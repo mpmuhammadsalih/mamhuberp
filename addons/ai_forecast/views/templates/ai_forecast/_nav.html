@@ -1,0 +1,12 @@
+{% macro ai_nav(active) %}
+<nav class="ai-fc-nav">
+  <a href="{{ url_for('ai_forecast.dashboard') }}" {% if active == 'cockpit' %}class="is-active"{% endif %}>Cockpit</a>
+  <a href="{{ url_for('ai_forecast.sales_forecast_page') }}" {% if active == 'sales' %}class="is-active"{% endif %}>Sales</a>
+  <a href="{{ url_for('ai_forecast.purchase_forecast_page') }}" {% if active == 'purchase' %}class="is-active"{% endif %}>Purchase</a>
+  <a href="{{ url_for('ai_forecast.reorder_page') }}" {% if active == 'reorder' %}class="is-active"{% endif %}>Reorder</a>
+  <a href="{{ url_for('ai_forecast.products_page') }}" {% if active == 'products' %}class="is-active"{% endif %}>Products</a>
+  <a href="{{ url_for('ai_forecast.suppliers_page') }}" {% if active == 'suppliers' %}class="is-active"{% endif %}>Suppliers</a>
+  <a href="{{ url_for('ai_forecast.customers_page') }}" {% if active == 'customers' %}class="is-active"{% endif %}>Customers</a>
+  <a href="{{ url_for('ai_forecast.reports_page') }}" {% if active == 'reports' %}class="is-active"{% endif %}>Reports</a>
+</nav>
+{% endmacro %}

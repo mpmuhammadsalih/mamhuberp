@@ -1,0 +1,97 @@
+{# Global typeahead lookup — use anywhere after base.html (script loaded globally).
+   Example:
+   {% from 'includes/global_lookup_field.html' import global_lookup_field %}
+   {{ global_lookup_field(
+        field_id='custFilter',
+        label='Customer',
+        name='customer_code',
+        kind='customer',
+        value_code=filters.customer_code,
+        value_label=filters.customer_label,
+        no_default=true,
+   ) }}
+#}
+{% macro global_lookup_field(
+  field_id,
+  label='',
+  name='',
+  kind='customer',
+  search_url='',
+  value_code='',
+  value_label='',
+  value_text_search='',
+  placeholder='',
+  no_default=false,
+  limit=6,
+  min_chars=1,
+  dropdown_min_width='',
+  text_search_name='',
+  field_class='field field--lookup',
+  input_class='global-lookup__input odoo-lookup__input input',
+  inline=false,
+  hidden_class='',
+  hidden_extra_attrs='',
+  readonly=false,
+  disabled=false,
+  extra_from='',
+  extra_param='parent_code'
+) %}
+  {% set kind_norm = (kind or 'customer')|lower %}
+  {% set api_url = search_url or url_for('api.global_lookup', kind=kind_norm) %}
+  {% set code_val = (value_code|string)|trim if value_code is not none else '' %}
+  {% set show_label = (value_label or '')|trim if code_val and code_val != '0' else ((value_text_search or '')|trim if value_text_search else '') %}
+  {% if not inline %}<div class="{{ field_class }}">{% endif %}
+    {% if label and not inline %}
+    <label for="{{ field_id }}Display">{{ label }}</label>
+    {% endif %}
+    <div
+      class="global-lookup odoo-lookup{% if inline %} global-lookup--inline{% endif %}"
+      data-search-url="{{ api_url }}"
+      {% if no_default %}data-no-default="1"{% endif %}
+      data-placeholder="{{ placeholder }}"
+      data-limit="{{ limit }}"
+      data-min-chars="{{ min_chars }}"
+      {% if dropdown_min_width %}data-dropdown-min-width="{{ dropdown_min_width }}"{% endif %}
+      {% if text_search_name %}data-text-search-name="{{ text_search_name }}"{% endif %}
+      {% if extra_from %}data-extra-from="{{ extra_from }}"{% endif %}
+      {% if extra_param %}data-extra-param="{{ extra_param }}"{% endif %}
+    >
+      <div class="global-lookup__row odoo-lookup__row">
+        <input
+          id="{{ field_id }}Display"
+          class="{{ input_class }}"
+          type="text"
+          placeholder="{{ placeholder }}"
+          value="{{ show_label }}"
+          autocomplete="off"
+          data-allow-autocomplete
+          {% if readonly %}readonly{% endif %}
+          {% if disabled %}disabled{% endif %}
+        />
+        {% if name %}
+        <input
+          class="global-lookup__value odoo-lookup__value{% if hidden_class %} {{ hidden_class }}{% endif %}"
+          type="hidden"
+          name="{{ name }}"
+          value="{% if value_code and (not no_default or value_code != '0') %}{{ value_code }}{% endif %}"
+          {{ hidden_extra_attrs|safe }}
+        />
+        {% endif %}
+        {% if text_search_name %}
+        <input
+          class="global-lookup__text-search"
+          type="hidden"
+          name="{{ text_search_name }}"
+          value="{% if not code_val %}{{ (value_text_search or '')|trim }}{% endif %}"
+        />
+        {% endif %}
+        <button
+          type="button"
+          class="global-lookup__clear odoo-lookup__clear"
+          aria-label="Clear {{ label or kind }}"
+          {% if not value_code or (no_default and value_code == '0') %}hidden{% endif %}
+        >×</button>
+      </div>
+    </div>
+  {% if not inline %}</div>{% endif %}
+{% endmacro %}

@@ -1,0 +1,2 @@
+"""Addon manifest — Tasveek (HO TBLONLINEDATA list + import)."""
+MANIFEST = {'technical_name': 'tasveek', 'name': 'Tasveek', 'version': '1.0.0', 'category': 'Online', 'summary': 'Tasveek: list and import for HO TBLONLINEDATA.', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/online/tasveek'}, 'flask': {'blueprint': 'tasveek', 'blueprint_ref': 'addons.tasveek.controllers.routes:bp', 'routes_module': 'addons.tasveek.controllers.routes'}}

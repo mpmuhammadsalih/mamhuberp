@@ -1,0 +1,642 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .st-page { max-width: 1200px; margin: 0 auto; padding: 22px 14px; }
+  .st-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .st-title { margin: 0; font-size: 24px; font-weight: 400; }
+  .st-sub { margin: 4px 0 0; color: #6b7280; font-size: 13px; }
+  .st-btn { display: inline-block; text-decoration: none; background: #2563eb; color: #fff; border-radius: 6px; padding: 8px 14px; font-size: 13px; font-weight: 600; }
+  .st-btn-alt { border: 1px solid #d1d5db; background: #fff; color: #111827; border-radius: 6px; padding: 8px 12px; font-size: 12px; cursor: pointer; text-decoration: none; }
+  .st-filter-wrap { border: 1px solid #e5e7eb; border-radius: 8px; background: #f8fafc; padding: 10px; margin-bottom: 10px; }
+  .st-filters { display: grid; gap: 8px; grid-template-columns: repeat(7, minmax(110px, 1fr)); align-items: end; }
+  .st-fg label { display: block; font-size: 11px; color: #4b5563; margin-bottom: 4px; text-transform: uppercase; }
+  .st-fg input, .st-fg select { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; padding: 7px 8px; font-size: 13px; }
+  .st-store-input { display: flex; gap: 6px; align-items: center; }
+  .st-store-input input { flex: 1; background: #fff; }
+  .st-filter-actions { display: flex; gap: 6px; justify-content: flex-end; grid-column: span 2; }
+  .st-tabs { display: flex; gap: 8px; margin: 12px 0; }
+  .st-tab { border: 1px solid #d1d5db; background: #fff; color: #111827; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 13px; }
+  .st-tab.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+  .st-card { border: 1px solid #e5e7eb; border-radius: 8px; overflow: auto; }
+  .st-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .st-table th, .st-table td { padding: 9px 10px; border-bottom: 1px solid #e5e7eb; text-align: left; white-space: nowrap; }
+  .st-table th { background: #f8fafc; font-size: 12px; text-transform: uppercase; letter-spacing: 0.2px; }
+  .st-link { color: #1d4ed8; text-decoration: none; margin-right: 8px; font-size: 12px; }
+  .st-table tbody tr[data-st-href] { cursor: pointer; }
+  .st-table tbody tr[data-st-href]:hover { background: #f8fafc; }
+  .st-table tbody tr[data-st-href]:focus-visible { outline: 2px solid var(--nexa-focus-color); outline-offset: -2px; }
+  .st-empty { padding: 14px; color: #64748b; font-size: 13px; }
+  .st-hidden { display: none; }
+  .st-status-pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 600; border: 1px solid; }
+  .st-status-pill--pending { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+  .st-status-pill--completed { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+  .st-modal { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.28); display: none; align-items: center; justify-content: center; z-index: 999; }
+  .st-modal.open { display: flex; }
+  .st-modal-card { width: min(520px, 96vw); max-height: 72vh; background: #fff; border-radius: 10px; border: 1px solid #d1d5db; display: flex; flex-direction: column; overflow: hidden; }
+  .st-modal-head { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+  .st-modal-body { padding: 10px 12px; overflow: auto; }
+  .st-modal-close { border: 1px solid #d1d5db; background: #fff; border-radius: 6px; padding: 4px 8px; cursor: pointer; }
+  .st-store-list { margin-top: 8px; border: 1px solid #e5e7eb; border-radius: 6px; max-height: 44vh; overflow: auto; }
+  .st-store-row { width: 100%; border: 0; border-bottom: 1px solid #edf2f7; background: #fff; text-align: left; padding: 8px 10px; cursor: pointer; }
+  .st-store-row:hover { background: #f0f9ff; }
+  .st-bulk-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; background: #f8fafc; }
+  .st-bulk-info { font-size: 12px; color: #64748b; margin-left: auto; }
+  .st-check-col { width: 42px; text-align: center; }
+  .st-table tbody tr.row-selected { background: #eff6ff; }
+  @media (max-width: 1100px) { .st-filters { grid-template-columns: repeat(3, minmax(120px, 1fr)); } .st-filter-actions { grid-column: span 3; justify-content: flex-start; } }
+  @media (max-width: 720px) { .st-filters { grid-template-columns: repeat(1, minmax(0, 1fr)); } .st-filter-actions { grid-column: span 1; } }
+</style>
+<div class="st-page">
+  {% set fv = filter_values or {} %}
+  <div class="st-top">
+    <div>
+      <h1 class="st-title">Store Transfer</h1>
+      <p class="st-sub">One list for all transfers — create, transfer, approve, and PDF (including transit-type warehouses).</p>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+      {% if (session.get('user') or '')|lower == 'admin' %}
+      <a class="st-btn-alt" href="{{ url_for('purchase.stock_transfer_configuration') }}">Configuration</a>
+      {% endif %}
+      <a class="st-btn" href="{{ url_for('purchase.stock_transfer_new') }}">New Request</a>
+    </div>
+  </div>
+  <div class="st-filter-wrap">
+    <p class="st-empty" style="margin: 0 0 10px; padding: 0;"><strong>Workflow</strong> filters transit-type sites (WAREHOUSE_TYPE = TRANSIT). <strong>Pending to Transfer</strong> = Created (C). <strong>Pending to Approve</strong> = Transferred (T). <strong>Completed</strong> = Approved today unless you set a date range. Use <strong>All</strong> for a combined view.</p>
+    <form id="stFilterForm" class="st-filters" method="get" action="{{ url_for('purchase.stock_transfer') }}">
+      <div class="st-fg">
+        <label for="dateFrom">Date From</label>
+        <input id="dateFrom" name="date_from" type="date" value="{{ fv.date_from or '' }}" />
+      </div>
+      <div class="st-fg">
+        <label for="dateTo">Date To</label>
+        <input id="dateTo" name="date_to" type="date" value="{{ fv.date_to or '' }}" />
+      </div>
+      <div class="st-fg">
+        <label for="fromStoreText">From Store</label>
+        <input id="fromStoreCode" name="from_store" type="hidden" value="{{ fv.from_store or '' }}" />
+        <div class="st-store-input">
+          <input id="fromStoreText" type="text" value="" placeholder="All stores" readonly />
+          <button id="pickFromStoreBtn" class="st-btn-alt" type="button">Popup</button>
+        </div>
+      </div>
+      <div class="st-fg">
+        <label for="toStoreText">To Store</label>
+        <input id="toStoreCode" name="to_store" type="hidden" value="{{ fv.to_store or '' }}" />
+        <div class="st-store-input">
+          <input id="toStoreText" type="text" value="" placeholder="All stores" readonly />
+          <button id="pickToStoreBtn" class="st-btn-alt" type="button">Popup</button>
+        </div>
+      </div>
+      <div class="st-fg">
+        <label for="statusFilter">Status</label>
+        <select id="statusFilter" name="status">
+          <option value="" {% if not fv.status %}selected{% endif %}>All</option>
+          <option value="C" {% if fv.status == 'C' %}selected{% endif %}>Created</option>
+          <option value="T" {% if fv.status == 'T' %}selected{% endif %}>Transferred</option>
+          <option value="A" {% if fv.status == 'A' %}selected{% endif %}>Approved</option>
+        </select>
+      </div>
+      <div class="st-fg">
+        <label for="workflowFilter">Workflow</label>
+        <select id="workflowFilter" name="workflow">
+          <option value="all" {% if (workflow_filter|default('all')) == 'all' %}selected{% endif %}>All transfers</option>
+          <option value="transit" {% if workflow_filter == 'transit' %}selected{% endif %}>Transit sites only</option>
+          <option value="standard" {% if workflow_filter == 'standard' %}selected{% endif %}>Non-transit only</option>
+        </select>
+      </div>
+      <div class="st-filter-actions">
+        <button class="st-btn-alt" type="submit">Apply</button>
+        <a class="st-btn-alt" href="{{ url_for('purchase.stock_transfer') }}">Reset</a>
+        <button class="st-btn-alt" type="submit" formaction="{{ url_for('purchase.stock_transfer_summary_pdf') }}" formtarget="_blank">Summary PDF</button>
+      </div>
+    </form>
+  </div>
+  <div class="st-tabs">
+    <button type="button" class="st-tab active" data-tab="pending-transfer">Pending to Transfer</button>
+    <button type="button" class="st-tab" data-tab="pending-approve">Pending to Approve</button>
+    <button type="button" class="st-tab" data-tab="completed">Completed</button>
+    <button type="button" class="st-tab" data-tab="all">All</button>
+  </div>
+  <div id="tab-pending-transfer" class="st-card">
+    <table class="st-table">
+      <thead>
+        <tr>
+          <th>Request No</th>
+          <th>Date</th>
+          <th>From Store</th>
+          <th>To Store</th>
+          <th>Status</th>
+          <th>Created By</th>
+          <th>Transferred By</th>
+          <th>Approved By</th>
+          <th>Remarks</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in pending_transfer_rows %}
+          <tr data-st-href="{{ url_for('purchase.stock_transfer_query', transfer_no=row.transferno) }}" tabindex="0" role="link" aria-label="Open transfer {{ row.transferno }}">
+            <td>{{ row.transferno }}</td>
+            <td>{{ row.transferdate.strftime('%Y-%m-%d %I:%M %p') if row.transferdate else '' }}</td>
+            <td>{{ row.fromstore }}</td>
+            <td>{{ row.tostore }}</td>
+            <td>
+              {% set st = (row.status or 'C')|upper %}
+              {% if st == 'C' %}
+                <span class="st-status-pill st-status-pill--pending">Created</span>
+              {% else %}
+                <span class="st-status-pill st-status-pill--pending">{{ st }}</span>
+              {% endif %}
+            </td>
+            <td>{{ row.createdby or '-' }}</td>
+            <td>{{ row.transferredby or '-' }}</td>
+            <td>{{ row.approvedby or '-' }}</td>
+            <td>{{ row.remarks }}</td>
+            <td>
+              <a class="st-link" href="{{ url_for('purchase.stock_transfer_query', transfer_no=row.transferno) }}">View Request</a>
+              <a class="st-link" href="{{ url_for('purchase.stock_transfer_pdf', transfer_no=row.transferno, copy=1) }}" target="_blank">PDF</a>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="10" class="st-empty">No pending to transfer requests.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div id="tab-pending-approve" class="st-card st-hidden">
+    <div class="st-bulk-bar">
+      <button type="button" class="st-btn" id="stApproveSelectedBtn" {% if not pending_approve_rows %}disabled title="No transfers pending approval"{% endif %}>Approve Selected</button>
+      <button type="button" class="st-btn-alt" id="stApproveAllBtn" {% if not pending_approve_rows %}disabled title="No transfers pending approval"{% endif %}>Approve All</button>
+      <span class="st-bulk-info" id="stApproveSelInfo">0 selected</span>
+    </div>
+    <table class="st-table" id="stPendingApproveTable">
+      <thead>
+        <tr>
+          <th class="st-check-col"><input type="checkbox" id="stApproveSelectAll" title="Select all" {% if not pending_approve_rows %}disabled{% endif %}></th>
+          <th>Request No</th>
+          <th>Date</th>
+          <th>From Store</th>
+          <th>To Store</th>
+          <th>Status</th>
+          <th>Created By</th>
+          <th>Transferred By</th>
+          <th>Approved By</th>
+          <th>Remarks</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in pending_approve_rows %}
+          <tr data-st-href="{{ url_for('purchase.stock_transfer_query', transfer_no=row.transferno) }}" tabindex="0" role="link" aria-label="Open transfer {{ row.transferno }}">
+            <td class="st-check-col"><input type="checkbox" class="st-approve-check" value="{{ row.transferno }}" aria-label="Select transfer {{ row.transferno }}"></td>
+            <td>{{ row.transferno }}</td>
+            <td>{{ row.transferdate.strftime('%Y-%m-%d %I:%M %p') if row.transferdate else '' }}</td>
+            <td>{{ row.fromstore }}</td>
+            <td>{{ row.tostore }}</td>
+            <td>
+              {% set st = (row.status or 'P')|upper %}
+              {% if st == 'A' %}
+                <span class="st-status-pill st-status-pill--completed">Completed</span>
+              {% elif st == 'C' %}
+                <span class="st-status-pill st-status-pill--pending">Created</span>
+              {% elif st in ['T', 'P'] %}
+                <span class="st-status-pill st-status-pill--pending">Transferred</span>
+              {% else %}
+                <span class="st-status-pill st-status-pill--pending">{{ st }}</span>
+              {% endif %}
+            </td>
+            <td>{{ row.createdby or '-' }}</td>
+            <td>{{ row.transferredby or '-' }}</td>
+            <td>{{ row.approvedby or '-' }}</td>
+            <td>{{ row.remarks }}</td>
+            <td>
+              <a class="st-link" href="{{ url_for('purchase.stock_transfer_query', transfer_no=row.transferno) }}">View Request</a>
+              <a class="st-link" href="{{ url_for('purchase.stock_transfer_pdf', transfer_no=row.transferno, copy=1) }}" target="_blank">PDF</a>
+              <a class="st-link js-approve" href="#" data-no="{{ row.transferno }}">Approve</a>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="11" class="st-empty">No pending to approve requests.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div id="tab-completed" class="st-card st-hidden">
+    <table class="st-table">
+      <thead>
+        <tr>
+          <th>Transfer No</th>
+          <th>Date</th>
+          <th>From Store</th>
+          <th>To Store</th>
+          <th>Created By</th>
+          <th>Transferred By</th>
+          <th>Approved By</th>
+          <th>Remarks</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in completed_rows %}
+          <tr data-st-href="{{ url_for('purchase.stock_transfer_query', transfer_no=row.transferno) }}" tabindex="0" role="link" aria-label="Open transfer {{ row.transferno }}">
+            <td>{{ row.transferno }}</td>
+            <td>{{ row.transferdate.strftime('%Y-%m-%d %I:%M %p') if row.transferdate else '' }}</td>
+            <td>{{ row.fromstore }}</td>
+            <td>{{ row.tostore }}</td>
+            <td>{{ row.createdby or '-' }}</td>
+            <td>{{ row.transferredby or '-' }}</td>
+            <td>{{ row.approvedby or '-' }}</td>
+            <td>{{ row.remarks }}</td>
+            <td>
+              <a class="st-link" href="{{ url_for('purchase.stock_transfer_query', transfer_no=row.transferno) }}">View</a>
+              <a class="st-link" href="{{ url_for('purchase.stock_transfer_pdf', transfer_no=row.transferno, copy=1) }}" target="_blank">PDF</a>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="9" class="st-empty">No approved transfers.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div id="tab-all" class="st-card st-hidden">
+    <table class="st-table">
+      <thead>
+        <tr>
+          <th>Transfer No</th>
+          <th>Date</th>
+          <th>From Store</th>
+          <th>To Store</th>
+          <th>Status</th>
+          <th>Created By</th>
+          <th>Transferred By</th>
+          <th>Approved By</th>
+          <th>Remarks</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="stAllRowsBody">
+        <tr id="stAllRowsHint"><td colspan="10" class="st-empty">Open this tab to load the full list (current filters apply).</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<div id="storeFilterModal" class="st-modal" aria-hidden="true">
+  <div class="st-modal-card" role="dialog" aria-modal="true" aria-labelledby="storeFilterTitle">
+    <div class="st-modal-head">
+      <div id="storeFilterTitle">Select Store</div>
+      <button id="storeFilterClose" class="st-modal-close" type="button">Close</button>
+    </div>
+    <div class="st-modal-body">
+      <input id="storeFilterSearch" type="text" placeholder="Search code/name..." />
+      <div class="st-store-list" id="storeFilterList"></div>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    const stores = {{ transfer_store_options|default([], true)|tojson }};
+    const fromStoreCode = document.getElementById("fromStoreCode");
+    const toStoreCode = document.getElementById("toStoreCode");
+    const fromStoreText = document.getElementById("fromStoreText");
+    const toStoreText = document.getElementById("toStoreText");
+    const modal = document.getElementById("storeFilterModal");
+    const modalTitle = document.getElementById("storeFilterTitle");
+    const modalSearch = document.getElementById("storeFilterSearch");
+    const modalList = document.getElementById("storeFilterList");
+    const modalClose = document.getElementById("storeFilterClose");
+    let targetStoreInput = null;
+
+    function storeLabel(code) {
+      const c = String(code || "").trim().toUpperCase();
+      if (!c) return "";
+      const row = stores.find((x) => String(x.code || "").trim().toUpperCase() === c);
+      if (row && row.description) return `${c} - ${row.description}`;
+      return c;
+    }
+    function syncStoreText() {
+      fromStoreText.value = storeLabel(fromStoreCode.value);
+      toStoreText.value = storeLabel(toStoreCode.value);
+    }
+    function renderStoreList(keyword) {
+      const q = String(keyword || "").trim().toUpperCase();
+      const matches = stores.filter((row) => {
+        const c = String(row.code || "").toUpperCase();
+        const d = String(row.description || "").toUpperCase();
+        return !q || c.includes(q) || d.includes(q);
+      });
+      let html = '<button type="button" class="st-store-row" data-code="">All Stores</button>';
+      if (!matches.length) {
+        html += '<div class="st-empty">No stores found.</div>';
+      } else {
+        html += matches.map((row) => {
+          const code = String(row.code || "").trim().toUpperCase();
+          const desc = String(row.description || "").trim();
+          const text = desc ? `${code} - ${desc}` : code;
+          return `<button type="button" class="st-store-row" data-code="${code}">${text}</button>`;
+        }).join("");
+      }
+      modalList.innerHTML = html;
+      modalList.querySelectorAll(".st-store-row").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          if (!targetStoreInput) return;
+          targetStoreInput.value = btn.dataset.code || "";
+          syncStoreText();
+          closeStoreModal();
+        });
+      });
+    }
+    function openStoreModal(title, inputEl) {
+      targetStoreInput = inputEl;
+      modalTitle.textContent = title;
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+      modalSearch.value = "";
+      renderStoreList("");
+      setTimeout(() => modalSearch.focus(), 20);
+    }
+    function closeStoreModal() {
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+      targetStoreInput = null;
+    }
+    document.getElementById("pickFromStoreBtn").addEventListener("click", () => openStoreModal("Select From Store", fromStoreCode));
+    document.getElementById("pickToStoreBtn").addEventListener("click", () => openStoreModal("Select To Store", toStoreCode));
+    modalSearch.addEventListener("input", () => renderStoreList(modalSearch.value));
+    modalClose.addEventListener("click", closeStoreModal);
+    modal.addEventListener("click", (e) => { if (e.target === modal) closeStoreModal(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && modal.classList.contains("open")) closeStoreModal(); });
+    syncStoreText();
+
+    const allRowsApiBase = {{ url_for('purchase.stock_transfer_api_all_rows')|tojson }};
+    const ST_BULK_APPROVE_URL = {{ bulk_approve_api_url|tojson }};
+    const stAllRowsBody = document.getElementById("stAllRowsBody");
+    let stAllLoaded = false;
+    let stAllLoading = false;
+
+    function escHtml(s) {
+      return String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/"/g, "&quot;");
+    }
+    function stStatusPillHtml(stRaw) {
+      const st = String(stRaw || "P").toUpperCase();
+      const head = st.charAt(0) || "P";
+      if (head === "A") return '<span class="st-status-pill st-status-pill--completed">Completed</span>';
+      if (head === "C") return '<span class="st-status-pill st-status-pill--pending">Created</span>';
+      if (head === "T" || head === "P") return '<span class="st-status-pill st-status-pill--pending">Transferred</span>';
+      return '<span class="st-status-pill st-status-pill--pending">' + escHtml(st) + "</span>";
+    }
+
+    function bindStNavForTr(tr) {
+      const href = tr.getAttribute("data-st-href");
+      if (!href) return;
+      const go = (openNewTab) => {
+        if (openNewTab) window.open(href, "_blank", "noopener,noreferrer");
+        else window.location.assign(href);
+      };
+      tr.addEventListener("click", (e) => {
+        if (e.target.closest && (e.target.closest("a") || e.target.closest("button") || e.target.closest("input") || e.target.closest("label"))) return;
+        if (e.metaKey || e.ctrlKey) {
+          e.preventDefault();
+          go(true);
+          return;
+        }
+        go(false);
+      });
+      tr.addEventListener("auxclick", (e) => {
+        if (e.button !== 1) return;
+        if (e.target.closest && (e.target.closest("a") || e.target.closest("button") || e.target.closest("input") || e.target.closest("label"))) return;
+        e.preventDefault();
+        go(true);
+      });
+      tr.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        if (e.ctrlKey || e.metaKey) go(true);
+        else go(false);
+      });
+    }
+    document.querySelectorAll("#tab-pending-approve tr[data-st-href], #tab-completed tr[data-st-href]").forEach(bindStNavForTr);
+
+    async function loadStAllRowsOnce() {
+      if (stAllLoaded || stAllLoading || !stAllRowsBody) return;
+      stAllLoading = true;
+      stAllRowsBody.innerHTML = '<tr><td colspan="10" class="st-empty">Loading…</td></tr>';
+      try {
+        const url = allRowsApiBase + (window.location.search || "");
+        const r = await fetch(url, { credentials: "same-origin" });
+        const d = await r.json();
+        if (!r.ok || !d.success) {
+          stAllRowsBody.innerHTML = '<tr><td colspan="10" class="st-empty">' + escHtml(d.error || "Load failed") + "</td></tr>";
+          return;
+        }
+        const rows = d.rows || [];
+        if (!rows.length) {
+          stAllRowsBody.innerHTML = '<tr><td colspan="10" class="st-empty">No transfer records found.</td></tr>';
+        } else {
+          stAllRowsBody.innerHTML = rows.map((row) => {
+            const v = String(row.url_view || "").replace(/"/g, "");
+            const p = String(row.url_pdf || "").replace(/"/g, "");
+            return (
+              '<tr data-st-href="' + v + '" tabindex="0" role="link" aria-label="Open transfer ' + escHtml(String(row.transferno)) + '">' +
+              "<td>" + escHtml(String(row.transferno)) + "</td>" +
+              "<td>" + escHtml(row.transferdate) + "</td>" +
+              "<td>" + escHtml(row.fromstore) + "</td>" +
+              "<td>" + escHtml(row.tostore) + "</td>" +
+              "<td>" + stStatusPillHtml(row.status) + "</td>" +
+              "<td>" + escHtml(row.createdby || "-") + "</td>" +
+              "<td>" + escHtml(row.transferredby || "-") + "</td>" +
+              "<td>" + escHtml(row.approvedby || "-") + "</td>" +
+              "<td>" + escHtml(row.remarks) + "</td>" +
+              '<td><a class="st-link" href="' + v + '">View</a> ' +
+              '<a class="st-link" href="' + p + '" target="_blank" rel="noopener noreferrer">PDF</a></td>' +
+              "</tr>"
+            );
+          }).join("");
+          stAllRowsBody.querySelectorAll("tr[data-st-href]").forEach(bindStNavForTr);
+        }
+        stAllLoaded = true;
+      } catch (e) {
+        stAllRowsBody.innerHTML = '<tr><td colspan="10" class="st-empty">Network error</td></tr>';
+      } finally {
+        stAllLoading = false;
+      }
+    }
+
+    const tabs = document.querySelectorAll(".st-tab");
+    const pTransfer = document.getElementById("tab-pending-transfer");
+    const pApprove = document.getElementById("tab-pending-approve");
+    const c = document.getElementById("tab-completed");
+    const aTab = document.getElementById("tab-all");
+    tabs.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        tabs.forEach((x) => x.classList.remove("active"));
+        btn.classList.add("active");
+        const tab = btn.dataset.tab;
+        if (pTransfer) pTransfer.classList.toggle("st-hidden", tab !== "pending-transfer");
+        pApprove.classList.toggle("st-hidden", tab !== "pending-approve");
+        c.classList.toggle("st-hidden", tab !== "completed");
+        aTab.classList.toggle("st-hidden", tab !== "all");
+        if (tab === "all") loadStAllRowsOnce();
+      });
+    });
+    document.querySelectorAll(".js-approve").forEach((a) => {
+      a.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (a.dataset.approving === "1") return;
+        const no = a.dataset.no;
+        if (!no || !confirm("Approve this transfer request?")) return;
+        a.dataset.approving = "1";
+        const prevPe = a.style.pointerEvents;
+        const prevOp = a.style.opacity;
+        a.style.pointerEvents = "none";
+        a.style.opacity = "0.65";
+        try {
+          if (typeof window.showLoadingOverlay === "function") {
+            window.showLoadingOverlay("Approving transfer...");
+          }
+          try {
+            const r = await fetch(`/purchase/stock-transfer/api/approve/${no}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({}),
+            });
+            const d = await r.json().catch(() => ({}));
+            if ((r.status === 423 || d.save_session_locked) && d.error) {
+              alert(d.error);
+              return;
+            }
+            if ((r.status === 409 || d.replay_blocked) && d.error) {
+              alert(d.error);
+              return;
+            }
+            if (!r.ok || !d.success) {
+              alert(d.error || "Approval failed");
+              return;
+            }
+            if (typeof d.save_nonce === "string" && d.save_nonce) {
+              window.__GLOBAL_SAVE_NONCE = d.save_nonce;
+            }
+            if (typeof window.hideLoadingOverlay === "function") {
+              window.hideLoadingOverlay();
+            }
+            alert("Transfer approved");
+            window.location.reload();
+          } finally {
+            if (typeof window.hideLoadingOverlay === "function") {
+              window.hideLoadingOverlay();
+            }
+          }
+        } finally {
+          a.dataset.approving = "0";
+          a.style.pointerEvents = prevPe;
+          a.style.opacity = prevOp;
+        }
+      });
+    });
+
+    const stApproveSelectAll = document.getElementById("stApproveSelectAll");
+    const stApproveSelInfo = document.getElementById("stApproveSelInfo");
+    const stApproveSelectedBtn = document.getElementById("stApproveSelectedBtn");
+    const stApproveAllBtn = document.getElementById("stApproveAllBtn");
+
+    function stApproveChecks() {
+      return Array.from(document.querySelectorAll("#stPendingApproveTable tbody .st-approve-check"));
+    }
+    function stUpdateApproveSelInfo() {
+      const checks = stApproveChecks().filter((c) => c.checked);
+      stApproveChecks().forEach((c) => {
+        const tr = c.closest("tr");
+        if (tr) tr.classList.toggle("row-selected", c.checked);
+      });
+      if (stApproveSelInfo) stApproveSelInfo.textContent = checks.length + " selected";
+      if (stApproveSelectAll) {
+        const all = stApproveChecks();
+        stApproveSelectAll.checked = all.length > 0 && checks.length === all.length;
+        stApproveSelectAll.indeterminate = checks.length > 0 && checks.length < all.length;
+      }
+    }
+    if (stApproveSelectAll) {
+      stApproveSelectAll.addEventListener("change", () => {
+        stApproveChecks().forEach((c) => { c.checked = stApproveSelectAll.checked; });
+        stUpdateApproveSelInfo();
+      });
+    }
+    stApproveChecks().forEach((c) => {
+      c.addEventListener("click", (e) => e.stopPropagation());
+      c.addEventListener("change", stUpdateApproveSelInfo);
+    });
+    stUpdateApproveSelInfo();
+
+    let stBulkApproving = false;
+    async function stBulkApprove(transferNos) {
+      if (stBulkApproving) return;
+      const selected = (transferNos || [])
+        .map((n) => parseInt(String(n), 10))
+        .filter((n) => Number.isFinite(n) && n > 0);
+      if (!selected.length) {
+        alert("Select at least one transfer to approve.");
+        return;
+      }
+      if (!confirm("Approve " + selected.length + " selected transfer(s)? All selected transfers are saved together in one transaction.")) return;
+      stBulkApproving = true;
+      if (stApproveSelectedBtn) stApproveSelectedBtn.disabled = true;
+      if (stApproveAllBtn) stApproveAllBtn.disabled = true;
+      document.querySelectorAll(".js-approve").forEach((a) => {
+        a.dataset.approving = "1";
+        a.style.pointerEvents = "none";
+        a.style.opacity = "0.65";
+      });
+      if (typeof window.showLoadingOverlay === "function") {
+        window.showLoadingOverlay("Approving " + selected.length + " transfer(s)...");
+      }
+      try {
+        const r = await fetch(ST_BULK_APPROVE_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transfer_nos: selected }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if ((r.status === 423 || d.save_session_locked) && d.error) {
+          alert(d.error);
+          return;
+        }
+        if (!r.ok || !d.success) {
+          const errMsg = d.error || d.message || "Bulk approval failed";
+          const tno = d.transfer_no != null ? (" (Request " + d.transfer_no + ")") : "";
+          alert(errMsg + tno + "\n\nNo transfers were approved.");
+          return;
+        }
+        alert(d.message || ("Approved " + selected.length + " transfer(s)."));
+        window.location.reload();
+      } catch (err) {
+        alert((err && err.message) ? String(err.message) : "Network or unexpected error.");
+      } finally {
+        stBulkApproving = false;
+        if (typeof window.hideLoadingOverlay === "function") {
+          window.hideLoadingOverlay();
+        }
+        if (stApproveSelectedBtn) stApproveSelectedBtn.disabled = false;
+        if (stApproveAllBtn) stApproveAllBtn.disabled = false;
+        document.querySelectorAll(".js-approve").forEach((a) => {
+          a.dataset.approving = "0";
+          a.style.pointerEvents = "";
+          a.style.opacity = "";
+        });
+      }
+    }
+    if (stApproveSelectedBtn) {
+      stApproveSelectedBtn.addEventListener("click", () => {
+        stBulkApprove(stApproveChecks().filter((c) => c.checked).map((c) => c.value));
+      });
+    }
+    if (stApproveAllBtn) {
+      stApproveAllBtn.addEventListener("click", () => {
+        stBulkApprove(stApproveChecks().map((c) => c.value));
+      });
+    }
+  })();
+</script>
+{% endblock %}

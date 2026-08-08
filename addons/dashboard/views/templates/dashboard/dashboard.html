@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  /* Canvas is global (style.css); keep dashboard width/padding only */
+  .page-po.page-po--dashboard {
+    max-width: 1040px;
+  }
+  .page-po--dashboard .page-po__topbar {
+    margin-bottom: 18px;
+  }
+  .page-po--dashboard .page-po__title {
+    color: #061a4d;
+  }
+  .dashboard-hero {
+    position: relative;
+    overflow: hidden;
+    border-radius: 18px;
+    padding: 18px 22px;
+    margin-bottom: 18px;
+    color: #f4f9ff;
+    background:
+      radial-gradient(circle at 90% 10%, rgba(22, 183, 255, 0.5), transparent 28%),
+      linear-gradient(135deg, #061a4d 0%, #0057d9 56%, #16b7ff 100%);
+    box-shadow: 0 12px 28px rgba(6, 26, 77, 0.16);
+  }
+  .dashboard-hero::after {
+    content: "";
+    position: absolute;
+    right: -68px;
+    bottom: -78px;
+    width: 190px;
+    height: 190px;
+    border-radius: 999px;
+    border: 30px solid rgba(255, 255, 255, 0.12);
+  }
+  .dashboard-hero__eyebrow {
+    margin: 0 0 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(244, 249, 255, 0.78);
+  }
+  .dashboard-hero__title {
+    position: relative;
+    z-index: 1;
+    margin: 0;
+    font-size: clamp(22px, 2.6vw, 30px);
+    line-height: 1.15;
+    font-weight: 800;
+  }
+  .page-po .dashboard-welcome {
+    position: relative;
+    z-index: 1;
+    max-width: 620px;
+    color: rgba(244, 249, 255, 0.88);
+    margin: 8px 0 0;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .dashboard-meta {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .dashboard-meta__pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 999px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    backdrop-filter: blur(8px);
+  }
+  .page-po--dashboard .page-po__section-title {
+    color: #061a4d;
+    border-left: 4px solid #16b7ff;
+    padding-left: 10px;
+  }
+  .page-po .dashboard-quicklinks {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+  }
+  .page-po .dashboard-quicklinks .page-po__btn-secondary {
+    position: relative;
+    min-height: 82px;
+    justify-content: flex-start;
+    align-items: flex-end;
+    padding: 16px;
+    border: 1px solid rgba(0, 87, 217, 0.12);
+    border-radius: 16px;
+    background: #fff;
+    color: #061a4d;
+    text-decoration: none;
+    box-shadow: 0 10px 28px rgba(6, 26, 77, 0.08);
+    transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+  }
+  .page-po .dashboard-quicklinks .page-po__btn-secondary::before {
+    content: "";
+    position: absolute;
+    top: 14px;
+    left: 16px;
+    width: 30px;
+    height: 5px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #0057d9, #16b7ff);
+  }
+  .page-po .dashboard-quicklinks .page-po__btn-secondary:hover {
+    transform: translateY(-2px);
+    border-color: rgba(22, 183, 255, 0.55);
+    box-shadow: 0 16px 34px rgba(0, 87, 217, 0.14);
+  }
+  @media (max-width: 768px) {
+    .page-po.page-po--dashboard {
+      width: 100%;
+      max-width: none;
+      padding: 14px 12px;
+    }
+    .page-po--dashboard .page-po__topbar {
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+    }
+    .page-po--dashboard .page-po__title {
+      font-size: 22px;
+    }
+    .dashboard-hero {
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .dashboard-hero::after {
+      right: -86px;
+      bottom: -92px;
+      width: 170px;
+      height: 170px;
+      border-width: 26px;
+    }
+    .dashboard-hero__title {
+      font-size: 22px;
+      line-height: 1.2;
+    }
+    .page-po .dashboard-welcome {
+      font-size: 12px;
+    }
+    .page-po .dashboard-quicklinks {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .page-po .dashboard-quicklinks .page-po__btn-secondary {
+      min-height: 68px;
+      padding: 14px 12px;
+      border-radius: 14px;
+      font-size: 12px;
+    }
+  }
+  @media (max-width: 480px) {
+    .page-po.page-po--dashboard {
+      padding: 12px 10px;
+    }
+    .page-po--dashboard .page-po__topbar {
+      margin-bottom: 10px;
+    }
+    .page-po--dashboard .page-po__title {
+      font-size: 20px;
+    }
+    .page-po--dashboard .page-po__muted {
+      font-size: 12px;
+    }
+    .dashboard-hero {
+      padding: 14px;
+      border-radius: 14px;
+    }
+    .dashboard-hero__eyebrow {
+      font-size: 10px;
+      letter-spacing: 0.1em;
+    }
+    .dashboard-hero__title {
+      font-size: 19px;
+    }
+    .page-po .dashboard-quicklinks {
+      grid-template-columns: 1fr;
+    }
+    .page-po .dashboard-quicklinks .page-po__btn-secondary {
+      min-height: 58px;
+      align-items: center;
+      padding: 12px 14px 12px 54px;
+    }
+    .page-po .dashboard-quicklinks .page-po__btn-secondary::before {
+      top: 50%;
+      left: 14px;
+      width: 26px;
+      transform: translateY(-50%);
+    }
+  }
+  @media (hover: none) {
+    .page-po .dashboard-quicklinks .page-po__btn-secondary:hover {
+      transform: none;
+    }
+  }
+</style>
+<div class="page-po page-po--dashboard">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Dashboard</h1>
+      <p class="page-po__muted">Sales &amp; Business Management</p>
+    </div>
+  </div>
+
+  <section class="dashboard-hero" aria-label="Dashboard welcome">
+    <p class="dashboard-hero__eyebrow">Nexus Erp</p>
+    <h2 class="dashboard-hero__title">Welcome back{% if session.get('user') %}, {{ session.get('user') }}{% endif %}</h2>
+    <p class="dashboard-welcome">Your workspace is ready.</p>
+  </section>
+
+  <div class="page-po__section-title">Quick access</div>
+  <div class="dashboard-quicklinks">
+    {% if has_menu_permission('users.user_create') %}
+      <a href="{{ url_for('users.user_list') }}" class="page-po__btn-secondary">User Management</a>
+    {% endif %}
+    {% if has_menu_permission('tenants.tenant_list') %}
+      <a href="{{ url_for('tenants.tenant_list') }}" class="page-po__btn-secondary">Tenants</a>
+    {% endif %}
+    {% if has_menu_permission('roles.roles_list') %}
+      <a href="{{ url_for('roles.roles_list') }}" class="page-po__btn-secondary">Roles &amp; Permissions</a>
+    {% endif %}
+    {% if has_menu_permission('employee.employee_list') %}
+      <a href="{{ url_for('employee.employee_list') }}" class="page-po__btn-secondary">Employee</a>
+    {% endif %}
+    {% if has_menu_permission('sales.sales_invoice') %}
+      <a href="{{ url_for('sales.sales_invoice') }}" class="page-po__btn-secondary">Sales Invoice</a>
+    {% endif %}
+    {% if has_menu_permission('purchase.purchase_order_list') or allow_all_permissions %}
+      <a href="{{ url_for('purchase.purchase_order_list') }}" class="page-po__btn-secondary">Purchase Order</a>
+    {% endif %}
+    {% if has_menu_permission('sms.sms_page') %}
+      <a href="{{ url_for('sms.sms_page') }}" class="page-po__btn-secondary">Send SMS</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=8"></script>
+{% endblock %}

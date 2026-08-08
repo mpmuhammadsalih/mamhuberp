@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Salesman{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+
+{% set ns = namespace(n=(salesmen or [])|length, route=0, emp=0, tel=0) %}
+{% for s in salesmen or [] %}
+  {% if s.routecode and s.routecode|string|trim %}{% set ns.route = ns.route + 1 %}{% endif %}
+  {% if s.employeecode and s.employeecode|string|trim %}{% set ns.emp = ns.emp + 1 %}{% endif %}
+  {% if s.telephone and s.telephone|string|trim %}{% set ns.tel = ns.tel + 1 %}{% endif %}
+{% endfor %}
+
+<div class="page-po nexa-list-page nexa-setup-list-page">
+  <section class="nexa-stat-grid" aria-label="Salesman summary">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-person-lines-fill" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Total</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.n) }}</p>
+        <p class="nexa-stat-sub">This branch list</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-signpost-split" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">With route</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.route) }}</p>
+        <p class="nexa-stat-sub">Route code set</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-person-badge" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">With employee</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.emp) }}</p>
+        <p class="nexa-stat-sub">Employee link</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-telephone" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">With phone</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.tel) }}</p>
+        <p class="nexa-stat-sub">Telephone field</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--cyan"><i class="bi bi-geo-alt" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Branch</p>
+        <p class="nexa-stat-value" style="font-size:clamp(14px,1.2vw,18px);">{{ location_code }}</p>
+        <p class="nexa-stat-sub">{{ location_name or 'Session location' }}</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Salesman</h1>
+      <p class="page-po__muted">Maintain sales reps for the branch (<strong>SALESMAN</strong>).</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% include 'includes/list_refresh_bar.html' %}
+      <a href="{{ url_for('salesman.salesman_create') }}" class="page-po__btn-primary">+ New salesman</a>
+    </div>
+  </div>
+
+  <form class="nexa-list-filter-panel" method="get" action="{{ url_for('salesman.salesman_list') }}">
+    <div class="form-group" style="margin-bottom:0;">
+      <label for="smSearch" style="font-size:11px;font-weight:700;color:#64748b;">Search</label>
+      <input id="smSearch" type="text" name="search" class="input" placeholder="Code or name…" value="{{ search_term or '' }}" style="min-width:220px;" />
+    </div>
+    <button type="submit" class="page-po__btn-secondary">Filter</button>
+  </form>
+
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th style="text-align:center;width:52px;">Sl.No</th>
+          <th>Loc</th>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Telephone</th>
+          <th>Type</th>
+          <th>Flag</th>
+          <th>Route</th>
+          <th>Employee</th>
+          <th style="text-align:center;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if salesmen %}
+          {% for s in salesmen %}
+            <tr>
+              <td style="text-align:center;">{{ loop.index }}</td>
+              <td>{{ s.locationcode or '-' }}</td>
+              <td>{{ s.salesmancode or '-' }}</td>
+              <td>{{ s.salesmanname or '-' }}</td>
+              <td>{{ s.telephone or '-' }}</td>
+              <td>{{ (s.type or '-')|trim }}</td>
+              <td>{{ (s.flag or '-')|trim }}</td>
+              <td>{{ s.routecode or '-' }}</td>
+              <td>{{ s.employeecode or '-' }}</td>
+              <td style="text-align:center;">
+                <a href="{{ url_for('salesman.salesman_edit', location_code=s.locationcode, salesman_code=s.salesmancode) }}" class="btn-view">Edit</a>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="10" style="text-align:center;padding:18px;color:#64748b;">No salesmen for this branch, or SALESMAN table is empty.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

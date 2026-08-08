@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/sales_ai.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<div class="sai-page" id="salesAiApp"
+     data-api="{{ api_data_url }}"
+     data-narrative="{{ api_narrative_url or '' }}"
+     data-openai="{{ '1' if openai_configured else '0' }}">
+
+  <header class="sai-header">
+    <div class="sai-header__intro">
+      <h1 class="sai-title">Sales AI Dashboard</h1>
+      <p class="sai-sub">
+        Branch {{ location_code }}{% if location_name %} · {{ location_name }}{% endif %}
+        — KPIs, comparisons, forecasting, and intelligent sales recommendations
+      </p>
+    </div>
+    <div class="sai-header__actions">
+      <button type="button" class="sai-btn" id="saiThemeToggle" title="Toggle dark mode">🌙</button>
+      <button type="button" class="sai-btn sai-btn--primary" id="saiRefresh">Refresh</button>
+      {% if openai_configured %}
+      <button type="button" class="sai-btn sai-btn--ai" id="saiAiPlan">AI Daily Plan</button>
+      {% endif %}
+      <span class="sai-status" id="saiStatus"></span>
+    </div>
+  </header>
+
+  <div id="saiCelebrate" class="sai-celebrate hidden" aria-hidden="true">🎉 Target Achieved!</div>
+
+  <aside class="sai-filters glass">
+    <div class="sai-filters__head">Global Filters</div>
+    <form id="saiFilterForm" class="sai-filters__body">
+      <label>Date From</label>
+      <input type="date" name="date_from" value="{{ filters.date_from or '' }}" />
+      <label>Date To</label>
+      <input type="date" name="date_to" value="{{ filters.date_to or '' }}" />
+      <label>Branch</label>
+      <select name="branch" id="saiBranch">
+        {% for b in options.branches or [] %}
+        <option value="{{ b.locationcode or b.code }}" {% if filters.branch|string == (b.locationcode or b.code)|string %}selected{% endif %}>
+          {{ b.locationcode or b.code }} {{ b.locationname or b.name or '' }}
+        </option>
+        {% endfor %}
+      </select>
+      <label>Warehouse</label>
+      <select name="warehouse">
+        <option value="">All</option>
+        {% for w in options.warehouses or [] %}
+        <option value="{{ w.warehouse_code or w.code }}">{{ w.warehouse_code or w.code }} {{ w.warehouse_name or '' }}</option>
+        {% endfor %}
+      </select>
+      <label>Salesperson</label>
+      <select name="salesman_code">
+        <option value="">All</option>
+        {% for s in options.salesmen or [] %}
+        <option value="{{ s.code }}">{{ s.code }} {{ s.name or '' }}</option>
+        {% endfor %}
+      </select>
+      <label>Category</label>
+      <select name="category_code">
+        <option value="">All</option>
+        {% for c in options.categories or [] %}
+        <option value="{{ c.code }}">{{ c.code }}</option>
+        {% endfor %}
+      </select>
+      <label>Brand</label>
+      <select name="brand_code">
+        <option value="">All</option>
+        {% for b in options.brands or [] %}
+        <option value="{{ b.code }}">{{ b.code }}</option>
+        {% endfor %}
+      </select>
+      <label>Customer</label>
+      <input type="text" name="customer_code" placeholder="All" list="saiCustomerList" />
+      <datalist id="saiCustomerList">
+        {% for c in options.customers or [] %}
+        <option value="{{ c.code }}">{{ c.name or '' }}</option>
+        {% endfor %}
+      </datalist>
+      <label>Region</label>
+      <input type="text" name="region" placeholder="All" />
+      <label>Payment Type</label>
+      <input type="text" name="payment_type" placeholder="All" />
+      <label>Invoice Type</label>
+      <input type="text" name="invoice_type" placeholder="All" />
+      <button type="submit" class="sai-btn sai-btn--primary sai-btn--block">Apply Filters</button>
+    </form>
+  </aside>
+
+  <main class="sai-main">
+    <div id="saiError" class="sai-alert hidden"></div>
+
+    <section class="sai-gamify glass" id="saiGamify" aria-label="Daily progress">
+      <div class="sai-gamify__progress">
+        <div class="sai-gamify__bar"><div class="sai-gamify__fill" id="saiDailyBar"></div></div>
+        <span id="saiGapMsg">Loading target progress…</span>
+      </div>
+      <div class="sai-gamify__stats">
+        <span id="saiStreak">🔥 Streak: —</span>
+        <span id="saiRank">Rank: —</span>
+        <span id="saiRewards">Rewards: —</span>
+      </div>
+    </section>
+
+    <section class="sai-kpi-grid" id="saiKpiGrid" aria-label="Sales KPIs"></section>
+
+    <section class="sai-row">
+      <div class="sai-card glass sai-card--wide">
+        <div class="sai-card__head">Sales Comparison</div>
+        <div class="sai-card__tabs" id="saiCompTabs">
+          <button type="button" data-comp="today_vs_yesterday" class="active">Today vs Yesterday</button>
+          <button type="button" data-comp="week_vs_last_week">Week vs Last Week</button>
+          <button type="button" data-comp="month_vs_last_month">Month vs Month</button>
+          <button type="button" data-comp="year_vs_prior">Year vs Year</button>
+        </div>
+        <div class="sai-chart-wrap"><canvas id="saiCompChart"></canvas></div>
+      </div>
+      <div class="sai-card glass">
+        <div class="sai-card__head">Comparison Heatmap</div>
+        <div class="sai-chart-wrap sai-chart-wrap--short"><canvas id="saiHeatChart"></canvas></div>
+      </div>
+    </section>
+
+    <section class="sai-row">
+      <div class="sai-card glass sai-card--wide">
+        <div class="sai-card__head">AI Forecast Panel</div>
+        <div class="sai-forecast-kpis" id="saiForecastKpis"></div>
+        <div class="sai-chart-wrap"><canvas id="saiForecastChart"></canvas></div>
+      </div>
+      <div class="sai-card glass">
+        <div class="sai-card__head">Smart Alerts</div>
+        <ul class="sai-alerts" id="saiAlerts"></ul>
+      </div>
+    </section>
+
+    <section class="sai-row">
+      <div class="sai-card glass">
+        <div class="sai-card__head">Branch Comparison</div>
+        <div class="sai-chart-wrap sai-chart-wrap--short"><canvas id="saiBranchChart"></canvas></div>
+      </div>
+      <div class="sai-card glass">
+        <div class="sai-card__head">Salesperson Comparison</div>
+        <div class="sai-chart-wrap sai-chart-wrap--short"><canvas id="saiSalesmanChart"></canvas></div>
+      </div>
+      <div class="sai-card glass">
+        <div class="sai-card__head">Category vs Brand</div>
+        <div class="sai-chart-wrap sai-chart-wrap--short"><canvas id="saiCatBrandChart"></canvas></div>
+      </div>
+    </section>
+
+    <section class="sai-card glass">
+      <div class="sai-card__head">Category Performance</div>
+      <div class="sai-category-grid" id="saiCategoryGrid"></div>
+    </section>
+
+    <section class="sai-row">
+      <div class="sai-card glass">
+        <div class="sai-card__head">Top 10 Brands</div>
+        <div class="sai-chart-wrap sai-chart-wrap--short"><canvas id="saiBrandBarChart"></canvas></div>
+      </div>
+      <div class="sai-card glass">
+        <div class="sai-card__head">Brand Mix</div>
+        <div class="sai-chart-wrap sai-chart-wrap--short"><canvas id="saiBrandDonutChart"></canvas></div>
+      </div>
+      <div class="sai-card glass">
+        <div class="sai-card__head">Brand Insights</div>
+        <div id="saiBrandInsights" class="sai-insights-list"></div>
+      </div>
+    </section>
+
+    <section class="sai-card glass">
+      <div class="sai-card__head">
+        Top Products
+        <input type="search" id="saiProductSearch" class="sai-search" placeholder="Search products…" />
+      </div>
+      <div class="sai-table-scroll">
+        <table class="sai-table" id="saiProductTable">
+          <thead>
+            <tr>
+              <th data-sort="rank">Rank</th>
+              <th>Image</th>
+              <th data-sort="name">Product</th>
+              <th data-sort="category">Category</th>
+              <th data-sort="brand">Brand</th>
+              <th data-sort="qty">Qty</th>
+              <th data-sort="sales">Sales</th>
+              <th data-sort="profit">Profit</th>
+              <th data-sort="margin_pct">Margin %</th>
+              <th data-sort="growth_pct">Growth</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="sai-card glass">
+      <div class="sai-card__head">Salesperson Leaderboard</div>
+      <div class="sai-leaderboard" id="saiLeaderboard"></div>
+    </section>
+
+    <section class="sai-row">
+      <div class="sai-card glass">
+        <div class="sai-card__head">Customer Segments</div>
+        <div class="sai-chart-wrap sai-chart-wrap--short"><canvas id="saiSegmentChart"></canvas></div>
+      </div>
+      <div class="sai-card glass">
+        <div class="sai-card__head">Top Customers</div>
+        <ul class="sai-list" id="saiTopCustomers"></ul>
+      </div>
+      <div class="sai-card glass">
+        <div class="sai-card__head">Customer KPIs</div>
+        <div class="sai-mini-kpis" id="saiCustomerKpis"></div>
+      </div>
+    </section>
+
+    <section class="sai-row">
+      <div class="sai-card glass sai-card--wide">
+        <div class="sai-card__head">Geographic Sales</div>
+        <div class="sai-geo" id="saiGeoMap"></div>
+      </div>
+      <div class="sai-card glass">
+        <div class="sai-card__head">Sales Trend (90d)</div>
+        <div class="sai-chart-wrap"><canvas id="saiTrendChart"></canvas></div>
+      </div>
+    </section>
+
+    <section class="sai-card glass">
+      <div class="sai-card__head">Time Analysis</div>
+      <div class="sai-time-tabs" id="saiTimeTabs">
+        <button type="button" data-time="hour" class="active">Hour</button>
+        <button type="button" data-time="day_of_week">Day</button>
+        <button type="button" data-time="month">Month</button>
+      </div>
+      <div class="sai-chart-wrap sai-chart-wrap--short"><canvas id="saiTimeChart"></canvas></div>
+    </section>
+
+    <section class="sai-row">
+      <div class="sai-card glass">
+        <div class="sai-card__head">Product Movement</div>
+        <div id="saiMovement" class="sai-movement"></div>
+      </div>
+      <div class="sai-card glass">
+        <div class="sai-card__head">AI Insights</div>
+        <ul class="sai-ai-list" id="saiAiInsights"></ul>
+      </div>
+      <div class="sai-card glass">
+        <div class="sai-card__head">Bonus AI Widgets</div>
+        <div id="saiAiWidgets" class="sai-widgets"></div>
+      </div>
+    </section>
+
+    {% if openai_configured %}
+    <section class="sai-card glass sai-card--ai">
+      <div class="sai-card__head">AI-Generated Daily Action Plan</div>
+      <div class="sai-narrative" id="saiNarrative">Click “AI Daily Plan” for a personalized action plan based on live data.</div>
+    </section>
+    {% endif %}
+  </main>
+</div>
+<script src="{{ url_for('static', filename='js/sales_ai.js') }}?v=1"></script>
+{% endblock %}

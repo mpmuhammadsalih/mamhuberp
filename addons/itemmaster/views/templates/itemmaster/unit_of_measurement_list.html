@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block title %}Unit of measurement{% endblock %}
+{% block content %}
+<style>
+  .uom-badge { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 700; background: #e0f2fe; color: #0369a1; }
+</style>
+
+<div class="page-po nexa-list-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Unit of measurement</h1>
+      <p class="page-po__muted">Maintains the <code>UNITOFMEASUREMENT</code> table (<code>UNITCODE</code> / <code>UNITNAME</code> or equivalent). These values are used on items (e.g. <code>BASEUOM</code>) and on transaction lines.{% if location_code %} Branch location: <strong>{{ location_code }}</strong>.{% endif %}</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <button type="button" class="page-po__btn-primary" id="uomBtnNew">+ New unit</button>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div class="nexa-list-toolbar">
+    <input type="text" id="uomSearch" class="input" placeholder="Filter by code or name…"
+           style="min-width:220px; max-width:320px;" autocomplete="off" />
+  </div>
+
+  <div class="co-table-wrap">
+    <table class="co-table" id="uomTable">
+      <thead>
+        <tr>
+          <th data-col="0" style="text-align:center; width:60px;">Sl.No<span class="sort-arrow"></span></th>
+          <th data-col="1" style="width:120px;">Unit code<span class="sort-arrow"></span></th>
+          <th data-col="2">Unit name<span class="sort-arrow"></span></th>
+          <th style="text-align:center; width:160px;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="uomTbody">
+        {% for r in rows %}
+        <tr data-search="{{ (r.unitcode|string ~ ' ' ~ (r.unitname or ''))|e }}">
+          <td class="sl-no" style="text-align:center; color:#6b7280;">{{ loop.index }}</td>
+          <td style="font-family:monospace; font-weight:600;"><span class="uom-badge">{{ r.unitcode }}</span></td>
+          <td>{{ r.unitname or '' }}</td>
+          <td style="text-align:center; white-space:nowrap;">
+            <button type="button" class="btn-view" data-uom-action="edit" data-code="{{ r.unitcode }}" data-name="{{ (r.unitname or '')|e }}">Edit</button>
+            <button type="button" class="btn-view" data-uom-action="delete" data-code="{{ r.unitcode }}" style="margin-left:6px;border-color:#fecaca;color:#b91c1c;">Delete</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">No units found. Add a row in <code>UNITOFMEASUREMENT</code> or use <strong>+ New unit</strong>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal hidden" id="uomModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="uomModal"></div>
+  <div class="modal__content" style="max-width: 440px;">
+    <div class="modal__header">
+      <h3 id="uomModalTitle">Unit</h3>
+      <button type="button" class="modal__close" data-close="uomModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <p class="page-po__muted" id="uomModalHint" style="margin-bottom:12px;"></p>
+      <input type="hidden" id="uom-mode" />
+      <div class="mb-3" id="uom-code-row">
+        <label class="form-label" for="uom-code">Unit code *</label>
+        <input type="text" class="form-control" id="uom-code" maxlength="30" placeholder="e.g. PCS, KG, BOX" autocomplete="off" style="text-transform:uppercase;" />
+      </div>
+      <div class="mb-3" id="uom-code-readonly-row" style="display:none;">
+        <label class="form-label" for="uom-code-readonly">Unit code</label>
+        <input type="text" class="form-control" id="uom-code-readonly" readonly tabindex="-1" style="background:#f8fafc; font-family:monospace;" />
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="uom-name">Unit name *</label>
+        <input type="text" class="form-control" id="uom-name" maxlength="200" autocomplete="off" />
+      </div>
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:8px; padding:12px 20px; border-top:1px solid #e2e8f0;">
+      <button type="button" class="btn btn-secondary" data-close="uomModal">Cancel</button>
+      <button type="button" class="btn btn-primary" id="uom-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var UOM_SAVE_URL = {{ url_for('itemmaster.unit_of_measurement_save')|tojson }};
+var UOM_ISSUE_ONCE_URL = {{ url_for('itemmaster.unit_of_measurement_issue_once')|tojson }};
+var UOM_CREATE_ONCE = {{ (uom_create_once or '')|tojson }};
+var UOM_PENDING_EDIT_ONCE = '';
+if (typeof window.__GLOBAL_SAVE_NONCE === 'string' && {{ (global_save_nonce or '')|tojson }}) {
+  window.__GLOBAL_SAVE_NONCE = {{ (global_save_nonce or '')|tojson }};
+}
+
+function uomPayloadExtra() {
+  var o = {};
+  if (typeof window.__GLOBAL_SAVE_NONCE === 'string' && window.__GLOBAL_SAVE_NONCE) {
+    o.save_nonce = window.__GLOBAL_SAVE_NONCE;
+  }
+  return o;
+}
+
+function uomClose() { var m = document.getElementById('uomModal'); if (m) m.classList.add('hidden'); }
+function uomOpen() { var m = document.getElementById('uomModal'); if (m) { m.classList.remove('hidden'); document.getElementById('uom-name').focus(); } }
+function uomReset() {
+  document.getElementById('uom-mode').value = '';
+  document.getElementById('uom-code').value = '';
+  document.getElementById('uom-name').value = '';
+  document.getElementById('uom-code-readonly').value = '';
+  document.getElementById('uom-code-row').style.display = '';
+  document.getElementById('uom-code-readonly-row').style.display = 'none';
+  document.getElementById('uomModalHint').textContent = '';
+  UOM_PENDING_EDIT_ONCE = '';
+}
+
+document.getElementById('uomModal').addEventListener('click', function(e) {
+  if (e.target.getAttribute('data-close') === 'uomModal' || e.target.classList.contains('modal__overlay') || e.target.classList.contains('modal__close')) {
+    uomClose();
+  }
+});
+
+document.getElementById('uomBtnNew').addEventListener('click', function() {
+  uomReset();
+  document.getElementById('uom-mode').value = 'create';
+  document.getElementById('uomModalTitle').textContent = 'New unit';
+  document.getElementById('uomModalHint').textContent = 'Code is unique (e.g. PCS) and is stored in upper case.';
+  uomOpen();
+  document.getElementById('uom-code').focus();
+});
+
+document.getElementById('uomTbody').addEventListener('click', function(e) {
+  var t = e.target.closest('[data-uom-action]');
+  if (!t) return;
+  var a = t.getAttribute('data-uom-action');
+  var c = t.getAttribute('data-code') || '';
+  if (a === 'edit') {
+    var ic = UOM_ISSUE_ONCE_URL + '?intent=edit&code=' + encodeURIComponent(c);
+    fetch(ic).then(function(r) { return r.json(); }).then(function(j) {
+      if (!j || !j.ok || !j.once) {
+        alert((j && j.error) ? j.error : 'Could not open edit (session/token).');
+        return;
+      }
+      if (j.save_nonce) window.__GLOBAL_SAVE_NONCE = j.save_nonce;
+      uomReset();
+      UOM_PENDING_EDIT_ONCE = j.once;
+      document.getElementById('uom-mode').value = 'update';
+      document.getElementById('uomModalTitle').textContent = 'Edit unit';
+      document.getElementById('uomModalHint').textContent = 'Unit code cannot be changed. Update the display name only.';
+      document.getElementById('uom-code-row').style.display = 'none';
+      document.getElementById('uom-code-readonly-row').style.display = '';
+      document.getElementById('uom-code-readonly').value = c;
+      document.getElementById('uom-name').value = t.getAttribute('data-name') || '';
+      uomOpen();
+    }).catch(function() { alert('Network error preparing edit'); });
+    return;
+  }
+  if (a === 'delete') {
+    if (!confirm('Delete unit ' + c + '?')) return;
+    var btn = document.getElementById('uom-save');
+    if (btn) btn.disabled = true;
+    var delUrl = UOM_ISSUE_ONCE_URL + '?intent=delete&code=' + encodeURIComponent(c);
+    fetch(delUrl).then(function(r) { return r.json(); }).then(function(issue) {
+      if (!issue || !issue.ok || !issue.once) {
+        if (btn) btn.disabled = false;
+        alert((issue && issue.error) ? issue.error : 'Could not prepare delete.');
+        return;
+      }
+      if (issue.save_nonce) window.__GLOBAL_SAVE_NONCE = issue.save_nonce;
+      return fetch(UOM_SAVE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.assign({ mode: 'delete', code: c, uom_delete_once: issue.once }, uomPayloadExtra()))
+      });
+    }).then(function(r) {
+      if (!r || typeof r.json !== 'function') { if (btn) btn.disabled = false; return; }
+      return r.json().then(function(j) { return { ok: r.ok, data: j }; });
+    }).then(function(res) {
+      if (!res) return;
+      if (btn) btn.disabled = false;
+      if (res.ok && res.data && res.data.ok) {
+        if (res.data.save_nonce) window.__GLOBAL_SAVE_NONCE = res.data.save_nonce;
+        window.location.reload();
+        return;
+      }
+      alert((res.data && res.data.error) ? res.data.error : 'Delete failed');
+      if (res.data && res.data.save_nonce) window.__GLOBAL_SAVE_NONCE = res.data.save_nonce;
+    }).catch(function() { if (btn) btn.disabled = false; alert('Network error'); });
+  }
+});
+
+document.getElementById('uom-save').addEventListener('click', function() {
+  var mode = document.getElementById('uom-mode').value;
+  var name = (document.getElementById('uom-name').value || '').trim();
+  if (!name) { alert('Name is required'); return; }
+  var payload;
+  if (mode === 'create') {
+    var c = (document.getElementById('uom-code').value || '').trim().toUpperCase();
+    if (!c) { alert('Code is required'); return; }
+    payload = Object.assign({ mode: 'create', code: c, name: name, uom_create_once: UOM_CREATE_ONCE }, uomPayloadExtra());
+  } else if (mode === 'update') {
+    var c2 = (document.getElementById('uom-code-readonly').value || '').trim();
+    if (!c2) { alert('Code missing'); return; }
+    if (!UOM_PENDING_EDIT_ONCE) {
+      alert('Session lock missing. Close and choose Edit again.');
+      return;
+    }
+    payload = Object.assign({ mode: 'update', code: c2, name: name, uom_edit_once: UOM_PENDING_EDIT_ONCE }, uomPayloadExtra());
+  } else {
+    return;
+  }
+  var btn = document.getElementById('uom-save');
+  btn.disabled = true;
+  fetch(UOM_SAVE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).then(function(r) { return r.json().then(function(j) { return { ok: r.ok, data: j }; }); })
+    .then(function(res) {
+      btn.disabled = false;
+      if (res.data && res.data.save_nonce) window.__GLOBAL_SAVE_NONCE = res.data.save_nonce;
+      if (res.ok && res.data && res.data.ok) {
+        if (res.data.uom_create_once) UOM_CREATE_ONCE = res.data.uom_create_once;
+        uomClose(); window.location.reload(); return;
+      }
+      alert((res.data && res.data.error) ? res.data.error : 'Save failed');
+    })
+    .catch(function() { btn.disabled = false; alert('Network error'); });
+});
+
+document.getElementById('uomSearch').addEventListener('input', function() {
+  var q = (this.value || '').trim().toLowerCase();
+  var trs = document.querySelectorAll('#uomTbody tr[data-search]');
+  for (var i = 0; i < trs.length; i++) {
+    var hay = (trs[i].getAttribute('data-search') || '').toLowerCase();
+    trs[i].style.display = (!q || hay.indexOf(q) !== -1) ? '' : 'none';
+  }
+});
+</script>
+{% endblock %}

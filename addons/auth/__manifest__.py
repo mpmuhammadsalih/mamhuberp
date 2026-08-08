@@ -1,0 +1,2 @@
+"""Addon manifest — Auth."""
+MANIFEST = {'technical_name': 'auth', 'name': 'Auth', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Migrated from blueprints/auth.py', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/auth'}, 'flask': {'blueprint': 'auth', 'blueprint_ref': 'addons.auth:bp', 'models_package': 'addons.auth.models', 'routes_module': 'addons.auth.controllers.routes'}}

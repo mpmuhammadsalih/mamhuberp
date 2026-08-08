@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body { background: #f8f9fa !important; }
+  .dbx { max-width: 720px; margin: 28px auto 56px; padding: 0 16px; }
+  .dbx h1 { font-size: 1.5rem; margin: 0 0 8px; color: #212529; }
+  .dbx > p.sub { color: #6c757d; font-size: 14px; margin: 0 0 24px; line-height: 1.5; }
+  .dbx .grid { display: grid; gap: 16px; }
+  @media (min-width: 640px) {
+    .dbx .grid.two { grid-template-columns: 1fr 1fr; }
+  }
+  .dbx .panel { background: #fff; border-radius: 10px; padding: 18px 20px; box-shadow: 0 1px 3px rgba(0,0,0,.07); border-top: 4px solid #dee2e6; }
+  .dbx .panel--app { border-top-color: #198754; }
+  .dbx .panel--edit { border-top-color: #0d6efd; }
+  .dbx .panel h2 { font-size: 1rem; margin: 0 0 12px; color: #212529; display: flex; align-items: center; gap: 8px; }
+  .dbx .panel p { font-size: 14px; color: #495057; margin: 0 0 12px; line-height: 1.45; }
+  .dbx dl { margin: 0; font-size: 13px; }
+  .dbx dt { color: #6c757d; font-weight: 600; margin-top: 10px; }
+  .dbx dt:first-child { margin-top: 0; }
+  .dbx dd { margin: 4px 0 0; word-break: break-all; color: #212529; }
+  .dbx .btn { display: inline-block; padding: 10px 18px; border-radius: 8px; font-weight: 600; text-decoration: none; font-size: 14px; border: none; cursor: pointer; text-align: center; }
+  .dbx .btn-primary { background: #198754; color: #fff !important; }
+  .dbx .btn-primary:hover { background: #157347; color: #fff !important; }
+  .dbx .btn-secondary { background: #e7f1ff; color: #084298 !important; border: 1px solid #0d6efd; }
+  .dbx .btn-secondary:hover { background: #d0e3ff; color: #084298 !important; }
+  .dbx .btn-ghost { background: #fff; color: #495057 !important; border: 1px solid #ced4da; }
+  .dbx .btn-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; align-items: center; }
+  .dbx .pill { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #e9ecef; color: #495057; }
+  .dbx .banner { font-size: 13px; padding: 12px 14px; border-radius: 8px; margin-top: 14px; line-height: 1.45; }
+  .dbx .banner--amber { background: #fff8e6; border-left: 4px solid #f59e0b; color: #92400e; }
+  .dbx .banner--red { background: #fdecec; border-left: 4px solid #dc3545; color: #842029; }
+  .dbx .banner--blue { background: #e7f1ff; border-left: 4px solid #0d6efd; color: #084298; }
+  .dbx .flash-list { margin-bottom: 16px; }
+  .dbx code { font-size: 12px; }
+  .dbx label { font-size: 13px; font-weight: 600; display: block; margin-top: 10px; color: #495057; }
+  .dbx input[type="password"] { width: 100%; padding: 9px 11px; border: 1px solid #ced4da; border-radius: 6px; box-sizing: border-box; margin-top: 6px; font-size: 14px; }
+</style>
+
+<div class="dbx">
+  <h1>Database setup</h1>
+  <p class="sub">
+    {% if wizard_disabled %}
+      The setup wizard is disabled on this server (<code>DATABASE_SETUP_DISABLED=1</code>).
+    {% else %}
+      Oracle is already configured. Use the options below to continue to the app, or change connection settings (admin / setup key / env).
+    {% endif %}
+  </p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-list">
+        {% for category, message in messages %}
+          <div class="flash flash--{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {% if wizard_disabled %}
+    <div class="panel">
+      <p style="margin:0;">Remove <code>DATABASE_SETUP_DISABLED</code> (or set to <code>0</code>), restart the server, then visit <code>/database-setup</code> again.</p>
+      <div class="btn-row" style="margin-top:14px;">
+        <a class="btn btn-primary" href="{{ login_url }}">Sign in</a>
+      </div>
+    </div>
+  {% else %}
+
+  <div class="panel" style="margin-bottom:10px;border-top-color:#6c757d;">
+    <span class="pill">{{ 'Multi-DB mode' if status_mode == 'multi' else 'Single DB mode' }}</span>
+    <h2 style="margin-top:10px;">Connection summary <span style="font-weight:400;font-size:12px;color:#6c757d;">(passwords never shown)</span></h2>
+    <dl>
+      {% if status_mode == 'multi' %}
+        <dt>Auth Oracle user</dt><dd>{{ status_auth_user or '—' }}</dd>
+        <dt>Auth DSN</dt><dd>{{ status_auth_dsn or '—' }}</dd>
+        {% if status_single_user %}
+          <dt>Optional <code>DB_*</code> user</dt><dd>{{ status_single_user }}</dd>
+          <dt>Optional <code>DB_*</code> DSN</dt><dd>{{ status_single_dsn or '—' }}</dd>
+        {% endif %}
+      {% else %}
+        <dt>Oracle user</dt><dd>{{ status_single_user or '—' }}</dd>
+        <dt>DSN</dt><dd>{{ status_single_dsn or '—' }}</dd>
+      {% endif %}
+    </dl>
+  </div>
+
+  <div class="grid two">
+    <div class="panel panel--app">
+      <h2>Use the application</h2>
+      <p>Sign in and work with your data. You can return to this page anytime from the browser if you have access.</p>
+      <div class="btn-row">
+        <a class="btn btn-primary" href="{{ login_url }}">Sign in</a>
+        {% if current_user %}
+          <a class="btn btn-secondary" href="{{ dashboard_url }}">Go to dashboard</a>
+        {% else %}
+          <a class="btn btn-ghost" href="{{ dashboard_after_login }}">Sign in &amp; open dashboard</a>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="panel panel--edit">
+      <h2>Edit database connection</h2>
+      <p style="font-size:13px;color:#495057;margin:0 0 12px;">The setup form includes <strong>Single DB</strong> vs <strong>Multi-DB</strong> — you can change mode later when you open the full wizard.</p>
+      {% if admin_edit_available %}
+        <p>
+          <strong>Privileged logins</strong> (<code>admin</code> or <code>super</code>, case-insensitive)
+          can open the full setup form <em>without</em> changing <code>.env</code> manually — after you sign in with that account, reload <code>/database-setup</code>.
+        </p>
+        <div class="btn-row">
+          <a class="btn btn-secondary" href="{{ login_url_with_next }}">Sign in &amp; return to setup</a>
+        </div>
+        {% if current_user_is_privileged %}
+          <div class="banner banner--blue">
+            You are signed in as <strong>{{ current_user }}</strong>. If the form does not open automatically, your server may block it — see below or use an unlock key.
+          </div>
+          <div class="btn-row" style="margin-top:10px;">
+            <a class="btn btn-primary" href="{{ wizard_url }}">Open setup form now</a>
+          </div>
+        {% endif %}
+      {% else %}
+        <div class="banner banner--amber">
+          Admin-based editing is turned off (<code>DATABASE_SETUP_NO_ADMIN_EDIT=1</code>). Use the setup key below or set <code>ALLOW_DATABASE_SETUP_WHILE_CONFIGURED=1</code>.
+        </div>
+        {% if current_user_is_privileged %}
+          <p style="margin-top:10px;">Your account is privileged, but the admin shortcut is disabled on this host.</p>
+        {% endif %}
+      {% endif %}
+
+      {% if has_edit_unlock_key %}
+        <div class="banner banner--amber" style="margin-top:14px;">
+          Optional: set <code>DATABASE_SETUP_EDIT_KEY</code> in <code>.env</code> and enter it here to unlock the wizard for this browser (no restart).
+        </div>
+        <form method="post" action="{{ url_for('database_setup.unlock') }}">
+          <input type="hidden" name="unlock_token" value="{{ unlock_token }}" />
+          <label for="edit_key">Setup key</label>
+          <input type="password" name="edit_key" id="edit_key" autocomplete="off" placeholder="Same value as DATABASE_SETUP_EDIT_KEY" />
+          <button type="submit" class="btn btn-primary" style="width:100%;margin-top:14px;">Unlock &amp; open form</button>
+        </form>
+      {% else %}
+        <p style="margin-top:12px;font-size:13px;color:#6c757d;">
+          Other ways: add <code>ALLOW_DATABASE_SETUP_WHILE_CONFIGURED=1</code> or <code>DATABASE_SETUP_EDIT_KEY</code> to <code>.env</code>,
+          or <code>DATABASE_SETUP_ALWAYS=1</code> on trusted dev hosts.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

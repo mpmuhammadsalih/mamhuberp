@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}Purchase Debit Note{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .pdn-list-page .pdn-status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+  .pdn-list-page .pdn-status-pill--draft { background: #eef2ff; color: #4338ca; }
+  .pdn-list-page .pdn-status-pill--posted { background: #e0f2fe; color: #0369a1; }
+  .pdn-list-page .pdn-row-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .pdn-list-page .pdn-row-actions .page-po__btn-secondary {
+    padding: 4px 10px !important;
+    min-height: 28px !important;
+    font-size: 11px !important;
+  }
+  .pdn-list-page .pdn-row-actions .pdn-btn-post {
+    border-color: #bbf7d0 !important;
+    color: #15803d !important;
+  }
+</style>
+
+{% set _pending_n = (pending_rows or [])|length %}
+{% set _completed_n = (completed_rows or [])|length %}
+{% set _total_n = _pending_n + _completed_n %}
+
+<div class="page-po nexa-list-page nexa-setup-list-page pdn-list-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title page-po__title--with-icon">
+        <span class="page-po__title-icon" aria-hidden="true"><i class="bi bi-receipt"></i></span>
+        Purchase Debit Note
+      </h1>
+      <p class="page-po__muted">Create draft debit note requests, then post debit notes to accounts.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('purchase.purchase_debit_note_new') }}" class="page-po__btn-primary">New request</a>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div class="nexa-stat-grid" aria-label="Debit note summary">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue" aria-hidden="true"><i class="bi bi-files"></i></span>
+      <div>
+        <p class="nexa-stat-label">Total</p>
+        <p class="nexa-stat-value">{{ _total_n }}</p>
+        <p class="nexa-stat-sub">Requests + posted</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple" aria-hidden="true"><i class="bi bi-pencil-square"></i></span>
+      <div>
+        <p class="nexa-stat-label">Pending requests</p>
+        <p class="nexa-stat-value">{{ _pending_n }}</p>
+        <p class="nexa-stat-sub">Ready to post</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green" aria-hidden="true"><i class="bi bi-check2-circle"></i></span>
+      <div>
+        <p class="nexa-stat-label">Posted</p>
+        <p class="nexa-stat-value">{{ _completed_n }}</p>
+        <p class="nexa-stat-sub">Debit notes saved</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="po-tabs">
+    <button type="button" class="po-tab active" data-tab="pendingTab">Pending ({{ _pending_n }})</button>
+    <button type="button" class="po-tab" data-tab="completedTab">Posted ({{ _completed_n }})</button>
+  </div>
+
+  <div class="nexa-list-toolbar">
+    <input type="text" id="pdnListSearch" class="input" placeholder="Search request no, supplier…"
+           style="min-width:220px; max-width:360px;" autocomplete="off" />
+    <button type="button" class="page-po__btn-secondary" id="pdnListSearchClear" style="padding:4px 10px; font-size:11px;">Clear</button>
+    <span id="pdnListMeta" class="nexa-num"></span>
+  </div>
+
+  <div id="pendingTab" class="tab-pane active">
+    <div class="page-po__section-title">Pending debit note requests</div>
+    <div class="co-table-wrap">
+      <table class="co-table" id="pdnPendingTable">
+        <thead>
+          <tr>
+            <th>Request No</th>
+            <th>Date</th>
+            <th>Supplier</th>
+            <th>Status</th>
+            <th class="num">Amount</th>
+            <th style="cursor:default;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in pending_rows %}
+          <tr data-search="{{ r.goodsreturnno }} {{ r.suppliercode or '' }} {{ r.suppliername or '' }} draft">
+            <td><a class="pi-link" href="{{ url_for('purchase.purchase_debit_note_request_query', goods_return_no=r.goodsreturnno) }}">{{ r.goodsreturnno }}</a></td>
+            <td>{{ (r.returndate|string)[:10] if r.returndate else '-' }}</td>
+            <td>
+              {% if r.suppliercode %}{{ r.suppliercode }}{% endif %}
+              {% if r.suppliername %} - {{ r.suppliername }}{% endif %}
+            </td>
+            <td><span class="pdn-status-pill pdn-status-pill--draft">{{ (r.approval_status or 'DRAFT') }}</span></td>
+            <td class="num">{{ "%.2f"|format((r.returnamount or 0)|float) }}</td>
+            <td>
+              <div class="pdn-row-actions">
+                <a class="page-po__btn-secondary" href="{{ url_for('purchase.purchase_debit_note_request_query', goods_return_no=r.goodsreturnno) }}">View</a>
+                {% if (r.approval_status or 'DRAFT')|upper == 'DRAFT' %}
+                <a class="page-po__btn-secondary" href="{{ url_for('purchase.purchase_debit_note_request_edit', goods_return_no=r.goodsreturnno) }}">Edit</a>
+                {% endif %}
+                <a class="page-po__btn-secondary" href="{{ url_for('purchase.api_debit_note_request_pdf', goods_return_no=r.goodsreturnno) }}" target="_blank" rel="noopener">PDF</a>
+                <a class="page-po__btn-secondary pdn-btn-post" href="{{ url_for('purchase.purchase_debit_note_post_new', return_order_no=r.goodsreturnno) }}">Post</a>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" style="text-align:center;padding:10px;color:#6b7280;font-style:italic;">No pending debit note requests.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="completedTab" class="tab-pane">
+    <div class="page-po__section-title">Posted debit notes</div>
+    <div class="co-table-wrap">
+      <table class="co-table" id="pdnCompletedTable">
+        <thead>
+          <tr>
+            <th>Debit Note No</th>
+            <th>Date</th>
+            <th>Supplier</th>
+            <th>Status</th>
+            <th class="num">Amount</th>
+            <th style="cursor:default;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in completed_rows %}
+          <tr data-search="{{ r.goodsreturnno }} {{ r.suppliercode or '' }} {{ r.suppliername or '' }} posted">
+            <td><a class="pi-link" href="{{ url_for('purchase.purchase_debit_note_query', goods_return_no=r.goodsreturnno) }}">{{ r.goodsreturnno }}</a></td>
+            <td>{{ (r.returndate|string)[:10] if r.returndate else '-' }}</td>
+            <td>
+              {% if r.suppliercode %}{{ r.suppliercode }}{% endif %}
+              {% if r.suppliername %} - {{ r.suppliername }}{% endif %}
+            </td>
+            <td><span class="pdn-status-pill pdn-status-pill--posted">Posted</span></td>
+            <td class="num">{{ "%.2f"|format((r.returnamount or 0)|float) }}</td>
+            <td>
+              <div class="pdn-row-actions">
+                <a class="page-po__btn-secondary" href="{{ url_for('purchase.purchase_debit_note_query', goods_return_no=r.goodsreturnno) }}">View</a>
+                <a class="page-po__btn-secondary" href="{{ url_for('purchase.api_debit_note_pdf', dr_no=r.goodsreturnno) }}" target="_blank" rel="noopener">PDF</a>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" style="text-align:center;padding:10px;color:#6b7280;font-style:italic;">No posted debit notes found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  const tabs = document.querySelectorAll('.po-tab[data-tab]');
+  const panes = document.querySelectorAll('.tab-pane');
+  tabs.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      tabs.forEach(function (b) { b.classList.remove('active'); });
+      panes.forEach(function (p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+      const pane = document.getElementById(btn.dataset.tab);
+      if (pane) pane.classList.add('active');
+      filterTables();
+    });
+  });
+
+  const searchEl = document.getElementById('pdnListSearch');
+  const clearBtn = document.getElementById('pdnListSearchClear');
+  const metaEl = document.getElementById('pdnListMeta');
+
+  function filterTables() {
+    const q = (searchEl && searchEl.value || '').trim().toLowerCase();
+    let visible = 0;
+    let total = 0;
+    document.querySelectorAll('#pdnPendingTable tbody tr[data-search], #pdnCompletedTable tbody tr[data-search]').forEach(function (tr) {
+      const pane = tr.closest('.tab-pane');
+      if (!pane || !pane.classList.contains('active')) return;
+      total += 1;
+      const hay = (tr.getAttribute('data-search') || '').toLowerCase();
+      const show = !q || hay.indexOf(q) !== -1;
+      tr.style.display = show ? '' : 'none';
+      if (show) visible += 1;
+    });
+    if (metaEl) metaEl.textContent = q ? (visible + ' of ' + total + ' shown') : '';
+  }
+
+  if (searchEl) searchEl.addEventListener('input', filterTables);
+  if (clearBtn) clearBtn.addEventListener('click', function () {
+    if (searchEl) searchEl.value = '';
+    filterTables();
+  });
+})();
+</script>
+{% endblock %}

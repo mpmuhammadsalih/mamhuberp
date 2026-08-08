@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+{% block content %}
+{% set current_sort_by = sort_by or 'rawabicode' %}
+{% set current_sort_dir = sort_dir or 'desc' %}
+{% set per_page = items_per_page or 100 %}
+{% set list_base = url_for('ho.itemmaster_central') %}
+{% set form_base = url_for('ho.itemmaster_central_form') %}
+
+{% macro ho_imc_url(sort_col=current_sort_by, sort_direction=current_sort_dir, page_num=current_page, q=search) -%}
+{{ list_base }}?{% if q %}search={{ q|urlencode }}&{% endif %}sort_by={{ sort_col }}&sort_dir={{ sort_direction }}{% if page_num and page_num > 1 %}&page={{ page_num }}{% endif %}
+{%- endmacro %}
+
+{% macro ho_imc_toggle_sort(col) -%}
+{% if current_sort_by == col and current_sort_dir == 'desc' %}asc{% else %}desc{% endif %}
+{%- endmacro %}
+
+<style>
+  body { overflow-x: auto; min-height: 100vh; color: #212529; }
+  .im-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px 16px;
+    --im-toolbar-bg: linear-gradient(180deg, #f0f7fb 0%, #e3eef8 100%);
+    --im-toolbar-border: rgba(13, 110, 253, 0.14);
+    --im-field-fill: rgba(255, 255, 255, 0.52);
+    --im-field-fill-strong: #eaf2fa;
+    --im-table-surface: rgba(255, 255, 255, 0.55);
+  }
+  .im-topbar { display: flex; flex-direction: column; align-items: stretch; gap: 16px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #dee2e6; }
+  .im-topbar-main { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; }
+  .im-topbar h1 { margin: 0; font-size: 17px; font-weight: 400; color: #212529; line-height: 1.3; }
+  .im-topbar h1 .im-ref { font-weight: 600; }
+  .im-topbar .im-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .im-btn-save { background: #28a745 !important; border: none; color: #fff !important; padding: 8px 20px; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; text-decoration: none !important; display: inline-flex; align-items: center; }
+  .im-btn-secondary { background: var(--im-field-fill-strong); border: 1px solid rgba(13, 110, 253, 0.16); color: #495057; padding: 8px 16px; border-radius: 4px; font-size: 13px; cursor: pointer; text-decoration: none !important; display: inline-flex; align-items: center; }
+  .im-btn-secondary:hover { background: #dfe8f3; }
+  .im-link { color: #007bff; text-decoration: none; font-size: 13px; }
+  .im-link:hover { text-decoration: underline; }
+  .im-target-db-panel {
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    background: linear-gradient(180deg, var(--im-field-fill-strong) 0%, #e2ecf6 100%);
+    box-sizing: border-box;
+  }
+  .im-target-db-panel__head {
+    display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between;
+    gap: 12px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e9ecef;
+  }
+  .im-target-db-panel__title { display: block; font-size: 14px; font-weight: 600; color: #212529; }
+  .im-target-db-panel__actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .im-target-db-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 10px 14px;
+  }
+  .im-target-db-cell {
+    display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 12px;
+    border: 1px solid #e2e8f0; border-radius: 6px; background: var(--im-field-fill-strong);
+    font-size: 12px; color: #495057; cursor: pointer; line-height: 1.35;
+  }
+  .im-target-db-cell:hover { border-color: #94a3b8; box-shadow: 0 1px 4px rgba(15, 23, 42, .07); }
+  .im-target-db-cell input[type="checkbox"] { margin-top: 3px; flex-shrink: 0; }
+  .im-target-db-cell .im-target-db-cell__text { flex: 1; min-width: 0; word-break: break-word; }
+  .ho-imc-search { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 14px; }
+  .ho-imc-search label { font-size: 12px; font-weight: 600; color: #495057; display: block; margin-bottom: 4px; }
+  .ho-imc-search .input {
+    border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; padding: 6px 0;
+    font-size: 13px; background: var(--im-field-fill); min-width: 260px;
+  }
+  .ho-imc-meta { font-size: 12px; color: #6c757d; margin: 0 0 10px; }
+  .scroll-table { border: 1px solid #dee2e6; border-radius: 4px; background: var(--im-table-surface); overflow: auto; max-height: 62vh; }
+  .itemmaster-container .table { width: 100%; border-collapse: collapse; min-width: 1080px; }
+  .itemmaster-container .table thead { background: var(--im-field-fill-strong) !important; }
+  .itemmaster-container .table thead th {
+    background: var(--im-field-fill-strong) !important; color: #495057 !important;
+    padding: 8px 12px; border-bottom: 1px solid #dee2e6; font-weight: 600; font-size: 12px;
+    position: sticky; top: 0; z-index: 1;
+  }
+  .itemmaster-container .table thead th a { color: inherit; text-decoration: none; }
+  .itemmaster-container .table thead th a:hover { text-decoration: underline; color: #007bff; }
+  .itemmaster-container .table td { padding: 8px 12px; font-size: 13px; border-bottom: 1px solid #dee2e6; }
+  .itemmaster-container .table tbody tr:hover { background: #f8f9fa !important; cursor: pointer; }
+  .itemmaster-container .table td.num { text-align: right; }
+  .itemmaster-container .table td.sl-no { text-align: center; color: #6c757d; }
+  .itemmaster-container .table td.col-itemname { max-width: 280px; white-space: normal; }
+  .ho-imc-pagination { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; font-size: 12px; color: #6c757d; }
+  .ho-imc-pagination .pages { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .ho-imc-pagination .pages a, .ho-imc-pagination .pages span {
+    padding: 4px 10px; border: 1px solid #dee2e6; border-radius: 4px; text-decoration: none; color: #495057; background: #fff;
+  }
+  .ho-imc-pagination .pages a:hover { background: #f8f9fa; }
+  .ho-imc-pagination .pages span.current { background: #007bff; border-color: #007bff; color: #fff; font-weight: 600; }
+  .ho-imc-pagination .pages span.disabled { color: #adb5bd; cursor: default; }
+
+  .im-page:has(.itemmaster-container) { padding-top: 50px !important; }
+  .im-page:has(.itemmaster-container) .im-topbar-main {
+    position: fixed !important; top: 46px; left: 260px; right: var(--nexa-scrollbar-width, 0px); z-index: 105;
+    margin: 0 !important; padding: 6px 16px 8px 16px; border-bottom: 1px solid var(--im-toolbar-border);
+    box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04), 0 6px 18px rgba(15, 23, 42, 0.06);
+    background: var(--im-toolbar-bg); box-sizing: border-box; width: auto; max-width: none;
+    display: flex !important; flex-wrap: nowrap; align-items: center; justify-content: flex-start; gap: 8px; min-width: 0;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main h1 {
+    flex: 1 1 auto; min-width: 0; margin: 0; font-size: 13px !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions {
+    flex: 0 0 auto; margin-left: auto; flex-wrap: nowrap; gap: 3px; overflow-x: auto;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions > a.im-btn-save,
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions > a.im-btn-secondary {
+    box-sizing: border-box !important; min-width: 5.25rem; padding: 6px 10px !important; font-size: 11px !important;
+    justify-content: center !important; flex-shrink: 0;
+  }
+  .layout.sidebar-collapsed:not(.layout--auth) .im-page:has(.itemmaster-container) .im-topbar-main { left: 56px; }
+  .layout--auth .im-page:has(.itemmaster-container) .im-topbar-main { top: 0; left: 0; }
+</style>
+
+<div class="im-page">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>Itemmaster Central / <span class="im-ref">List</span></h1>
+      <div class="im-actions">
+        <a href="{{ form_base }}" class="im-btn-save">+ New Item</a>
+        <a href="{{ url_for('ho.itemmaster_central_activity_log') }}" class="im-btn-secondary">Activity</a>
+        <button type="submit" form="hoImcSearchForm" class="im-btn-secondary">Search</button>
+        <a href="{{ list_base }}" class="im-btn-secondary">Clear</a>
+      </div>
+    </div>
+
+    <div id="hoTargetTenantChecks" class="im-target-db-panel" role="group" aria-label="Target databases">
+      <div class="im-target-db-panel__head">
+        <div>
+          <span class="im-target-db-panel__title">Target databases</span>
+          <span style="display:block;font-size:12px;color:#6c757d;margin-top:4px;">
+            Selected branches apply when you open or create an item (same as Item Master).
+            HO location {{ source_location_code or '—' }} · {{ source_tenant_id or 'HO' }}.
+          </span>
+        </div>
+        <div class="im-target-db-panel__actions">
+          <button type="button" class="im-link" id="btnHoTargetAll" style="font-size:13px;font-weight:600;">All</button>
+          <span style="color:#ced4da;" aria-hidden="true">|</span>
+          <button type="button" class="im-link" id="btnHoTargetNone" style="font-size:13px;font-weight:600;">None</button>
+        </div>
+      </div>
+      <div class="im-target-db-grid">
+        {% for t in target_dbs or [] %}
+        <label class="im-target-db-cell">
+          <input type="checkbox" class="ho-target-tenant-check" value="{{ t.tenant_id }}" checked />
+          <span class="im-target-db-cell__text">
+            <strong>{{ t.display_name or t.tenant_id }}</strong><br />
+            <span style="opacity:.92;">{{ t.tenant_id }}{% if t.network_link %} · {{ t.network_link }}{% endif %}</span>
+          </span>
+        </label>
+        {% else %}
+        <p style="margin:0;font-size:12px;color:#6c757d;">No branch databases configured for sync.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <section class="itemmaster-container">
+    <form method="get" action="{{ list_base }}" id="hoImcSearchForm" class="ho-imc-search">
+      <div>
+        <label for="hoImcSearchInput">Search</label>
+        <input type="text" id="hoImcSearchInput" class="input" name="search" value="{{ search or '' }}"
+               placeholder="Item code, name, barcode, Rawabi code…" autocomplete="off" />
+      </div>
+      <input type="hidden" name="sort_by" value="{{ current_sort_by }}" />
+      <input type="hidden" name="sort_dir" value="{{ current_sort_dir }}" />
+    </form>
+
+    <p class="ho-imc-meta">
+      <strong>{{ total_count or 0 }}</strong> item(s)
+      {% if total_pages > 1 %} · Page {{ current_page or 1 }} of {{ total_pages }}{% endif %}
+    </p>
+
+    <div class="scroll-table">
+      <table class="table" id="hoItemTable">
+        <thead>
+          <tr>
+            <th class="sl-no" style="text-align:center;width:52px;">#</th>
+            <th>
+              <a href="{{ ho_imc_url('rawabicode', ho_imc_toggle_sort('rawabicode'), 1) }}">
+                RawabiCode{% if current_sort_by == 'rawabicode' %} {{ '▼' if current_sort_dir == 'desc' else '▲' }}{% endif %}
+              </a>
+            </th>
+            <th>
+              <a href="{{ ho_imc_url('itemcode', ho_imc_toggle_sort('itemcode'), 1) }}">
+                Item Code{% if current_sort_by == 'itemcode' %} {{ '▼' if current_sort_dir == 'desc' else '▲' }}{% endif %}
+              </a>
+            </th>
+            <th>
+              <a href="{{ ho_imc_url('barcode', ho_imc_toggle_sort('barcode'), 1) }}">
+                Barcode{% if current_sort_by == 'barcode' %} {{ '▼' if current_sort_dir == 'desc' else '▲' }}{% endif %}
+              </a>
+            </th>
+            <th class="col-itemname">
+              <a href="{{ ho_imc_url('itemname', ho_imc_toggle_sort('itemname'), 1) }}">
+                Item Name{% if current_sort_by == 'itemname' %} {{ '▼' if current_sort_dir == 'desc' else '▲' }}{% endif %}
+              </a>
+            </th>
+            <th>
+              <a href="{{ ho_imc_url('uom', ho_imc_toggle_sort('uom'), 1) }}">
+                UOM{% if current_sort_by == 'uom' %} {{ '▼' if current_sort_dir == 'desc' else '▲' }}{% endif %}
+              </a>
+            </th>
+            <th class="num">
+              <a href="{{ ho_imc_url('cost', ho_imc_toggle_sort('cost'), 1) }}">
+                Cost{% if current_sort_by == 'cost' %} {{ '▼' if current_sort_dir == 'desc' else '▲' }}{% endif %}
+              </a>
+            </th>
+            <th class="num">
+              <a href="{{ ho_imc_url('retail', ho_imc_toggle_sort('retail'), 1) }}">
+                Retail{% if current_sort_by == 'retail' %} {{ '▼' if current_sort_dir == 'desc' else '▲' }}{% endif %}
+              </a>
+            </th>
+            <th class="num">
+              <a href="{{ ho_imc_url('currentstock', ho_imc_toggle_sort('currentstock'), 1) }}">
+                Stock{% if current_sort_by == 'currentstock' %} {{ '▼' if current_sort_dir == 'desc' else '▲' }}{% endif %}
+              </a>
+            </th>
+            <th>
+              <a href="{{ ho_imc_url('username', ho_imc_toggle_sort('username'), 1) }}">
+                Created By{% if current_sort_by == 'username' %} {{ '▼' if current_sort_dir == 'desc' else '▲' }}{% endif %}
+              </a>
+            </th>
+            <th>
+              <a href="{{ ho_imc_url('createddate', ho_imc_toggle_sort('createddate'), 1) }}">
+                Created{% if current_sort_by == 'createddate' %} {{ '▼' if current_sort_dir == 'desc' else '▲' }}{% endif %}
+              </a>
+            </th>
+            <th style="text-align:center;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if items %}
+            {% for item in items %}
+              {% set stock_qty = (item.currentstock or 0)|float %}
+              {% set sl = loop.index + ((current_page - 1) * per_page) %}
+              <tr class="ho-imc-row" data-item-code="{{ item.itemcode }}" data-href="{{ form_base }}?item_code={{ item.itemcode }}">
+                <td class="sl-no">{{ sl }}</td>
+                <td>{{ item.rawabicode or '—' }}</td>
+                <td><a href="{{ form_base }}?item_code={{ item.itemcode }}" class="im-link" onclick="event.stopPropagation();">{{ item.itemcode }}</a></td>
+                <td>{{ item.manufacturerid or '—' }}</td>
+                <td class="col-itemname" title="{{ item.itemname or '—' }}">{{ item.itemname or '—' }}</td>
+                <td>{{ item.unitofmeasurement or '—' }}</td>
+                <td class="num">{{ '%.3f'|format((item.costprice or 0)|float) }}</td>
+                <td class="num">{{ '%.3f'|format((item.retailprice or 0)|float) }}</td>
+                <td class="num">{{ '%.3f'|format(stock_qty) }}</td>
+                <td>{{ item.createdby or '—' }}</td>
+                <td>{{ item.createddate or '—' }}</td>
+                <td style="text-align:center;">
+                  <a href="{{ form_base }}?item_code={{ item.itemcode }}" class="im-link" onclick="event.stopPropagation();">Open</a>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="12" style="text-align:center;padding:24px;color:#6c757d;font-style:italic;">No items found.</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if total_pages > 1 %}
+    <div class="ho-imc-pagination">
+      <div>
+        {% set start_item = ((current_page - 1) * per_page) + 1 %}
+        {% set end_item = current_page * per_page if current_page * per_page < total_count else total_count %}
+        Showing {{ start_item }}–{{ end_item }} of {{ total_count }}
+      </div>
+      <div class="pages">
+        {% if current_page > 1 %}
+          <a href="{{ ho_imc_url(current_sort_by, current_sort_dir, current_page - 1) }}">« Prev</a>
+        {% else %}
+          <span class="disabled">« Prev</span>
+        {% endif %}
+        {% set start_page = [1, current_page - 2]|max %}
+        {% set end_page = [total_pages + 1, current_page + 3]|min %}
+        {% for p in range(start_page, end_page) %}
+          {% if p == current_page %}
+            <span class="current">{{ p }}</span>
+          {% else %}
+            <a href="{{ ho_imc_url(current_sort_by, current_sort_dir, p) }}">{{ p }}</a>
+          {% endif %}
+        {% endfor %}
+        {% if current_page < total_pages %}
+          <a href="{{ ho_imc_url(current_sort_by, current_sort_dir, current_page + 1) }}">Next »</a>
+        {% else %}
+          <span class="disabled">Next »</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </section>
+</div>
+
+<script>
+(function() {
+  const STORAGE_KEY = 'ho_central_target_tenant_ids';
+
+  function hoTargetChecks() {
+    return Array.from(document.querySelectorAll('.ho-target-tenant-check'));
+  }
+
+  function setHoTargetChecks(on) {
+    hoTargetChecks().forEach(function(cb) {
+      if (!cb.disabled) cb.checked = !!on;
+    });
+    saveHoTargetChecks();
+  }
+
+  function saveHoTargetChecks() {
+    try {
+      const ids = hoTargetChecks().filter(function(cb) { return cb.checked; }).map(function(cb) { return cb.value; });
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
+    } catch (e) { /* ignore */ }
+  }
+
+  function restoreHoTargetChecks() {
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const ids = JSON.parse(raw);
+      if (!Array.isArray(ids) || !ids.length) return;
+      const set = new Set(ids.map(String));
+      hoTargetChecks().forEach(function(cb) {
+        if (!cb.disabled) cb.checked = set.has(String(cb.value));
+      });
+    } catch (e) { /* ignore */ }
+  }
+
+  document.getElementById('btnHoTargetAll')?.addEventListener('click', function() { setHoTargetChecks(true); });
+  document.getElementById('btnHoTargetNone')?.addEventListener('click', function() { setHoTargetChecks(false); });
+  hoTargetChecks().forEach(function(cb) {
+    cb.addEventListener('change', saveHoTargetChecks);
+  });
+  restoreHoTargetChecks();
+
+  document.querySelectorAll('#hoItemTable tbody tr.ho-imc-row').forEach(function(tr) {
+    tr.addEventListener('dblclick', function() {
+      const href = tr.getAttribute('data-href');
+      if (href) window.location.href = href;
+    });
+  });
+})();
+</script>
+{% endblock %}

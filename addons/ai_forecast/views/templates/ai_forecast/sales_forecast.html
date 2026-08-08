@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "ai_forecast/_nav.html" import ai_nav %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('ai_forecast.static', filename='css/ai_forecast.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="ai-fc-page">
+  <div class="ai-fc-topbar">
+    <div><h1 class="ai-fc-title">Sales Forecast</h1><p class="ai-fc-sub">Moving average · weighted trend · YoY · demand by item</p></div>
+    {{ ai_nav('sales') }}
+  </div>
+  <p class="ai-fc-status" id="aiFcPageStatus"></p>
+  <div class="ai-fc-grid-2">
+    <div class="ai-fc-card"><div class="ai-fc-card__head">Forecast summary</div><div class="ai-fc-card__body" id="aiFcSummary"></div></div>
+    <div class="ai-fc-card"><div class="ai-fc-card__head">Daily sales (90d)</div><div class="ai-fc-card__body"><div class="ai-fc-chart-wrap"><canvas id="aiFcChart"></canvas></div></div></div>
+  </div>
+  <div class="ai-fc-card"><div class="ai-fc-card__head">Item demand forecast (30d)</div>
+    <div class="ai-fc-card__body" style="overflow:auto;max-height:400px;">
+      <table class="ai-fc-table" id="aiFcTable"><thead><tr><th>Item</th><th>Name</th><th>Predicted qty</th><th>Class</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function(){
+  const fmt = n => Number(n).toLocaleString(undefined,{maximumFractionDigits:2});
+  fetch({{ url_for('ai_forecast.api_sales_forecast')|tojson }} + '?horizon=30').then(r=>r.json()).then(d=>{
+    if(!d.success) return;
+    const x = d.data || {};
+    document.getElementById('aiFcSummary').innerHTML = `
+      <p><strong>Predicted qty (30d):</strong> ${fmt(x.predicted_qty)}</p>
+      <p><strong>Predicted amount:</strong> ${fmt(x.predicted_amount)}</p>
+      <p><strong>MA 7/30/90:</strong> ${fmt(x.moving_average&&x.moving_average['7d'])} / ${fmt(x.moving_average&&x.moving_average['30d'])} / ${fmt(x.moving_average&&x.moving_average['90d'])}</p>
+      <p><strong>YoY same period:</strong> ${fmt(x.yoy_same_period_qty)}</p>
+      <p><strong>Growth 30d:</strong> ${x.growth_pct_30d!=null?x.growth_pct_30d+'%':'—'}</p>`;
+    const s = x.daily_series || [];
+    new Chart(document.getElementById('aiFcChart'), { type:'line', data:{ labels:s.map(r=>r.date), datasets:[{ data:s.map(r=>r.qty), borderColor:'#28a745', tension:0.2 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}} } });
+    document.querySelector('#aiFcTable tbody').innerHTML = (x.item_demand_forecast||[]).map(r=>`<tr><td>${r.itemcode}</td><td>${r.itemname||''}</td><td class="num">${fmt(r.predicted_qty)}</td><td>${r.velocity_class||''}</td></tr>`).join('');
+  });
+})();
+</script>
+{% endblock %}

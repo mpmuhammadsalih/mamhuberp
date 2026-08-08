@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+{% block title %}Main account ledger{% endblock %}
+
+{% macro tree_rows(node, depth) -%}
+  <tr class="mal-tr mal-tr--depth-{{ depth }}{% if node.is_postable %} mal-tr--post{% else %} mal-tr--group{% endif %}">
+    <td class="mal-col-ac" style="padding-left: {{ 10 + depth * 16 }}px;">
+      <span class="mal-code">{{ node.code|e }}</span>
+      <span class="mal-name">{{ node.name|e }}</span>
+      {% if node.is_postable %}
+      <span class="mal-tag mal-tag--post">Postable</span>
+      {% else %}
+      <span class="mal-tag mal-tag--group">Group</span>
+      {% endif %}
+    </td>
+    <td>{{ node.type|e }}</td>
+    <td class="mal-num">{{ '%.2f'|format(node.rollup.opening) }}</td>
+    <td class="mal-num">{{ '%.2f'|format(node.rollup.debit) }}</td>
+    <td class="mal-num">{{ '%.2f'|format(node.rollup.credit) }}</td>
+    <td class="mal-num mal-num--close">{{ '%.2f'|format(node.rollup.closing) }}</td>
+  </tr>
+  {% if node.is_postable and node.lines and (node.lines|length) > 0 %}
+  <tr class="mal-tr mal-tr--detail">
+    <td colspan="6" class="mal-detail-cell" style="padding-left: {{ 18 + depth * 16 }}px;">
+      <details class="mal-details">
+        <summary>GL detail ({{ node.lines|length }} line(s)) — {{ node.code|e }}</summary>
+        <div class="mal-detail-table-wrap">
+          <table class="mal-detail-tbl">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Voucher</th>
+                <th>Ref</th>
+                <th>Narration</th>
+                <th>Source</th>
+                <th class="mal-num">Debit</th>
+                <th class="mal-num">Credit</th>
+                <th class="mal-num">Balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for ln in node.lines %}
+              <tr>
+                <td>{{ (ln.voucher_date or '')|e }}</td>
+                <td>{{ (ln.voucher_no or '')|e }}</td>
+                <td>{{ (ln.reference_no or '')|e }}</td>
+                <td>{{ (ln.narration or '')|e }}</td>
+                <td>{{ (ln.source or '')|e }}</td>
+                <td class="mal-num">{{ '%.2f'|format(ln.debit or 0) }}</td>
+                <td class="mal-num">{{ '%.2f'|format(ln.credit or 0) }}</td>
+                <td class="mal-num">{{ '%.2f'|format(ln.running_balance or 0) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </td>
+  </tr>
+  {% endif %}
+  {% for ch in (node.children or []) %}
+  {{ tree_rows(ch, depth + 1) }}
+  {% endfor %}
+{%- endmacro %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .mal-wrap { max-width: 1280px; }
+  .mal-top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+  .mal-back { font-size: 13px; }
+  .mal-back a { color: #1a56a4; text-decoration: none; }
+  .mal-back a:hover { text-decoration: underline; }
+  .mal-title { font-size: 1.5rem; font-weight: 600; color: #0f172a; margin: 0 0 4px 0; }
+  .mal-sub { color: #64748b; font-size: 13px; margin: 0; max-width: 56rem; }
+  .mal-card {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 18px; margin-bottom: 16px;
+  }
+  .mal-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+  .mal-filters label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px; }
+  .mal-filters input[type="date"] { padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; }
+  .mal-filters .mal-account-pick { display: flex; align-items: stretch; width: 100%; max-width: 520px; min-height: 40px; border: 1px solid #cbd5e1; border-radius: 10px; background: #f8fafc; overflow: hidden; }
+  .mal-filters .mal-account-pick:focus-within { border-color: #1a56a4; box-shadow: 0 0 0 2px rgba(26, 86, 164, 0.12); background: #fff; }
+  .mal-filters .mal-account-pick input[readonly] { flex: 1; min-width: 0; border: none; background: transparent; padding: 8px 10px; font-size: 14px; cursor: pointer; }
+  .mal-filters .mal-account-pick .search-clear { position: static; transform: none; width: 40px; background: #f1f5f9; border: none; border-left: 1px solid #e2e8f0; }
+  .mal-filters .mal-account-pick .search-picker { min-width: 44px; background: #1a56a4; color: #fff; border: none; border-left: 1px solid #e2e8f0; font-size: 16px; font-weight: 600; cursor: pointer; }
+  .mal-filters .mal-account-pick .search-picker:hover { background: #144a8a; }
+  .mal-filters button[type="submit"] { background: #1a56a4; color: #fff; border: none; padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .mal-filters button[type="submit"]:hover { background: #144a8a; }
+  .mal-export-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+  .mal-export-row .mal-exp-lbl { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px; width: 100%; }
+  .mal-exp { display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; text-decoration: none; border: 1px solid #cbd5e1; background: #fff; color: #334155; }
+  .mal-exp:hover { background: #f1f5f9; color: #0f172a; }
+  .mal-exp--pdf { background: #1a56a4; color: #fff; border-color: #1a56a4; }
+  .mal-exp--pdf:hover { background: #144a8a; color: #fff; }
+  .mal-exp--xls { background: #047857; color: #fff; border-color: #047857; }
+  .mal-exp--xls:hover { background: #065f46; color: #fff; }
+  .mal-err { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
+  .mal-hint { font-size: 12px; color: #64748b; margin: 0 0 8px 0; }
+  .mal-legend { font-size: 12px; color: #475569; margin: 0 0 10px 0; padding: 8px 10px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
+  .mal-prompt { text-align: center; color: #64748b; padding: 28px 16px; font-size: 14px; }
+  #malTreeTable { width: 100%; border-collapse: collapse; font-size: 13px; }
+  #malTreeTable th, #malTreeTable td { border: 1px solid #e2e8f0; padding: 8px 10px; }
+  #malTreeTable thead th { background: #f1f5f9; font-weight: 600; text-align: left; color: #334155; }
+  .mal-num { text-align: right; font-family: ui-monospace, monospace; }
+  .mal-tr--group { background: #fafbfc; font-weight: 500; }
+  .mal-tr--group .mal-code { color: #0f172a; }
+  .mal-tr--post .mal-name { color: #334155; }
+  .mal-tr--detail { background: #fff; }
+  .mal-tr--detail td { border-top: none; }
+  .mal-col-ac { vertical-align: middle; }
+  .mal-code { font-weight: 600; margin-right: 6px; }
+  .mal-name { color: #64748b; font-weight: 400; }
+  .mal-tag { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; margin-left: 6px; padding: 2px 6px; border-radius: 4px; vertical-align: middle; }
+  .mal-tag--group { background: #e2e8f0; color: #475569; }
+  .mal-tag--post { background: #dbeafe; color: #1d4ed8; }
+  .mal-details summary { cursor: pointer; color: #1a56a4; font-weight: 500; }
+  .mal-details summary:hover { text-decoration: underline; }
+  .mal-detail-table-wrap { margin-top: 8px; overflow-x: auto; }
+  .mal-detail-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .mal-detail-tbl th, .mal-detail-tbl td { border: 1px solid #e2e8f0; padding: 6px 8px; }
+  .mal-detail-tbl thead th { background: #f8fafc; }
+  .nexa-setup-list-page .page-po__topbar-actions .mal-exp { margin-left: 8px; }
+  .nexa-setup-list-page .page-po__topbar-actions .mal-exp:first-child { margin-left: 0; }
+</style>
+
+<div class="page-po nexa-list-page nexa-setup-list-page mal-wrap">
+  {% if root and selected_account_id and not report_error %}
+  {% set rr = root.rollup %}
+  <section class="nexa-stat-grid" aria-label="Root rollup">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-diagram-3" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Root</p>
+        <p class="nexa-stat-value">{{ root.code|e }}</p>
+        <p class="nexa-stat-sub">{{ (root.name or '')|truncate(28) }}</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--cyan"><i class="bi bi-box-arrow-in-right" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Opening</p>
+        <p class="nexa-stat-value">{{ '%.2f'|format(rr.opening or 0) }}</p>
+        <p class="nexa-stat-sub">Roll-up</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-plus-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Debit</p>
+        <p class="nexa-stat-value">{{ '%.2f'|format(rr.debit or 0) }}</p>
+        <p class="nexa-stat-sub">Period</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-dash-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Credit</p>
+        <p class="nexa-stat-value">{{ '%.2f'|format(rr.credit or 0) }}</p>
+        <p class="nexa-stat-sub">Period</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-calculator" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Closing</p>
+        <p class="nexa-stat-value">{{ '%.2f'|format(rr.closing or 0) }}</p>
+        <p class="nexa-stat-sub">Roll-up</p>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  <div class="page-po__topbar">
+    <div>
+      <p class="mal-back" style="margin:0 0 6px;"><a href="{{ url_for('accounts.chart_of_accounts_list') }}">← Chart of accounts</a></p>
+      <h1 class="page-po__title">Main account ledger</h1>
+      <p class="page-po__muted">Tree under a root account — group roll-ups and postable GL detail.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% if selected_account_id %}
+      <a class="mal-exp mal-exp--pdf" href="{{ url_for('accounts.main_account_ledger_pdf', account_id=selected_account_id, date_from=date_from or none, date_to=date_to or none) }}" target="_blank" rel="noopener">PDF</a>
+      <a class="mal-exp mal-exp--xls" href="{{ url_for('accounts.main_account_ledger_excel', account_id=selected_account_id, date_from=date_from or none, date_to=date_to or none) }}">Excel</a>
+      {% endif %}
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div class="mal-card">
+    <p class="mal-hint">Balances use the same <strong>debit &minus; credit</strong> running convention as the single account ledger. Leave dates empty to use year-start through today. Dates apply to the whole tree.</p>
+    <form method="get" action="{{ url_for('accounts.main_account_ledger') }}" class="mal-filters nexa-list-filter-panel" id="malLedgerForm">
+      <div>
+        <label for="mal_account_display">Root account</label>
+        <input type="hidden" name="account_id" id="mal_account_id" value="{{ selected_account_id if selected_account_id is not none else '' }}">
+        <span class="search-field search-field--popup mal-account-pick" style="width:100%;max-width:520px;">
+          <input type="text" id="mal_account_display" readonly placeholder="Click to search and select root account…"
+            value="{{ (selected_root_display or '')|e }}">
+          <button type="button" class="search-clear" id="malAccountClear" title="Clear" aria-label="Clear" {% if not selected_root_display %}style="display:none"{% endif %}>×</button>
+          <button type="button" class="search-picker" id="malAccountPickerOpen" aria-label="Open account list">▾</button>
+        </span>
+      </div>
+      <div>
+        <label for="mal_date_from">From (optional)</label>
+        <input type="date" id="mal_date_from" name="date_from" value="{{ date_from or '' }}">
+      </div>
+      <div>
+        <label for="mal_date_to">To (optional)</label>
+        <input type="date" id="mal_date_to" name="date_to" value="{{ date_to or '' }}">
+      </div>
+      <div>
+        <label style="visibility:hidden;display:block;">&nbsp;</label>
+        <button type="submit">Show tree report</button>
+      </div>
+    </form>
+  </div>
+
+  {% if report_error %}
+  <div class="mal-err">{{ report_error|e }}</div>
+  {% endif %}
+
+  {% if root and selected_account_id and not report_error %}
+  <div class="mal-card">
+    <p class="mal-legend">
+      <strong>Period</strong> {{ (date_from or '—')|e }} to {{ (date_to or '—')|e }}
+      &nbsp;·&nbsp; <strong>Root</strong> {{ root.code|e }} — {{ root.name|e }}
+    </p>
+    <div class="table-wrap co-table-wrap" style="overflow-x:auto;">
+      <table id="malTreeTable" class="co-table">
+        <thead>
+          <tr>
+            <th>Account</th>
+            <th>Type</th>
+            <th class="mal-num">Opening</th>
+            <th class="mal-num">Debit</th>
+            <th class="mal-num">Credit</th>
+            <th class="mal-num">Closing</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ tree_rows(root, 0) }}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% elif selected_account_id and not report_error and not root %}
+  <div class="mal-card mal-prompt">No data for this root (try another account or check the chart).</div>
+  {% else %}
+  <div class="mal-card mal-prompt">Choose a <strong>root account</strong> and click <strong>Show tree report</strong>.</div>
+  {% endif %}
+</div>
+
+<div class="modal hidden" id="malAccountPickerModal" role="dialog" aria-modal="true" aria-labelledby="malAccPickerTitle">
+  <div class="modal__overlay" data-close="malAccountPickerModal"></div>
+  <div class="modal__content" style="width: min(700px, 95vw); max-height: 85vh;">
+    <div class="modal__header">
+      <h3 id="malAccPickerTitle">Select root (main) account</h3>
+      <button type="button" class="modal__close" data-close="malAccountPickerModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__search" style="margin-bottom: 10px;">
+        <div class="search-field" style="width: 100%;">
+          <input type="text" id="malAccPickerSearch" placeholder="Search by code, name, or type…" autocomplete="off" style="width: 100%;">
+          <button type="button" class="search-clear" id="malAccPickerSearchClear" style="display: none;">×</button>
+        </div>
+      </div>
+      <div class="scroll-table modal__table" style="max-height: 52vh;">
+        <table class="table" id="malAccPickerTable" style="width: 100%;">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Type</th>
+            </tr>
+          </thead>
+          <tbody id="malAccPickerBody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var MAL_ACCOUNTS = {{ coa_list|tojson }};
+  if (!Array.isArray(MAL_ACCOUNTS)) MAL_ACCOUNTS = [];
+  var malModalList = [];
+
+  function esc(s) {
+    if (s == null) return '';
+    var d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+  }
+
+  function openMalAccPicker() {
+    var m = document.getElementById('malAccountPickerModal');
+    if (!m) return;
+    malModalList = MAL_ACCOUNTS.slice();
+    renderMalAccPickerRows(malModalList);
+    var s = document.getElementById('malAccPickerSearch');
+    if (s) { s.value = ''; s.focus(); }
+    var c = document.getElementById('malAccPickerSearchClear');
+    if (c) c.style.display = 'none';
+    m.classList.remove('hidden');
+  }
+
+  function closeMalAccPicker() {
+    var m = document.getElementById('malAccountPickerModal');
+    if (m) m.classList.add('hidden');
+  }
+
+  function renderMalAccPickerRows(list) {
+    var tbody = document.getElementById('malAccPickerBody');
+    if (!tbody) return;
+    tbody.innerHTML = (list || []).map(function(a) {
+      if (a.account_id == null) return '';
+      var id = String(a.account_id);
+      var code = String(a.code != null ? a.code : '');
+      var name = String(a.name != null ? a.name : '');
+      var typ = String(a.type != null ? a.type : '—');
+      return '<tr data-id="' + id.replace(/"/g, '&quot;') + '" style="cursor:pointer;">' +
+        '<td><strong>' + esc(code) + '</strong></td><td>' + esc(name) + '</td><td>' + esc(typ) + '</td></tr>';
+    }).join('');
+  }
+
+  function filterMalAccPickerRows(q) {
+    var t = (q || '').trim().toLowerCase();
+    if (!t) { renderMalAccPickerRows(malModalList); return; }
+    var f = (malModalList || []).filter(function(a) {
+      return (String(a.code || '').toLowerCase().indexOf(t) !== -1) ||
+        (String(a.name || '').toLowerCase().indexOf(t) !== -1) ||
+        (String(a.type || '').toLowerCase().indexOf(t) !== -1);
+    });
+    renderMalAccPickerRows(f);
+  }
+
+  document.getElementById('malAccountPickerOpen') && document.getElementById('malAccountPickerOpen').addEventListener('click', function(e) { e.preventDefault(); openMalAccPicker(); });
+  document.getElementById('mal_account_display') && document.getElementById('mal_account_display').addEventListener('click', function(e) { e.preventDefault(); openMalAccPicker(); });
+  var malModal = document.getElementById('malAccountPickerModal');
+  if (malModal) {
+    malModal.addEventListener('click', function(e) {
+      if (e.target.classList.contains('modal__overlay') || (e.target.dataset && e.target.dataset.close === 'malAccountPickerModal') || e.target.classList.contains('modal__close')) {
+        closeMalAccPicker();
+      }
+    });
+  }
+  var malBody = document.getElementById('malAccPickerBody');
+  if (malBody) {
+    malBody.addEventListener('click', function(e) {
+      var tr = e.target.closest('tr');
+      if (!tr) return;
+      var id = tr.getAttribute('data-id');
+      if (id) {
+        var rec = (MAL_ACCOUNTS || []).filter(function(x) { return String(x && x.account_id) === id; })[0];
+        var label = rec ? (String(rec.code != null ? rec.code : '') + ' — ' + String(rec.name != null ? rec.name : '')) : '';
+        var hid = document.getElementById('mal_account_id');
+        var disp = document.getElementById('mal_account_display');
+        if (hid) hid.value = id;
+        if (disp) disp.value = label;
+        var clr = document.getElementById('malAccountClear');
+        if (clr) clr.style.display = 'block';
+      }
+      closeMalAccPicker();
+    });
+  }
+  var malSrch = document.getElementById('malAccPickerSearch');
+  var malSrchClr = document.getElementById('malAccPickerSearchClear');
+  if (malSrch) {
+    malSrch.addEventListener('input', function() {
+      filterMalAccPickerRows(malSrch.value);
+      if (malSrchClr) malSrchClr.style.display = malSrch.value ? 'block' : 'none';
+    });
+  }
+  if (malSrchClr) {
+    malSrchClr.addEventListener('click', function() {
+      if (malSrch) { malSrch.value = ''; malSrch.focus(); }
+      malSrchClr.style.display = 'none';
+      filterMalAccPickerRows('');
+    });
+  }
+  var malClear = document.getElementById('malAccountClear');
+  if (malClear) {
+    malClear.addEventListener('click', function(e) {
+      e.preventDefault();
+      var hid = document.getElementById('mal_account_id');
+      var disp = document.getElementById('mal_account_display');
+      if (hid) hid.value = '';
+      if (disp) disp.value = '';
+      malClear.style.display = 'none';
+    });
+  }
+})();
+</script>
+{% endblock %}

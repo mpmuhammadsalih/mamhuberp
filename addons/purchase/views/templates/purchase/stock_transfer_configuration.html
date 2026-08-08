@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .stcfg-wrap { max-width: 960px; margin: 0 auto; padding: 22px 14px 40px; }
+  .stcfg-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 18px; }
+  .stcfg-title { margin: 0; font-size: 22px; font-weight: 500; }
+  .stcfg-sub { margin: 6px 0 0; color: #64748b; font-size: 13px; max-width: 52rem; }
+  .stcfg-btn { display: inline-block; text-decoration: none; border-radius: 6px; padding: 8px 14px; font-size: 13px; font-weight: 600; border: 1px solid #d1d5db; background: #fff; color: #111827; }
+  .stcfg-btn--pri { background: #2563eb; color: #fff; border-color: #2563eb; text-decoration: none; }
+  .stcfg-panel { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; background: #fafafa; }
+  .stcfg-h { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: #0f172a; }
+  .stcfg-note { margin: 0 0 12px; font-size: 12px; color: #475569; line-height: 1.45; }
+  .stcfg-kv { display: grid; grid-template-columns: 220px 1fr; gap: 6px 12px; font-size: 13px; align-items: start; margin-bottom: 8px; }
+  .stcfg-kv dt { margin: 0; color: #64748b; font-weight: 500; }
+  .stcfg-kv dd { margin: 0; color: #0f172a; word-break: break-word; font-family: ui-monospace, monospace; font-size: 12px; }
+  .stcfg-tag { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 11px; font-weight: 600; margin-left: 6px; }
+  .stcfg-tag--on { background: #dcfce7; color: #166534; }
+  .stcfg-tag--off { background: #f1f5f9; color: #64748b; }
+  .stcfg-tag--idx { background: #e0f2fe; color: #0369a1; }
+  .stcfg-tag--miss { background: #fef3c7; color: #b45309; }
+  .stcfg-table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; border-radius: 6px; overflow: hidden; border: 1px solid #e5e7eb; }
+  .stcfg-table th, .stcfg-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #f1f5f9; }
+  .stcfg-table th { background: #f8fafc; font-size: 11px; text-transform: uppercase; color: #64748b; }
+  pre.stcfg-sql { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 6px; overflow: auto; }
+  .stcfg-actions { margin-top: 10px; }
+</style>
+
+<div class="stcfg-wrap">
+  <div class="stcfg-top">
+    <div>
+      <h1 class="stcfg-title">Store Transfer · Configuration</h1>
+      <p class="stcfg-sub">
+        Tenant-scoped tuning (environment variables) and Oracle indexes used by list loads.
+        Indexes are optional and can be recreated here if the automated ensure did not run or failed silently.
+      </p>
+    </div>
+    <a class="stcfg-btn stcfg-btn--pri" href="{{ url_for('purchase.stock_transfer') }}">Back to list</a>
+  </div>
+
+  <section class="stcfg-panel">
+    <h2 class="stcfg-h">Detected tables</h2>
+    <p class="stcfg-note">Resolved via metadata (actual names vary by ERP schema).</p>
+    <dl class="stcfg-kv">
+      <dt>STKTRFHDR</dt><dd>{{ hdr_tbl or '(not detected)' }}</dd>
+      <dt>STKTRFDTL</dt><dd>{{ dtl_tbl or '(not detected)' }}</dd>
+      <dt>STKTRFAPPROVALSETUP</dt><dd>{{ apx_tbl or '(not detected)' }}</dd>
+    </dl>
+  </section>
+
+  <section class="stcfg-panel">
+    <h2 class="stcfg-h">Environment (effective values)</h2>
+    <p class="stcfg-note">Set these in <code>.env</code>; restart the app after changes.</p>
+    <dl class="stcfg-kv">
+      <dt>STORE_TRANSFER_UI_ROW_LIMIT</dt>
+      <dd>raw=<code>{{ ui_row_raw or '(unset)' }}</code> → effective cap <strong>{{ row_cap_eff }}</strong></dd>
+      <dt>STORE_TRANSFER_DASH_ENSURE_TTL_SEC</dt>
+      <dd>raw=<code>{{ dash_ttl_raw or '(unset)' }}</code> → <strong>{{ '%.1f'|format(dash_ttl_sec) }}s</strong> between schema ensure runs</dd>
+      <dt>STORE_TRANSFER_TIMING_LOG</dt>
+      <dd>raw=<code>{{ timing_raw or '(unset)' }}</code>
+        {% if timing_on %}<span class="stcfg-tag stcfg-tag--on">logging on</span>
+        {% else %}<span class="stcfg-tag stcfg-tag--off">logging off</span>{% endif %}
+      </dd>
+      <dt>STORE_TRANSFER_APPROVAL_CACHE_SEC</dt>
+      <dd>raw=<code>{{ appr_cache_raw or '(default 45)' }}</code>
+        {% if appr_cache_ttl and appr_cache_ttl > 0 %} → cache TTL <strong>{{ appr_cache_ttl }}s</strong> (dashboard only)
+        {% else %}→ <strong>disabled</strong> (0){% endif %}
+      </dd>
+    </dl>
+  </section>
+
+  <section class="stcfg-panel">
+    <h2 class="stcfg-h">Performance indexes (<code>USER_INDEXES</code>)</h2>
+    <p class="stcfg-note">Status reflects the current tenant connection. Automated creation runs during store-transfer table ensure.</p>
+    <table class="stcfg-table">
+      <thead>
+        <tr>
+          <th>Index</th>
+          <th>Purpose</th>
+          <th>Table</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in index_snap %}
+        <tr>
+          <td><code>{{ r.name }}</code></td>
+          <td>{{ r.purpose }}</td>
+          <td>{{ r.table_name or '—' }}</td>
+          <td>
+            {% if r.present %}
+              <span class="stcfg-tag stcfg-tag--idx">{{ r.ora_status or 'AVAILABLE' }}</span>
+            {% else %}
+              <span class="stcfg-tag stcfg-tag--miss">not found</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if ddls_examples %}
+      <p class="stcfg-note" style="margin-top:14px;">Example DDL for this schema:</p>
+      <pre class="stcfg-sql">{% for ddl in ddls_examples %}{{ ddl }}
+
+{% endfor %}</pre>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('purchase.stock_transfer_configuration') }}" class="stcfg-actions">
+      <button type="submit" name="action" value="ensure_indexes" class="stcfg-btn">Ensure indexes now</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

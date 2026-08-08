@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/approval_workflow.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="awf-page" id="approvalWorkflowApp"
+     data-api="{{ api_url }}"
+     data-save="{{ save_url }}"
+     data-delete-base="{{ delete_url_base }}"
+     data-action="{{ action_url }}"
+     data-delegation="{{ delegation_url }}"
+     data-escalation="{{ escalation_url }}">
+
+  <header class="awf-header">
+    <h1 class="awf-title">Approval Workflow</h1>
+    <button type="button" class="awf-btn awf-btn--primary" id="awfBtnNew">+ New Workflow</button>
+  </header>
+
+  <nav class="awf-tabs" id="awfTabs">
+    <button type="button" class="awf-tab awf-tab--active" data-tab="setup">Workflow Setup</button>
+    <button type="button" class="awf-tab" data-tab="pending">Pending Approvals <span class="awf-tab-badge awf-tab-badge--red" id="awfBadgePending">0</span></button>
+    <button type="button" class="awf-tab" data-tab="my">My Approvals <span class="awf-tab-badge awf-tab-badge--orange" id="awfBadgeMy">0</span></button>
+    <button type="button" class="awf-tab" data-tab="history">Approval History</button>
+    <button type="button" class="awf-tab" data-tab="delegation">Delegation</button>
+    <button type="button" class="awf-tab" data-tab="escalation">Escalation Rules</button>
+  </nav>
+
+  <div id="awfViewSetup" class="awf-view awf-view--active">
+    <section class="awf-kpi-grid" id="awfKpiGrid">
+      <div class="awf-kpi"><div><div class="awf-kpi__val" data-kpi="active_workflows">—</div><div class="awf-kpi__lbl">Active Workflows</div></div><span>📋</span></div>
+      <div class="awf-kpi"><div><div class="awf-kpi__val" data-kpi="pending_approvals">—</div><div class="awf-kpi__lbl">Pending Approvals</div></div><span>✓</span></div>
+      <div class="awf-kpi"><div><div class="awf-kpi__val" data-kpi="awaiting_others">—</div><div class="awf-kpi__lbl">Awaiting Others</div></div><span>⏳</span></div>
+      <div class="awf-kpi"><div><div class="awf-kpi__val" data-kpi="approved_today">—</div><div class="awf-kpi__lbl">Approved Today</div></div><span>🕐</span></div>
+    </section>
+
+    <div class="awf-main-grid">
+      <div class="awf-card">
+        <div class="awf-card__head">
+          <span>Workflow Rules</span>
+          <select id="awfTxFilter" style="font-size:0.78rem;padding:4px 8px;">
+            <option value="ALL">All Transactions</option>
+            {% for code, label in transaction_types %}
+            <option value="{{ code }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="awf-card__body awf-table-wrap">
+          <table class="awf-table" id="awfRulesTable">
+            <thead>
+              <tr>
+                <th>#</th><th>Workflow Name</th><th>Transaction Type</th><th>Amount Range</th>
+                <th>Levels</th><th>Status</th><th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="awfRulesBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <aside>
+        <div class="awf-card" style="margin-bottom:12px;">
+          <div class="awf-card__head">Approval Flow Preview</div>
+          <div class="awf-flow" id="awfFlowPreview">
+            <p class="awf-panel-placeholder">Select a workflow row</p>
+          </div>
+        </div>
+        <div class="awf-card">
+          <div class="awf-card__head">Workflow Details</div>
+          <ul class="awf-detail-list" id="awfDetailList">
+            <li><span>Workflow Name</span><span>—</span></li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+
+    <div class="awf-card">
+      <div class="awf-card__head">
+        <span>Pending Approvals <span class="awf-tab-badge awf-tab-badge--red" id="awfPendingSectionBadge">0</span></span>
+        <a href="#" id="awfViewAllPending" style="font-size:0.78rem;">View All</a>
+      </div>
+      <div class="awf-table-wrap">
+        <table class="awf-table">
+          <thead>
+            <tr>
+              <th>Document No</th><th>Transaction Type</th><th>Date</th><th>Created By</th>
+              <th>Amount</th><th>Current Level</th><th>Pending At</th><th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="awfPendingBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="awfViewPending" class="awf-view">
+    <div class="awf-card">
+      <div class="awf-card__head">All Pending Approvals</div>
+      <div class="awf-table-wrap">
+        <table class="awf-table"><thead>
+          <tr><th>Document No</th><th>Type</th><th>Date</th><th>Created By</th><th>Amount</th><th>Level</th><th>Pending At</th><th>Action</th></tr>
+        </thead><tbody id="awfPendingFullBody"></tbody></table>
+      </div>
+    </div>
+  </div>
+  <div id="awfViewMy" class="awf-view">
+    <div class="awf-card">
+      <div class="awf-card__head">My Approvals Today: <span id="awfMyTodayCount">0</span></div>
+      <div class="awf-table-wrap">
+        <table class="awf-table"><thead>
+          <tr><th>Document No</th><th>Type</th><th>Amount</th><th>Status</th><th>Date</th></tr>
+        </thead><tbody id="awfMyBody"></tbody></table>
+      </div>
+    </div>
+  </div>
+  <div id="awfViewHistory" class="awf-view">
+    <div class="awf-card">
+      <div class="awf-card__head">Approval History</div>
+      <div class="awf-table-wrap">
+        <table class="awf-table"><thead>
+          <tr><th>Document No</th><th>Type</th><th>Amount</th><th>Status</th><th>Action By</th><th>Date</th><th>Remarks</th></tr>
+        </thead><tbody id="awfHistoryBody"></tbody></table>
+      </div>
+    </div>
+  </div>
+  <div id="awfViewDelegation" class="awf-view">
+    <div class="awf-card">
+      <div class="awf-card__head">
+        <span>Delegation</span>
+        <button type="button" class="awf-btn awf-btn--primary awf-btn--sm" id="awfBtnAddDelegation">+ Add</button>
+      </div>
+      <div class="awf-table-wrap">
+        <table class="awf-table"><thead>
+          <tr><th>Delegator</th><th>Delegate</th><th>From</th><th>To</th><th>Status</th><th>Remarks</th></tr>
+        </thead><tbody id="awfDelegationBody"></tbody></table>
+      </div>
+    </div>
+  </div>
+  <div id="awfViewEscalation" class="awf-view">
+    <div class="awf-card">
+      <div class="awf-card__head">
+        <span>Escalation Rules</span>
+        <button type="button" class="awf-btn awf-btn--primary awf-btn--sm" id="awfBtnAddEscalation">+ Add Rule</button>
+      </div>
+      <div class="awf-table-wrap">
+        <table class="awf-table"><thead>
+          <tr><th>Transaction</th><th>Hours Pending</th><th>Escalate To Role</th><th>Status</th></tr>
+        </thead><tbody id="awfEscalationBody"></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="awf-modal hidden" id="awfModal">
+  <div class="awf-modal__backdrop" data-close="awfModal"></div>
+  <div class="awf-modal__dialog">
+    <div class="awf-modal__head">
+      <h3 id="awfModalTitle" style="margin:0;font-size:1rem;">New Workflow</h3>
+      <button type="button" class="awf-icon-btn" data-close="awfModal">&times;</button>
+    </div>
+    <input type="hidden" id="awfEditId" value="" />
+    <div class="awf-field">
+      <label>Workflow Name</label>
+      <input type="text" id="awfName" />
+    </div>
+    <div class="awf-field">
+      <label>Transaction Type</label>
+      <select id="awfTxType">
+        {% for code, label in transaction_types %}
+        <option value="{{ code }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="awf-field">
+      <label><input type="checkbox" id="awfAnyAmount" /> Any amount</label>
+    </div>
+    <div class="awf-field" id="awfAmountFields">
+      <label>Amount Min</label>
+      <input type="number" id="awfAmountMin" step="0.01" value="0" />
+      <label style="margin-top:8px;">Amount Max (blank = and above)</label>
+      <input type="number" id="awfAmountMax" step="0.01" />
+    </div>
+    <div class="awf-field">
+      <label>Number of Levels</label>
+      <input type="number" id="awfNumLevels" min="1" max="5" value="1" />
+    </div>
+    <div class="awf-field">
+      <label>Approval levels (role labels)</label>
+      <div id="awfLevelFields"></div>
+    </div>
+    <div class="awf-field">
+      <label>Status</label>
+      <select id="awfStatus">
+        <option value="ACTIVE">Active</option>
+        <option value="INACTIVE">Inactive</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+      <button type="button" class="awf-btn" data-close="awfModal">Cancel</button>
+      <button type="button" class="awf-btn awf-btn--primary" id="awfModalSave">Save Workflow</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.AWF_INITIAL = {{ initial_payload|tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/approval_workflow.js') }}?v=1"></script>
+{% endblock %}

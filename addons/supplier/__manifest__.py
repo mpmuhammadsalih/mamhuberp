@@ -1,0 +1,2 @@
+"""Addon manifest — Supplier."""
+MANIFEST = {'technical_name': 'supplier', 'name': 'Supplier', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Migrated from blueprints/supplier.py', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/supplier'}, 'flask': {'blueprint': 'supplier', 'blueprint_ref': 'addons.supplier:bp', 'models_package': 'addons.supplier.models', 'routes_module': 'addons.supplier.controllers.routes'}}

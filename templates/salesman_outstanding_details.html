@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body { background: #fff !important; }
+</style>
+<div class="page-po" style="max-width: 1400px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Salesman Outstanding Details</h1>
+      <p class="page-po__muted">Bucket: {{ bucket_label }}{% if salesman_code %} | Salesman: {{ salesman_code }}{% endif %}</p>
+    </div>
+    <div class="page-po__actions">
+      <a class="page-po__btn-secondary" href="{{ url_for('reports.salesman_outstanding_details_export', bucket=bucket, salesman_code=salesman_code or '') }}" aria-label="Export to Excel" title="Export to Excel">Export</a>
+      <a class="page-po__btn-secondary" href="{{ url_for('reports.salesman_outstanding') }}">Back</a>
+    </div>
+  </div>
+
+  {% if rows %}
+    <div class="page-po__section-title">Invoice details</div>
+    <div class="table-responsive">
+      <div class="scroll-table">
+        <table class="table table-fixed">
+          <thead>
+            <tr>
+              <th>SL No</th>
+              <th>Bill No</th>
+              <th>Bill Date</th>
+              <th>Customer Code</th>
+              <th>Customer Name</th>
+              <th>Salesman Code</th>
+              <th>Salesman Name</th>
+              <th>Bill Amount</th>
+              <th>Paid Amount</th>
+              <th>Outstanding</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td>{{ row.slno }}</td>
+                <td>{{ row.billno }}</td>
+                <td>
+                  {% if row.billdate %}
+                    {{ row.billdate.strftime('%d-%m-%Y') if row.billdate else '-' }}
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td>{{ row.customercode }}</td>
+                <td>{{ row.customername or '-' }}</td>
+                <td>{{ row.salesmancode or '-' }}</td>
+                <td>{{ row.salesmanname or '-' }}</td>
+                <td>{{ "%.2f"|format(row.billamount or 0) }}</td>
+                <td>{{ "%.2f"|format(row.paidamount or 0) }}</td>
+                <td>{{ "%.2f"|format(row.outstanding or 0) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            {% set total_bill = rows | sum(attribute='billamount') %}
+            {% set total_paid = rows | sum(attribute='paidamount') %}
+            {% set total_out = rows | sum(attribute='outstanding') %}
+            <tr class="table-total">
+              <th colspan="7">Total</th>
+              <th>{{ "%.2f"|format(total_bill or 0) }}</th>
+              <th>{{ "%.2f"|format(total_paid or 0) }}</th>
+              <th>{{ "%.2f"|format(total_out or 0) }}</th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  {% else %}
+    <p class="page-po__muted" style="margin-bottom: 8px;">No invoice details found.</p>
+    <div class="page-po__muted" style="font-size: 13px; max-width: 560px;">
+      <p style="margin: 0 0 6px 0;"><strong>Why this can happen:</strong></p>
+      <ul style="margin: 0; padding-left: 20px;">
+        <li><strong>Bucket 0-30</strong> shows only invoices whose <strong>bill date</strong> is within the last 30 days. If all outstanding for this salesman are older, try <a href="{{ url_for('reports.salesman_outstanding_details', bucket='all', salesman_code=salesman_code or '') }}" style="color: #007bff;">All Periods</a>.</li>
+        <li>Rows must have <strong>balance &gt; 0</strong> and <strong>flag = 'B'</strong> in tblsettlement.</li>
+        <li>Salesman filter uses <strong>tblsettlement</strong> salesman column only (e.g. salesmancode = {{ salesman_code or '?' }}). BILLHDR is not used.</li>
+      </ul>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

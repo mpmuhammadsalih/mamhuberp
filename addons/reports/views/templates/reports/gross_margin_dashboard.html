@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/gross_margin.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<div class="gma-page" id="grossMarginApp"
+     data-api="{{ api_data_url }}"
+     data-drill="{{ api_drilldown_url }}"
+     data-export-excel="{{ export_excel_url }}"
+     data-export-pdf="{{ export_pdf_url }}">
+
+  <header class="gma-header">
+    <div>
+      <h1 class="gma-title">Gross Margin Analysis</h1>
+      <p class="gma-sub">
+        Profitability by sales line: Sales Amount = Qty × Selling Price; Cost Amount = Qty × Average Cost;
+        Gross Profit = Sales − Cost; Margin % = (Gross Profit ÷ Sales) × 100.
+        <span class="gma-legend">
+          <span class="gma-margin--green">■</span> &gt;30%
+          <span class="gma-margin--yellow">■</span> 15–30%
+          <span class="gma-margin--orange">■</span> 5–15%
+          <span class="gma-margin--red">■</span> &lt;5%
+          <span class="gma-margin--dark-red">■</span> Negative
+        </span>
+      </p>
+    </div>
+    <div class="gma-actions">
+      <button type="button" class="gma-btn" id="gmaBtnPrint">Print</button>
+      <button type="button" class="gma-btn" id="gmaBtnEmail">Email Report</button>
+      <a class="gma-btn" id="gmaBtnExcel" href="{{ export_excel_url }}">Export Excel</a>
+      <a class="gma-btn" id="gmaBtnPdf" href="{{ export_pdf_url }}">Export PDF</a>
+      <button type="button" class="gma-btn gma-btn--primary" id="gmaBtnRun">Run Analysis</button>
+      <span class="gma-status" id="gmaStatus"></span>
+    </div>
+  </header>
+
+  <div id="gmaError" class="gma-error hidden"></div>
+
+  <section class="gma-kpi-grid" id="gmaKpiGrid" aria-label="Margin KPIs">
+    <div class="gma-kpi" data-kpi="total_sales"><div class="gma-kpi__label">Total Sales</div><div class="gma-kpi__val">—</div></div>
+    <div class="gma-kpi" data-kpi="total_cost"><div class="gma-kpi__label">Total Cost</div><div class="gma-kpi__val">—</div></div>
+    <div class="gma-kpi gma-kpi--profit" data-kpi="gross_profit"><div class="gma-kpi__label">Gross Profit</div><div class="gma-kpi__val">—</div></div>
+    <div class="gma-kpi" data-kpi="margin_pct"><div class="gma-kpi__label">Margin %</div><div class="gma-kpi__val">—</div></div>
+    <div class="gma-kpi" data-kpi="highest_margin_item"><div class="gma-kpi__label">Highest Margin Item</div><div class="gma-kpi__val gma-kpi__val--sm">—</div></div>
+    <div class="gma-kpi" data-kpi="lowest_margin_item"><div class="gma-kpi__label">Lowest Margin Item</div><div class="gma-kpi__val gma-kpi__val--sm">—</div></div>
+    <div class="gma-kpi gma-kpi--warn" data-kpi="loss_making_items"><div class="gma-kpi__label">Loss-Making Items</div><div class="gma-kpi__val">—</div></div>
+    <div class="gma-kpi gma-kpi--profit" data-kpi="top_customer_by_profit"><div class="gma-kpi__label">Top Customer by Profit</div><div class="gma-kpi__val gma-kpi__val--sm">—</div></div>
+  </section>
+
+  <div class="gma-layout">
+    <aside class="gma-panel gma-filters-col">
+      <div class="gma-panel__head">Filters</div>
+      <div class="gma-panel__body gma-filter">
+        <form id="gmaFilterForm">
+          <label>Date From</label>
+          <input type="date" name="date_from" value="{{ filters.date_from or '' }}" />
+          <label>Date To</label>
+          <input type="date" name="date_to" value="{{ filters.date_to or '' }}" />
+          <label>Branch</label>
+          <select name="branch" id="gmaBranch">
+            {% for b in options.branches or [] %}
+            <option value="{{ b.locationcode or b.code }}" {% if filters.branch|string == (b.locationcode or b.code)|string %}selected{% endif %}>
+              {{ b.locationcode or b.code }} {{ b.locationname or b.name or '' }}
+            </option>
+            {% endfor %}
+          </select>
+          <label>Customer Code</label>
+          <input type="text" name="customer_code" value="{{ filters.customer_code or '' }}" placeholder="All" list="gmaCustomerList" />
+          <datalist id="gmaCustomerList">
+            {% for c in options.customers or [] %}
+            <option value="{{ c.code }}">{{ c.name or '' }}</option>
+            {% endfor %}
+          </datalist>
+          <label>Salesman Code</label>
+          <select name="salesman_code" id="gmaSalesman">
+            <option value="">All</option>
+            {% for s in options.salesmen or [] %}
+            <option value="{{ s.code }}" {% if filters.salesman_code|string == s.code|string %}selected{% endif %}>{{ s.code }} {{ s.name or '' }}</option>
+            {% endfor %}
+          </select>
+          <label>Item Code</label>
+          <input type="text" name="item_code" value="{{ filters.item_code or '' }}" />
+          <label>Category</label>
+          <select name="category_code" id="gmaCategory">
+            <option value="">All</option>
+            {% for c in options.categories or [] %}
+            <option value="{{ c.code }}" {% if filters.category_code|string == c.code|string %}selected{% endif %}>{{ c.code }}</option>
+            {% endfor %}
+          </select>
+          <label>Brand</label>
+          <select name="brand_code" id="gmaBrand">
+            <option value="">All</option>
+            {% for b in options.brands or [] %}
+            <option value="{{ b.code }}" {% if filters.brand_code|string == b.code|string %}selected{% endif %}>{{ b.code }}</option>
+            {% endfor %}
+          </select>
+          <label>Warehouse</label>
+          <select name="warehouse_id" id="gmaWarehouse">
+            <option value="">All</option>
+            {% for w in options.warehouses or [] %}
+            <option value="{{ w.warehouse_id or w.WAREHOUSE_ID }}" {% if filters.warehouse_id|string == (w.warehouse_id or '')|string %}selected{% endif %}>
+              {{ w.warehouse_code or w.WAREHOUSE_CODE }} {{ w.warehouse_name or '' }}
+            </option>
+            {% endfor %}
+          </select>
+          <label>Search</label>
+          <input type="text" name="search" value="{{ filters.search or '' }}" placeholder="Item / name" />
+        </form>
+      </div>
+    </aside>
+
+    <main class="gma-panel gma-main-col">
+      <div class="gma-panel__head">
+        <span>Margin Analysis</span>
+        <div class="gma-view-tabs" id="gmaViewTabs" role="tablist">
+          <button type="button" class="gma-tab gma-tab--active" data-view="grid">Detail Grid</button>
+          <button type="button" class="gma-tab" data-view="summary">Summary By</button>
+          <button type="button" class="gma-tab" data-view="charts">Charts</button>
+          <button type="button" class="gma-tab" data-view="advanced">Advanced</button>
+        </div>
+      </div>
+      <div class="gma-panel__body">
+        <div id="gmaViewGrid" class="gma-view gma-view--active">
+          <div class="gma-table-wrap">
+            <table class="gma-table" id="gmaGridTable">
+              <thead>
+                <tr>
+                  <th>Invoice</th><th>Date</th><th>Customer</th><th>Salesman</th>
+                  <th>Item</th><th>Name</th><th class="num">Qty</th>
+                  <th class="num">Sales Rate</th><th class="num">Cost Rate</th>
+                  <th class="num">Sales Amt</th><th class="num">Cost Amt</th>
+                  <th class="num">Profit</th><th class="num">Margin %</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="gmaGridBody"><tr><td colspan="14" class="gma-loading">Run analysis to load data…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="gmaViewSummary" class="gma-view hidden">
+          <div class="gma-summary-tabs" id="gmaSummaryTabs"></div>
+          <div class="gma-table-wrap">
+            <table class="gma-table" id="gmaSummaryTable">
+              <thead><tr><th>Key</th><th class="num">Sales</th><th class="num">Cost</th><th class="num">Profit</th><th class="num">Margin %</th><th>Status</th></tr></thead>
+              <tbody id="gmaSummaryBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="gmaViewCharts" class="gma-view hidden">
+          <div class="gma-charts-grid">
+            <div class="gma-chart-card"><h3>Top 20 Profitable Items</h3><canvas id="gmaChartTopProfit"></canvas></div>
+            <div class="gma-chart-card"><h3>Top 20 Loss-Making Items</h3><canvas id="gmaChartTopLoss"></canvas></div>
+            <div class="gma-chart-card"><h3>Margin by Category</h3><canvas id="gmaChartCategory"></canvas></div>
+            <div class="gma-chart-card"><h3>Margin by Salesman</h3><canvas id="gmaChartSalesman"></canvas></div>
+            <div class="gma-chart-card gma-chart-card--wide"><h3>Margin Trend by Month</h3><canvas id="gmaChartTrend"></canvas></div>
+            <div class="gma-chart-card"><h3>Margin by Customer</h3><canvas id="gmaChartCustomer"></canvas></div>
+          </div>
+        </div>
+        <div id="gmaViewAdvanced" class="gma-view hidden">
+          <p class="gma-hint">Pivot-style margin breakdown — use Summary By tab for drill-down by dimension.</p>
+          <div id="gmaAdvancedHost" class="gma-advanced-grid"></div>
+        </div>
+      </div>
+    </main>
+
+    <aside class="gma-panel gma-insights-col">
+      <div class="gma-panel__head">AI Insights &amp; Recommendations</div>
+      <div class="gma-panel__body" id="gmaInsights">
+        <p class="gma-loading">Insights appear after analysis run.</p>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="gma-modal hidden" id="gmaDrillModal" role="dialog" aria-modal="true">
+  <div class="gma-modal__backdrop" data-close="gmaDrillModal"></div>
+  <div class="gma-modal__dialog">
+    <header class="gma-modal__head">
+      <h2 id="gmaDrillTitle">Item drill-down</h2>
+      <button type="button" class="gma-modal__close" data-close="gmaDrillModal" aria-label="Close">&times;</button>
+    </header>
+    <div class="gma-modal__body" id="gmaDrillBody"></div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/gross_margin.js') }}?v=1"></script>
+{% endblock %}

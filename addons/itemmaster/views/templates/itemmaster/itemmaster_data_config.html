@@ -1,0 +1,1036 @@
+{% extends "base.html" %}
+{% block title %}{{ title or "Item Master · Data config" }}{% endblock %}
+{% block content %}
+<style>
+  .imcfg-page { max-width: 1280px; margin: 0 auto; padding: 20px 16px 48px; font-family: system-ui, sans-serif; }
+  .imcfg-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #2563eb; }
+  .imcfg-bar h1 { margin: 0; font-size: 1.25rem; font-weight: 600; color: #1e3a8a; }
+  .imcfg-bar a { font-size: 0.85rem; color: #1d4ed8; text-decoration: none; font-weight: 600; }
+  .imcfg-bar a:hover { text-decoration: underline; }
+  .imcfg-intro { font-size: 0.85rem; color: #475569; margin-bottom: 16px; line-height: 1.5; }
+  .imcfg-panel { border: 1px solid #cbd5e1; border-radius: 10px; margin-bottom: 20px; overflow: hidden; background: #fff; }
+  .imcfg-ph { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #1d4ed8; padding: 10px 14px; background: #f0f9ff; border-bottom: 1px solid #bfdbfe; }
+  .imcfg-pbody { padding: 12px 14px 16px; }
+  .imcfg-pbody pre { margin: 0 0 10px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.78rem; overflow: auto; max-height: 280px; white-space: pre-wrap; word-break: break-word; }
+  .imcfg-pbody label { display: block; font-size: 0.72rem; font-weight: 700; color: #64748b; margin-bottom: 6px; text-transform: uppercase; }
+  .imcfg-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 10px; }
+  .imcfg-btn { padding: 8px 16px; border-radius: 8px; border: none; font-size: 0.82rem; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .imcfg-btn--run { background: #2563eb; color: #fff; }
+  .imcfg-btn--run:hover { filter: brightness(0.95); }
+  .imcfg-btn--run:disabled { opacity: 0.45; cursor: not-allowed; }
+  .imcfg-grid { display: grid; gap: 12px; margin-bottom: 18px; }
+  @media (min-width: 900px) { .imcfg-grid { grid-template-columns: repeat(4, 1fr); } }
+  .imcfg-grid label { display: block; font-size: 0.75rem; font-weight: 600; color: #334155; margin-bottom: 4px; }
+  .imcfg-grid input, .imcfg-grid select { width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.88rem; box-sizing: border-box; }
+  .imcfg-grid .imcfg-check { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: #334155; }
+  .imcfg-grid .imcfg-check input { width: auto; }
+  .imcfg-msg { margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 0.85rem; }
+  .imcfg-msg--err { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+  .imcfg-msg--ok { background: #f0f9ff; color: #1e40af; border: 1px solid #bfdbfe; }
+  .imcfg-result { margin-top: 14px; overflow: auto; max-height: 420px; border: 1px solid #e2e8f0; border-radius: 8px; }
+  .imcfg-result table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  .imcfg-result th, .imcfg-result td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; text-align: left; vertical-align: top; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+  .imcfg-result thead th { position: sticky; top: 0; background: #f1f5f9; font-weight: 700; color: #334155; z-index: 1; }
+  .imcfg-btn--ai { background: #7c3aed; color: #fff; }
+  .imcfg-btn--ai:hover { filter: brightness(0.95); }
+  .imcfg-btn--ai:disabled { opacity: 0.45; cursor: not-allowed; }
+  .imcfg-ai-log { margin-top: 10px; font-size: 0.8rem; color: #334155; white-space: pre-wrap; max-height: 200px; overflow: auto; padding: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
+  .imcfg-ai-samples { margin-top: 8px; font-size: 0.78rem; color: #475569; }
+</style>
+
+<div class="imcfg-page">
+  <div class="imcfg-bar">
+    <h1>Item Master · Data config</h1>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <a href="{{ url_for('itemmaster.itemmaster') }}">← Item Master form</a>
+      <a href="{{ url_for('itemmaster.productlist') }}">← Product list</a>
+    </div>
+  </div>
+
+  <p class="imcfg-intro">
+    Resolved SQL for this tenant (same patterns as the Item Master screen, product list, next-code, AI template scan, and lookups).
+    Use <strong>Execute preview</strong> to run a capped query against your session database.
+    {{ wrapped_preview_hint }}
+  </p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="imcfg-msg imcfg-msg--ok" role="status">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <form method="get" action="{{ url_for('itemmaster.itemmaster_data_config') }}" class="imcfg-grid">
+    <div>
+      <label for="location_code">Branch location code</label>
+      <input type="number" id="location_code" name="location_code" value="{{ cfg_loc }}" />
+    </div>
+    <div>
+      <label for="category_flag">Category FLAG sample</label>
+      <select id="category_flag" name="category_flag">
+        {% for f in ['B','Z','L','M','D','C'] %}
+        <option value="{{ f }}" {% if category_flag == f %}selected{% endif %}>{{ f }} ({{ {'B':'Brand','Z':'Size','L':'Color','M':'Main','D':'Dept','C':'Category'}[f] }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="row_limit">Preview row cap</label>
+      <input type="number" id="row_limit" name="row_limit" min="1" max="5000" value="{{ row_limit }}" />
+    </div>
+    <div>
+      <label for="sample_item_code">Sample item code</label>
+      <input type="number" id="sample_item_code" name="sample_item_code" value="{{ sample_item_code }}" />
+    </div>
+    <div>
+      <label for="sample_mfg_id">Sample manufacturer / alt barcode</label>
+      <input type="text" id="sample_mfg_id" name="sample_mfg_id" value="{{ sample_mfg }}" maxlength="120" autocomplete="off" />
+    </div>
+    <div>
+      <label for="ai_word">AI scan word (LIKE)</label>
+      <input type="text" id="ai_word" name="ai_word" value="{{ ai_word }}" maxlength="80" autocomplete="off" />
+    </div>
+    <div style="display:flex;align-items:flex-end;">
+      <label class="imcfg-check">
+        <input type="checkbox" name="cat_use_location" value="1" {% if cat_use_location %}checked{% endif %} />
+        CATEGORY SQL includes LOCATIONCODE
+      </label>
+    </div>
+    <div style="grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+      <button type="submit" class="imcfg-btn imcfg-btn--run">Reload SQL</button>
+    </div>
+  </form>
+
+  {% if exec_error %}
+  <div class="imcfg-msg imcfg-msg--err" role="alert">{{ exec_error }}</div>
+  {% endif %}
+  {% if exec_label and last_execute and last_execute != 'indexes' and not exec_error %}
+  <div class="imcfg-msg imcfg-msg--ok" role="status">{{ exec_label }} · {{ exec_rows|length }} row(s)</div>
+  {% endif %}
+
+  {% if exec_cols and last_execute and last_execute != 'indexes' and not exec_error %}
+  <div class="imcfg-result">
+    <table>
+      <thead><tr>{% for c in exec_cols %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for r in exec_rows %}
+        <tr>{% for c in exec_cols %}<td title="{{ r.get(c, '') }}">{{ r.get(c) if r.get(c) is not none else '' }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% for p in im_cfg_panels %}
+  <div class="imcfg-panel">
+    <div class="imcfg-ph">{{ p.title }}</div>
+    <div class="imcfg-pbody">
+      <label>Binds (JSON)</label>
+      <pre>{{ p.params_json }}</pre>
+      <label>Statement</label>
+      <pre>{{ p.sql or '(could not build — table/columns not detected)' }}</pre>
+      <form method="post" action="{{ url_for('itemmaster.itemmaster_data_config') }}" class="imcfg-actions">
+        <input type="hidden" name="row_limit" value="{{ row_limit }}" />
+        <input type="hidden" name="location_code" value="{{ cfg_loc }}" />
+        <input type="hidden" name="category_flag" value="{{ category_flag }}" />
+        {% if cat_use_location %}<input type="hidden" name="cat_use_location" value="1" />{% endif %}
+        <input type="hidden" name="sample_item_code" value="{{ sample_item_code }}" />
+        <input type="hidden" name="sample_mfg_id" value="{{ sample_mfg }}" />
+        <input type="hidden" name="ai_word" value="{{ ai_word }}" />
+        <button type="submit" class="imcfg-btn imcfg-btn--run" name="execute" value="{{ p.id }}" {% if not p.has_sql %}disabled{% endif %}>Execute preview</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+
+  <div class="imcfg-panel" id="imcfg-accounts-panel">
+    <div class="imcfg-ph">Accounts · Update missing item accounts</div>
+    <div class="imcfg-pbody">
+      <p style="margin:0 0 10px;font-size:0.82rem;color:#475569;line-height:1.45;">
+        Fills missing or zero <strong>SALESACCOUNT</strong>, <strong>PURCHASEACCOUNT</strong>,
+        <strong>INVENTORYACCOUNT</strong>, and <strong>COGSACCOUNT</strong> in <strong>ITEMMASTER</strong>.
+        Existing account values are kept unchanged. Inventory defaults to <strong>1300</strong>.
+      </p>
+      <p style="margin:0 0 10px;font-size:0.82rem;color:#64748b;">
+        Items with missing accounts at location <strong>{{ cfg_loc }}</strong>:
+        <strong id="imcfg-accounts-missing-count">{{ missing_account_count }}</strong>
+      </p>
+      <div class="imcfg-actions">
+        <label style="font-size:0.78rem;color:#64748b;display:flex;align-items:center;gap:6px;">
+          Batch size
+          <input type="number" id="imcfg-accounts-batch-size" min="1" max="1000" value="{{ account_backfill_batch_default or 250 }}" style="width:76px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px;" />
+        </label>
+        <button type="button" class="imcfg-btn imcfg-btn--run" id="imcfg-accounts-refresh-count">Refresh count</button>
+        <button type="button" class="imcfg-btn imcfg-btn--ai" id="imcfg-accounts-run-bulk" style="background:#16a34a;border-color:#16a34a;">Update all missing accounts</button>
+        <button type="button" class="imcfg-btn imcfg-btn--run" id="imcfg-accounts-stop-bulk" style="display:none;background:#64748b;">Stop</button>
+      </div>
+      <div class="imcfg-ai-log" id="imcfg-accounts-log" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <div class="imcfg-panel" id="imcfg-ai-arabic-panel">
+    <div class="imcfg-ph">AI · Update Arabic (ITEMNAMEARA)</div>
+    <div class="imcfg-pbody">
+      <p style="margin:0 0 10px;font-size:0.82rem;color:#475569;line-height:1.45;">
+        Fills <strong>ITEMNAMEARA</strong> from <strong>ITEMNAME</strong> using AI (OpenAI when <code>OPENAI_API_KEY</code> is set in <code>.env</code>, otherwise the built-in term map).
+        Only rows where Arabic is <strong>null or blank</strong> are updated, for branch location <strong>{{ cfg_loc }}</strong>.
+      </p>
+      <p style="margin:0 0 10px;font-size:0.82rem;color:#64748b;">
+        Missing Arabic names: <strong id="imcfg-ai-missing-count">{{ ai_arabic_missing_count }}</strong>
+        {% if not has_openai %}<span style="color:#b45309;"> · OPENAI_API_KEY not set — fallback translator only</span>{% endif %}
+      </p>
+      <div class="imcfg-actions">
+        <label style="font-size:0.78rem;color:#64748b;display:flex;align-items:center;gap:6px;">
+          Batch size
+          <input type="number" id="imcfg-ai-batch-size" min="1" max="100" value="{{ ai_arabic_batch_default or 25 }}" style="width:64px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px;" />
+        </label>
+        <button type="button" class="imcfg-btn imcfg-btn--run" id="imcfg-ai-refresh-count">Refresh count</button>
+        <button type="button" class="imcfg-btn imcfg-btn--ai" id="imcfg-ai-run-bulk">Update Arabic using AI</button>
+        <button type="button" class="imcfg-btn imcfg-btn--run" id="imcfg-ai-stop-bulk" style="display:none;background:#64748b;">Stop</button>
+      </div>
+      <div class="imcfg-ai-log" id="imcfg-ai-log" aria-live="polite"></div>
+      <div class="imcfg-ai-samples" id="imcfg-ai-samples"></div>
+    </div>
+  </div>
+
+  <div class="imcfg-panel" id="imcfg-price-import-panel">
+    <div class="imcfg-ph">Price update · Excel import by barcode</div>
+    <div class="imcfg-pbody">
+      <p style="margin:0 0 10px;font-size:0.82rem;color:#475569;line-height:1.45;">
+        Update <strong>Cost</strong>, <strong>Retail</strong>, <strong>Wholesale</strong>, <strong>Third</strong>, and <strong>Branch</strong> prices
+        in <strong>ITEMMASTER</strong> and <strong>ITEMALTERNATEUOMMAP</strong> using <strong>Barcode</strong> (manufacturer ID).
+        Leave a price column blank to keep the existing value. Uses branch location from the form above (or per-row <code>LocationCode</code>).
+      </p>
+      <p style="margin:0 0 10px;font-size:0.78rem;color:#64748b;">
+        Columns: Barcode (required), LocationCode (optional), CostPrice, RetailPrice, WholesalePrice, ThirdPrice, BranchPrice.
+        Max {{ price_import_max_rows }} data rows per file.
+      </p>
+      <div class="imcfg-actions">
+        <a class="imcfg-btn imcfg-btn--run" href="{{ url_for('itemmaster.itemmaster_data_config_price_import_template') }}" style="text-decoration:none;display:inline-block;">Download template</a>
+        <label class="imcfg-btn imcfg-btn--ai" style="background:#b45309;cursor:pointer;margin:0;">
+          Choose Excel file
+          <input type="file" id="imcfg-price-file" accept=".xlsx,.xlsm" style="display:none;" />
+        </label>
+        <button type="button" class="imcfg-btn imcfg-btn--run" id="imcfg-price-import-run" disabled>Import prices</button>
+      </div>
+      <div class="imcfg-ai-log" id="imcfg-price-import-log" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <div class="imcfg-panel" id="imcfg-cost-import-panel">
+    <div class="imcfg-ph">Cost price · Excel import by item code</div>
+    <div class="imcfg-pbody">
+      <p style="margin:0 0 10px;font-size:0.82rem;color:#475569;line-height:1.45;">
+        Bulk update <strong>COSTPRICE</strong> in <strong>ITEMMASTER</strong> and the
+        <strong>base</strong> row in <strong>ITEMALTERNATEUOMMAP</strong> using <strong>ItemCode</strong>.
+        Uses branch location from the form above (or per-row <code>LocationCode</code>).
+      </p>
+      <p style="margin:0 0 10px;font-size:0.78rem;color:#64748b;">
+        Columns: ItemCode (required), LocationCode (optional), CostPrice (required).
+        Max {{ price_import_max_rows }} data rows per file. Large files import in batches of {{ cost_import_batch_size }} rows to avoid proxy timeouts.
+      </p>
+      <div class="imcfg-actions">
+        <a class="imcfg-btn imcfg-btn--run" href="{{ url_for('itemmaster.itemmaster_data_config_cost_import_template') }}" style="text-decoration:none;display:inline-block;">Download template</a>
+        <label class="imcfg-btn imcfg-btn--ai" style="background:#059669;cursor:pointer;margin:0;">
+          Choose Excel file
+          <input type="file" id="imcfg-cost-file" accept=".xlsx,.xlsm" style="display:none;" />
+        </label>
+        <button type="button" class="imcfg-btn imcfg-btn--run" id="imcfg-cost-import-run" disabled>Import cost prices</button>
+        <button type="button" class="imcfg-btn imcfg-btn--run" id="imcfg-cost-import-stop" style="display:none;background:#64748b;">Stop</button>
+      </div>
+      <div class="imcfg-ai-log" id="imcfg-cost-import-log" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <div class="imcfg-panel" id="imcfg-base-alt-panel">
+    <div class="imcfg-ph">Alternate UOM · Base row from ITEMMASTER</div>
+    <div class="imcfg-pbody">
+      <p style="margin:0 0 10px;font-size:0.82rem;color:#475569;line-height:1.45;">
+        Creates or updates the <strong>IS_BASE</strong> row in <strong>ITEMALTERNATEUOMMAP</strong> from each
+        <strong>ITEMMASTER</strong> header (base UOM, barcode, prices, description, and <strong>CURRENTSTOCK</strong> when the column exists).
+        Use this after importing items or when pickers show items without a base alternate row.
+      </p>
+      <p style="margin:0 0 10px;font-size:0.82rem;color:#64748b;">
+        Items missing a base alternate row at location <strong>{{ cfg_loc }}</strong>:
+        <strong id="imcfg-base-alt-missing-count">{{ base_alt_missing_count }}</strong>
+      </p>
+      <div class="imcfg-actions">
+        <label style="font-size:0.78rem;color:#64748b;display:flex;align-items:center;gap:6px;">
+          Batch size
+          <input type="number" id="imcfg-base-alt-batch-size" min="1" max="200" value="{{ base_alt_batch_default or 50 }}" style="width:64px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px;" />
+        </label>
+        <label class="imcfg-check" style="margin:0;">
+          <input type="checkbox" id="imcfg-base-alt-missing-only" value="1" checked />
+          Only items without a base row
+        </label>
+        <button type="button" class="imcfg-btn imcfg-btn--run" id="imcfg-base-alt-refresh-count">Refresh count</button>
+        <button type="button" class="imcfg-btn imcfg-btn--ai" id="imcfg-base-alt-run-bulk" style="background:#0d9488;border-color:#0d9488;">Add / sync base alternate rows</button>
+        <button type="button" class="imcfg-btn imcfg-btn--run" id="imcfg-base-alt-stop-bulk" style="display:none;background:#64748b;">Stop</button>
+      </div>
+      <div class="imcfg-ai-log" id="imcfg-base-alt-log" aria-live="polite"></div>
+      <div class="imcfg-ai-samples" id="imcfg-base-alt-samples"></div>
+    </div>
+  </div>
+
+  <div class="imcfg-panel" id="imcfg-store-stock-panel">
+    <div class="imcfg-ph">Store stock · Import to WAREHOUSE_STOCK</div>
+    <div class="imcfg-pbody">
+      <p style="margin:0 0 10px;font-size:0.82rem;color:#475569;line-height:1.45;">
+        Copy per-store quantities from <strong>ITEMMASTER</strong> columns
+        (<code>STORE1</code>, <code>STORE2</code>, …) into <strong>WAREHOUSE_STOCK</strong>
+        at branch location <strong>{{ cfg_loc }}</strong>.
+        Mapping: <code>STORE1</code> → <code>WH001</code>, <code>STORE2</code> → <code>WH002</code>, and so on
+        (warehouse codes must exist in <strong>WAREHOUSE_MASTER</strong> for this branch).
+      </p>
+      <p style="margin:0 0 10px;font-size:0.82rem;color:#64748b;">
+        Items at this branch: <strong id="imcfg-store-stock-total">—</strong>
+      </p>
+      <div id="imcfg-store-stock-map" class="imcfg-ai-samples" style="margin-bottom:10px;"></div>
+      <div class="imcfg-actions">
+        <label style="font-size:0.78rem;color:#64748b;display:flex;align-items:center;gap:6px;">
+          Batch size
+          <input type="number" id="imcfg-store-stock-batch-size" min="1" max="500" value="{{ store_stock_import_batch_default or 100 }}" style="width:64px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px;" />
+        </label>
+        <button type="button" class="imcfg-btn imcfg-btn--run" id="imcfg-store-stock-refresh-map">Refresh mapping</button>
+        <button type="button" class="imcfg-btn imcfg-btn--ai" id="imcfg-store-stock-run-import" style="background:#0369a1;border-color:#0369a1;">Import store stock</button>
+        <button type="button" class="imcfg-btn imcfg-btn--run" id="imcfg-store-stock-stop-import" style="display:none;background:#64748b;">Stop</button>
+      </div>
+      <div class="imcfg-ai-log" id="imcfg-store-stock-log" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <div class="imcfg-panel">
+    <div class="imcfg-ph">Performance indexes (CREATE INDEX)</div>
+    <div class="imcfg-pbody">
+      <p style="margin:0 0 10px;font-size:0.82rem;color:#475569;">Suggested indexes for ITEMMASTER, CATEGORY, lookups, and chart list. Use <strong>Execute index DDL</strong> below when you want to apply them (indexes that already exist are skipped).</p>
+      {% if index_ddls %}
+      <pre>{% for ddl in index_ddls %}{{ ddl }};
+{% endfor %}</pre>
+      {% else %}
+      <pre>(No index DDL — core tables not detected)</pre>
+      {% endif %}
+      <form method="post" action="{{ url_for('itemmaster.itemmaster_data_config') }}" class="imcfg-actions">
+        <input type="hidden" name="row_limit" value="{{ row_limit }}" />
+        <input type="hidden" name="location_code" value="{{ cfg_loc }}" />
+        <input type="hidden" name="category_flag" value="{{ category_flag }}" />
+        {% if cat_use_location %}<input type="hidden" name="cat_use_location" value="1" />{% endif %}
+        <input type="hidden" name="sample_item_code" value="{{ sample_item_code }}" />
+        <input type="hidden" name="sample_mfg_id" value="{{ sample_mfg }}" />
+        <input type="hidden" name="ai_word" value="{{ ai_word }}" />
+        <button type="submit" class="imcfg-btn imcfg-btn--run" name="execute" value="indexes">Execute index DDL</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script data-imcfg-version="accounts-backfill-v2">
+(function() {
+  var COUNT_URL = {{ url_for('itemmaster.itemmaster_data_config_missing_accounts_count')|tojson }};
+  var BULK_URL = {{ url_for('itemmaster.itemmaster_data_config_backfill_missing_accounts')|tojson }};
+  var countEl = document.getElementById('imcfg-accounts-missing-count');
+  var logEl = document.getElementById('imcfg-accounts-log');
+  var batchEl = document.getElementById('imcfg-accounts-batch-size');
+  var btnRun = document.getElementById('imcfg-accounts-run-bulk');
+  var btnStop = document.getElementById('imcfg-accounts-stop-bulk');
+  var btnRefresh = document.getElementById('imcfg-accounts-refresh-count');
+  var stopRequested = false;
+
+  function currentLoc() {
+    var el = document.getElementById('location_code');
+    var v = el ? parseInt(el.value, 10) : NaN;
+    return isNaN(v) ? {{ cfg_loc|tojson }} : v;
+  }
+
+  function logLine(msg) {
+    if (!logEl) return;
+    logEl.textContent = (logEl.textContent ? logEl.textContent + '\n' : '') + msg;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function refreshCount() {
+    var u = COUNT_URL + '?location_code=' + encodeURIComponent(String(currentLoc()));
+    return fetch(u, { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(j) {
+        if (j && j.ok && countEl) countEl.textContent = String(j.missing_count != null ? j.missing_count : '0');
+        return j;
+      });
+  }
+
+  function runBulkLoop() {
+    if (!btnRun || !BULK_URL) return;
+    var batch = parseInt(batchEl && batchEl.value, 10) || 250;
+    batch = Math.max(1, Math.min(batch, 1000));
+    stopRequested = false;
+    btnRun.disabled = true;
+    if (btnStop) btnStop.style.display = '';
+    if (logEl) logEl.textContent = '';
+    var totalUpdated = 0;
+
+    function finish() {
+      if (btnRun) btnRun.disabled = false;
+      if (btnStop) btnStop.style.display = 'none';
+      refreshCount();
+    }
+
+    function step() {
+      if (stopRequested) {
+        logLine('Stopped by user.');
+        finish();
+        return;
+      }
+      fetch(BULK_URL, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location_code: currentLoc(), batch_size: batch })
+      })
+        .then(function(r) { return r.json().then(function(j) { return { okHttp: r.ok, j: j }; }); })
+        .then(function(res) {
+          var j = res.j || {};
+          if (!res.okHttp || j.ok === false) {
+            logLine((j.errors && j.errors[0]) || j.error || ('Account update failed. Server response: ' + JSON.stringify(j)));
+            finish();
+            return;
+          }
+          totalUpdated += (j.updated || 0);
+          var processed = Number(j.processed || 0);
+          var updated = Number(j.updated || 0);
+          var remaining = j.remaining != null ? Number(j.remaining) : null;
+          var remainingText = remaining != null && !isNaN(remaining) ? String(remaining) : 'checking';
+          logLine(
+            'Batch: processed ' + processed +
+            ', updated ' + updated +
+            ', remaining ' + remainingText
+          );
+          if (countEl && j.remaining != null) countEl.textContent = String(j.remaining);
+          if (j.done || processed <= 0) {
+            if (processed <= 0 && updated <= 0) {
+              logLine('No missing account rows found for this location, or they were already updated.');
+            }
+            logLine('Done. Total updated: ' + totalUpdated + '.');
+            finish();
+            return;
+          }
+          setTimeout(step, 120);
+        })
+        .catch(function() {
+          logLine('Network error during account update.');
+          finish();
+        });
+    }
+
+    if (!confirm('Update missing ITEMMASTER accounts at location ' + currentLoc() + '?\nExisting account values will not be changed.')) {
+      finish();
+      return;
+    }
+    step();
+  }
+
+  if (btnRefresh) btnRefresh.addEventListener('click', function() {
+    if (logEl) logEl.textContent = 'Refreshing count…';
+    refreshCount().then(function() {
+      if (logEl) logEl.textContent = 'Count refreshed.';
+    });
+  });
+  if (btnRun) btnRun.addEventListener('click', runBulkLoop);
+  if (btnStop) btnStop.addEventListener('click', function() { stopRequested = true; });
+})();
+
+(function() {
+  function currentLoc() {
+    var el = document.getElementById('location_code');
+    var v = el ? parseInt(el.value, 10) : NaN;
+    return isNaN(v) ? {{ cfg_loc|tojson }} : v;
+  }
+  var COUNT_URL = {{ url_for('itemmaster.itemmaster_data_config_ai_arabic_missing_count')|tojson }};
+  var BULK_URL = {{ url_for('itemmaster.itemmaster_data_config_ai_arabic_bulk')|tojson }};
+  var countEl = document.getElementById('imcfg-ai-missing-count');
+  var logEl = document.getElementById('imcfg-ai-log');
+  var samplesEl = document.getElementById('imcfg-ai-samples');
+  var batchEl = document.getElementById('imcfg-ai-batch-size');
+  var btnRun = document.getElementById('imcfg-ai-run-bulk');
+  var btnStop = document.getElementById('imcfg-ai-stop-bulk');
+  var btnRefresh = document.getElementById('imcfg-ai-refresh-count');
+  var running = false;
+  var stopRequested = false;
+
+  function logLine(msg) {
+    if (!logEl) return;
+    logEl.textContent = (logEl.textContent ? logEl.textContent + '\n' : '') + msg;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function refreshCount() {
+    var u = COUNT_URL + '?location_code=' + encodeURIComponent(String(currentLoc()));
+    return fetch(u, { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(j) {
+        if (j && j.ok && countEl) countEl.textContent = String(j.missing_count != null ? j.missing_count : '0');
+        return j;
+      });
+  }
+
+  function runBulkLoop() {
+    if (!btnRun || !BULK_URL) return;
+    var batch = parseInt(batchEl && batchEl.value, 10) || 25;
+    batch = Math.max(1, Math.min(batch, 100));
+    running = true;
+    stopRequested = false;
+    btnRun.disabled = true;
+    if (btnStop) btnStop.style.display = '';
+    if (logEl) logEl.textContent = '';
+    if (samplesEl) samplesEl.textContent = '';
+    var offset = 0;
+    var totalUpdated = 0;
+    var totalFailed = 0;
+
+    function step() {
+      if (stopRequested) {
+        logLine('Stopped by user.');
+        finish();
+        return;
+      }
+      fetch(BULK_URL, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location_code: currentLoc(), offset: offset, batch_size: batch })
+      })
+        .then(function(r) { return r.json().then(function(j) { return { okHttp: r.ok, j: j }; }); })
+        .then(function(res) {
+          var j = res.j || {};
+          if (!res.okHttp || !j.ok) {
+            logLine(j.error || 'Bulk update failed.');
+            finish();
+            return;
+          }
+          totalUpdated += (j.updated || 0);
+          totalFailed += (j.failed || 0);
+          logLine(
+            'Batch @' + offset + ': processed ' + (j.processed || 0) +
+            ', updated ' + (j.updated || 0) + ', failed ' + (j.failed || 0) +
+            ', remaining ' + (j.remaining != null ? j.remaining : '?')
+          );
+          if (j.errors && j.errors.length) {
+            j.errors.slice(0, 5).forEach(function(e) { logLine('  ' + e); });
+          }
+          if (j.samples && j.samples.length && samplesEl) {
+            samplesEl.textContent = 'Recent: ' + j.samples.map(function(s) {
+              return '#' + s.itemcode + ' ' + (s.itemname || '') + ' → ' + (s.itemnameara || '') + ' (' + (s.source || '') + ')';
+            }).join('\n');
+          }
+          if (countEl && j.remaining != null) countEl.textContent = String(j.remaining);
+          if (j.done) {
+            logLine('Done. Total updated: ' + totalUpdated + ', failed: ' + totalFailed + '.');
+            finish();
+            return;
+          }
+          offset = j.next_offset != null ? j.next_offset : (offset + batch);
+          setTimeout(step, 120);
+        })
+        .catch(function() {
+          logLine('Network error during bulk update.');
+          finish();
+        });
+    }
+
+    function finish() {
+      running = false;
+      if (btnRun) btnRun.disabled = false;
+      if (btnStop) btnStop.style.display = 'none';
+      refreshCount();
+    }
+
+    if (!confirm('Update ITEMNAMEARA using AI for all items with empty Arabic at location ' + currentLoc() + '?\nThis may take a long time for large catalogs.')) {
+      return;
+    }
+    step();
+  }
+
+  if (btnRefresh) btnRefresh.addEventListener('click', function() {
+    if (logEl) logEl.textContent = 'Refreshing count…';
+    refreshCount().then(function() {
+      if (logEl) logEl.textContent = 'Count refreshed.';
+    });
+  });
+  if (btnRun) btnRun.addEventListener('click', runBulkLoop);
+  if (btnStop) btnStop.addEventListener('click', function() { stopRequested = true; });
+})();
+
+(function() {
+  var COUNT_URL = {{ url_for('itemmaster.itemmaster_data_config_base_alternate_missing_count')|tojson }};
+  var BULK_URL = {{ url_for('itemmaster.itemmaster_data_config_base_alternate_bulk')|tojson }};
+  var countEl = document.getElementById('imcfg-base-alt-missing-count');
+  var logEl = document.getElementById('imcfg-base-alt-log');
+  var samplesEl = document.getElementById('imcfg-base-alt-samples');
+  var batchEl = document.getElementById('imcfg-base-alt-batch-size');
+  var missingOnlyEl = document.getElementById('imcfg-base-alt-missing-only');
+  var btnRun = document.getElementById('imcfg-base-alt-run-bulk');
+  var btnStop = document.getElementById('imcfg-base-alt-stop-bulk');
+  var btnRefresh = document.getElementById('imcfg-base-alt-refresh-count');
+  var running = false;
+  var stopRequested = false;
+
+  function currentLoc() {
+    var el = document.getElementById('location_code');
+    var v = el ? parseInt(el.value, 10) : NaN;
+    return isNaN(v) ? {{ cfg_loc|tojson }} : v;
+  }
+
+  function logLine(msg) {
+    if (!logEl) return;
+    logEl.textContent = (logEl.textContent ? logEl.textContent + '\n' : '') + msg;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function refreshCount() {
+    var u = COUNT_URL + '?location_code=' + encodeURIComponent(String(currentLoc()));
+    return fetch(u, { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(j) {
+        if (j && j.ok && countEl) countEl.textContent = String(j.missing_count != null ? j.missing_count : '0');
+        return j;
+      });
+  }
+
+  function runBulkLoop() {
+    if (!btnRun || !BULK_URL) return;
+    var batch = parseInt(batchEl && batchEl.value, 10) || 50;
+    batch = Math.max(1, Math.min(batch, 200));
+    var missingOnly = !(missingOnlyEl && !missingOnlyEl.checked);
+    running = true;
+    stopRequested = false;
+    btnRun.disabled = true;
+    if (btnStop) btnStop.style.display = '';
+    if (logEl) logEl.textContent = '';
+    if (samplesEl) samplesEl.textContent = '';
+    var offset = 0;
+    var totalCreated = 0;
+    var totalUpdated = 0;
+    var totalFailed = 0;
+
+    function step() {
+      if (stopRequested) {
+        logLine('Stopped by user.');
+        finish();
+        return;
+      }
+      fetch(BULK_URL, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location_code: currentLoc(),
+          offset: offset,
+          batch_size: batch,
+          missing_only: missingOnly
+        })
+      })
+        .then(function(r) { return r.json().then(function(j) { return { okHttp: r.ok, j: j }; }); })
+        .then(function(res) {
+          var j = res.j || {};
+          if (!res.okHttp || !j.ok) {
+            logLine(j.error || 'Base alternate sync failed.');
+            finish();
+            return;
+          }
+          totalCreated += (j.created || 0);
+          totalUpdated += (j.updated || 0);
+          totalFailed += (j.failed || 0);
+          logLine(
+            'Batch @' + offset + ': processed ' + (j.processed || 0) +
+            ', created ' + (j.created || 0) + ', updated ' + (j.updated || 0) +
+            ', skipped ' + (j.skipped || 0) + ', failed ' + (j.failed || 0) +
+            (missingOnly ? ', remaining ' + (j.remaining != null ? j.remaining : '?') : '')
+          );
+          if (j.errors && j.errors.length) {
+            j.errors.slice(0, 5).forEach(function(e) { logLine('  ' + e); });
+          }
+          if (j.samples && j.samples.length && samplesEl) {
+            samplesEl.textContent = 'Recent: ' + j.samples.map(function(s) {
+              return '#' + s.itemcode + ' → ' + (s.result || '');
+            }).join(' | ');
+          }
+          if (missingOnly && countEl && j.remaining != null) countEl.textContent = String(j.remaining);
+          if (j.done) {
+            logLine('Done. Created: ' + totalCreated + ', updated: ' + totalUpdated + ', failed: ' + totalFailed + '.');
+            finish();
+            return;
+          }
+          offset = j.next_offset != null ? j.next_offset : (offset + batch);
+          setTimeout(step, 120);
+        })
+        .catch(function() {
+          logLine('Network error during base alternate sync.');
+          finish();
+        });
+    }
+
+    function finish() {
+      running = false;
+      if (btnRun) btnRun.disabled = false;
+      if (btnStop) btnStop.style.display = 'none';
+      refreshCount();
+    }
+
+    var modeTxt = missingOnly ? 'items WITHOUT a base alternate row' : 'ALL items with a base UOM (refresh from ITEMMASTER)';
+    if (!confirm('Sync base alternate rows from ITEMMASTER for ' + modeTxt + ' at location ' + currentLoc() + '?\nThis may take a while for large catalogs.')) {
+      return;
+    }
+    step();
+  }
+
+  if (btnRefresh) btnRefresh.addEventListener('click', function() {
+    if (logEl) logEl.textContent = 'Refreshing count…';
+    refreshCount().then(function() {
+      if (logEl) logEl.textContent = 'Count refreshed.';
+    });
+  });
+  if (btnRun) btnRun.addEventListener('click', runBulkLoop);
+  if (btnStop) btnStop.addEventListener('click', function() { stopRequested = true; });
+})();
+
+(function() {
+  var MAP_URL = {{ url_for('itemmaster.itemmaster_data_config_store_stock_import_map')|tojson }};
+  var IMPORT_URL = {{ url_for('itemmaster.itemmaster_data_config_store_stock_import')|tojson }};
+  var totalEl = document.getElementById('imcfg-store-stock-total');
+  var mapEl = document.getElementById('imcfg-store-stock-map');
+  var logEl = document.getElementById('imcfg-store-stock-log');
+  var batchEl = document.getElementById('imcfg-store-stock-batch-size');
+  var btnRefresh = document.getElementById('imcfg-store-stock-refresh-map');
+  var btnRun = document.getElementById('imcfg-store-stock-run-import');
+  var btnStop = document.getElementById('imcfg-store-stock-stop-import');
+  var stopRequested = false;
+
+  function currentLoc() {
+    var el = document.getElementById('location_code');
+    var v = el ? parseInt(el.value, 10) : NaN;
+    return isNaN(v) ? {{ cfg_loc|tojson }} : v;
+  }
+
+  function logLine(msg) {
+    if (!logEl) return;
+    logEl.textContent = (logEl.textContent ? logEl.textContent + '\n' : '') + msg;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function renderMap(j) {
+    if (!mapEl) return;
+    var lines = [];
+    (j.mappings || []).forEach(function(m) {
+      lines.push((m.store_column || '') + ' → ' + (m.warehouse_code || '') +
+        (m.warehouse_name ? (' (' + m.warehouse_name + ')') : ''));
+    });
+    if ((j.mapping_errors || []).length) {
+      lines.push('');
+      lines.push('Warnings:');
+      j.mapping_errors.slice(0, 12).forEach(function(e) { lines.push('  ' + e); });
+    }
+    mapEl.textContent = lines.length ? lines.join('\n') : 'No STORE → WH mappings (check ITEMMASTER store columns and WAREHOUSE_MASTER).';
+    if (totalEl && j.total_items != null) totalEl.textContent = String(j.total_items);
+  }
+
+  function refreshMap() {
+    var u = MAP_URL + '?location_code=' + encodeURIComponent(String(currentLoc()));
+    return fetch(u, { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(j) {
+        renderMap(j || {});
+        return j;
+      });
+  }
+
+  function runImportLoop() {
+    if (!btnRun || !IMPORT_URL) return;
+    var batch = parseInt(batchEl && batchEl.value, 10) || 100;
+    batch = Math.max(1, Math.min(batch, 500));
+    stopRequested = false;
+    btnRun.disabled = true;
+    if (btnStop) btnStop.style.display = '';
+    if (logEl) logEl.textContent = '';
+    var offset = 0;
+    var totalUpserted = 0;
+    var totalFailed = 0;
+
+    function finish() {
+      if (btnRun) btnRun.disabled = false;
+      if (btnStop) btnStop.style.display = 'none';
+      refreshMap();
+    }
+
+    function step() {
+      if (stopRequested) {
+        logLine('Stopped by user.');
+        finish();
+        return;
+      }
+      fetch(IMPORT_URL, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location_code: currentLoc(), offset: offset, batch_size: batch })
+      })
+        .then(function(r) { return r.json().then(function(j) { return { okHttp: r.ok, j: j }; }); })
+        .then(function(res) {
+          var j = res.j || {};
+          if (Array.isArray(j) && j.length && j[0] && typeof j[0] === 'object' && j[0].body) {
+            try { j = JSON.parse(j[0].body); } catch (e) {}
+          }
+          var itemsN = Number(j.items != null ? j.items : (j.processed != null ? j.processed : 0)) || 0;
+          if (!res.okHttp || j.ok === false) {
+            logLine((j.errors && j.errors[0]) || j.error || 'Import failed.');
+            finish();
+            return;
+          }
+          totalUpserted += (j.upserted || 0);
+          totalFailed += (j.failed || 0);
+          logLine(
+            'Batch @' + offset + ': items ' + itemsN +
+            ', warehouse rows ' + (j.upserted || 0) +
+            ', failed ' + (j.failed || 0) +
+            ', remaining items ' + (j.remaining != null ? j.remaining : '?')
+          );
+          if (j.errors && j.errors.length) {
+            j.errors.slice(0, 5).forEach(function(e) { logLine('  ' + e); });
+          }
+          if (j.done || itemsN <= 0) {
+            if (itemsN <= 0 && !j.done) {
+              logLine('No items returned for this batch (check branch location code).');
+            }
+            logLine('Done. Warehouse stock rows written: ' + totalUpserted + ', failed: ' + totalFailed + '.');
+            finish();
+            return;
+          }
+          offset = j.next_offset != null ? j.next_offset : (offset + batch);
+          setTimeout(step, 120);
+        })
+        .catch(function() {
+          logLine('Network error during store stock import.');
+          finish();
+        });
+    }
+
+    refreshMap().then(function(j) {
+      if (!j || !j.ok || !(j.mappings || []).length) {
+        logLine('Cannot import: no valid STORE → WH mappings. Fix WAREHOUSE_MASTER (WH001, WH002, …) then Refresh mapping.');
+        finish();
+        return;
+      }
+      if (!confirm(
+        'Import ITEMMASTER store columns into WAREHOUSE_STOCK at location ' + currentLoc() + '?\n' +
+        'Mapping: ' + (j.mappings || []).map(function(m) { return m.store_column + '→' + m.warehouse_code; }).join(', ') + '\n' +
+        'Existing WAREHOUSE_STOCK qty for mapped warehouses will be overwritten per item.'
+      )) {
+        finish();
+        return;
+      }
+      step();
+    });
+  }
+
+  if (btnRefresh) btnRefresh.addEventListener('click', function() {
+    if (logEl) logEl.textContent = 'Refreshing mapping…';
+    refreshMap().then(function() {
+      if (logEl) logEl.textContent = 'Mapping refreshed.';
+    });
+  });
+  if (btnRun) btnRun.addEventListener('click', runImportLoop);
+  if (btnStop) btnStop.addEventListener('click', function() { stopRequested = true; });
+  refreshMap();
+})();
+
+(function() {
+  var IMPORT_URL = {{ url_for('itemmaster.itemmaster_data_config_price_import')|tojson }};
+  var fileEl = document.getElementById('imcfg-price-file');
+  var btnRun = document.getElementById('imcfg-price-import-run');
+  var logEl = document.getElementById('imcfg-price-import-log');
+
+  function currentLoc() {
+    var el = document.getElementById('location_code');
+    var v = el ? parseInt(el.value, 10) : NaN;
+    return isNaN(v) ? {{ cfg_loc|tojson }} : v;
+  }
+
+  function logLine(msg) {
+    if (!logEl) return;
+    logEl.textContent = (logEl.textContent ? logEl.textContent + '\n' : '') + msg;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  if (fileEl) {
+    fileEl.addEventListener('change', function() {
+      if (btnRun) btnRun.disabled = !(fileEl.files && fileEl.files.length);
+      if (logEl && fileEl.files && fileEl.files[0]) {
+        logEl.textContent = 'Selected: ' + fileEl.files[0].name;
+      }
+    });
+  }
+
+  if (btnRun) {
+    btnRun.addEventListener('click', function() {
+      if (!fileEl || !fileEl.files || !fileEl.files.length) return;
+      var fd = new FormData();
+      fd.append('excel_file', fileEl.files[0]);
+      fd.append('location_code', String(currentLoc()));
+      btnRun.disabled = true;
+      logLine('Uploading…');
+      fetch(IMPORT_URL, { method: 'POST', credentials: 'same-origin', body: fd })
+        .then(function(r) { return r.json().then(function(j) { return { okHttp: r.ok, j: j }; }); })
+        .then(function(res) {
+          var j = res.j || {};
+          if (!res.okHttp || !j.ok) {
+            logLine(j.error || 'Import failed.');
+            return;
+          }
+          logLine(
+            'Done. Updated: ' + (j.updated || 0) +
+            ', failed: ' + (j.failed || 0) +
+            ', processed: ' + (j.processed || 0) +
+            (j.partial ? ' (see errors below)' : '')
+          );
+          if (j.errors && j.errors.length) {
+            j.errors.slice(0, 20).forEach(function(e) { logLine('  ' + e); });
+            if ((j.error_count || 0) > 20) logLine('  … and ' + ((j.error_count || 0) - 20) + ' more');
+          }
+        })
+        .catch(function() { logLine('Network error during import.'); })
+        .finally(function() {
+          if (btnRun) btnRun.disabled = !(fileEl.files && fileEl.files.length);
+        });
+    });
+  }
+})();
+</script>
+<script data-imcfg-version="cost-import-v3">
+(function() {
+  var IMPORT_URL = {{ url_for('itemmaster.itemmaster_data_config_cost_import')|tojson }};
+  var BATCH_SIZE = {{ cost_import_batch_size|tojson }};
+  var fileEl = document.getElementById('imcfg-cost-file');
+  var btnRun = document.getElementById('imcfg-cost-import-run');
+  var btnStop = document.getElementById('imcfg-cost-import-stop');
+  var logEl = document.getElementById('imcfg-cost-import-log');
+  var stopRequested = false;
+  var running = false;
+
+  function currentLoc() {
+    var el = document.getElementById('location_code');
+    var v = el ? parseInt(el.value, 10) : NaN;
+    return isNaN(v) ? {{ cfg_loc|tojson }} : v;
+  }
+
+  function logLine(msg) {
+    if (!logEl) return;
+    logEl.textContent = (logEl.textContent ? logEl.textContent + '\n' : '') + msg;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function importHttpError(status) {
+    if (status === 524 || status === 504 || status === 502) {
+      return 'Import timed out (HTTP ' + status + '). Reload this page and try again — imports run in batches of ' + BATCH_SIZE + ' rows.';
+    }
+    return 'Server returned a non-JSON response (HTTP ' + (status || '?') + ').';
+  }
+
+  function readImportResponse(r) {
+    return r.text().then(function(text) {
+      var j = {};
+      try {
+        j = text ? JSON.parse(text) : {};
+      } catch (parseErr) {
+        throw new Error(importHttpError(r.status) + (text ? ' ' + String(text).replace(/\s+/g, ' ').trim().slice(0, 120) : ''));
+      }
+      return { okHttp: r.ok, status: r.status, j: j };
+    });
+  }
+
+  function postImportBatch(formData) {
+    return fetch(IMPORT_URL, { method: 'POST', credentials: 'same-origin', body: formData })
+      .then(readImportResponse);
+  }
+
+  function finishImport() {
+    running = false;
+    stopRequested = false;
+    if (btnRun) btnRun.disabled = !(fileEl && fileEl.files && fileEl.files.length);
+    if (btnStop) btnStop.style.display = 'none';
+  }
+
+  function runImportBatch(offset, importToken) {
+    if (stopRequested) {
+      logLine('Stopped by user.');
+      finishImport();
+      return Promise.resolve(null);
+    }
+    var batchFd = new FormData();
+    batchFd.append('location_code', String(currentLoc()));
+    batchFd.append('batch_offset', String(offset || 0));
+    if (importToken) batchFd.append('import_token', importToken);
+    if (offset <= 0 && fileEl && fileEl.files && fileEl.files[0]) {
+      batchFd.append('excel_file', fileEl.files[0]);
+    }
+    return postImportBatch(batchFd).then(function(res) {
+      var j = res.j || {};
+      if (!res.okHttp || !j.ok) {
+        throw new Error(j.error || importHttpError(res.status));
+      }
+      var proc = j.processed_total || j.processed || 0;
+      var total = j.row_total || proc;
+      logLine('Importing… ' + proc + (total ? (' / ' + total) : '') + ' rows (updated ' + (j.updated || 0) + ', failed ' + (j.failed || 0) + ')');
+      if (j.done) {
+        return j;
+      }
+      return runImportBatch(j.next_batch_offset || (offset + BATCH_SIZE), j.import_token || importToken);
+    });
+  }
+
+  if (fileEl) {
+    fileEl.addEventListener('change', function() {
+      if (btnRun) btnRun.disabled = !(fileEl.files && fileEl.files.length);
+      if (logEl && fileEl.files && fileEl.files[0]) {
+        logEl.textContent = 'Selected: ' + fileEl.files[0].name;
+      }
+    });
+  }
+
+  if (btnStop) {
+    btnStop.addEventListener('click', function() { stopRequested = true; });
+  }
+
+  if (btnRun) {
+    btnRun.addEventListener('click', function() {
+      if (!fileEl || !fileEl.files || !fileEl.files.length || running) return;
+      if (!confirm('Update COSTPRICE for all rows in this file at location ' + currentLoc() + '?\nITEMMASTER and base ITEMALTERNATEUOMMAP will be updated per item code.')) {
+        return;
+      }
+      running = true;
+      stopRequested = false;
+      btnRun.disabled = true;
+      if (btnStop) btnStop.style.display = '';
+      if (logEl) logEl.textContent = '';
+      logLine('Uploading…');
+      runImportBatch(0, '')
+        .then(function(j) {
+          if (!j) return;
+          logLine(
+            'Done. Updated: ' + (j.updated || 0) +
+            ', failed: ' + (j.failed || 0) +
+            ', processed: ' + (j.processed || j.processed_total || 0) +
+            (j.partial ? ' (see errors below)' : '')
+          );
+          if (j.errors && j.errors.length) {
+            j.errors.slice(0, 20).forEach(function(e) { logLine('  ' + e); });
+            if ((j.error_count || 0) > 20) logLine('  … and ' + ((j.error_count || 0) - 20) + ' more');
+          }
+        })
+        .catch(function(ex) {
+          logLine(ex && ex.message ? ex.message : 'Network error during import.');
+        })
+        .finally(finishImport);
+    });
+  }
+})();
+</script>
+{% endblock %}

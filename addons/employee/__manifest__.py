@@ -1,0 +1,2 @@
+"""Addon manifest — Employee."""
+MANIFEST = {'technical_name': 'employee', 'name': 'Employee', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Migrated from blueprints/employee.py', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/employee'}, 'flask': {'blueprint': 'employee', 'blueprint_ref': 'addons.employee:bp', 'models_package': 'addons.employee.models', 'routes_module': 'addons.employee.controllers.routes'}}

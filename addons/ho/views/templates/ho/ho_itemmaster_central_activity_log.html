@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Itemmaster Central — Activity report{% endblock %}
+{% block content %}
+<style>
+  body { background: #fff !important; }
+  .im-act-page { max-width: 1200px; margin: 0 auto; padding: 20px 16px; }
+  .im-act-page table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .im-act-page th, .im-act-page td { border-bottom: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; vertical-align: top; }
+  .im-act-page th { background: #f8fafc; color: #475569; font-weight: 600; }
+  .im-act-meta { margin-bottom: 14px; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+  .im-act-note { font-size: 12px; color: #64748b; margin-bottom: 12px; line-height: 1.45; }
+</style>
+
+<div class="page-po im-act-page">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Itemmaster Central — Activity report</h1>
+      <p class="page-po__muted">Creates, updates, branch sync, remap pushes, and deletes from HO Itemmaster Central (stored in NEXA_MASTER_ACTIVITY_LOG).</p>
+    </div>
+    <div class="page-po__actions" style="display:flex;flex-wrap:wrap;gap:8px;">
+      <a href="{{ url_for('ho.itemmaster_central') }}" class="page-po__btn-secondary">Back to list</a>
+      <a href="{{ url_for('ho.itemmaster_central_activity_log', export='csv', limit=limit) }}" class="page-po__btn-secondary">Export CSV</a>
+      {% if has_menu_permission('activity_log.activity_log_page') %}
+      <a href="{{ url_for('activity_log.activity_log_page', entity='itemmaster_central', match='exact') }}" class="page-po__btn-secondary">Open in Master activity log</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <p class="im-act-note">Each row’s <strong>Detail</strong> JSON includes field-level before/after for ITEMMASTER updates, alternate UOM snapshots (truncated), and per-tenant sync or remap results.</p>
+
+  <form class="im-act-meta" method="get" action="{{ url_for('ho.itemmaster_central_activity_log') }}">
+    <div class="form-group" style="margin:0;">
+      <label for="lim" style="display:block;margin-bottom:4px;font-size:12px;color:#64748b;">Max rows (50–2000)</label>
+      <input class="input" id="lim" name="limit" type="number" min="50" max="2000" value="{{ limit }}" style="padding:6px 10px;width:120px;" />
+    </div>
+    <button type="submit" class="page-po__btn-secondary">Refresh</button>
+  </form>
+
+  {% if not rows %}
+  <p class="page-po__muted">No Itemmaster Central activity recorded yet.</p>
+  {% else %}
+  <div style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th style="white-space:nowrap;">When</th>
+          <th>Action</th>
+          <th>Summary</th>
+          <th>User</th>
+          <th>Detail</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td style="white-space:nowrap;">{{ r.logged_at or '' }}</td>
+          <td>{{ r.action or '' }}</td>
+          <td>{{ r.summary or '' }}</td>
+          <td>{{ r.username or '' }}</td>
+          <td><code style="font-size:11px;word-break:break-all;">{% if r.detail %}{{ r.detail | tojson }}{% endif %}</code></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

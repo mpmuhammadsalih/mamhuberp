@@ -1,0 +1,557 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .page { max-width: 98vw; margin: 0 auto; padding: 14px 10px; }
+  .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #dee2e6; padding-bottom: 10px; }
+  .title { margin: 0; font-size: 22px; font-weight: 400; color: #212529; }
+  .sub { margin: 4px 0 0; font-size: 12px; color: #6c757d; }
+  .card { border: 1px solid #dee2e6; border-radius: 6px; background: #fff; padding: 14px; margin-bottom: 14px; }
+  .qz-section__title { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: #212529; }
+  .qz-section__lead { margin: 0 0 10px; font-size: 12px; color: #6c757d; line-height: 1.45; }
+  .meta { color: #495057; font-size: 13px; line-height: 1.6; }
+  .meta strong { color: #212529; }
+  .form-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .input { border: 1px solid #dee2e6; border-radius: 4px; padding: 7px 8px; font-size: 12px; min-width: 220px; flex: 1 1 220px; max-width: 100%; }
+  .btn { border: 1px solid #007bff; border-radius: 4px; background: #007bff; color: #fff; padding: 7px 12px; font-size: 12px; cursor: pointer; }
+  .btn-secondary { border-color: #6c757d; background: #6c757d; }
+  .btn-outline { border-color: #28a745; background: #28a745; }
+  .row-title { font-size: 12px; color: #495057; min-width: 110px; }
+  .err { margin-bottom: 8px; color: #dc3545; font-size: 12px; }
+  .hint { font-size: 11px; color: #6c757d; }
+  .cert-actions { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  .printer-modal.hidden { display: none; }
+  .printer-modal { position: fixed; inset: 0; z-index: 1050; }
+  .printer-modal__overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.35); }
+  .printer-modal__content { position: relative; width: min(720px, 94vw); margin: 8vh auto; background: #fff; border: 1px solid #dee2e6; border-radius: 8px; overflow: hidden; }
+  .printer-modal__head { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-bottom: 1px solid #dee2e6; }
+  .printer-modal__title { font-size: 14px; font-weight: 600; color: #212529; }
+  .printer-modal__close { border: none; background: transparent; font-size: 20px; line-height: 1; color: #6c757d; cursor: pointer; }
+  .printer-modal__body { padding: 10px 12px; max-height: 64vh; overflow: auto; }
+  .printer-search { width: 100%; border: 1px solid #dee2e6; border-radius: 4px; padding: 7px 8px; font-size: 12px; margin-bottom: 8px; }
+  .printer-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .printer-table th, .printer-table td { border: 1px solid #dee2e6; padding: 6px 8px; text-align: left; }
+  .printer-table thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; }
+  .printer-row { cursor: pointer; }
+  .printer-row:hover { background: #eef5ff; }
+  .save-badge { font-size: 11px; color: #198754; margin-left: 6px; display: none; }
+  .save-badge.visible { display: inline; }
+</style>
+
+<div class="page">
+  <div class="top">
+    <div>
+      <h1 class="title">Printer configuration</h1>
+      <p class="sub">Configure QZ Tray printers per use-case (invoice, POS receipt, barcode labels). Names are stored in this browser only (each PC saves its own printers).</p>
+    </div>
+  </div>
+
+  {% if error %}
+    <div class="card"><div class="err">{{ error }}</div></div>
+  {% endif %}
+
+  <div class="card">
+    <h2 class="qz-section__title">Sales invoice — QZ printer</h2>
+    <p class="qz-section__lead">Prints the same designed invoice PDF as “open report” / GRN layout (via QZ). Pick a printer that accepts PDF—or use a Windows printer driver—for best results.</p>
+    <div class="form-row">
+      <label for="billno" style="font-size:12px; color:#495057;">Bill No</label>
+      <input
+        class="input"
+        type="text"
+        id="billno"
+        name="billno"
+        value="{{ billno or '' }}"
+        placeholder="Enter bill number"
+        autocomplete="off"
+        style="flex:0 1 220px;"
+      />
+    </div>
+    <div class="form-row">
+      <span class="row-title">Printer</span>
+      <input class="input" type="text" id="qzPrinterInvoice" placeholder="Invoice printer name (QZ)" autocomplete="off" />
+      <button type="button" class="btn btn-secondary" id="btnPickInvoicePrinter">Printer list</button>
+      <button type="button" class="btn btn-outline" id="btnSaveInvoicePrinter">Save<span id="savedInvoiceBadge" class="save-badge">Saved</span></button>
+      <button type="button" class="btn btn-secondary" id="btnPrintQzInvoice">Print invoice PDF via QZ</button>
+    </div>
+    <div class="hint">Enter Bill No, then choose printer and use Print invoice PDF via QZ (same PDF layout as invoice preview). Thermal ESC/POS only: use POS test below.</div>
+  </div>
+
+  <div class="card">
+    <h2 class="qz-section__title">POS receipt — QZ printer</h2>
+    <p class="qz-section__lead">Thermal / secondary printer for point-of-sale. Stored separately from the invoice printer. Server-side POS printing (Receipt Design) is unchanged; this value is ready when checkout uses browser QZ.</p>
+    <div class="form-row">
+      <span class="row-title">Printer</span>
+      <input class="input" type="text" id="qzPrinterPos" placeholder="POS receipt printer name (QZ)" autocomplete="off" />
+      <button type="button" class="btn btn-secondary" id="btnPickPosPrinter">Printer list</button>
+      <button type="button" class="btn btn-outline" id="btnSavePosPrinter">Save<span id="savedPosBadge" class="save-badge">Saved</span></button>
+      <button type="button" class="btn btn-secondary" id="btnPosQzTest">Test print</button>
+    </div>
+    <div class="form-row" style="align-items: center;">
+      <span class="row-title">Preview</span>
+      <label style="display: inline-flex; align-items: center; gap: 10px; font-size: 12px; color: #495057; cursor: pointer; user-select: none;">
+        <input type="checkbox" id="qzPosReceiptPreviewToggle" style="width: 16px; height: 16px;" />
+        <span>Print preview before QZ print</span>
+      </label>
+    </div>
+    <div class="hint">Default is direct QZ print (no preview). Turn on “Print preview before QZ print” to review in a modal before printing. Toggle is saved in this browser only.</div>
+    <div class="hint">Test print sends a short ESC/POS sample to verify the selected printer.</div>
+  </div>
+
+  <div class="card">
+    <h2 class="qz-section__title">Barcode labels — QZ printer</h2>
+    <p class="qz-section__lead">48×30 mm product and shelf labels from <strong>Barcode management</strong>. Stored separately from invoice and POS receipt printers.</p>
+    <div class="form-row">
+      <span class="row-title">Printer</span>
+      <input class="input" type="text" id="qzPrinterBarcode" placeholder="Barcode label printer name (QZ)" autocomplete="off" />
+      <button type="button" class="btn btn-secondary" id="btnPickBarcodePrinter">Printer list</button>
+      <button type="button" class="btn btn-outline" id="btnSaveBarcodePrinter">Save<span id="savedBarcodeBadge" class="save-badge">Saved</span></button>
+      <button type="button" class="btn btn-secondary" id="btnBarcodeQzTest">Test print</button>
+    </div>
+    <div class="hint">Test print sends a sample 48×30 mm label via QZ (HTML). Use a label printer or driver that accepts the label size.</div>
+  </div>
+
+  <div class="card">
+    <h2 class="qz-section__title">QZ certificate</h2>
+    <div class="meta">
+      <div id="qzCertInfo"><strong>QZ Cert:</strong> checking...</div>
+      <div class="cert-actions">
+        <button type="button" class="btn btn-secondary" id="btnDownloadQzCert">Download QZ certificate</button>
+        <button type="button" class="btn btn-secondary" id="btnRegenerateQzCert">Create new QZ certificate</button>
+        <a class="btn btn-secondary" href="https://qz.io/download/" target="_blank" rel="noopener noreferrer">Download QZ Tray</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="printer-modal hidden" id="printerModal">
+  <div class="printer-modal__overlay" id="printerModalOverlay"></div>
+  <div class="printer-modal__content">
+    <div class="printer-modal__head">
+      <div class="printer-modal__title" id="printerModalTitle">Select printer</div>
+      <button type="button" class="printer-modal__close" id="printerModalClose">&times;</button>
+    </div>
+    <div class="printer-modal__body">
+      <input type="text" class="printer-search" id="printerSearch" placeholder="Search printer..." autocomplete="off" />
+      <table class="printer-table">
+        <thead><tr><th>Printer name</th></tr></thead>
+        <tbody id="printerListBody"><tr><td>No printers loaded.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/qz_printer_prefs.js') }}"></script>
+<script src="{{ url_for('static', filename='js/qz_invoice_print.js') }}"></script>
+<script src="{{ url_for('static', filename='js/qz_barcode_print.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/qz-tray/qz-tray.js"></script>
+<script>
+window.__BC_QZ_URLS__ = {
+  certificate: {{ url_for('reports.qz_certificate')|tojson }},
+  sign: {{ url_for('reports.qz_sign')|tojson }}
+};
+</script>
+<script>
+(function() {
+  const inputBillNo = document.getElementById('billno');
+  const btnPrintQzInvoice = document.getElementById('btnPrintQzInvoice');
+  const btnPickInvoicePrinter = document.getElementById('btnPickInvoicePrinter');
+  const btnPickPosPrinter = document.getElementById('btnPickPosPrinter');
+  const btnPickBarcodePrinter = document.getElementById('btnPickBarcodePrinter');
+  const btnSaveInvoicePrinter = document.getElementById('btnSaveInvoicePrinter');
+  const btnSavePosPrinter = document.getElementById('btnSavePosPrinter');
+  const btnSaveBarcodePrinter = document.getElementById('btnSaveBarcodePrinter');
+  const btnPosQzTest = document.getElementById('btnPosQzTest');
+  const btnBarcodeQzTest = document.getElementById('btnBarcodeQzTest');
+  const qzPrinterInvoice = document.getElementById('qzPrinterInvoice');
+  const qzPrinterPos = document.getElementById('qzPrinterPos');
+  const qzPrinterBarcode = document.getElementById('qzPrinterBarcode');
+  const savedInvoiceBadge = document.getElementById('savedInvoiceBadge');
+  const savedPosBadge = document.getElementById('savedPosBadge');
+  const savedBarcodeBadge = document.getElementById('savedBarcodeBadge');
+  const printerModal = document.getElementById('printerModal');
+  const printerModalOverlay = document.getElementById('printerModalOverlay');
+  const printerModalClose = document.getElementById('printerModalClose');
+  const printerModalTitle = document.getElementById('printerModalTitle');
+  const printerSearch = document.getElementById('printerSearch');
+  const printerListBody = document.getElementById('printerListBody');
+  const qzCertInfoEl = document.getElementById('qzCertInfo');
+  const btnDownloadQzCert = document.getElementById('btnDownloadQzCert');
+  const btnRegenerateQzCert = document.getElementById('btnRegenerateQzCert');
+
+  let printerRows = [];
+  let targetPrinterInput = null;
+  let qzSecurityConfigured = false;
+
+  function flashBadge(el) {
+    if (!el) return;
+    el.classList.add('visible');
+    clearTimeout(el._t);
+    el._t = setTimeout(function() { el.classList.remove('visible'); }, 2000);
+  }
+
+  function applySavedPrintersFromStorage() {
+    if (!window.QzPrinterPrefs) return;
+    const inv = QzPrinterPrefs.get('sales_invoice');
+    const pos = QzPrinterPrefs.get('pos_receipt');
+    const bc = QzPrinterPrefs.get('barcode_label');
+    if (inv && qzPrinterInvoice) qzPrinterInvoice.value = inv;
+    if (pos && qzPrinterPos) qzPrinterPos.value = pos;
+    if (bc && qzPrinterBarcode) qzPrinterBarcode.value = bc;
+  }
+  applySavedPrintersFromStorage();
+
+  const qzPosReceiptPreviewToggle = document.getElementById('qzPosReceiptPreviewToggle');
+  function applyPosReceiptPreviewToggleFromStorage() {
+    if (!qzPosReceiptPreviewToggle || !window.QzPrinterPrefs || typeof QzPrinterPrefs.getPosReceiptPreviewEnabled !== 'function') return;
+    qzPosReceiptPreviewToggle.checked = QzPrinterPrefs.getPosReceiptPreviewEnabled();
+  }
+  applyPosReceiptPreviewToggleFromStorage();
+  if (qzPosReceiptPreviewToggle && window.QzPrinterPrefs && typeof QzPrinterPrefs.setPosReceiptPreviewEnabled === 'function') {
+    qzPosReceiptPreviewToggle.addEventListener('change', function () {
+      QzPrinterPrefs.setPosReceiptPreviewEnabled(!!qzPosReceiptPreviewToggle.checked);
+    });
+  }
+
+  if (btnSaveInvoicePrinter) {
+    btnSaveInvoicePrinter.addEventListener('click', function() {
+      if (!window.QzPrinterPrefs) {
+        alert('Printer prefs script missing.');
+        return;
+      }
+      QzPrinterPrefs.set('sales_invoice', qzPrinterInvoice ? qzPrinterInvoice.value : '');
+      flashBadge(savedInvoiceBadge);
+    });
+  }
+  if (btnSavePosPrinter) {
+    btnSavePosPrinter.addEventListener('click', function() {
+      if (!window.QzPrinterPrefs) {
+        alert('Printer prefs script missing.');
+        return;
+      }
+      QzPrinterPrefs.set('pos_receipt', qzPrinterPos ? qzPrinterPos.value : '');
+      flashBadge(savedPosBadge);
+    });
+  }
+  if (btnSaveBarcodePrinter) {
+    btnSaveBarcodePrinter.addEventListener('click', function() {
+      if (!window.QzPrinterPrefs) {
+        alert('Printer prefs script missing.');
+        return;
+      }
+      QzPrinterPrefs.set('barcode_label', qzPrinterBarcode ? qzPrinterBarcode.value : '');
+      flashBadge(savedBarcodeBadge);
+    });
+  }
+
+  const closePrinterPopup = () => {
+    if (printerModal) printerModal.classList.add('hidden');
+    if (printerSearch) printerSearch.value = '';
+  };
+
+  const renderPrinterPopupRows = (query) => {
+    if (!printerListBody) return;
+    const q = String(query || '').trim().toLowerCase();
+    const filtered = (printerRows || []).filter((p) => !q || String(p).toLowerCase().includes(q));
+    if (!filtered.length) {
+      printerListBody.innerHTML = '<tr><td>No printers found.</td></tr>';
+      return;
+    }
+    printerListBody.innerHTML = filtered.map((p) => {
+      const s = String(p);
+      return '<tr class="printer-row" data-printer="' + s.replace(/"/g, '&quot;').replace(/&/g, '&amp;') + '"><td>' + s.replace(/</g, '&lt;').replace(/&/g, '&amp;') + '</td></tr>';
+    }).join('');
+    printerListBody.querySelectorAll('.printer-row').forEach((row) => {
+      row.addEventListener('click', function() {
+        const printer = String(this.dataset.printer || '').trim();
+        if (printer && targetPrinterInput) {
+          targetPrinterInput.value = printer;
+        }
+        closePrinterPopup();
+      });
+    });
+  };
+
+  const openPrinterPopup = (title, targetInput) => {
+    targetPrinterInput = targetInput || null;
+    if (printerModalTitle) printerModalTitle.textContent = title || 'Select printer';
+    renderPrinterPopupRows('');
+    if (printerModal) printerModal.classList.remove('hidden');
+    if (printerSearch) {
+      printerSearch.value = '';
+      setTimeout(() => printerSearch.focus(), 0);
+    }
+  };
+
+  const ensureQzConnected = async () => {
+    if (!window.qz) {
+      throw new Error('QZ Tray library not loaded. Check network/CDN access.');
+    }
+    if (!qz.security) {
+      throw new Error('QZ security API unavailable.');
+    }
+    if (!qzSecurityConfigured) {
+      qz.security.setCertificatePromise((resolve, reject) => {
+        fetch("{{ url_for('reports.qz_certificate') }}", { credentials: 'same-origin' })
+          .then((res) => {
+            if (!res.ok) throw new Error(`Certificate fetch failed (HTTP ${res.status})`);
+            return res.text();
+          })
+          .then((txt) => resolve(txt))
+          .catch((err) => reject(err));
+      });
+      qz.security.setSignatureAlgorithm("SHA512");
+      qz.security.setSignaturePromise((toSign) => (resolve, reject) => {
+        fetch("{{ url_for('reports.qz_sign') }}", {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ request: toSign }),
+        })
+          .then(async (res) => {
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.success || !data.signature) {
+              throw new Error((data && (data.error || data.message)) || `Signature failed (HTTP ${res.status})`);
+            }
+            resolve(data.signature);
+          })
+          .catch((err) => reject(err));
+      });
+      qzSecurityConfigured = true;
+    }
+    if (!qz.websocket.isActive()) {
+      await qz.websocket.connect();
+    }
+  };
+
+  const loadQzPrinters = async () => {
+    await ensureQzConnected();
+    let found = [];
+    try {
+      const res = await qz.printers.find();
+      if (Array.isArray(res)) {
+        found = res.map((x) => String(x || '').trim()).filter((x) => !!x);
+      } else if (res != null) {
+        found = [String(res).trim()].filter((x) => !!x);
+      }
+    } catch (e) {
+      throw new Error(`QZ Tray printer fetch failed: ${e.message || e}`);
+    }
+    found = Array.from(new Set(found)).sort((a, b) => a.localeCompare(b));
+    if (!found.length) throw new Error('No printers returned by QZ Tray.');
+    printerRows = found;
+    return found;
+  };
+
+  const loadQzCertInfo = async () => {
+    if (!qzCertInfoEl) return;
+    try {
+      const res = await fetch("{{ url_for('reports.qz_cert_info') }}", { credentials: 'same-origin' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error((data && (data.error || data.message)) || `cert-info failed (HTTP ${res.status})`);
+      }
+      const fp = String(data.fingerprint_sha256 || '');
+      const shortFp = fp ? `${fp.slice(0, 16)}...${fp.slice(-16)}` : 'N/A';
+      qzCertInfoEl.innerHTML =
+        `<strong>QZ Cert:</strong> Subject=${String(data.subject || 'N/A')} | ` +
+        `Valid=${String(data.valid_from || 'N/A')} to ${String(data.valid_to || 'N/A')} | ` +
+        `SHA256=${shortFp}`;
+      qzCertInfoEl.title = `Fingerprint: ${fp}\nCert: ${String(data.cert_file || '')}`;
+    } catch (e) {
+      qzCertInfoEl.innerHTML = `<strong>QZ Cert:</strong> error - ${e.message || e}`;
+    }
+  };
+
+  if (btnDownloadQzCert) {
+    btnDownloadQzCert.addEventListener('click', function() {
+      window.open("{{ url_for('reports.qz_certificate_download') }}", '_blank');
+    });
+  }
+
+  if (btnRegenerateQzCert) {
+    btnRegenerateQzCert.addEventListener('click', async function() {
+      if (!confirm('Create a new QZ certificate now? Existing clients may need to trust the new certificate again.')) return;
+      const oldText = btnRegenerateQzCert.textContent;
+      btnRegenerateQzCert.disabled = true;
+      btnRegenerateQzCert.textContent = 'Generating...';
+      try {
+        const res = await fetch("{{ url_for('reports.qz_certificate_regenerate') }}", {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          throw new Error((data && (data.error || data.message)) || `Regenerate failed (HTTP ${res.status})`);
+        }
+        alert('New QZ certificate created. Download it and import/trust it on all client PCs.');
+        await loadQzCertInfo();
+      } catch (e) {
+        alert(`QZ certificate error: ${e.message || e}`);
+      } finally {
+        btnRegenerateQzCert.disabled = false;
+        btnRegenerateQzCert.textContent = oldText;
+      }
+    });
+  }
+
+  /** Resolve printer from focused input, else QZ default */
+  const resolvePrinterFromInput = async (inputEl) => {
+    let printerName = String(inputEl && inputEl.value || '').trim();
+    if (printerName) return printerName;
+    await ensureQzConnected();
+    try {
+      printerName = String(await qz.printers.getDefault() || '').trim();
+    } catch (e) {
+      printerName = '';
+    }
+    if (!printerName) {
+      throw new Error('No printer selected and no QZ default printer. Pick a printer or enter its name.');
+    }
+    if (inputEl) inputEl.value = printerName;
+    return printerName;
+  };
+
+  const getBillNo = () => String(inputBillNo && inputBillNo.value || '').trim();
+
+  const fetchQzInvoicePdfPayload = async () => {
+    const billno = getBillNo();
+    if (!billno) {
+      throw new Error('Enter a Bill No in the Sales invoice section.');
+    }
+    const base = {{ url_for('reports.crystal_reports_cashbilldup_qz_pdf')|tojson }};
+    const res = await fetch(`${base}?billno=${encodeURIComponent(billno)}`, { credentials: 'same-origin' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success || !data.pdf_base64) {
+      throw new Error((data && (data.error || data.message)) || `QZ invoice PDF failed (HTTP ${res.status})`);
+    }
+    return data;
+  };
+
+  if (inputBillNo) {
+    inputBillNo.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (btnPrintQzInvoice && !btnPrintQzInvoice.disabled) btnPrintQzInvoice.click();
+      }
+    });
+  }
+
+  function bindPick(btn, inputEl, title) {
+    if (!btn) return;
+    btn.addEventListener('click', async function() {
+      try {
+        await loadQzPrinters();
+        openPrinterPopup(title, inputEl);
+      } catch (e) {
+        alert(`Printer list error: ${e.message || e}`);
+      }
+    });
+  }
+  bindPick(btnPickInvoicePrinter, qzPrinterInvoice, 'Invoice printer');
+  bindPick(btnPickPosPrinter, qzPrinterPos, 'POS receipt printer');
+  bindPick(btnPickBarcodePrinter, qzPrinterBarcode, 'Barcode label printer');
+
+  if (printerModalOverlay) printerModalOverlay.addEventListener('click', closePrinterPopup);
+  if (printerModalClose) printerModalClose.addEventListener('click', closePrinterPopup);
+  if (printerSearch) {
+    printerSearch.addEventListener('input', function() {
+      renderPrinterPopupRows(this.value);
+    });
+    printerSearch.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closePrinterPopup();
+      }
+    });
+  }
+
+  if (btnPrintQzInvoice) {
+    btnPrintQzInvoice.addEventListener('click', async function() {
+      if (!window.qz) {
+        alert('QZ Tray library not loaded.');
+        return;
+      }
+      const oldText = btnPrintQzInvoice.textContent;
+      btnPrintQzInvoice.disabled = true;
+      btnPrintQzInvoice.textContent = 'Printing...';
+      try {
+        const pdfPayload = await fetchQzInvoicePdfPayload();
+        await ensureQzConnected();
+        const printerName = await resolvePrinterFromInput(qzPrinterInvoice);
+        const config = qz.configs.create(printerName);
+        const b64 = String(pdfPayload.pdf_base64 || '').replace(/\s/g, '');
+        const data = [{ type: 'pdf', format: 'base64', data: b64 }];
+        await qz.print(config, data);
+        alert('Invoice PDF sent to printer via QZ Tray (invoice printer).');
+      } catch (e) {
+        alert(`QZ print error: ${e.message || e}`);
+      } finally {
+        btnPrintQzInvoice.disabled = false;
+        btnPrintQzInvoice.textContent = oldText;
+      }
+    });
+  }
+
+  if (btnBarcodeQzTest) {
+    btnBarcodeQzTest.addEventListener('click', async function() {
+      if (!window.BcQzPrint || typeof window.BcQzPrint.printTestLabel !== 'function') {
+        alert('Barcode QZ print script missing.');
+        return;
+      }
+      if (window.QzPrinterPrefs && qzPrinterBarcode) {
+        QzPrinterPrefs.set('barcode_label', qzPrinterBarcode.value);
+      }
+      const oldText = btnBarcodeQzTest.textContent;
+      btnBarcodeQzTest.disabled = true;
+      btnBarcodeQzTest.textContent = 'Printing...';
+      try {
+        await window.BcQzPrint.printTestLabel();
+        alert('Test label sent to barcode printer via QZ Tray.');
+      } catch (e) {
+        alert(`Barcode test print error: ${e.message || e}`);
+      } finally {
+        btnBarcodeQzTest.disabled = false;
+        btnBarcodeQzTest.textContent = oldText;
+      }
+    });
+  }
+
+  if (btnPosQzTest) {
+    btnPosQzTest.addEventListener('click', async function() {
+      if (!window.qz) {
+        alert('QZ Tray library not loaded.');
+        return;
+      }
+      const oldText = btnPosQzTest.textContent;
+      btnPosQzTest.disabled = true;
+      btnPosQzTest.textContent = 'Printing...';
+      try {
+        await ensureQzConnected();
+        const printerName = await resolvePrinterFromInput(qzPrinterPos);
+        const config = qz.configs.create(printerName);
+        const nl = '\n';
+        const escInit = '\x1B@';
+        const sample = escInit + 'POS QZ test print' + nl + nl + nl + '\x1DV\x01';
+        const data = [{ type: 'raw', format: 'plain', data: sample }];
+        await qz.print(config, data);
+        alert('Test sent to POS printer via QZ Tray.');
+      } catch (e) {
+        alert(`POS test print error: ${e.message || e}`);
+      } finally {
+        btnPosQzTest.disabled = false;
+        btnPosQzTest.textContent = oldText;
+      }
+    });
+  }
+
+  loadQzCertInfo().catch(() => {});
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && printerModal && !printerModal.classList.contains('hidden')) {
+      e.preventDefault();
+      closePrinterPopup();
+    }
+  });
+})();
+</script>
+{% endblock %}

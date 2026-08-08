@@ -1,0 +1,530 @@
+{% extends "base.html" %}
+{% block title %}Edit location {{ location_code_value }}{% endblock %}
+{% block content %}
+{% set list_url = url_for('branch_location.branch_location_master') %}
+<style>
+  body:has(.blm-location-im-page) { background: #f5f6f8 !important; }
+
+  .blm-location-im-page {
+    max-width: 1680px;
+    margin: 0 auto;
+    padding: 8px 12px 10px !important;
+    padding-top: 50px !important;
+    box-sizing: border-box;
+    --im-toolbar-bg: linear-gradient(180deg, #f0f7fb 0%, #e3eef8 100%);
+    --im-toolbar-border: rgba(13, 110, 253, 0.14);
+    --im-field-fill: rgba(255, 255, 255, 0.52);
+    --im-field-fill-strong: #eaf2fa;
+    --im-field-readonly: rgba(226, 236, 247, 0.92);
+  }
+
+  .blm-location-im-page .im-topbar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 6px;
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+  .blm-location-im-page .im-topbar-main {
+    position: fixed !important;
+    top: 46px;
+    left: 260px;
+    right: var(--nexa-scrollbar-width, 0px);
+    z-index: 105;
+    margin: 0 !important;
+    padding: 6px 16px 8px 16px !important;
+    border-bottom: 1px solid var(--im-toolbar-border);
+    box-shadow:
+      0 1px 0 rgba(15, 23, 42, 0.04),
+      0 6px 18px rgba(15, 23, 42, 0.06);
+    background: var(--im-toolbar-bg);
+    box-sizing: border-box;
+    width: auto;
+    max-width: none;
+    display: flex !important;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    min-width: 0;
+  }
+  .layout.sidebar-collapsed:not(.layout--auth) .blm-location-im-page .im-topbar-main { left: 56px; }
+  .layout--auth .blm-location-im-page .im-topbar-main {
+    top: 0;
+    left: 0;
+    right: var(--nexa-scrollbar-width, 0px);
+    padding: 6px 16px 8px 16px !important;
+  }
+
+  .blm-location-im-page .im-topbar-main h1 {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    font-size: 13px !important;
+    font-weight: 400;
+    color: #212529;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .blm-location-im-page .im-topbar-main h1 .im-ref { font-weight: 600; }
+
+  .blm-location-im-page .im-actions {
+    flex: 0 0 auto;
+    margin-left: auto;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .blm-location-im-page .im-actions::-webkit-scrollbar { display: none; height: 0; }
+
+  .blm-location-im-page .im-btn-save,
+  .blm-location-im-page .im-btn-secondary {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box !important;
+    min-height: 36px;
+    padding: 8px 14px !important;
+    border-radius: 6px !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    text-decoration: none !important;
+    white-space: nowrap;
+    cursor: pointer;
+    font-family: inherit;
+    flex-shrink: 0;
+    border: none;
+  }
+  .blm-location-im-page .im-btn-secondary {
+    background: var(--im-field-fill-strong) !important;
+    border: 1px solid rgba(13, 110, 253, 0.18) !important;
+    color: #495057 !important;
+    box-shadow: 0 3px 8px rgba(15, 23, 42, .04);
+  }
+  .blm-location-im-page .im-btn-save {
+    background: #0d6efd !important;
+    border: 1px solid #0d6efd !important;
+    color: #fff !important;
+    box-shadow: 0 8px 18px rgba(13, 110, 253, .22);
+  }
+
+  .blm-location-shell.customer-form-shell.itemmaster-container {
+    background: var(--im-field-fill-strong);
+    border: 1px solid #e5eaf2;
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, .06);
+    overflow: hidden;
+    padding: 0;
+    margin-top: 6px;
+    max-width: 960px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .blm-location-shell.customer-form-shell.itemmaster-container .cf-form-stack {
+    padding: 6px 10px 12px;
+    box-sizing: border-box;
+  }
+
+  .blm-location-im-page .cf-form-stack { display: flex; flex-direction: column; gap: 2px; margin-top: 0; }
+  .blm-location-im-page .cf-form-stack .cf-form-panel { display: block; padding: 0; margin: 0; background: transparent; flex-shrink: 0; }
+  .blm-location-im-page .cf-section-title {
+    margin: 0;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #14324a;
+    background: linear-gradient(180deg, #e4ecf4 0%, #d5e1ec 100%);
+    border: 1px solid #b8c8d4;
+    border-bottom: 1px solid #a9bac9;
+    border-radius: 2px 2px 0 0;
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    line-height: 1.25;
+  }
+  .blm-location-im-page .cf-form-stack .cf-form-panel:not(:first-child) .cf-section-title { margin-top: 10px; }
+  .blm-location-im-page .cf-form-stack .cf-form-panel .customer-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 18px;
+    row-gap: 4px;
+    margin-top: 0 !important;
+    margin-bottom: 6px !important;
+    padding: 8px 12px !important;
+    border: 1px solid #b8c8d4 !important;
+    border-top: none !important;
+    border-radius: 0 0 2px 2px !important;
+    background: #fff !important;
+    box-shadow: 0 1px 3px rgba(15, 35, 55, 0.08);
+  }
+
+  .blm-location-im-page .customer-details .form-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 0;
+    min-height: 0;
+    min-width: 0;
+  }
+  .blm-location-im-page .customer-details .form-group label {
+    margin: 0;
+    min-width: 140px;
+    font-size: 13px;
+    font-weight: 400;
+    color: #495057;
+    flex-shrink: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+  }
+  .blm-location-im-page .customer-details .form-group label > span { min-width: 140px; flex-shrink: 0; }
+  .blm-location-im-page .customer-details .form-group .input {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    line-height: 1.25;
+    padding: 2px 0;
+    min-height: auto;
+    border: none;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 0;
+    background: var(--im-field-fill);
+    box-shadow: none !important;
+  }
+  .blm-location-im-page .customer-details .form-group .input:focus {
+    outline: none;
+    border-bottom-color: var(--nexa-focus-color);
+    box-shadow: none !important;
+  }
+  .blm-location-im-page .customer-details .form-group input[readonly] {
+    background: var(--im-field-readonly);
+    color: #6c757d;
+    font-family: ui-monospace, monospace;
+  }
+
+  .blm-location-im-page .field-hint {
+    margin: 2px 0 0 152px;
+    color: #6c757d;
+    font-size: 11px;
+    line-height: 1.25;
+    grid-column: 1 / -1;
+  }
+
+  .blm-location-im-page .blm-switch-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    width: 100%;
+    grid-column: 1 / -1;
+  }
+  .blm-location-im-page .blm-switch {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #f8fafc;
+  }
+  .blm-location-im-page .blm-switch-meta { flex: 1; min-width: 0; }
+  .blm-location-im-page .blm-switch-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #212529;
+    display: block;
+    line-height: 1.35;
+  }
+  .blm-location-im-page .blm-switch-hint {
+    font-size: 11px;
+    color: #64748b;
+    font-weight: 400;
+    margin: 6px 0 0;
+    line-height: 1.45;
+    max-width: 560px;
+  }
+  .blm-location-im-page .blm-switch-toggle {
+    flex-shrink: 0;
+    position: relative;
+    width: 44px;
+    height: 24px;
+    margin-top: 2px;
+  }
+  .blm-location-im-page .blm-switch-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+  }
+  .blm-location-im-page .blm-switch-toggle .blm-switch-slider {
+    cursor: pointer;
+    border-radius: 999px;
+    position: absolute;
+    inset: 0;
+    background: #ced4da;
+    transition: background 0.18s ease;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, .06);
+  }
+  .blm-location-im-page .blm-switch-toggle .blm-switch-slider:before {
+    content: "";
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    left: 3px;
+    bottom: 3px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.18s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+  }
+  .blm-location-im-page .blm-switch-toggle input:checked + .blm-switch-slider { background: #28a745; }
+  .blm-location-im-page .blm-switch-toggle input:checked + .blm-switch-slider:before { transform: translateX(20px); }
+  .blm-location-im-page .blm-switch-toggle input:focus-visible + .blm-switch-slider {
+    outline: 2px solid var(--nexa-focus-color);
+    outline-offset: 2px;
+  }
+
+  .blm-location-im-page .blm-logo-panel {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 16px;
+    grid-column: 1 / -1;
+    padding: 4px 0 8px;
+  }
+  .blm-location-im-page .blm-logo-preview {
+    flex: 0 0 auto;
+    min-height: 56px;
+    min-width: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    background: #fff;
+    padding: 8px 12px;
+  }
+  .blm-location-im-page .blm-logo-preview img {
+    max-height: 64px;
+    max-width: 160px;
+    width: auto;
+    object-fit: contain;
+  }
+  .blm-location-im-page .blm-logo-upload {
+    flex: 1 1 220px;
+    min-width: 0;
+  }
+  .blm-location-im-page .blm-logo-upload label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 6px;
+  }
+  .blm-location-im-page .blm-logo-upload .input[type="file"] {
+    width: 100%;
+    max-width: 360px;
+    font-size: 12px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 6px 8px;
+    background: #fff;
+  }
+  .blm-location-im-page .blm-logo-hint {
+    margin: 6px 0 0;
+    font-size: 11px;
+    color: #64748b;
+    line-height: 1.4;
+  }
+
+  @media (max-width: 1024px) {
+    .blm-location-im-page .cf-form-stack .cf-form-panel .customer-details { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 900px) {
+    .blm-location-im-page {
+      max-width: 100% !important;
+      padding-left: 8px;
+      padding-right: 8px;
+    }
+    .blm-location-im-page .im-topbar-main {
+      flex-wrap: wrap !important;
+      left: 0 !important;
+      right: 0 !important;
+      padding-left: 10px !important;
+      padding-right: 10px !important;
+    }
+  }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px #fff inset !important;
+    box-shadow: 0 0 0 1000px #fff inset !important;
+    -webkit-text-fill-color: inherit !important;
+  }
+</style>
+
+<div class="im-page blm-location-im-page">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>
+        Branch /
+        <span class="im-ref">{{ location_code_value }}</span>
+      </h1>
+      <div class="im-actions">
+        <button type="submit" form="blm-edit-form" class="im-btn-save">Save location</button>
+        <a href="{{ list_url }}" class="im-btn-secondary">Cancel</a>
+        <a href="{{ list_url }}" class="im-btn-secondary">List</a>
+      </div>
+    </div>
+  </div>
+
+  <section class="blm-location-shell customer-form-shell itemmaster-container">
+    <form method="post" action="" id="blm-edit-form" enctype="multipart/form-data">
+      <input type="hidden" name="blm_once" value="{{ blm_form_once }}" />
+
+      <div class="cf-form-stack">
+        <div class="cf-form-panel">
+          <h2 class="cf-section-title">Location details</h2>
+          <div class="customer-details">
+            <div class="form-group">
+              <label for="blm-ro-code">
+                <span>Location code <small style="font-weight:400;color:#6c757d;">(read-only)</small></span>
+                <input type="text" id="blm-ro-code" class="input" value="{{ location_code_value }}" readonly tabindex="-1" aria-readonly="true" />
+              </label>
+            </div>
+            {% if has_branch_locationname %}
+            <div class="form-group">
+              <label for="f-locationname">
+                <span>Location name</span>
+                <input type="text" name="locationname" id="f-locationname" class="input"
+                       value="{{ (row.get('locationname') or row.get('LOCATIONNAME') or '') }}" maxlength="4000" autocomplete="off" placeholder="Branch / store name" />
+              </label>
+            </div>
+            {% endif %}
+
+            {% for col in branch_after_name_cols %}
+            {% set lk = col.lower() %}
+            <div class="form-group" {% if col == 'ADDRESS' %}style="grid-column: 1 / -1;"{% endif %}>
+              <label for="f-{{ lk }}">
+                <span>{{ col|replace('_', ' ') }}</span>
+                <input type="text" name="{{ lk }}" id="f-{{ lk }}" class="input"
+                       value="{{ (row.get(lk))|default('', true) }}"
+                       maxlength="{% if col == 'TELEPHONE' %}100{% elif col == 'DBCODE' %}80{% elif col == 'EMAILID' %}150{% elif col == 'RESETNO' %}12{% else %}4000{% endif %}" autocomplete="off" />
+              </label>
+            </div>
+            {% endfor %}
+
+            <div class="blm-logo-panel">
+              <div class="blm-logo-preview" aria-label="Branch logo preview">
+                {% if branch_logo_path %}
+                  <img src="{{ url_for('static', filename=branch_logo_path) }}" alt="Branch logo" />
+                {% else %}
+                  <span class="muted" style="font-size:12px;color:#94a3b8;">No logo uploaded</span>
+                {% endif %}
+              </div>
+              <div class="blm-logo-upload">
+                <label for="blm-logo-file">Branch logo</label>
+                <input type="file" id="blm-logo-file" name="logo" accept=".png,.jpg,.jpeg,.webp" class="input" />
+                <p class="blm-logo-hint">Optional. PNG, JPG, or WEBP. Used on Purchase Order PDF and other branch printouts. Upload to replace the current logo.</p>
+              </div>
+            </div>
+          </div>
+          <p class="field-hint">Update branch flags and fields, then <strong>Save location</strong>.</p>
+        </div>
+
+        {% if branch_switch_cols %}
+        <div class="cf-form-panel">
+          <h2 class="cf-section-title">Branch options</h2>
+          <div class="customer-details" style="grid-template-columns: 1fr;">
+            <div class="blm-switch-list" role="group" aria-label="Branch options">
+              {% for cu in branch_switch_cols %}
+              {% set lk = cu.lower() %}
+              {% if cu == 'WAREHOUSE_ENABLE' %}
+              <div class="blm-switch">
+                <div class="blm-switch-meta">
+                  <span class="blm-switch-label">Warehouse enabled</span>
+                  <p class="blm-switch-hint">When checked, this branch may use <strong>Warehouse</strong> features (with menu / permissions). Column <code>WAREHOUSE_ENABLE</code>.</p>
+                </div>
+                <label class="blm-switch-toggle">
+                  <input type="checkbox" name="warehouse_enable" value="on" {% if (row.get(lk)|default('', true))|upper == 'Y' %}checked{% endif %} />
+                  <span class="blm-switch-slider"></span>
+                </label>
+              </div>
+              {% elif cu == 'BATCH_TRACKING' %}
+              <div class="blm-switch">
+                <div class="blm-switch-meta">
+                  <span class="blm-switch-label">Batch tracking</span>
+                  <p class="blm-switch-hint">When checked, GRN postings can require batch/expiry at this branch for batch-tracked items. Works with Item Master <code>BATCH_TRACKED</code>; both branch and item flags apply. Column <code>BATCH_TRACKING</code>.</p>
+                </div>
+                <label class="blm-switch-toggle">
+                  <input type="checkbox" name="batch_tracking" value="on" {% if (row.get(lk)|default('', true))|upper == 'Y' %}checked{% endif %} />
+                  <span class="blm-switch-slider"></span>
+                </label>
+              </div>
+              {% elif cu == 'BIN_TRACKING' %}
+              <div class="blm-switch">
+                <div class="blm-switch-meta">
+                  <span class="blm-switch-label">Bin tracking</span>
+                  <p class="blm-switch-hint">When checked, Item Master shows warehouse <strong>bin</strong> picklists for this branch. Column <code>BIN_TRACKING</code>.</p>
+                </div>
+                <label class="blm-switch-toggle">
+                  <input type="checkbox" name="bin_tracking" value="on" {% if (row.get(lk)|default('', true))|upper == 'Y' %}checked{% endif %} />
+                  <span class="blm-switch-slider"></span>
+                </label>
+              </div>
+              {% elif cu == 'BASELOCATIONFLAG' %}
+              <div class="blm-switch">
+                <div class="blm-switch-meta">
+                  <span class="blm-switch-label">Base location (HO)</span>
+                  <p class="blm-switch-hint">Marks this branch as the primary / head-office row used where the app resolves a single base <strong>LOCATIONCODE</strong> (for example chart of accounts). Typically one row stays <strong>Y</strong>. Column <code>BASELOCATIONFLAG</code>.</p>
+                </div>
+                <label class="blm-switch-toggle">
+                  <input type="checkbox" name="baselocationflag" value="on" {% if (row.get(lk)|default('', true))|upper == 'Y' %}checked{% endif %} />
+                  <span class="blm-switch-slider"></span>
+                </label>
+              </div>
+              {% endif %}
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if branch_other_cols %}
+        <div class="cf-form-panel">
+          <h2 class="cf-section-title">Other fields</h2>
+          <div class="customer-details">
+            {% for col in branch_other_cols %}
+            {% set lk = col.lower() %}
+            <div class="form-group">
+              <label for="f-{{ lk }}">
+                <span>{{ col|replace('_', ' ') }}</span>
+                <input type="text" name="{{ lk }}" id="f-{{ lk }}" class="input"
+                       value="{{ (row.get(lk))|default('', true) }}" maxlength="4000" autocomplete="off" />
+              </label>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </form>
+  </section>
+</div>
+{% endblock %}

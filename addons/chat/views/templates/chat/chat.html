@@ -1,0 +1,1206 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .wa-wrap {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 0;
+    height: calc(100vh - 118px);
+    min-height: 620px;
+    max-height: calc(100vh - 118px);
+    border-radius: 12px;
+    overflow: hidden;
+    align-content: stretch;
+    border: 1px solid #dbe5dd;
+    background: #f0f2f5;
+    font-family: "Segoe UI", "Helvetica Neue", Helvetica, "Lucida Grande", Arial, Ubuntu, Cantarell, "Fira Sans", sans-serif;
+  }
+  .wa-side { background: #fff; border-right: 1px solid #dce3dd; display: grid; grid-template-rows: auto auto 1fr; min-height: 0; overflow: hidden; }
+  .wa-side-head {
+    background: #f0f2f5;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-bottom: 1px solid #dce3dd;
+  }
+  /* Four filter tabs: equal width and height */
+  .wa-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    width: 100%;
+  }
+  .wa-filter-grid .wa-filter-btn {
+    width: 100%;
+    min-height: 42px;
+    height: 100%;
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.2;
+    padding: 6px 4px;
+    box-sizing: border-box;
+  }
+  .wa-btn { border: 1px solid #ccd6cc; background: #fff; color: #1f2937; border-radius: 18px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
+  .wa-btn:hover { background: #f5f5f5; }
+  .wa-search-wrap { padding: 8px; border-bottom: 1px solid #edf2ee; }
+  .wa-search { width: 100%; border: 1px solid #d5ddd5; border-radius: 18px; padding: 8px 12px; font-size: 13px; }
+  .wa-btn.active { background: #e9f5ef; border-color: #22c55e; color: #166534; font-weight: 700; }
+  .wa-filter-btn { border: 1px solid #ccd6cc; background: #fff; color: #334155; border-radius: 14px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
+  .wa-filter-btn.active { background: #e9f5ef; border-color: #22c55e; color: #166534; font-weight: 700; }
+  .wa-group-create {
+    width: 100%;
+    min-height: 40px;
+    box-sizing: border-box;
+    border: 1px dashed #22c55e;
+    background: #f0fdf4;
+    color: #166534;
+    border-radius: 14px;
+    padding: 8px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 700;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  .wa-group-create.show { display: flex; }
+  .wa-list { overflow-y: auto; overflow-x: hidden; min-height: 0; }
+  #chatUsers {
+    max-height: min(320px, 38vh);
+    overflow-y: auto;
+    overflow-x: hidden;
+    border-bottom: 1px solid #edf2ee;
+  }
+  .wa-list-title { font-size: 11px; color: #6b7280; font-weight: 700; padding: 10px 12px 6px; text-transform: uppercase; }
+  .wa-item { display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #f1f5f3; cursor: pointer; align-items: center; }
+  .wa-item:hover { background: #f5f9f6; }
+  .wa-item.active { background: #e9f5ef; }
+  .wa-avatar { width: 40px; height: 40px; border-radius: 50%; background: #22c55e; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; }
+  .wa-name { font-size: 13px; font-weight: 700; color: #111827; }
+  .wa-sub { font-size: 12px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wa-badge { background: #22c55e; color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 11px; }
+  .wa-item-meta { display: flex; align-items: center; gap: 6px; }
+  .wa-star { border: none; background: transparent; cursor: pointer; font-size: 14px; color: #94a3b8; padding: 0; }
+  .wa-star.on { color: #f59e0b; }
+  /* Flex column: messages fill between header and composer (avoids grid row mismatch when reply bar is display:none). */
+  .wa-main {
+    display: flex;
+    flex-direction: column;
+    background: #efeae2;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+  .wa-main-top { flex: 0 0 auto; }
+  .wa-head { display: grid; grid-template-columns: 46px 1fr; gap: 10px; align-items: center; padding: 10px 12px; background: #f0f2f5; border-bottom: 1px solid #dce3dd; }
+  .wa-title { font-size: 14px; font-weight: 700; color: #111827; }
+  .wa-last-seen { font-size: 12px; color: #6b7280; }
+  .wa-typing { font-size: 12px; color: #16a34a; min-height: 16px; }
+  .wa-reply-bar { display: none; background: #f7f8fa; border-bottom: 1px solid #dce3dd; padding: 8px 12px; }
+  .wa-reply-bar.show { display: block; }
+  .wa-reply-txt { border-left: 3px solid #22c55e; padding-left: 8px; color: #4b5563; font-size: 12px; display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  .wa-reply-main { min-width: 0; }
+  .wa-reply-name { color: #16a34a; font-weight: 700; }
+  .wa-reply-snippet { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 520px; }
+  .wa-msgs {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding: 14px 14px 10px;
+    background-image: radial-gradient(rgba(0,0,0,0.03) 1px, transparent 1px);
+    background-size: 14px 14px;
+  }
+  .wa-list,
+  .wa-msgs {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(107, 114, 128, 0.45) transparent;
+  }
+  .wa-list::-webkit-scrollbar,
+  .wa-msgs::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .wa-list::-webkit-scrollbar-track,
+  .wa-msgs::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .wa-list::-webkit-scrollbar-thumb,
+  .wa-msgs::-webkit-scrollbar-thumb {
+    background: rgba(107, 114, 128, 0.42);
+    border-radius: 10px;
+  }
+  .wa-list::-webkit-scrollbar-thumb:hover,
+  .wa-msgs::-webkit-scrollbar-thumb:hover {
+    background: rgba(107, 114, 128, 0.62);
+  }
+  .wa-row { display: flex; margin-bottom: 10px; }
+  .wa-row.own { justify-content: flex-end; }
+  .wa-bubble { max-width: 70%; background: #fff; border-radius: 8px; padding: 7px 9px; box-shadow: 0 1px 1px rgba(0,0,0,0.08); }
+  .wa-row.own .wa-bubble { background: #d9fdd3; }
+  .wa-reply-box { background: rgba(0,0,0,0.06); border-left: 3px solid #22c55e; padding: 6px 8px; border-radius: 6px; margin-bottom: 6px; font-size: 12px; color: #374151; cursor: pointer; }
+  .wa-reply-box:hover { background: rgba(0,0,0,0.09); }
+  .wa-msg-highlight { animation: waMsgFlash 1.3s ease; }
+  @keyframes waMsgFlash {
+    0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.0); }
+    30% { box-shadow: 0 0 0 3px rgba(34,197,94,0.45); }
+    100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.0); }
+  }
+  .wa-text { font-size: 13px; color: #111827; white-space: pre-wrap; }
+  .wa-image { margin-top: 6px; max-width: 260px; width: 100%; border-radius: 8px; }
+  .wa-file { display: inline-block; margin-top: 6px; font-size: 12px; color: #0f766e; text-decoration: none; }
+  .wa-file:hover { text-decoration: underline; }
+  .wa-meta { margin-top: 5px; display: flex; align-items: center; gap: 8px; justify-content: flex-end; font-size: 11px; color: #6b7280; }
+  .wa-tick { font-weight: 700; }
+  .wa-tick.read { color: #0284c7; }
+  .wa-actions { margin-top: 4px; display: flex; gap: 8px; align-items: center; font-size: 11px; color: #4b5563; }
+  .wa-actions button { border: none; background: transparent; cursor: pointer; font-size: 14px; color: #4b5563; padding: 0 2px; line-height: 1; }
+  .wa-actions button:hover { color: #111827; }
+  .wa-compose { flex: 0 0 auto; background: #f0f2f5; border-top: 1px solid #dce3dd; padding: 8px 10px; z-index: 2; }
+  .wa-compose-shell { display: flex; align-items: flex-end; gap: 6px; background: #fff; border: 1px solid #d5ddd5; border-radius: 12px; padding: 8px 10px; }
+  .wa-compose textarea {
+    flex: 1;
+    width: 100%;
+    border: none;
+    outline: none;
+    min-height: 48px;
+    max-height: 200px;
+    padding: 6px 4px;
+    resize: none;
+    font-size: 14px;
+    line-height: 1.45;
+    background: transparent;
+    overflow-y: auto;
+  }
+  .wa-compose-actions { display: contents; }
+  .wa-icon-btn { border: none; background: transparent; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 18px; color: #4b5563; display: inline-flex; align-items: center; justify-content: center; }
+  .wa-send { border: none; background: #111827; color: #fff; border-radius: 50%; width: 34px; height: 34px; cursor: pointer; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0; font-size: 16px; }
+  .wa-empty { color: #6b7280; text-align: center; margin-top: 44px; }
+  .wa-emoji-panel { position: fixed; background: #fff; border: 1px solid #dce3dd; border-radius: 10px; padding: 8px; width: 240px; display: none; grid-template-columns: repeat(8, 1fr); gap: 6px; box-shadow: 0 8px 22px rgba(0,0,0,0.14); z-index: 10050; }
+  .wa-emoji-panel.show { display: grid; }
+  .wa-emoji-btn { border: none; background: transparent; font-size: 18px; cursor: pointer; padding: 2px; }
+  .wa-compose-meta { margin-top: 4px; min-height: 14px; display: flex; gap: 10px; }
+  .wa-voice-state { font-size: 11px; color: #b91c1c; min-width: 82px; text-align: center; display: none; }
+  .wa-voice-state.show { display: inline; }
+  .wa-attach-label { font-size: 11px; color: #0f766e; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: none; }
+  .wa-attach-label.show { display: inline; }
+  .wa-audio { margin-top: 6px; width: 240px; max-width: 100%; }
+  .chat-btn { border: 1px solid #ccd6cc; background: #fff; color: #1f2937; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+  .chat-search { width: 100%; border: 1px solid #d5ddd5; border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+  .muted { color: #6b7280; font-size: 12px; }
+  .chat-modal { position: fixed; inset: 0; background: rgba(2, 6, 23, 0.5); display: none; align-items: center; justify-content: center; z-index: 9999; }
+  .chat-modal-card { width: 96%; max-width: 520px; background: #fff; border-radius: 12px; border: 1px solid #cbd5e1; padding: 14px; }
+  .chat-users-grid { max-height: 260px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; margin-top: 8px; }
+  .chat-users-grid label { display: block; font-size: 13px; padding: 4px 0; }
+  .chat-user-pick { padding: 7px 8px; border-bottom: 1px solid #eef2f7; cursor: pointer; border-radius: 6px; }
+  .chat-user-pick:hover { background: #f8fafc; }
+  .chat-user-pick.selected { background: #dcfce7; border: 1px solid #86efac; }
+  .chat-recent-wrap { margin-top: 8px; }
+  .chat-recent-title { font-size: 12px; color: #6b7280; margin-bottom: 6px; }
+  .chat-recent-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chat-recent-chip { border: 1px solid #d1d5db; background: #fff; color: #334155; border-radius: 14px; padding: 5px 10px; font-size: 12px; cursor: pointer; }
+  .chat-recent-chip.selected { background: #dcfce7; border-color: #86efac; color: #14532d; }
+  @media (max-width: 980px) {
+    .wa-wrap { grid-template-columns: 1fr; height: calc(100vh - 98px); max-height: calc(100vh - 98px); min-height: 540px; }
+    .wa-side { max-height: 38vh; border-right: none; border-bottom: 1px solid #dce3dd; }
+    .wa-main { min-height: 48vh; }
+    .wa-compose { padding: 8px; }
+  }
+</style>
+
+<section class="wa-wrap">
+  <div class="wa-side">
+    <div class="wa-side-head">
+      <div class="wa-filter-grid" role="tablist" aria-label="Conversation filters">
+        <button type="button" class="wa-filter-btn active" id="chatFilterAll">All</button>
+        <button type="button" class="wa-filter-btn" id="chatFilterUnread">Unread</button>
+        <button type="button" class="wa-filter-btn" id="chatFilterFavourites">Favourites</button>
+        <button type="button" class="wa-filter-btn" id="chatFilterGroups">Groups</button>
+      </div>
+      <button type="button" class="wa-group-create" id="chatCreateGroupQuick">+ New Group</button>
+    </div>
+    <div class="wa-search-wrap">
+      <input id="chatUserSearch" class="wa-search" placeholder="Search or start new chat" />
+    </div>
+    <div class="wa-list">
+      <div class="wa-list-title" id="chatUsersHeading">All users</div>
+      <div id="chatUsers"></div>
+      <div class="wa-list-title">Conversations</div>
+      <div id="chatConversations"></div>
+    </div>
+  </div>
+
+  <div class="wa-main">
+    <div class="wa-main-top">
+    <div class="wa-head">
+      <div class="wa-avatar" id="chatHeaderAvatar">C</div>
+      <div>
+        <div class="wa-title" id="chatMainTitle">Chatbox</div>
+        <div class="wa-last-seen" id="chatLastSeen">Select a conversation</div>
+        <div class="wa-typing" id="chatTypingIndicator"></div>
+      </div>
+    </div>
+    <div class="wa-reply-bar" id="chatReplyBar">
+      <div class="wa-reply-txt">
+        <div class="wa-reply-main">
+          <div class="wa-reply-name" id="chatReplyName">Replying...</div>
+          <div class="wa-reply-snippet" id="chatReplyLabel"></div>
+        </div>
+        <button type="button" class="wa-btn" id="chatReplyClearBtn">✕</button>
+      </div>
+    </div>
+    </div>
+    <div class="wa-msgs" id="chatMessages">
+      <div class="wa-empty">Select or create a conversation to start chatting.</div>
+    </div>
+    <form id="chatComposeForm" class="wa-compose">
+      <div class="wa-compose-shell">
+        <input type="file" id="chatMessageAttachment" style="display:none;" />
+        <button type="button" class="wa-icon-btn" id="chatAttachBtn" title="Attach">+</button>
+        <button type="button" class="wa-icon-btn" id="chatEmojiBtn" title="Emoji">☺</button>
+        <textarea id="chatMessageText" placeholder="Type a message..." rows="1"></textarea>
+        <button type="button" class="wa-icon-btn" id="chatVoiceBtn" title="Voice note">🎤</button>
+        <button class="wa-send" id="chatSendBtn" type="button" title="Send">➤</button>
+      </div>
+      <div class="wa-compose-meta">
+        <span class="wa-attach-label" id="chatAttachLabel"></span>
+        <span class="wa-voice-state" id="chatVoiceState"></span>
+      </div>
+    </form>
+    <div class="wa-emoji-panel" id="chatEmojiPanel"></div>
+  </div>
+</section>
+
+<div class="chat-modal" id="chatGroupModal">
+  <div class="chat-modal-card">
+    <h3 style="margin: 0 0 8px 0;">Create Group</h3>
+    <input id="chatGroupTitle" class="chat-search" placeholder="Group name" />
+    <div class="muted" style="margin-top:8px;">Select members</div>
+    <div class="chat-users-grid" id="chatGroupUsers"></div>
+    <div style="margin-top: 10px; display:flex; gap:8px; justify-content: flex-end;">
+      <button type="button" class="chat-btn" id="chatGroupCancelBtn">Cancel</button>
+      <button type="button" class="chat-btn" id="chatGroupCreateBtn">Create</button>
+    </div>
+  </div>
+</div>
+
+<div class="chat-modal" id="chatShareModal">
+  <div class="chat-modal-card">
+    <h3 style="margin: 0 0 8px 0;">Share Message</h3>
+    <div class="chat-recent-wrap" id="chatShareRecentWrap" style="display:none;">
+      <div class="chat-recent-title">Recent contacts</div>
+      <div class="chat-recent-list" id="chatShareRecent"></div>
+    </div>
+    <input id="chatShareSearch" class="chat-search" placeholder="Search user..." />
+    <div class="chat-users-grid" id="chatShareUsers"></div>
+    <textarea id="chatShareNote" class="chat-search" placeholder="Add note (optional)" style="margin-top:8px;min-height:60px;"></textarea>
+    <div style="margin-top: 10px; display:flex; gap:8px; justify-content: flex-end;">
+      <button type="button" class="chat-btn" id="chatShareCancelBtn">Cancel</button>
+      <button type="button" class="chat-btn" id="chatShareSendBtn">Share</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let chatConversations = [];
+  let chatUsers = [];
+  let chatAllTenantsMode = false;
+  let activeConversationId = null;
+  let messagePollTimer = null;
+  let convPollTimer = null;
+  let usersPollTimer = null;
+  let lastMessageSignature = "";
+  let chatEventSource = null;
+  let refreshTimer = null;
+  let replyingTo = null;
+  let isSending = false;
+  let activeConversationFilter = "all";
+  let typingTimer = null;
+  let typingStopTimer = null;
+  let typingPollTimer = null;
+  let mediaRecorder = null;
+  let recordingChunks = [];
+  let recordingStartMs = 0;
+  let voiceBlob = null;
+  let shareMessageId = 0;
+  let shareTargetUsers = [];
+  let forceScrollToBottom = false;
+  let isLoadingConversations = false;
+  let isLoadingMessages = false;
+  const EMOJIS = ["😀","😁","😂","🤣","😊","😍","😘","😎","🤩","😇","😉","🙂","🙌","👏","👍","❤️","🔥","🎉","🙏","💯","😢","😮","😡","🤔","😴","🤝","✅","⭐","📌","📷","📎","🎵"];
+  const FAV_STORAGE_KEY = "chat_favourite_conversations";
+
+  function chatSetSendBusy(busy) {
+    const sendBtn = document.querySelector("#chatComposeForm .wa-send");
+    if (!sendBtn) return;
+    // Keep clickable to avoid stuck-send UX.
+    sendBtn.disabled = false;
+    sendBtn.textContent = busy ? "…" : "➤";
+    sendBtn.style.opacity = "1";
+    sendBtn.style.cursor = "pointer";
+  }
+
+  function chatGetFavourites() {
+    try {
+      const raw = localStorage.getItem(FAV_STORAGE_KEY) || "[]";
+      const arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return [];
+      return arr.map(v => Number(v)).filter(v => Number.isFinite(v) && v > 0);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function chatSetFavourites(list) {
+    try {
+      localStorage.setItem(FAV_STORAGE_KEY, JSON.stringify(Array.from(new Set((list || []).map(v => Number(v)).filter(v => Number.isFinite(v) && v > 0)))));
+    } catch (_) {}
+  }
+
+  function chatIsFavourite(conversationId) {
+    return chatGetFavourites().includes(Number(conversationId));
+  }
+
+  function chatToggleFavourite(conversationId) {
+    const cid = Number(conversationId);
+    if (!cid) return;
+    const favs = chatGetFavourites();
+    const idx = favs.indexOf(cid);
+    if (idx >= 0) favs.splice(idx, 1);
+    else favs.push(cid);
+    chatSetFavourites(favs);
+    chatRenderConversations();
+  }
+
+  function chatSetConversationFilter(filterKey) {
+    activeConversationFilter = String(filterKey || "all").toLowerCase();
+    const createBtn = document.getElementById("chatCreateGroupQuick");
+    if (createBtn) createBtn.classList.toggle("show", activeConversationFilter === "groups");
+    ["all", "unread", "favourites", "groups"].forEach(k => {
+      const btn = document.getElementById(`chatFilter${k.charAt(0).toUpperCase()}${k.slice(1)}`);
+      if (btn) btn.classList.toggle("active", activeConversationFilter === k);
+    });
+    chatRenderConversations();
+  }
+
+  function chatOpenShareModal(messageId) {
+    shareMessageId = Number(messageId || 0);
+    shareTargetUsers = [];
+    document.getElementById("chatShareSearch").value = "";
+    document.getElementById("chatShareNote").value = "";
+    document.getElementById("chatShareSendBtn").textContent = "Share";
+    chatRenderShareRecent();
+    chatRenderShareUsers("");
+    document.getElementById("chatShareModal").style.display = "flex";
+  }
+
+  function chatCloseShareModal() {
+    document.getElementById("chatShareModal").style.display = "none";
+    shareMessageId = 0;
+    shareTargetUsers = [];
+  }
+
+  function chatRenderShareUsers(searchTerm) {
+    const q = String(searchTerm || "").trim().toLowerCase();
+    const box = document.getElementById("chatShareUsers");
+    const rows = (chatUsers || []).filter(u => {
+      const uname = String(u.username || "");
+      const t = String(u.tenant_id || "").toLowerCase();
+      if (!uname) return false;
+      if (!q) return true;
+      return uname.toLowerCase().includes(q) || t.includes(q);
+    });
+    if (!rows.length) {
+      box.innerHTML = '<div class="wa-empty" style="margin: 8px;">No users found</div>';
+      return;
+    }
+    box.innerHTML = rows.map(u => {
+      const uname = String(u.username || "");
+      const sel = shareTargetUsers.some(v => String(v || "").toUpperCase() === uname.toUpperCase());
+      return `<div class="chat-user-pick ${sel ? "selected" : ""}" data-u="${chatEsc(uname)}">${chatEsc(chatUserLabel(uname))}</div>`;
+    }).join("");
+    box.querySelectorAll(".chat-user-pick").forEach(el => {
+      el.addEventListener("click", () => {
+        const uname = el.getAttribute("data-u") || "";
+        const idx = shareTargetUsers.findIndex(v => String(v || "").toUpperCase() === uname.toUpperCase());
+        if (idx >= 0) {
+          shareTargetUsers.splice(idx, 1);
+        } else if (uname) {
+          shareTargetUsers.push(uname);
+        }
+        const btn = document.getElementById("chatShareSendBtn");
+        if (btn) btn.textContent = shareTargetUsers.length ? `Share (${shareTargetUsers.length})` : "Share";
+        chatRenderShareRecent();
+        chatRenderShareUsers(document.getElementById("chatShareSearch").value || "");
+      });
+    });
+  }
+
+  function chatGetRecentShareUsers() {
+    const out = [];
+    const seen = new Set();
+    (chatConversations || []).forEach(c => {
+      if (String(c.conversation_type || "").toUpperCase() !== "DIRECT") return;
+      const u = String(c.direct_other_user || "").trim();
+      if (!u) return;
+      const k = u.toUpperCase();
+      if (seen.has(k)) return;
+      seen.add(k);
+      out.push(u);
+    });
+    return out.slice(0, 8);
+  }
+
+  function chatRenderShareRecent() {
+    const wrap = document.getElementById("chatShareRecentWrap");
+    const box = document.getElementById("chatShareRecent");
+    if (!wrap || !box) return;
+    const users = chatGetRecentShareUsers();
+    if (!users.length) {
+      wrap.style.display = "none";
+      box.innerHTML = "";
+      return;
+    }
+    wrap.style.display = "";
+    box.innerHTML = users.map(u => {
+      const sel = shareTargetUsers.some(v => String(v || "").toUpperCase() === u.toUpperCase());
+      return `<button type="button" class="chat-recent-chip ${sel ? "selected" : ""}" data-u="${chatEsc(u)}">${chatEsc(chatUserLabel(u))}</button>`;
+    }).join("");
+    box.querySelectorAll(".chat-recent-chip").forEach(el => {
+      el.addEventListener("click", () => {
+        const uname = el.getAttribute("data-u") || "";
+        const idx = shareTargetUsers.findIndex(v => String(v || "").toUpperCase() === uname.toUpperCase());
+        if (idx >= 0) shareTargetUsers.splice(idx, 1);
+        else if (uname) shareTargetUsers.push(uname);
+        const btn = document.getElementById("chatShareSendBtn");
+        if (btn) btn.textContent = shareTargetUsers.length ? `Share (${shareTargetUsers.length})` : "Share";
+        chatRenderShareRecent();
+        chatRenderShareUsers(document.getElementById("chatShareSearch").value || "");
+      });
+    });
+  }
+
+  async function chatSubmitShare() {
+    const note = String(document.getElementById("chatShareNote").value || "").trim();
+    if (!shareMessageId) return alert("No message selected.");
+    if (!shareTargetUsers.length) return alert("Select one or more users to share.");
+    const res = await chatFetchJson(`/chat/api/messages/${shareMessageId}/share`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ usernames: shareTargetUsers, note }),
+    });
+    chatCloseShareModal();
+    if (res.failed && res.failed.length) {
+      alert(`Shared to ${res.sent_count || 0} user(s). Failed: ${res.failed.length}`);
+    } else {
+      alert(`Shared to ${res.sent_count || shareTargetUsers.length} user(s)`);
+    }
+  }
+
+  function chatEsc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (m) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m];
+    });
+  }
+
+  function chatInitials(name) {
+    const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return "U";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+
+  function chatUserLabel(name) {
+    const s = String(name || "").trim().toLowerCase();
+    if (!s) return "";
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  function chatRelativeTime(v) {
+    if (!v) return "last seen recently";
+    const dt = new Date(String(v));
+    if (isNaN(dt.getTime())) return "last seen recently";
+    const diff = Math.floor((Date.now() - dt.getTime()) / 1000);
+    if (diff < 60) return "online";
+    if (diff < 3600) return `last seen ${Math.floor(diff / 60)} min ago`;
+    if (diff < 86400) return `last seen ${Math.floor(diff / 3600)} hr ago`;
+    return `last seen ${dt.toLocaleString()}`;
+  }
+
+  function chatLooksLikeAudio(fileName, fileMime) {
+    const n = String(fileName || "").toLowerCase();
+    const m = String(fileMime || "").toLowerCase();
+    if (m.startsWith("audio/")) return true;
+    return n.endsWith(".webm") || n.endsWith(".ogg") || n.endsWith(".wav") || n.endsWith(".mp3") || n.endsWith(".m4a");
+  }
+
+  async function chatFetchJson(url, opts) {
+    const r = await fetch(url, Object.assign({ credentials: "same-origin" }, opts || {}));
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.ok === false) throw new Error(j.error || ("Request failed: " + r.status));
+    return j;
+  }
+
+  async function chatSetTyping(isTyping) {
+    if (!activeConversationId) return;
+    try {
+      await chatFetchJson("/chat/api/typing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversation_id: activeConversationId, is_typing: !!isTyping }),
+      });
+    } catch (_) {}
+  }
+
+  function chatHandleTypingInput() {
+    if (!activeConversationId) return;
+    if (typingTimer) clearTimeout(typingTimer);
+    if (typingStopTimer) clearTimeout(typingStopTimer);
+    typingTimer = setTimeout(() => { chatSetTyping(true); }, 450);
+    typingStopTimer = setTimeout(() => { chatSetTyping(false); }, 2400);
+  }
+
+  async function chatRefreshTyping() {
+    if (!activeConversationId) {
+      document.getElementById("chatTypingIndicator").textContent = "";
+      return;
+    }
+    try {
+      const data = await chatFetchJson(`/chat/api/typing?conversation_id=${activeConversationId}`);
+      const names = (data.rows || []).map(r => String(r.username || "").trim()).filter(Boolean);
+      const label = document.getElementById("chatTypingIndicator");
+      if (!names.length) {
+        label.textContent = "";
+      } else if (names.length === 1) {
+        label.textContent = `${chatUserLabel(names[0])} is typing...`;
+      } else {
+        label.textContent = `${chatUserLabel(names[0])} and ${names.length - 1} other${names.length > 2 ? "s" : ""} typing...`;
+      }
+    } catch (_) {}
+  }
+
+  function chatInitEmojiPanel() {
+    const panel = document.getElementById("chatEmojiPanel");
+    panel.innerHTML = EMOJIS.map(e => `<button type="button" class="wa-emoji-btn" data-e="${e}">${e}</button>`).join("");
+    panel.querySelectorAll(".wa-emoji-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const t = document.getElementById("chatMessageText");
+        t.value += btn.getAttribute("data-e") || "";
+        t.focus();
+      });
+    });
+  }
+
+  function chatPositionEmojiPanel() {
+    const panel = document.getElementById("chatEmojiPanel");
+    const btn = document.getElementById("chatEmojiBtn");
+    if (!panel || !btn) return;
+    const r = btn.getBoundingClientRect();
+    const panelW = 240;
+    const panelH = 180;
+    let left = r.left + (r.width / 2) - (panelW / 2);
+    let top = r.top - panelH - 8;
+    if (left < 8) left = 8;
+    if ((left + panelW) > (window.innerWidth - 8)) left = window.innerWidth - panelW - 8;
+    if (top < 8) top = r.bottom + 8;
+    if ((top + panelH) > (window.innerHeight - 8)) top = window.innerHeight - panelH - 8;
+    panel.style.left = `${Math.max(8, left)}px`;
+    panel.style.top = `${Math.max(8, top)}px`;
+  }
+
+  async function chatToggleVoiceRecording() {
+    const stateEl = document.getElementById("chatVoiceState");
+    const btn = document.getElementById("chatVoiceBtn");
+    if (mediaRecorder && mediaRecorder.state === "recording") {
+      mediaRecorder.stop();
+      return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert("Voice recording is not supported in this browser.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingChunks = [];
+      mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      recordingStartMs = Date.now();
+      mediaRecorder.ondataavailable = (ev) => {
+        if (ev.data && ev.data.size > 0) recordingChunks.push(ev.data);
+      };
+      mediaRecorder.onstop = () => {
+        const durSec = Math.max(1, Math.round((Date.now() - recordingStartMs) / 1000));
+        voiceBlob = new Blob(recordingChunks, { type: "audio/webm" });
+        stateEl.textContent = `voice ${durSec}s ready`;
+        stateEl.classList.add("show");
+        document.getElementById("chatAttachLabel").classList.remove("show");
+        btn.textContent = "🎤";
+        try { stream.getTracks().forEach(t => t.stop()); } catch (_) {}
+      };
+      mediaRecorder.start();
+      btn.textContent = "⏹";
+      stateEl.textContent = "recording...";
+    } catch (e) {
+      alert("Microphone permission denied.");
+    }
+  }
+
+  function chatRenderConversations() {
+    const q = (document.getElementById("chatUserSearch").value || "").trim().toLowerCase();
+    const box = document.getElementById("chatConversations");
+    const rows = chatConversations.filter(c => {
+      if (q && !String(c.display_name || "").toLowerCase().includes(q)) return false;
+      if (activeConversationFilter === "unread" && Number(c.unread_count || 0) <= 0) return false;
+      if (activeConversationFilter === "groups" && String(c.conversation_type || "").toUpperCase() !== "GROUP") return false;
+      if (activeConversationFilter === "favourites" && !chatIsFavourite(c.conversation_id)) return false;
+      return true;
+    });
+    if (!rows.length) {
+      if (activeConversationFilter === "groups") {
+        box.innerHTML = '<div class="wa-empty" style="margin: 16px 10px;">No groups yet. Click <b>+ New Group</b> to create one.</div>';
+      } else {
+        box.innerHTML = '<div class="wa-empty" style="margin: 16px 10px;">No conversations</div>';
+      }
+      return;
+    }
+    const hasActiveVisible = rows.some(c => Number(c.conversation_id) === Number(activeConversationId));
+    if (!hasActiveVisible) {
+      activeConversationId = Number(rows[0].conversation_id);
+      chatLoadMessages(false).catch(() => {});
+    }
+    box.innerHTML = rows.map(c => {
+      const isActive = Number(c.conversation_id) === Number(activeConversationId);
+      const lastTxt = c.last_text ? String(c.last_text) : (c.last_image_url ? "[Image]" : (c.last_file_name ? `[File] ${c.last_file_name}` : ""));
+      const convName = (String(c.conversation_type || "").toUpperCase() === "DIRECT")
+        ? chatUserLabel(c.display_name || "user")
+        : String(c.display_name || "Chat");
+      const initials = chatInitials(convName || "User");
+      const isFav = chatIsFavourite(c.conversation_id);
+      return `
+        <div class="wa-item ${isActive ? "active" : ""}" data-id="${c.conversation_id}">
+          <div class="wa-avatar">${chatEsc(initials)}</div>
+          <div>
+            <div class="wa-name">${chatEsc(convName || "Chat")}</div>
+            <div class="wa-sub">${chatEsc(lastTxt)}</div>
+          </div>
+          <div class="wa-item-meta">
+            <button type="button" class="wa-star ${isFav ? "on" : ""}" data-star-id="${c.conversation_id}" title="Favourite">${isFav ? "★" : "☆"}</button>
+            ${Number(c.unread_count || 0) > 0 ? `<span class="wa-badge">${Number(c.unread_count)}</span>` : ""}
+          </div>
+        </div>
+      `;
+    }).join("");
+    box.querySelectorAll(".wa-star").forEach(el => {
+      el.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        chatToggleFavourite(Number(el.getAttribute("data-star-id") || 0));
+      });
+    });
+    box.querySelectorAll(".wa-item[data-id]").forEach(el => {
+      el.addEventListener("click", () => {
+        activeConversationId = Number(el.getAttribute("data-id"));
+        chatRenderConversations();
+        chatLoadMessages(false).catch(() => {});
+      });
+    });
+  }
+
+  function chatRenderUsers() {
+    const q = (document.getElementById("chatUserSearch").value || "").trim().toLowerCase();
+    const box = document.getElementById("chatUsers");
+    const head = document.getElementById("chatUsersHeading");
+    if (!box) return;
+    const rows = !q
+      ? chatUsers.slice()
+      : chatUsers.filter(u => {
+          const a = String(u.username || "").toLowerCase();
+          const b = String(u.employeecode || "").toLowerCase();
+          const t = String(u.tenant_id || "").toLowerCase();
+          return a.includes(q) || b.includes(q) || t.includes(q);
+        });
+    if (head) head.textContent = q ? "Matches" : "All users";
+    if (!rows.length) {
+      box.innerHTML = '<div class="wa-empty" style="padding: 8px 10px;">' + (q ? "No users found" : "No users") + "</div>";
+      return;
+    }
+    box.innerHTML = rows.map(u => {
+      const uname = u.username || "";
+      const unameLabel = chatUserLabel(uname);
+      const initials = chatInitials(uname);
+      const seen = chatRelativeTime(u.last_seen_date);
+      const tid = String(u.tenant_id || "").trim();
+      const sub = [seen, (chatAllTenantsMode && tid) ? ("Tenant: " + tid) : ""].filter(Boolean).join(" · ");
+      return `
+        <div class="wa-item" data-u="${chatEsc(uname)}">
+          <div class="wa-avatar">${chatEsc(initials)}</div>
+          <div>
+            <div class="wa-name">${chatEsc(unameLabel)}</div>
+            <div class="wa-sub">${chatEsc(sub || seen)}</div>
+          </div>
+          <div></div>
+        </div>
+      `;
+    }).join("");
+    box.querySelectorAll(".wa-item").forEach(el => {
+      el.addEventListener("click", async () => {
+        const username = el.getAttribute("data-u") || "";
+        if (!username) return;
+        try {
+          const res = await chatFetchJson("/chat/api/conversations/direct", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username }),
+          });
+          activeConversationId = Number(res.conversation_id);
+          await chatLoadConversations(true);
+          await chatLoadMessages(true);
+        } catch (e) {
+          alert(e.message || "Cannot start chat.");
+        }
+      });
+    });
+  }
+
+  async function chatLoadConversations(keepSelection) {
+    if (isLoadingConversations) return;
+    isLoadingConversations = true;
+    try {
+    const data = await chatFetchJson("/chat/api/conversations");
+    chatConversations = data.rows || [];
+    if (!keepSelection && chatConversations.length && !activeConversationId) {
+      activeConversationId = Number(chatConversations[0].conversation_id);
+    }
+    const active = chatConversations.find(c => Number(c.conversation_id) === Number(activeConversationId));
+    const activeTitle = active
+      ? ((String(active.conversation_type || "").toUpperCase() === "DIRECT")
+          ? chatUserLabel(active.display_name || "user")
+          : String(active.display_name || "Chatbox"))
+      : "Chatbox";
+    document.getElementById("chatMainTitle").textContent = activeTitle;
+    document.getElementById("chatHeaderAvatar").textContent = chatInitials(activeTitle || "Chat");
+    const lastSeenTxt = active && active.direct_other_last_seen ? chatRelativeTime(active.direct_other_last_seen) : (active ? "online" : "Select a conversation");
+    document.getElementById("chatLastSeen").textContent = lastSeenTxt;
+    chatRenderConversations();
+    } finally {
+      isLoadingConversations = false;
+    }
+  }
+
+  function chatRenderMessages(rows) {
+    const box = document.getElementById("chatMessages");
+    const wasNearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 80;
+    if (!rows.length) {
+      box.innerHTML = '<div class="wa-empty">No messages yet.</div>';
+      lastMessageSignature = "";
+      return;
+    }
+    const latest = rows[rows.length - 1] || {};
+    const sig = `${latest.message_id || 0}|${rows.length}|${latest.edited_flag || "N"}|${latest.created_date || ""}`;
+    if (sig === lastMessageSignature) return;
+    lastMessageSignature = sig;
+    box.innerHTML = rows.map(m => {
+      const edited = String(m.edited_flag || "N").toUpperCase() === "Y" ? "edited" : "";
+      const image = m.image_url ? `<img class="wa-image" src="${chatEsc(m.image_url)}" alt="attachment" />` : "";
+      let fileLink = "";
+      if (m.file_url) {
+        if (chatLooksLikeAudio(m.file_name, m.file_mime)) {
+          fileLink = `<audio class="wa-audio" controls src="${chatEsc(m.file_url)}"></audio><a class="wa-file" href="${chatEsc(m.file_url)}" target="_blank" rel="noopener">🎵 ${chatEsc(m.file_name || "Voice note")}</a>`;
+        } else {
+          fileLink = `<a class="wa-file" href="${chatEsc(m.file_url)}" target="_blank" rel="noopener">📎 ${chatEsc(m.file_name || "Attachment")}</a>`;
+        }
+      }
+      const replyBox = m.replied_message_id
+        ? `<div class="wa-reply-box" data-reply-id="${Number(m.replied_message_id || 0)}"><b>${chatEsc(m.reply_to_sender || "Reply")}</b><br>${chatEsc((m.reply_to_text || "").slice(0, 80))}</div>`
+        : "";
+      const ticks = m.is_own ? `<span class="wa-tick ${String(m.read_by_all||"N")==="Y" ? "read" : ""}">${String(m.read_by_all||"N")==="Y" ? "✓✓" : "✓"}</span>` : "";
+      const likeCount = Number((m.reaction_summary || {}).LIKE || 0);
+      return `
+        <div class="wa-row ${m.is_own ? "own" : ""}" id="wa-msg-${m.message_id}" data-mid="${m.message_id}">
+          <div class="wa-bubble">
+            ${replyBox}
+            <div class="wa-text">${chatEsc(m.message_text || "")}</div>
+            ${image}
+            ${fileLink}
+            <div class="wa-meta">
+              <span>${chatEsc(String(m.created_date || ""))}</span>
+              ${ticks}
+              ${edited ? `<span>${edited}</span>` : ""}
+            </div>
+            <div class="wa-actions">
+              <button class="msg-reply" title="Reply" aria-label="Reply" data-mid="${m.message_id}" data-sender="${chatEsc(m.sender_username||"")}" data-text="${chatEsc(m.message_text||"")}">↩</button>
+              <button class="msg-share" title="Share" aria-label="Share" data-mid="${m.message_id}">⤴</button>
+              <button class="msg-like" title="Like" aria-label="Like" data-mid="${m.message_id}">${(m.my_reaction || "") === "LIKE" ? "♥" : "♡"}${likeCount ? `<span style="font-size:11px;margin-left:2px;">${likeCount}</span>` : ""}</button>
+              ${m.is_own ? `<button class="msg-edit" title="Edit" aria-label="Edit" data-mid="${m.message_id}" data-text="${chatEsc(m.message_text || "")}">✎</button>` : ""}
+              ${m.is_own ? `<button class="msg-del" title="Delete" aria-label="Delete" data-mid="${m.message_id}">🗑</button>` : ""}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+    box.querySelectorAll(".msg-edit").forEach(btn => {
+      if (btn.classList.contains("msg-del")) return;
+      btn.addEventListener("click", async () => {
+        const mid = Number(btn.getAttribute("data-mid"));
+        const current = btn.getAttribute("data-text") || "";
+        const nextText = prompt("Edit message", current);
+        if (nextText == null) return;
+        const payload = { message_text: String(nextText).trim() };
+        if (!payload.message_text) return alert("Message cannot be empty.");
+        try {
+          await chatFetchJson(`/chat/api/messages/${mid}/edit`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          await chatLoadMessages(false);
+          await chatLoadConversations(false);
+        } catch (e) {
+          alert(e.message || "Failed to edit message.");
+        }
+      });
+    });
+    box.querySelectorAll(".msg-del").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const mid = Number(btn.getAttribute("data-mid"));
+        if (!mid) return;
+        if (!confirm("Delete this message?")) return;
+        try {
+          await chatFetchJson(`/chat/api/messages/${mid}/delete`, { method: "POST" });
+          await chatLoadMessages(false);
+          await chatLoadConversations(false);
+        } catch (e) {
+          alert(e.message || "Failed to delete message.");
+        }
+      });
+    });
+    box.querySelectorAll(".msg-reply").forEach(btn => {
+      btn.addEventListener("click", () => {
+        replyingTo = {
+          message_id: Number(btn.getAttribute("data-mid") || 0),
+          sender: btn.getAttribute("data-sender") || "",
+          text: btn.getAttribute("data-text") || "",
+        };
+        const bar = document.getElementById("chatReplyBar");
+        const nameEl = document.getElementById("chatReplyName");
+        const label = document.getElementById("chatReplyLabel");
+        nameEl.textContent = chatUserLabel(replyingTo.sender);
+        label.textContent = replyingTo.text.slice(0, 120);
+        bar.classList.add("show");
+        document.getElementById("chatMessageText").focus();
+      });
+    });
+    box.querySelectorAll(".wa-reply-box[data-reply-id]").forEach(el => {
+      el.addEventListener("click", () => {
+        const rid = Number(el.getAttribute("data-reply-id") || 0);
+        if (!rid) return;
+        const target = document.getElementById(`wa-msg-${rid}`);
+        if (!target) return;
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        target.classList.add("wa-msg-highlight");
+        setTimeout(() => target.classList.remove("wa-msg-highlight"), 1400);
+      });
+    });
+    box.querySelectorAll(".msg-like").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const mid = Number(btn.getAttribute("data-mid") || 0);
+        if (!mid) return;
+        try {
+          await chatFetchJson(`/chat/api/messages/${mid}/react`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reaction: "LIKE" }),
+          });
+          await chatLoadMessages(false);
+        } catch (e) {
+          alert(e.message || "Failed to react.");
+        }
+      });
+    });
+    box.querySelectorAll(".msg-share").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const mid = Number(btn.getAttribute("data-mid") || 0);
+        if (!mid) return;
+        chatOpenShareModal(mid);
+      });
+    });
+    if (forceScrollToBottom || wasNearBottom) {
+      box.scrollTop = box.scrollHeight + 1000;
+    }
+    forceScrollToBottom = false;
+  }
+
+  async function chatLoadMessages(alsoRefreshConversations) {
+    if (isLoadingMessages) return;
+    if (!activeConversationId) return;
+    isLoadingMessages = true;
+    try {
+    const data = await chatFetchJson(`/chat/api/messages?conversation_id=${activeConversationId}`);
+    chatRenderMessages(data.rows || []);
+    await chatRefreshTyping();
+    } finally {
+      isLoadingMessages = false;
+    }
+  }
+
+  function chatDedupeUserRows(rows) {
+    const m = new Map();
+    for (const u of rows || []) {
+      const k = String(u.username || "").trim().toLowerCase();
+      if (!k) continue;
+      if (!m.has(k)) m.set(k, u);
+    }
+    return Array.from(m.values());
+  }
+
+  async function chatLoadUsers() {
+    const data = await chatFetchJson("/chat/api/users");
+    chatUsers = chatDedupeUserRows(data.rows || []);
+    chatAllTenantsMode = data.all_tenants_users === true;
+    chatRenderUsers();
+  }
+
+  async function chatRefreshAll() {
+    await chatLoadUsers();
+    await chatLoadConversations(true);
+    if (activeConversationId) await chatLoadMessages(false);
+    await chatRefreshTyping();
+  }
+
+  function chatScheduleRefresh(delayMs) {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      chatRefreshAll().catch(() => {});
+    }, Math.max(0, Number(delayMs || 0)));
+  }
+
+  function chatConnectStream() {
+    if (!window.EventSource) return;
+    try {
+      if (chatEventSource) {
+        chatEventSource.close();
+      }
+      chatEventSource = new EventSource("/chat/api/stream");
+      chatEventSource.addEventListener("sync", () => {
+        chatScheduleRefresh(80);
+      });
+      chatEventSource.onerror = () => {
+        try { chatEventSource.close(); } catch (_) {}
+        chatEventSource = null;
+        setTimeout(chatConnectStream, 2000);
+      };
+    } catch (_) {
+      // Keep fallback polling if stream is unavailable.
+    }
+  }
+
+  function chatOpenGroupModal() {
+    const modal = document.getElementById("chatGroupModal");
+    const usersEl = document.getElementById("chatGroupUsers");
+    usersEl.innerHTML = chatUsers.map(u => {
+      const uname = u.username || "";
+      const tid = String(u.tenant_id || "").trim();
+      const label = tid && chatAllTenantsMode ? (uname + " (" + tid + ")") : uname;
+      return `<label><input type="checkbox" value="${chatEsc(uname)}" /> ${chatEsc(label)}</label>`;
+    }).join("");
+    modal.style.display = "flex";
+  }
+
+  function chatCloseGroupModal() {
+    document.getElementById("chatGroupModal").style.display = "none";
+    document.getElementById("chatGroupTitle").value = "";
+  }
+
+  async function chatCreateDirect() {
+    if (!chatUsers.length) await chatLoadUsers();
+    const raw = prompt("Enter username to chat with:");
+    const username = String(raw || "").trim();
+    if (!username) return;
+    const res = await chatFetchJson("/chat/api/conversations/direct", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username }),
+    });
+    activeConversationId = Number(res.conversation_id);
+    await chatLoadConversations(false);
+    await chatLoadMessages(false);
+  }
+
+  async function chatCreateGroup() {
+    const title = String(document.getElementById("chatGroupTitle").value || "").trim();
+    const picks = Array.from(document.querySelectorAll("#chatGroupUsers input[type=checkbox]:checked")).map(i => i.value);
+    if (!title) return alert("Group title is required.");
+    if (!picks.length) return alert("Select at least one participant.");
+    const res = await chatFetchJson("/chat/api/conversations/group", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, participants: picks }),
+    });
+    chatCloseGroupModal();
+    activeConversationId = Number(res.conversation_id);
+    await chatLoadConversations(false);
+    await chatLoadMessages(false);
+  }
+
+  async function chatSendMessage(e) {
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
+    if (!activeConversationId) {
+      await chatLoadConversations(false);
+      if (!activeConversationId) return alert("Select a conversation.");
+    }
+    const txtEl = document.getElementById("chatMessageText");
+    const fileEl = document.getElementById("chatMessageAttachment");
+    const form = new FormData();
+    form.append("conversation_id", String(activeConversationId));
+    form.append("message_text", String(txtEl.value || "").trim());
+    if (replyingTo && Number(replyingTo.message_id) > 0) {
+      form.append("replied_message_id", String(replyingTo.message_id));
+    }
+    if (fileEl.files && fileEl.files[0]) {
+      form.append("attachment", fileEl.files[0]);
+    } else if (voiceBlob) {
+      const vn = `voice_note_${Date.now()}.webm`;
+      form.append("attachment", new File([voiceBlob], vn, { type: "audio/webm" }));
+    }
+    const hasText = String(txtEl.value || "").trim().length > 0;
+    const hasFile = !!(fileEl.files && fileEl.files[0]) || !!voiceBlob;
+    if (!hasText && !hasFile) return;
+
+    chatSetSendBusy(true);
+    try {
+      await chatFetchJson("/chat/api/messages", { method: "POST", body: form });
+      txtEl.value = "";
+      fileEl.value = "";
+      document.getElementById("chatAttachLabel").textContent = "";
+      document.getElementById("chatAttachLabel").classList.remove("show");
+      voiceBlob = null;
+      document.getElementById("chatVoiceState").textContent = "";
+      document.getElementById("chatVoiceState").classList.remove("show");
+      replyingTo = null;
+      document.getElementById("chatReplyBar").classList.remove("show");
+      forceScrollToBottom = true;
+      chatSetTyping(false).catch(() => {});
+    } catch (e2) {
+      alert(e2.message || "Failed to send message.");
+    } finally {
+      chatSetSendBusy(false);
+    }
+    chatLoadMessages(false).catch(() => {});
+    chatLoadConversations(false).catch(() => {});
+  }
+
+  function chatTriggerSend() {
+    chatSendMessage({ preventDefault: function() {} }).catch((err) => {
+      alert((err && err.message) || "Failed to send message.");
+    });
+  }
+
+  async function chatInit() {
+    await chatLoadUsers();
+    await chatLoadConversations(false);
+    if (activeConversationId) await chatLoadMessages(false);
+
+    document.getElementById("chatUserSearch").addEventListener("input", () => {
+      chatRenderUsers();
+      chatRenderConversations();
+    });
+    document.getElementById("chatComposeForm").addEventListener("submit", chatSendMessage);
+    document.getElementById("chatMessageText").addEventListener("input", chatHandleTypingInput);
+    document.getElementById("chatMessageText").addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" && !ev.shiftKey) {
+        ev.preventDefault();
+        chatTriggerSend();
+      }
+    });
+    document.getElementById("chatSendBtn").addEventListener("click", (ev) => {
+      chatTriggerSend();
+    });
+    document.getElementById("chatFilterAll").addEventListener("click", () => chatSetConversationFilter("all"));
+    document.getElementById("chatFilterUnread").addEventListener("click", () => chatSetConversationFilter("unread"));
+    document.getElementById("chatFilterFavourites").addEventListener("click", () => chatSetConversationFilter("favourites"));
+    document.getElementById("chatFilterGroups").addEventListener("click", () => chatSetConversationFilter("groups"));
+    document.getElementById("chatCreateGroupQuick").addEventListener("click", chatOpenGroupModal);
+    document.getElementById("chatGroupCancelBtn").addEventListener("click", chatCloseGroupModal);
+    document.getElementById("chatGroupCreateBtn").addEventListener("click", chatCreateGroup);
+    document.getElementById("chatGroupModal").addEventListener("click", (ev) => {
+      if (ev.target && ev.target.id === "chatGroupModal") chatCloseGroupModal();
+    });
+    document.getElementById("chatShareSearch").addEventListener("input", (ev) => {
+      chatRenderShareUsers(ev.target.value || "");
+    });
+    document.getElementById("chatShareCancelBtn").addEventListener("click", chatCloseShareModal);
+    document.getElementById("chatShareSendBtn").addEventListener("click", () => {
+      chatSubmitShare().catch(e => alert(e.message || "Failed to share."));
+    });
+    document.getElementById("chatShareModal").addEventListener("click", (ev) => {
+      if (ev.target && ev.target.id === "chatShareModal") chatCloseShareModal();
+    });
+    document.getElementById("chatAttachBtn").addEventListener("click", () => {
+      document.getElementById("chatMessageAttachment").click();
+    });
+    document.getElementById("chatMessageAttachment").addEventListener("change", () => {
+      const f = document.getElementById("chatMessageAttachment").files;
+      const lbl = document.getElementById("chatAttachLabel");
+      lbl.textContent = (f && f[0] && f[0].name) ? f[0].name : "";
+      lbl.classList.toggle("show", !!(f && f[0] && f[0].name));
+      if (f && f[0]) {
+        voiceBlob = null;
+        document.getElementById("chatVoiceState").textContent = "";
+        document.getElementById("chatVoiceState").classList.remove("show");
+      }
+    });
+    document.getElementById("chatEmojiBtn").addEventListener("click", () => {
+      const p = document.getElementById("chatEmojiPanel");
+      const next = !p.classList.contains("show");
+      p.classList.toggle("show", next);
+      if (next) chatPositionEmojiPanel();
+    });
+    document.addEventListener("click", (ev) => {
+      const p = document.getElementById("chatEmojiPanel");
+      const b = document.getElementById("chatEmojiBtn");
+      if (!p.contains(ev.target) && ev.target !== b) p.classList.remove("show");
+    });
+    document.getElementById("chatVoiceBtn").addEventListener("click", chatToggleVoiceRecording);
+    document.getElementById("chatReplyClearBtn").addEventListener("click", () => {
+      replyingTo = null;
+      document.getElementById("chatReplyBar").classList.remove("show");
+    });
+    chatInitEmojiPanel();
+    chatSetSendBusy(false);
+    chatSetConversationFilter("all");
+
+    convPollTimer = setInterval(() => { chatLoadConversations(false).catch(() => {}); }, 8000);
+    messagePollTimer = setInterval(() => { chatLoadMessages(false).catch(() => {}); }, 3200);
+    usersPollTimer = setInterval(() => { chatLoadUsers().catch(() => {}); }, 15000);
+    typingPollTimer = setInterval(() => { chatRefreshTyping().catch(() => {}); }, 3000);
+    // SSE disabled for compatibility with strict tracking-prevention browsers.
+
+    window.addEventListener("focus", () => { chatRefreshAll().catch(() => {}); });
+    window.addEventListener("resize", () => {
+      const p = document.getElementById("chatEmojiPanel");
+      if (p && p.classList.contains("show")) chatPositionEmojiPanel();
+    });
+    window.addEventListener("scroll", () => {
+      const p = document.getElementById("chatEmojiPanel");
+      if (p && p.classList.contains("show")) chatPositionEmojiPanel();
+    }, true);
+    window.addEventListener("beforeunload", () => { chatSetTyping(false); });
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        chatRefreshAll().catch(() => {});
+      } else {
+        chatSetTyping(false);
+      }
+    });
+  }
+
+  chatInit().catch(err => {
+    console.error(err);
+    alert("Failed to load chat.");
+  });
+</script>
+{% endblock %}

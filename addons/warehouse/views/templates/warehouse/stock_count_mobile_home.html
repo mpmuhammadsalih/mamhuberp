@@ -1,0 +1,81 @@
+{% extends "warehouse/stock_count_mobile_layout.html" %}
+{% block scm_title %}Stock Counting{% endblock %}
+{% block scm_body %}
+<header class="scm-appbar">
+  <div class="scm-appbar__title-wrap" style="padding-left:12px;">
+    <h1 class="scm-appbar__title">Stock counting</h1>
+    <p class="scm-appbar__subtitle">Mobile · Loc {{ location_code }}{% if session.get('user') %} · {{ session.get('user') }}{% endif %}</p>
+  </div>
+  {% if show_desktop_link %}
+  <a href="{{ url_for('warehouse.warehouse_stock_counting_list') }}" class="scm-appbar__action" title="Desktop stock counting" aria-label="Desktop"><i class="bi bi-display"></i></a>
+  {% endif %}
+</header>
+
+<main class="scm-main" id="scmHome"
+  data-api-list="{{ url_for('warehouse.api_stock_count_list') }}"
+  data-mobile-new="{{ url_for('warehouse.warehouse_stock_counting_mobile_new') }}">
+
+  <div class="scm-chips" role="tablist">
+    <button type="button" class="scm-chip is-active" data-filter="">All</button>
+    <button type="button" class="scm-chip" data-filter="DRAFT">Draft</button>
+    <button type="button" class="scm-chip" data-filter="PENDING">Pending</button>
+    <button type="button" class="scm-chip" data-filter="POSTED">Posted</button>
+  </div>
+
+  <div id="scmCountList">
+    {% for r in rows %}
+    <a href="{{ url_for('warehouse.warehouse_stock_counting_mobile_scan', count_no=r.count_no) }}" class="scm-card scm-card--tap" style="text-decoration:none;color:inherit;" data-status="{{ (r.status or '')|upper }}">
+      <div class="scm-card__body">
+        <div class="scm-card__row">
+          <div>
+            <h2 class="scm-card__title">Count #{{ r.count_no }}</h2>
+            <p class="scm-card__meta">
+              {{ r.count_date.strftime('%d %b %Y') if r.count_date and r.count_date.strftime else r.count_date }}
+              {% if r.warehouse_id %} · WH {{ r.warehouse_id }}{% endif %}
+              · {{ r.line_count or 0 }} lines
+            </p>
+          </div>
+          <span class="scm-badge scm-badge--{{ (r.status or 'draft')|lower }}">{{ r.status }}</span>
+        </div>
+      </div>
+    </a>
+    {% else %}
+    <div class="scm-empty" id="scmEmptyDefault">
+      <i class="bi bi-upc-scan"></i>
+      <p>No counts yet.<br>Tap <strong>+</strong> to start scanning.</p>
+    </div>
+    {% endfor %}
+  </div>
+</main>
+
+<button type="button" class="scm-fab" id="scmFabNew" aria-label="New count"><i class="bi bi-plus-lg"></i></button>
+
+<div id="scmNewSheet" class="scm-sheet" role="dialog" aria-labelledby="scmNewSheetTitle" hidden>
+  <div class="scm-sheet__handle"></div>
+  <h2 id="scmNewSheetTitle" class="scm-sheet__title">New stock count</h2>
+  <form id="scmNewForm" method="post" action="{{ url_for('warehouse.warehouse_stock_counting_mobile_new') }}">
+    <div class="scm-field">
+      <label for="scmWh">Warehouse (optional)</label>
+      <select id="scmWh" name="warehouse_id">
+        <option value="">— Any —</option>
+        {% for s in sites %}
+        <option value="{{ s.warehouse_id or s.key }}">{{ s.name or s.key }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="scm-field">
+      <label for="scmBin">Default bin ID (optional)</label>
+      <input type="number" id="scmBin" name="storage_id" min="0" placeholder="Storage ID" inputmode="numeric" />
+    </div>
+    <div class="scm-field">
+      <label for="scmPdt">Device name</label>
+      <input type="text" id="scmPdt" name="pdt_device_id" maxlength="50" placeholder="e.g. PDT-01" value="MOBILE" />
+    </div>
+    <button type="submit" class="scm-btn-primary" style="width:100%;">Start counting</button>
+  </form>
+</div>
+{% endblock %}
+{% block scm_scripts %}
+<script src="{{ url_for('static', filename='js/stock_count_mobile.js') }}?v=2"></script>
+<script>ScmMobile.initHome();</script>
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+
+<div class="page-po nexa-list-page nexa-setup-list-page">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">PDT Users</h1>
+      <p class="page-po__muted">Users assigned to PDT roles (handheld stock counting).</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% include 'includes/list_refresh_bar.html' %}
+      <a class="page-po__btn-secondary" href="{{ url_for('pdt.pdt_roles_list') }}">PDT roles</a>
+      <a class="page-po__btn-primary" href="{{ url_for('pdt.pdt_user_create') }}">+ New PDT user</a>
+    </div>
+  </div>
+
+  {% if users %}
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th style="text-align:center;width:52px;">Sl.No</th>
+          <th>Username</th>
+          <th>Employee</th>
+          <th>Tenant</th>
+          <th>Role</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+          <tr>
+            <td style="text-align:center;">{{ loop.index }}</td>
+            <td>{{ u.username }}</td>
+            <td>{{ u.employeecode or '-' }}</td>
+            <td>{{ u.tenant_id or '-' }}</td>
+            <td>{{ u.role_name or u.role_id }}</td>
+            <td>{{ 'Active' if (u.active_flag or 'Y') == 'Y' else 'Inactive' }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="co-table-wrap">
+    <table class="co-table"><tbody><tr><td style="text-align:center;padding:14px;color:#64748b;">No PDT users yet. <a href="{{ url_for('pdt.pdt_user_create') }}" class="pi-link">Create a PDT user</a>.</td></tr></tbody></table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,750 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+
+
+
+{% set tab = active_tab|default('invoice') %}
+
+{% set is_return = tab == 'return' %}
+
+{% set is_all = tab == 'all' %}
+
+{% set col_count = 13 if is_all else 12 %}
+
+
+
+<div class="page-po nexa-list-page nexa-setup-list-page" style="max-width:1300px;">
+
+  <div class="page-po__topbar">
+
+    <div>
+
+      <h1 class="page-po__title">Sales List</h1>
+
+      <p class="page-po__muted">Manage posted sales invoices and sales returns for your branch.</p>
+
+    </div>
+
+    <div class="page-po__topbar-actions">
+
+      {% if is_all %}
+
+        {% if can_invoice|default(true) %}
+
+        <a href="{{ url_for('sales.sales_invoice') }}" class="page-po__btn-primary">+ New Sales Invoice</a>
+
+        {% endif %}
+
+        {% if can_return|default(true) %}
+
+        <a href="{{ url_for('sales.sales_return') }}" class="page-po__btn-secondary">+ New Sales Return</a>
+
+        {% endif %}
+
+      {% elif is_return %}
+
+        <a href="{{ url_for('sales.sales_return') }}" class="page-po__btn-primary">+ New Sales Return</a>
+
+      {% else %}
+
+        <a href="{{ url_for('sales.sales_invoice') }}" class="page-po__btn-primary">+ New Sales Invoice</a>
+
+      {% endif %}
+
+      <a href="{{ url_for('sales.sales_order_list') }}" class="po-nav-link">Sales Order</a>
+
+      {% include 'includes/list_refresh_bar.html' %}
+
+    </div>
+
+  </div>
+
+
+
+  <div class="po-tabs">
+
+    {% if can_invoice|default(true) %}
+
+    <a href="{{ url_for('sales.sales_invoice_list', tab='invoice', search=search or none, date_from=date_from or none, date_to=date_to or none, customer_code=customer_code or none) }}"
+
+       class="po-tab{% if tab == 'invoice' %} active{% endif %}">Sales Invoice</a>
+
+    {% endif %}
+
+    {% if can_return|default(true) %}
+
+    <a href="{{ url_for('sales.sales_invoice_list', tab='return', search=search or none, date_from=date_from or none, date_to=date_to or none, customer_code=customer_code or none) }}"
+
+       class="po-tab{% if tab == 'return' %} active{% endif %}">Sales Return</a>
+
+    {% endif %}
+
+    {% if (can_invoice|default(true)) or (can_return|default(true)) %}
+
+    <a href="{{ url_for('sales.sales_invoice_list', tab='all', search=search or none, date_from=date_from or none, date_to=date_to or none, customer_code=customer_code or none) }}"
+
+       class="po-tab{% if is_all %} active{% endif %}">All</a>
+
+    {% endif %}
+
+  </div>
+
+
+
+  {% set sm = summary or {} %}
+
+  <div class="nexa-stat-grid" aria-label="Sales summary">
+
+    {% if is_all %}
+
+    <div class="nexa-stat-card">
+
+      <span class="nexa-stat-icon nexa-stat-icon--blue" aria-hidden="true"><i class="bi bi-files"></i></span>
+
+      <div>
+
+        <p class="nexa-stat-label">Total Records</p>
+
+        <p class="nexa-stat-value">{{ sm.get('total_count', 0) }}</p>
+
+        <p class="nexa-stat-sub">{{ sm.get('invoice_count', 0) }} invoices · {{ sm.get('return_count', 0) }} returns</p>
+
+      </div>
+
+    </div>
+
+    <div class="nexa-stat-card">
+
+      <span class="nexa-stat-icon nexa-stat-icon--green" aria-hidden="true"><i class="bi bi-receipt"></i></span>
+
+      <div>
+
+        <p class="nexa-stat-label">Sales Invoice</p>
+
+        <p class="nexa-stat-value">{{ sm.get('invoice_count', 0) }}</p>
+
+        <p class="nexa-stat-sub">{{ '{:,.2f}'.format((sm.get('invoice_amount', 0) or 0)|float) }}</p>
+
+      </div>
+
+    </div>
+
+    <div class="nexa-stat-card">
+
+      <span class="nexa-stat-icon nexa-stat-icon--amber" aria-hidden="true"><i class="bi bi-arrow-return-left"></i></span>
+
+      <div>
+
+        <p class="nexa-stat-label">Sales Return</p>
+
+        <p class="nexa-stat-value">{{ sm.get('return_count', 0) }}</p>
+
+        <p class="nexa-stat-sub">{{ '{:,.2f}'.format((sm.get('return_amount', 0) or 0)|float) }}</p>
+
+      </div>
+
+    </div>
+
+    <div class="nexa-stat-card">
+
+      <span class="nexa-stat-icon nexa-stat-icon--blue" aria-hidden="true"><i class="bi bi-graph-up"></i></span>
+
+      <div>
+
+        <p class="nexa-stat-label">Net Sales</p>
+
+        <p class="nexa-stat-value">{{ '{:,.2f}'.format((sm.get('net_amount', 0) or 0)|float) }}</p>
+
+        <p class="nexa-stat-sub">Invoice minus return</p>
+
+      </div>
+
+    </div>
+
+    {% else %}
+
+    <div class="nexa-stat-card">
+
+      <span class="nexa-stat-icon nexa-stat-icon--blue" aria-hidden="true"><i class="bi bi-files"></i></span>
+
+      <div>
+
+        <p class="nexa-stat-label">{% if is_return %}Total Returns{% else %}Total Invoices{% endif %}</p>
+
+        <p class="nexa-stat-value">{{ sm.get('total_count', 0) }}</p>
+
+        <p class="nexa-stat-sub">{{ '{:,.2f}'.format((sm.get('total_amount', 0) or 0)|float) }} total amount</p>
+
+      </div>
+
+    </div>
+
+    <div class="nexa-stat-card">
+
+      <span class="nexa-stat-icon nexa-stat-icon--green" aria-hidden="true"><i class="bi bi-cash-coin"></i></span>
+
+      <div>
+
+        <p class="nexa-stat-label">Cash</p>
+
+        <p class="nexa-stat-value">{{ sm.get('cash_count', 0) }}</p>
+
+        <p class="nexa-stat-sub">{{ '{:,.2f}'.format((sm.get('cash_amount', 0) or 0)|float) }}</p>
+
+      </div>
+
+    </div>
+
+    <div class="nexa-stat-card">
+
+      <span class="nexa-stat-icon nexa-stat-icon--amber" aria-hidden="true"><i class="bi bi-credit-card"></i></span>
+
+      <div>
+
+        <p class="nexa-stat-label">Credit</p>
+
+        <p class="nexa-stat-value">{{ sm.get('credit_count', 0) }}</p>
+
+        <p class="nexa-stat-sub">{{ '{:,.2f}'.format((sm.get('credit_amount', 0) or 0)|float) }}</p>
+
+      </div>
+
+    </div>
+
+    {% endif %}
+
+  </div>
+
+
+
+  <div class="nexa-list-toolbar">
+
+    <input type="text" id="siSearch" class="input" placeholder="Search bill no, customer, created by, order no, remarks..."
+
+           style="min-width:220px; max-width:320px;" value="{{ search or '' }}" oninput="filterRows()">
+
+    <label style="font-size:12px; color:#6b7280; white-space:nowrap;">Customer</label>
+
+    <select id="siCustomer" class="input" style="min-width:200px; max-width:280px;">
+
+      <option value="">All customers</option>
+
+      {% for code, name in customer_options|default([]) %}
+
+      <option value="{{ code }}"{% if (customer_code|default('')) == code %} selected{% endif %}>{{ code }}{% if name and name != code %} · {{ name }}{% endif %}</option>
+
+      {% endfor %}
+
+    </select>
+
+    <label style="font-size:12px; color:#6b7280; white-space:nowrap;">From</label>
+
+    <input type="date" id="siDateFrom" class="input" style="width:150px;" value="{{ date_from or '' }}">
+
+    <label style="font-size:12px; color:#6b7280; white-space:nowrap;">To</label>
+
+    <input type="date" id="siDateTo" class="input" style="width:150px;" value="{{ date_to or '' }}">
+
+    <button type="button" class="page-po__btn-primary" id="siRunBtn" onclick="runSalesList()" style="padding:4px 12px; font-size:11px;">Run</button>
+
+    <button type="button" class="page-po__btn-secondary" onclick="clearFilters()" style="padding:4px 10px; font-size:11px;">Clear</button>
+
+    <button type="button" class="page-po__btn-primary" onclick="openSummaryPdf()" style="padding:4px 10px; font-size:11px;">Summary PDF</button>
+
+    <button type="button" class="page-po__btn-secondary" onclick="openCsvExport()" style="padding:4px 10px; font-size:11px;">Export CSV</button>
+
+    <span id="siCount" class="nexa-num" style="margin-left:4px;"></span>
+
+  </div>
+
+
+
+  <div class="co-table-wrap">
+
+    <table class="co-table" id="siTable">
+
+      <thead>
+
+        <tr>
+
+          <th data-col="0" style="text-align:center; width:60px;">Sl.No<span class="sort-arrow"></span></th>
+
+          {% if is_all %}
+
+          <th data-col="1">Doc Type<span class="sort-arrow"></span></th>
+
+          {% endif %}
+
+          <th data-col="{{ 2 if is_all else 1 }}">Bill No<span class="sort-arrow"></span></th>
+
+          <th data-col="{{ 3 if is_all else 2 }}">Bill Date<span class="sort-arrow"></span></th>
+
+          <th data-col="{{ 4 if is_all else 3 }}">Customer Code<span class="sort-arrow"></span></th>
+
+          <th data-col="{{ 5 if is_all else 4 }}">Customer Name<span class="sort-arrow"></span></th>
+
+          <th data-col="{{ 6 if is_all else 5 }}">Order No<span class="sort-arrow"></span></th>
+
+          <th data-col="{{ 7 if is_all else 6 }}" style="text-align:right;">Net Amount<span class="sort-arrow"></span></th>
+
+          <th data-col="{{ 8 if is_all else 7 }}">Status<span class="sort-arrow"></span></th>
+
+          <th data-col="{{ 9 if is_all else 8 }}">Type<span class="sort-arrow"></span></th>
+
+          <th data-col="{{ 10 if is_all else 9 }}">Created By<span class="sort-arrow"></span></th>
+
+          <th data-col="{{ 11 if is_all else 10 }}">Remarks<span class="sort-arrow"></span></th>
+
+          <th style="text-align:center; cursor:default;">Action</th>
+
+        </tr>
+
+      </thead>
+
+      <tbody id="siBody">
+
+        {% for row in invoices %}
+
+        {% set row_is_return = (row.doc_type|default('') == 'return') or is_return %}
+
+        {% set amt = (row.netbillamount or 0)|float %}
+
+        {% set disp_amt = (amt|abs) if row_is_return else amt %}
+
+        {% set doc_label = 'Sales Return' if row_is_return else 'Sales Invoice' %}
+
+        <tr
+
+          data-billno="{{ row.billno or '' }}"
+
+          data-date="{{ (row.billdate|string)[:10] if row.billdate else '' }}"
+
+          data-doctype="{{ doc_label }}"
+
+          data-customer="{{ row.customercode or '' }}"
+
+          data-customername="{{ row.customername or '' }}"
+
+          data-orderno="{{ row.orderno or '' }}"
+
+          data-status="{{ row.billstatus or '' }}"
+
+          data-billtype="{{ 'Credit' if (row.billtype|string|trim|upper) == 'R' else ('Cash' if (row.billtype|string|trim|upper) in ('C', '') else row.billtype) }}"
+
+          data-createdby="{{ row.createdby or '' }}"
+
+          data-remarks="{{ row.remarks or '' }}"
+
+          data-amount="{{ disp_amt }}"
+
+        >
+
+          <td class="sl-no">{{ loop.index }}</td>
+
+          {% if is_all %}
+
+          <td>{{ doc_label }}</td>
+
+          {% endif %}
+
+          <td><a class="so-link" href="{{ url_for('reports.crystal_reports_open_report', report_name=('salesreturn' if row.doc_type == 'return' else 'cashbilldup'), billno=row.billno) }}" target="_blank" rel="noopener">{{ row.billno or '-' }}</a></td>
+
+          <td>{{ (row.billdate|string)[:10] if row.billdate else '-' }}</td>
+
+          <td>{{ row.customercode or '-' }}</td>
+
+          <td>{{ row.customername or '-' }}</td>
+
+          <td>{{ row.orderno or '' }}</td>
+
+          <td class="num">{{ "%.2f"|format(disp_amt) }}</td>
+
+          <td>{{ row.billstatus or 'P' }}</td>
+
+          <td>{{ 'Credit' if (row.billtype|string|trim|upper) == 'R' else ('Cash' if (row.billtype|string|trim|upper) in ('C', '') else row.billtype) }}</td>
+
+          <td>{{ row.createdby or '—' }}</td>
+
+          <td>{{ row.remarks or '' }}</td>
+
+          <td style="text-align:center;">
+
+            <a class="btn-view" href="{{ url_for('reports.crystal_reports_open_report', report_name=('salesreturn' if row.doc_type == 'return' else 'cashbilldup'), billno=row.billno) }}" target="_blank" rel="noopener">View</a>
+
+          </td>
+
+        </tr>
+
+        {% else %}
+
+        <tr id="siNoData"><td colspan="{{ col_count }}" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">No {% if is_all %}sales records{% elif is_return %}sales returns{% else %}sales invoices{% endif %} found.</td></tr>
+
+        {% endfor %}
+
+      </tbody>
+
+      {% if invoices %}
+
+      <tfoot>
+
+        <tr>
+
+          <td colspan="{{ 7 if is_all else 6 }}" style="text-align:right; padding-right:12px; font-weight:700;">Total</td>
+
+          <td class="num" id="siTotalAmt">
+
+            {% set ns = namespace(total=0) %}
+
+            {% for r in invoices %}
+
+              {% set raw = (r.netbillamount|float if r.netbillamount is not none and r.netbillamount != '' else 0) %}
+
+              {% set r_ret = (r.doc_type|default('') == 'return') or is_return %}
+
+              {% set ns.total = ns.total + (raw|abs if r_ret else raw) %}
+
+            {% endfor %}
+
+            {{ '{:,.2f}'.format(ns.total) }}
+
+          </td>
+
+          <td colspan="{{ 5 if is_all else 5 }}"></td>
+
+        </tr>
+
+      </tfoot>
+
+      {% endif %}
+
+    </table>
+
+  </div>
+
+</div>
+
+
+
+<script>
+
+const SALES_LIST_TAB = {{ tab|tojson }};
+
+const SALES_LIST_BASE_URL = {{ url_for('sales.sales_invoice_list')|tojson }};
+
+const SALES_LIST_DEFAULT_DATE = {{ (date_to or date_from or '')|tojson }};
+
+const SALES_INVOICE_EXPORT_URL = {{ url_for('sales.sales_invoice_export') | tojson }};
+
+const SALES_INVOICE_SUMMARY_PDF_URL = {{ url_for('sales.sales_invoice_summary_pdf') | tojson }};
+
+
+
+function buildListQueryParams() {
+
+  const search = (document.getElementById('siSearch').value || '').trim();
+
+  const dateFrom = (document.getElementById('siDateFrom').value || '').trim();
+
+  const dateTo = (document.getElementById('siDateTo').value || '').trim();
+
+  const customer = (document.getElementById('siCustomer').value || '').trim();
+
+  const params = new URLSearchParams();
+
+  params.set('tab', SALES_LIST_TAB || 'invoice');
+
+  if (search) params.set('search', search);
+
+  if (dateFrom) params.set('date_from', dateFrom);
+
+  if (dateTo) params.set('date_to', dateTo);
+
+  if (customer) params.set('customer_code', customer);
+
+  return params;
+
+}
+
+
+
+function runSalesList() {
+
+  const params = buildListQueryParams();
+
+  window.location.href = SALES_LIST_BASE_URL + '?' + params.toString();
+
+}
+
+
+
+function openSummaryPdf() {
+
+  const params = buildListQueryParams();
+
+  window.open(SALES_INVOICE_SUMMARY_PDF_URL + '?' + params.toString(), '_blank');
+
+}
+
+
+
+function openCsvExport() {
+
+  const params = buildListQueryParams();
+
+  window.open(SALES_INVOICE_EXPORT_URL + '?' + params.toString(), '_blank');
+
+}
+
+
+
+(function () {
+
+  const table = document.getElementById('siTable');
+
+  const tbody = document.getElementById('siBody');
+
+  const countEl = document.getElementById('siCount');
+
+  const totalEl = document.getElementById('siTotalAmt');
+
+  let sortCol = -1, sortAsc = true;
+
+
+
+  table.querySelectorAll('thead th[data-col]').forEach(th => {
+
+    th.addEventListener('click', function () {
+
+      const col = parseInt(this.getAttribute('data-col'));
+
+      if (sortCol === col) sortAsc = !sortAsc;
+
+      else { sortCol = col; sortAsc = true; }
+
+      table.querySelectorAll('thead th').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+
+      this.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
+
+      sortTable();
+
+    });
+
+  });
+
+
+
+  function cellVal(row, col) {
+
+    const cells = row.querySelectorAll('td');
+
+    return cells[col] ? cells[col].textContent.trim() : '';
+
+  }
+
+
+
+  function sortTable() {
+
+    const rows = Array.from(tbody.querySelectorAll('tr:not(#siNoData)'));
+
+    rows.sort((a, b) => {
+
+      let av = cellVal(a, sortCol), bv = cellVal(b, sortCol);
+
+      const an = parseFloat(av.replace(/,/g, '')), bn = parseFloat(bv.replace(/,/g, ''));
+
+      let cmp = isNaN(an) || isNaN(bn) ? av.localeCompare(bv) : an - bn;
+
+      return sortAsc ? cmp : -cmp;
+
+    });
+
+    rows.forEach(r => tbody.appendChild(r));
+
+    reindex();
+
+  }
+
+
+
+  function filterRows() {
+
+    const q = (document.getElementById('siSearch').value || '').trim().toLowerCase();
+
+    const dateFrom = document.getElementById('siDateFrom').value;
+
+    const dateTo = document.getElementById('siDateTo').value;
+
+    const customer = (document.getElementById('siCustomer').value || '').trim();
+
+    const rows = tbody.querySelectorAll('tr:not(#siNoData)');
+
+    let vis = 0, total = 0;
+
+    rows.forEach(row => {
+
+      const text = (
+
+        (row.getAttribute('data-billno') || '') + ' ' +
+
+        (row.getAttribute('data-doctype') || '') + ' ' +
+
+        (row.getAttribute('data-customer') || '') + ' ' +
+
+        (row.getAttribute('data-customername') || '') + ' ' +
+
+        (row.getAttribute('data-orderno') || '') + ' ' +
+
+        (row.getAttribute('data-status') || '') + ' ' +
+
+        (row.getAttribute('data-billtype') || '') + ' ' +
+
+        (row.getAttribute('data-createdby') || '') + ' ' +
+
+        (row.getAttribute('data-remarks') || '')
+
+      ).toLowerCase();
+
+      const rowDate = row.getAttribute('data-date') || '';
+
+      const matchQ = !q || text.includes(q);
+
+      const matchFrom = !dateFrom || rowDate >= dateFrom;
+
+      const matchTo = !dateTo || rowDate <= dateTo;
+
+      const matchCustomer = !customer || (row.getAttribute('data-customer') || '') === customer;
+
+      const show = matchQ && matchFrom && matchTo && matchCustomer;
+
+      row.style.display = show ? '' : 'none';
+
+      if (show) { vis++; total += parseFloat(row.getAttribute('data-amount') || 0); }
+
+    });
+
+    reindex();
+
+    const totalRows = rows.length;
+
+    if (countEl) countEl.textContent = (q || dateFrom || dateTo || customer) ? (vis + ' of ' + totalRows + ' shown') : (totalRows + ' records');
+
+    if (totalEl) totalEl.textContent = total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  }
+
+
+
+  function reindex() {
+
+    let i = 1;
+
+    tbody.querySelectorAll('tr:not(#siNoData)').forEach(row => {
+
+      if (row.style.display !== 'none') {
+
+        const sl = row.querySelector('.sl-no');
+
+        if (sl) sl.textContent = i++;
+
+      }
+
+    });
+
+  }
+
+
+
+  filterRows();
+
+  window.filterRows = filterRows;
+
+})();
+
+
+
+function clearFilters() {
+
+  document.getElementById('siSearch').value = '';
+
+  document.getElementById('siCustomer').value = '';
+
+  const defaultDate = SALES_LIST_DEFAULT_DATE || new Date().toISOString().slice(0, 10);
+
+  document.getElementById('siDateFrom').value = defaultDate;
+
+  document.getElementById('siDateTo').value = defaultDate;
+
+  runSalesList();
+
+}
+
+
+
+(function wireSalesListRefresh() {
+
+  function hookRefresh() {
+
+    var btn = document.getElementById('listRefreshNow');
+
+    if (!btn || btn.dataset.siRunHooked === '1') return;
+
+    btn.dataset.siRunHooked = '1';
+
+    btn.addEventListener('click', function (e) {
+
+      e.preventDefault();
+
+      e.stopImmediatePropagation();
+
+      runSalesList();
+
+    }, true);
+
+  }
+
+  if (document.readyState === 'loading') {
+
+    document.addEventListener('DOMContentLoaded', function () {
+
+      setTimeout(hookRefresh, 0);
+
+    });
+
+  } else {
+
+    setTimeout(hookRefresh, 0);
+
+  }
+
+  ['siSearch', 'siDateFrom', 'siDateTo', 'siCustomer'].forEach(function (id) {
+
+    var el = document.getElementById(id);
+
+    if (!el) return;
+
+    el.addEventListener('keydown', function (e) {
+
+      if (e.key === 'Enter') {
+
+        e.preventDefault();
+
+        runSalesList();
+
+      }
+
+    });
+
+  });
+
+})();
+
+</script>
+
+{% endblock %}
+

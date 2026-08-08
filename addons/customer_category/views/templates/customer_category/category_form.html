@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit customer category{% else %}New customer category{% endif %}{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .setup-im-page .cat-setup-actions { display: none; }
+</style>
+
+<div class="im-page setup-im-page">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>Customer category / <span class="im-ref">{{ next_category_code }}</span> {% if not is_edit %}<span class="status-badge status-badge--new">New</span>{% endif %}</h1>
+      <div class="im-actions">
+        <button type="submit" form="categoryForm" class="im-btn-save">{% if is_edit %}Save{% else %}Create{% endif %}</button>
+        <a href="{{ url_for('customer_category.category_list') }}" class="im-btn-secondary">List</a>
+      </div>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, msg in messages %}
+        <p class="flash flash--{{ category }}" style="margin-bottom:12px;">{{ msg }}</p>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <section class="setup-im-shell customer-form-shell itemmaster-container">
+    <div class="cf-form-stack">
+      <div class="cf-form-panel">
+        <h2 class="cf-section-title">Category details</h2>
+  <form id="categoryForm" method="post" autocomplete="off" class="form-enter-focus-only" action="
+    {%- if is_edit -%}
+      {{ url_for('customer_category.category_edit', location_code=location_code, category_code=next_category_code) }}
+    {%- else -%}
+      {{ url_for('customer_category.category_create') }}
+    {%- endif -%}
+  ">
+    <input type="hidden" name="save_nonce" value="{{ global_save_nonce | default('') }}" />
+    <input type="hidden" name="locationcode" id="locHidden" value="{{ location_code }}" />
+    <div class="customer-details">
+    {% if not is_edit %}
+    <input type="hidden" name="category_create_once" value="{{ category_create_once }}" />
+    <div class="form-group" style="grid-column: 1 / -1;">
+      <label for="location_pick"><span>Branch</span></label>
+      <select class="input" id="location_pick" aria-label="Branch">
+        {% for loc in locations %}
+          <option value="{{ loc.code }}" {% if loc.code|string == location_code|string %}selected{% endif %}>
+            {{ loc.code }} — {{ loc.name or loc.code }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    {% else %}
+    <input type="hidden" name="category_edit_once" value="{{ category_edit_once }}" />
+    <div class="form-group" style="grid-column: 1 / -1;">
+      <label><span>Branch</span></label>
+      <span class="muted" style="flex:1;font-size:13px;">{{ location_code }}{% if location_name %} — {{ location_name }}{% endif %} · Code <strong>{{ next_category_code }}</strong></span>
+    </div>
+    {% endif %}
+
+    <div class="form-group">
+      <label for="categorycode_disp"><span>Category code</span></label>
+      <input class="input" id="categorycode_disp" type="text" readonly value="{{ next_category_code }}" />
+    </div>
+
+    <div class="form-group">
+      <label for="categoryname"><span>Name</span> <span style="color:#b45309">*</span></label>
+      <input class="input" id="categoryname" name="categoryname" type="text" maxlength="150" required
+        value="{{ (row_norm.categoryname or '')|default('', true)|trim }}" />
+    </div>
+
+    </div>
+
+    <div class="cat-setup-actions sm-actions">
+      <button type="submit" class="page-po__btn-primary">{% if is_edit %}Save{% else %}Create{% endif %}</button>
+    </div>
+  </form>
+
+  {% if is_edit %}
+  <form method="post" class="sm-actions form-enter-focus-only" style="border-top:none;padding-top:12px;margin-top:0;"
+        action="{{ url_for('customer_category.category_delete', location_code=location_code, category_code=next_category_code) }}"
+        onsubmit="return confirm('Delete this category?');">
+    <input type="hidden" name="category_delete_once" value="{{ category_delete_once }}" />
+    <button type="submit" class="page-po__btn-secondary" style="background:#fecaca;color:#991b1b;border-color:#f87171;">Delete</button>
+  </form>
+  {% endif %}
+      </div>
+    </div>
+  </section>
+</div>
+
+{% if not is_edit %}
+<script>
+(function() {
+  var pick = document.getElementById('location_pick');
+  var hidden = document.getElementById('locHidden');
+  if (!pick || !hidden) return;
+  pick.addEventListener('change', function() {
+    hidden.value = pick.value;
+    window.location = '{{ url_for("customer_category.category_create") }}'.split('?')[0] + '?pref_loc=' + encodeURIComponent(pick.value);
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

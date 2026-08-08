@@ -1,0 +1,3 @@
+# Nexa ERP — password auth for cx_Oracle on Windows (avoids ORA-12638 from NTS).
+SQLNET.AUTHENTICATION_SERVICES=(NONE)
+NAMES.DIRECTORY_PATH=(TNSNAMES, EZCONNECT)

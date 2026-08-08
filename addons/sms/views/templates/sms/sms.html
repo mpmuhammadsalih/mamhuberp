@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body { background: #fff !important; }
+  .page-po .sms-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .page-po .sms-customers { min-width: 0; }
+  #smsCustomerTable { min-width: 1200px; }
+  .page-po .sms-form-card { padding: 16px 0; }
+  .page-po .sms-form-card h3 { font-size: 14px; font-weight: 600; color: #212529; margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 2px solid #007bff; display: inline-block; }
+  .page-po .sms-form-card .form-group { margin-bottom: 12px; }
+  .page-po .sms-form-card .form-group label { font-size: 13px; color: #495057; margin-bottom: 4px; display: block; }
+  .page-po .sms-form-card .form-group .input, .page-po .sms-form-card .form-group select, .page-po .sms-form-card .form-group textarea { width: 100%; font-size: 13px; padding: 6px 0; border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; background: transparent; }
+  .page-po .sms-form-card .form-group textarea { min-height: 120px; resize: vertical; }
+  .page-po .sms-form-card .form-group .input:focus, .page-po .sms-form-card .form-group select:focus, .page-po .sms-form-card .form-group textarea:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .page-po .sms-form-card .form-actions { margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .page-po #selectedCustomersList { min-height: 60px; max-height: 150px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 8px; background: #fff; font-size: 13px; }
+  @media (max-width: 1200px) { .page-po .sms-layout { grid-template-columns: 1fr; } }
+</style>
+  <script>
+    window.locationName = "{{ location_name or '' }}";
+  </script>
+<div class="page-po" style="max-width: 1600px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Send SMS</h1>
+      <p class="page-po__muted">Send SMS to customers with outstanding balance.</p>
+    </div>
+  </div>
+
+  <div class="sms-layout">
+    <div class="sms-customers">
+      <div class="page-po__section-title">Customers with Outstanding</div>
+      <div class="page-po__filters">
+        <div style="display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="dateFrom">From Date</label>
+            <input type="date" id="dateFrom" class="input" value="{{ date_from }}" />
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="dateTo">To Date</label>
+            <input type="date" id="dateTo" class="input" value="{{ date_to }}" />
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <button type="button" class="page-po__btn-primary" id="btnFilter">Filter</button>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <button type="button" class="page-po__btn-secondary" id="btnClearFilter">Clear</button>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <button type="button" class="page-po__btn-secondary" id="btnExportExcel">Export to Excel</button>
+          </div>
+        </div>
+      </div>
+      {% if customers %}
+        <div class="table-responsive">
+          <div class="scroll-table">
+            <table class="table table-fixed" id="smsCustomerTable">
+              <thead>
+                <tr>
+                  <th style="width: 40px;">
+                    <input type="checkbox" id="selectAllCustomers" title="Select All" />
+                  </th>
+                  <th class="sortable" data-sort="slno">SL No<span class="sort-indicator"></span></th>
+                  <th class="sortable" data-sort="customercode">Code<span class="sort-indicator"></span></th>
+                  <th class="sortable" data-sort="customername">Customer Name<span class="sort-indicator"></span></th>
+                  <th class="sortable" data-sort="phoneno">Phone No<span class="sort-indicator"></span></th>
+                  <th class="sortable" data-sort="pendingamount">Pending<span class="sort-indicator"></span></th>
+                  <th class="sortable" data-sort="collectionamount">Collection<span class="sort-indicator"></span></th>
+                  <th class="sortable" data-sort="invoicecount">Invoice Count<span class="sort-indicator"></span></th>
+                  <th class="sortable" data-sort="outstandingamount">Outstanding<span class="sort-indicator"></span></th>
+                  <th class="sortable" data-sort="lastbilldate" style="min-width: 120px;">Last Bill Date<span class="sort-indicator"></span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for customer in customers %}
+                  {% set phone_display = customer.phoneno or '' %}
+                  {% if phone_display.startswith('+974') %}
+                    {% set phone_display = phone_display[4:] %}
+                  {% elif phone_display.startswith('974') %}
+                    {% set phone_display = phone_display[3:] %}
+                  {% endif %}
+                  <tr data-customer-code="{{ customer.customercode }}" data-phone="{{ phone_display }}" data-outstanding="{{ "%.2f"|format(customer.outstandingamount|float) }}" data-pending="{{ "%.2f"|format(customer.pendingamount|float) if customer.pendingamount else "0.00" }}" data-collection="{{ "%.2f"|format(customer.collectionamount|float) if customer.collectionamount else "0.00" }}">
+                    <td>
+                      <input type="checkbox" class="customer-checkbox" value="{{ customer.customercode }}" 
+                             data-name="{{ customer.customername or '-' }}" data-phone="{{ phone_display }}" 
+                             data-outstanding="{{ "%.2f"|format(customer.outstandingamount|float) }}"
+                             data-pending="{{ "%.2f"|format(customer.pendingamount|float) if customer.pendingamount else "0.00" }}"
+                             data-collection="{{ "%.2f"|format(customer.collectionamount|float) if customer.collectionamount else "0.00" }}" />
+                    </td>
+                    <td>{{ customer.slno }}</td>
+                    <td>{{ customer.customercode }}</td>
+                    <td>{{ customer.customername or '-' }}</td>
+                    <td>{{ phone_display or '-' }}</td>
+                    <td>{{ "%.2f"|format(customer.pendingamount|float) if customer.pendingamount else "0.00" }}</td>
+                    <td>{{ "%.2f"|format(customer.collectionamount|float) if customer.collectionamount else "0.00" }}</td>
+                    <td>{{ customer.invoicecount or 0 }}</td>
+                    <td>{{ "%.2f"|format(customer.outstandingamount|float) }}</td>
+                    <td>
+                      {% if customer.lastbilldate %}
+                        {{ customer.lastbilldate.strftime('%d-%m-%Y') if customer.lastbilldate else '-' }}
+                      {% else %}
+                        -
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+              <tfoot>
+                <tr class="table-total">
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td style="text-align: right; font-weight: bold;">Total:</td>
+                  <td></td>
+                  <td style="font-weight: bold;">
+                    {% set total_pending = customers|sum(attribute='pendingamount')|default(0) %}
+                    {{ "%.2f"|format(total_pending|float) }}
+                  </td>
+                  <td style="font-weight: bold;">
+                    {% set total_collection = customers|sum(attribute='collectionamount')|default(0) %}
+                    {{ "%.2f"|format(total_collection|float) }}
+                  </td>
+                  <td style="font-weight: bold;">
+                    {% set total_invoices = customers|sum(attribute='invoicecount')|default(0) %}
+                    {{ total_invoices|int }}
+                  </td>
+                  <td style="font-weight: bold;">
+                    {% set total_outstanding = customers|sum(attribute='outstandingamount')|default(0) %}
+                    {{ "%.2f"|format(total_outstanding|float) }}
+                  </td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+        {% elif has_filter %}
+          <p class="muted">No customers with outstanding balance found for the selected date range.</p>
+        {% else %}
+          <p class="muted">Use the date filters above and click <strong>Filter</strong> to load customers.</p>
+        {% endif %}
+      </div>
+
+      <div class="sms-actions">
+        <div class="sms-form-card">
+          <h3>Send SMS</h3>
+          <form id="smsForm" class="form">
+            <div class="form-group">
+              <label for="smsMask">Mask</label>
+              <select id="smsMask" name="mask" class="input" required>
+                {% if masks %}
+                  {% for mask_option in masks %}
+                    <option value="{{ mask_option.mask }}">{{ mask_option.mask }}</option>
+                  {% endfor %}
+                {% else %}
+                  <option value="{{ 'RAWABI' }}">RAWABI</option>
+                {% endif %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="smsContactNumber">Contact Number</label>
+              <input type="text" id="smsContactNumber" name="contact_number" class="input" readonly value="{{ contact_number or '' }}" placeholder="Contact number from tblsms" />
+            </div>
+            <div class="form-group">
+              <label for="smsMessage">Message</label>
+              <textarea id="smsMessage" name="message" rows="8" readonly class="input-readonly" required>Dear [Customer Name],
+Greetings from [Location Name].
+Cash invoice details: Collected today QR.[Collected].
+Total outstanding balance of QR.[Amount] is pending in your cash account.
+Kindly arrange payment before the due date.
+For any clarification, please contact [Contact Number].
+Thank you.</textarea>
+            </div>
+            <div class="form-group">
+              <label for="selectedCustomers">Selected Customers</label>
+              <div id="selectedCustomersList" style="min-height: 60px; max-height: 150px; overflow-y: auto; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px; background: #fff; font-size: 13px;">
+                <p class="muted" style="margin: 0; color: #9ca3af;">No customers selected</p>
+              </div>
+              <div style="margin-top: 8px; font-size: 12px; color: #6b7280;">
+                <span id="selectedCount">0</span> customer(s) selected
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="button" class="page-po__btn-primary" id="btnSendSingle">Send to Selected Customers</button>
+              <button type="button" class="page-po__btn-secondary" id="btnSendAll">Send to All Customers</button>
+            </div>
+          </form>
+          <div id="smsResults" class="sms-results" style="display: none;">
+            <h4>Results</h4>
+            <div id="smsResultsContent"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/sms.js') }}"></script>
+{% endblock %}

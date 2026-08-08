@@ -1,0 +1,809 @@
+{% extends "base.html" %}
+{% from 'includes/global_lookup_field.html' import global_lookup_field %}
+{% block title %}Cash Payment Voucher{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+{% set is_posted = (voucher.status or 'DRAFT')|upper == 'POSTED' %}
+<style>
+  .cpv-page {
+    max-width: 1680px;
+    padding: 10px 12px 24px;
+    --cpv-bg: #f5f7fb;
+    --cpv-card: #ffffff;
+    --cpv-soft: #f8fafc;
+    --cpv-border: #dbe3ef;
+    --cpv-text: #0f172a;
+    --cpv-muted: #64748b;
+    --cpv-blue: #0d6efd;
+    --cpv-green: #16a34a;
+    --cpv-red: #dc2626;
+  }
+  body:has(.cpv-page) { background: var(--cpv-bg) !important; }
+  .cpv-page .im-topbar { margin-bottom: 10px; padding-bottom: 0; border-bottom: 0; }
+  .cpv-page .im-topbar-main { align-items: center; }
+  .cpv-page .im-topbar h1 { font-size: 17px; font-weight: 400; }
+  .cpv-page .im-topbar h1 .im-ref { font-weight: 700; }
+  .cpv-status { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px; font-size: 12px; font-weight: 800; }
+  .cpv-status--draft { color: #92400e; background: #fffbeb; border: 1px solid #fde68a; }
+  .cpv-status--posted { color: #166534; background: #ecfdf5; border: 1px solid #bbf7d0; }
+  .cpv-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cpv-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 8px 14px; border-radius: 9px; border: 1px solid var(--cpv-border); background: #fff; color: #334155; font-size: 12px; font-weight: 800; text-decoration: none; cursor: pointer; box-shadow: 0 4px 10px rgba(15,23,42,.05); }
+  .cpv-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(15,23,42,.08); }
+  .cpv-btn--primary { color: #fff; border-color: var(--cpv-blue); background: #0d6efd; }
+  .cpv-btn--success { color: #fff; border-color: var(--cpv-green); background: #16a34a; }
+  .cpv-btn--danger { color: #fff; border-color: var(--cpv-red); background: linear-gradient(135deg, #dc2626, #ef4444); }
+  .cpv-btn[disabled] { opacity: .55; cursor: not-allowed; transform: none; }
+  .cpv-card { background: #eaf2fa; border: 1px solid #e5eaf2; border-radius: 10px; box-shadow: 0 10px 28px rgba(15,23,42,.06); overflow: hidden; margin-bottom: 12px; }
+  .cpv-card__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-bottom: 1px solid #dbe3ef; background: #eaf2fa; }
+  .cpv-card__head h2 { margin: 0; color: var(--cpv-text); font-size: 12px; font-weight: 850; }
+  .cpv-card__body { padding: 12px; }
+  .cpv-header-grid { display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 10px 14px; }
+  .cpv-field { min-width: 0; }
+  .cpv-field--wide { grid-column: span 2; }
+  .cpv-field--full { grid-column: 1 / -1; }
+  .cpv-field label { display: block; margin: 0 0 5px; color: #475569; font-size: 11px; font-weight: 850; text-transform: uppercase; letter-spacing: .025em; }
+  .cpv-input, .cpv-select, .cpv-textarea, .cpv-picker-field {
+    width: 100%;
+    min-height: 32px;
+    border: 1px solid var(--cpv-border);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--cpv-text);
+    font-size: 12px;
+    padding: 4px 8px;
+    box-sizing: border-box;
+    outline: none;
+    transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  .cpv-picker-field { display: flex; align-items: center; padding: 0; overflow: hidden; }
+  .cpv-picker-field .cpv-input { border: 0 !important; border-radius: 0; min-height: 30px; padding: 0 10px; background: transparent; }
+  .cpv-picker-field .search-picker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    min-height: 30px;
+    border: 0;
+    border-left: 1px solid #edf2f7;
+    background: #f8fafc;
+    color: #64748b;
+    cursor: pointer;
+  }
+  .cpv-picker-field .search-picker:hover { background: #e2e8f0; color: #0f172a; }
+  .cpv-textarea { min-height: 76px; resize: vertical; line-height: 1.45; }
+  .cpv-input:focus, .cpv-select:focus, .cpv-textarea:focus, .cpv-picker-field:focus-within { border-color: var(--cpv-blue); box-shadow: 0 0 0 3px rgba(13,110,253,.10); }
+  .cpv-input[readonly], .cpv-select:disabled, .cpv-textarea:disabled { background: #f1f5f9; color: #64748b; cursor: not-allowed; }
+  .cpv-grid-wrap { overflow: auto; border: 1px solid #e5eaf2; border-radius: 12px; background: #fff; }
+  .cpv-grid { width: 100%; min-width: 920px; border-collapse: separate; border-spacing: 0; }
+  .cpv-grid th { position: sticky; top: 0; z-index: 1; padding: 10px; background: #f8fafc; color: #334155; border-bottom: 1px solid #e5eaf2; font-size: 11px; font-weight: 850; text-align: left; text-transform: uppercase; letter-spacing: .03em; }
+  .cpv-grid td { padding: 8px 10px; border-bottom: 1px solid #eef2f7; vertical-align: middle; }
+  .cpv-grid tbody tr:hover { background: #f8fbff; }
+  .cpv-grid .num { text-align: right; }
+  .cpv-line-no { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; border-radius: 999px; background: #f0f9ff; color: #1d4ed8; font-size: 12px; font-weight: 850; }
+  .cpv-grid .cpv-input, .cpv-grid .cpv-select, .cpv-grid .cpv-picker-field { min-height: 32px; border-radius: 6px; }
+  .cpv-del { width: 34px; height: 34px; border: 1px solid #fecaca; border-radius: 9px; color: #b91c1c; background: #fff5f5; cursor: pointer; font-weight: 900; }
+  .cpv-del:hover { background: #fee2e2; }
+  .cpv-summary { display: flex; align-items: center; justify-content: flex-start; gap: 12px; padding: 12px 0 0; background: transparent; }
+  .cpv-summary__stats { display: flex; flex-wrap: wrap; gap: 10px; }
+  .cpv-stat { min-width: 150px; padding: 9px 12px; border: 1px solid #e5eaf2; border-radius: 12px; background: #f8fafc; }
+  .cpv-stat span { display: block; color: var(--cpv-muted); font-size: 11px; font-weight: 750; }
+  .cpv-stat strong { display: block; margin-top: 2px; color: var(--cpv-text); font-size: 18px; font-weight: 900; }
+  .cpv-audit { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: 10px; color: var(--cpv-muted); font-size: 12px; }
+  .cpv-audit b { display: block; color: #334155; font-size: 11px; text-transform: uppercase; letter-spacing: .025em; }
+  .cpv-help { color: var(--cpv-muted); font-size: 12px; }
+  .cpv-submit-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 12000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, .38);
+  }
+  .cpv-submit-overlay.show { display: flex; }
+  .cpv-submit-box {
+    min-width: 270px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 18px;
+    border-radius: 12px;
+    background: #fff;
+    color: #1e293b;
+    box-shadow: 0 16px 36px rgba(15, 23, 42, .26);
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .cpv-submit-spinner {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid #dbe3ef;
+    border-top-color: #0d6efd;
+    animation: cpv-submit-spin .75s linear infinite;
+  }
+  @keyframes cpv-submit-spin { to { transform: rotate(360deg); } }
+  .cpv-field .global-lookup { width: 100%; }
+  .cpv-field .global-lookup__row { width: 100%; }
+  .cpv-field .global-lookup__input { min-height: 30px; font-size: 12px; }
+  .cpv-grid .global-lookup--inline { width: 100%; }
+  .cpv-grid .global-lookup__input { min-height: 30px; font-size: 12px; }
+  @media (max-width: 1100px) {
+    .cpv-header-grid { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+    .cpv-field--wide { grid-column: 1 / -1; }
+    .cpv-audit { grid-template-columns: repeat(2, minmax(160px, 1fr)); }
+  }
+  @media (max-width: 700px) {
+    .cpv-summary { align-items: stretch; flex-direction: column; }
+    .cpv-header-grid, .cpv-audit { grid-template-columns: 1fr; }
+    .cpv-actions { width: 100%; }
+    .cpv-btn { flex: 1 1 auto; }
+  }
+  @media print {
+    .sidebar, .topbar, .cpv-actions, .cpv-del, .cpv-help, input[type="file"] { display: none !important; }
+    .cpv-page { max-width: none; padding: 0; }
+    .cpv-card { box-shadow: none; border-color: #cbd5e1; }
+    .cpv-summary { box-shadow: none; }
+  }
+</style>
+
+<div class="im-page setup-im-page setup-im-extra-wide nexa-setup-list-page cpv-page"
+     data-transaction-audit="Payment"
+     data-transaction-no="{{ voucher.voucher_no }}"
+     data-audit-intercept-form="#cpvForm"
+     data-track-root=".cpv-page">
+  <form id="cpvForm" method="post" enctype="multipart/form-data" autocomplete="off">
+    <input type="hidden" name="save_nonce" value="{{ global_save_nonce | default('') }}">
+    <input type="hidden" name="action" id="cpvAction" value="save">
+    <input type="hidden" name="existing_attachment_path" value="{{ voucher.attachment_path or '' }}">
+
+    <div class="im-topbar">
+      <div class="im-topbar-main">
+        <h1>Cash Payment Voucher / <span class="im-ref">{{ voucher.voucher_no }}</span></h1>
+        <div class="im-actions cpv-actions">
+          <span class="cpv-status {{ 'cpv-status--posted' if is_posted else 'cpv-status--draft' }}">{{ 'Posted' if is_posted else 'Draft' }}</span>
+          <button type="submit" class="im-btn-save cpv-btn cpv-btn--primary" data-action="save" data-tra-save {{ 'disabled' if is_posted else '' }}><i class="bi bi-save"></i> Save draft</button>
+          <button type="submit" class="cpv-btn cpv-btn--success" data-action="post" {{ 'disabled' if is_posted else '' }}><i class="bi bi-check2-circle"></i> Post</button>
+          {% if is_posted %}
+          <a class="im-btn-secondary cpv-btn" id="cpvPdfTop" href="{{ url_for('accounts.cash_payment_voucher_pdf', voucher_no=voucher.voucher_no) }}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+          {% endif %}
+          <button type="button" class="im-btn-secondary cpv-btn" id="cpvPrint"><i class="bi bi-printer"></i> Print</button>
+          <a class="im-btn-secondary cpv-btn" href="{{ url_for('accounts.cash_payment_voucher_list') }}"><i class="bi bi-list-ul"></i> List</a>
+          <a class="im-btn-secondary cpv-btn" href="{{ url_for('accounts.cash_payment_voucher', new=1) }}"><i class="bi bi-arrow-counterclockwise"></i> Clear</a>
+        </div>
+      </div>
+    </div>
+
+    <section class="cpv-card">
+      <div class="cpv-card__head">
+        <h2>Header</h2>
+        <span class="cpv-help">Type to search accounts. Enter → next field, Esc → back. Ctrl+S save draft, Ctrl+Enter post, Ctrl+P print · save once</span>
+      </div>
+      <div class="cpv-card__body">
+        <div class="cpv-header-grid">
+          <div class="cpv-field">
+            <label for="voucher_no">Voucher Number</label>
+            <input class="cpv-input" id="voucher_no" name="voucher_no" value="{{ voucher.voucher_no }}" readonly>
+          </div>
+          <div class="cpv-field">
+            <label for="voucher_date">Voucher Date</label>
+            <input class="cpv-input" id="voucher_date" type="date" name="voucher_date" value="{{ (voucher.voucher_date|string)[:10] if voucher.voucher_date else today }}" {{ 'readonly' if is_posted else '' }}>
+            <p class="cpv-help" id="cpvVoucherDateHint" style="margin:6px 0 0;">Closed accounting periods cannot be selected (Period Closing).</p>
+          </div>
+          <div class="cpv-field">
+            <label for="reference_no">Reference Number</label>
+            <input class="cpv-input" id="reference_no" name="reference_no" maxlength="50" placeholder="Optional reference" value="{{ voucher.reference_no or '' }}" {{ 'readonly' if is_posted else '' }}>
+          </div>
+          {{ global_lookup_field(
+            field_id='cpvPetty',
+            label='Petty Cash Account',
+            name='petty_cash_account',
+            kind='cpv_petty',
+            value_code=voucher.petty_cash_account or '',
+            value_label=voucher.petty_cash_label or '',
+            placeholder='Search petty cash account…',
+            no_default=true,
+            field_class='cpv-field',
+            input_class='global-lookup__input odoo-lookup__input cpv-input',
+            readonly=is_posted,
+            disabled=is_posted,
+          ) }}
+          {{ global_lookup_field(
+            field_id='cpvParent',
+            label='Expense Parent Account',
+            name='expense_parent_account',
+            kind='cpv_expense_parent',
+            value_code=voucher.expense_parent_account or '',
+            value_label=voucher.expense_parent_label or '',
+            placeholder='Search expense parent…',
+            no_default=true,
+            field_class='cpv-field',
+            input_class='global-lookup__input odoo-lookup__input cpv-input',
+            readonly=is_posted,
+            disabled=is_posted,
+          ) }}
+          <div class="cpv-field">
+            <label for="attachment">Attachment</label>
+            <input class="cpv-input" id="attachment" type="file" name="attachment" {{ 'disabled' if is_posted else '' }}>
+            {% if voucher.attachment_path %}<div class="cpv-help">Attached: {{ voucher.attachment_path }}</div>{% endif %}
+          </div>
+          <div class="cpv-field cpv-field--full">
+            <label for="narration">Narration</label>
+            <textarea class="cpv-textarea" id="narration" name="narration" placeholder="Enter payment narration" {{ 'disabled' if is_posted else '' }}>{{ voucher.narration or '' }}</textarea>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cpv-card">
+      <div class="cpv-card__head">
+        <h2>Expense Lines</h2>
+        <button type="button" class="cpv-btn" id="cpvAddRow" {{ 'disabled' if is_posted else '' }}><i class="bi bi-plus-lg"></i> Add Row</button>
+      </div>
+      <div class="cpv-card__body">
+        <div class="cpv-grid-wrap">
+          <table class="cpv-grid" id="cpvGrid">
+            <thead>
+              <tr>
+                <th style="width:80px;">Line</th>
+                <th style="min-width:280px;">Expense Sub Account</th>
+                <th>Description</th>
+                <th class="num" style="width:170px;">Amount</th>
+                <th style="width:80px;">Delete</th>
+              </tr>
+            </thead>
+            <tbody id="cpvLines"></tbody>
+          </table>
+        </div>
+        <div class="cpv-summary">
+          <div class="cpv-summary__stats">
+            <div class="cpv-stat"><span>Total Amount</span><strong id="cpvTotal">0.00</strong></div>
+            <div class="cpv-stat"><span>Total Lines</span><strong id="cpvLineCount">0</strong></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cpv-card">
+      <div class="cpv-card__head">
+        <h2>Audit Information</h2>
+        {% if is_posted %}
+        <a class="cpv-btn" href="{{ url_for('accounts.cash_payment_voucher_pdf', voucher_no=voucher.voucher_no) }}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> Cash Payment PDF</a>
+        {% endif %}
+        {% if voucher.gl_voucher_no %}
+        <a class="cpv-btn" href="{{ url_for('accounts.journal_voucher_view', voucher_no=voucher.gl_voucher_no) }}"><i class="bi bi-journal-text"></i> View GL {{ voucher.gl_voucher_no }}</a>
+        {% endif %}
+      </div>
+      <div class="cpv-card__body">
+        <div class="cpv-audit">
+          <div><b>Created By</b>{{ voucher.created_by or '-' }}</div>
+          <div><b>Created At</b>{{ voucher.created_at or '-' }}</div>
+          <div><b>Posted By</b>{{ voucher.posted_by or '-' }}</div>
+          <div><b>Posted At</b>{{ voucher.posted_at or '-' }}</div>
+        </div>
+      </div>
+    </section>
+
+  </form>
+</div>
+
+<div class="cpv-submit-overlay" id="cpvSubmitOverlay" aria-hidden="true" role="status">
+  <div class="cpv-submit-box">
+    <span class="cpv-submit-spinner" aria-hidden="true"></span>
+    <span id="cpvSubmitOverlayText">Processing, please wait...</span>
+  </div>
+</div>
+
+<script type="application/json" id="cpvClosedPeriodsJson">{{ (closed_periods or [])|tojson }}</script>
+<script src="{{ url_for('static', filename='js/period_date_guard.js') }}?v=1"></script>
+<script>
+  (function () {
+    const allAccounts = {{ accounts|tojson }};
+    const initialLines = {{ lines|tojson }};
+    const posted = {{ 'true' if is_posted else 'false' }};
+    const CPV_LINE_LOOKUP_URL = {{ url_for('api.global_lookup', kind='cpv_expense_line')|tojson }};
+    const tbody = document.getElementById('cpvLines');
+    const parentInput = document.querySelector('#cpvForm input[name="expense_parent_account"]');
+    const pettyInput = document.querySelector('#cpvForm input[name="petty_cash_account"]');
+    const form = document.getElementById('cpvForm');
+    const submitOverlay = document.getElementById('cpvSubmitOverlay');
+    const submitOverlayText = document.getElementById('cpvSubmitOverlayText');
+    const actionInput = document.getElementById('cpvAction');
+    const totalEl = document.getElementById('cpvTotal');
+    const countEl = document.getElementById('cpvLineCount');
+    const kpiTotalEl = document.getElementById('cpvKpiTotal');
+    const kpiLineCountEl = document.getElementById('cpvKpiLineCount');
+    const kpiPettyEl = document.getElementById('cpvKpiPetty');
+    const cpvPeriodGuard = (!posted && window.PeriodDateGuard && window.PeriodDateGuard.bind)
+      ? window.PeriodDateGuard.bind(
+          document.getElementById('voucher_date'),
+          window.PeriodDateGuard.fromJsonScript('cpvClosedPeriodsJson'),
+          { hintEl: document.getElementById('cpvVoucherDateHint') }
+        )
+      : null;
+
+    const params = new URLSearchParams(window.location.search);
+    const autoPdfVoucher = params.get('open_cash_payment_voucher_pdf');
+    if (autoPdfVoucher) {
+      const pdfBase = "{{ url_for('accounts.cash_payment_voucher_pdf') }}?voucher_no=";
+      window.open(pdfBase + encodeURIComponent(autoPdfVoucher), '_blank', 'noopener');
+      params.delete('open_cash_payment_voucher_pdf');
+      const next = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (next ? '?' + next : '') + window.location.hash);
+    }
+
+    function toNumber(value) {
+      const n = Number(String(value || '').replace(/,/g, ''));
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    function accountLabel(code) {
+      const acc = allAccounts.find((item) => String(item.code || '') === String(code || ''));
+      return acc ? `${acc.code} - ${acc.name || ''}` : (code || '');
+    }
+
+    function syncHeaderDisplays() {
+      if (kpiPettyEl && pettyInput) kpiPettyEl.textContent = pettyInput.value || '—';
+    }
+
+    function htmlEscape(value) {
+      return String(value || '').replace(/[&<>"']/g, function (ch) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+      });
+    }
+
+    function lookupDropdownOpen(el) {
+      const root = el && el.closest('.global-lookup, .odoo-lookup');
+      if (!root || !root.classList.contains('is-open')) return false;
+      const dd = root.id ? document.querySelector('[data-lookup-owner="' + root.id + '"]') : null;
+      return !!(dd && dd.style.display !== 'none' && dd.querySelector('.global-lookup__option, .odoo-lookup__option'));
+    }
+
+    function closeLookupDropdown(el) {
+      const root = el && el.closest('.global-lookup, .odoo-lookup');
+      if (!root) return;
+      root.classList.remove('is-open');
+      const inp = root.querySelector('.global-lookup__input, .odoo-lookup__input');
+      if (inp) inp.setAttribute('aria-expanded', 'false');
+      const dd = root.id ? document.querySelector('[data-lookup-owner="' + root.id + '"]') : null;
+      if (dd) { dd.style.display = 'none'; dd.innerHTML = ''; }
+    }
+
+    function collectCpvNavFields() {
+      const fields = [];
+      ['voucher_date', 'reference_no'].forEach(function (name) {
+        const el = form.querySelector('input[name="' + name + '"]');
+        if (el && !el.disabled) fields.push(el);
+      });
+      form.querySelectorAll('#cpvPettyDisplay, #cpvParentDisplay').forEach(function (el) {
+        if (el && !el.disabled) fields.push(el);
+      });
+      const narr = document.getElementById('narration');
+      if (narr && !narr.disabled) fields.push(narr);
+      Array.prototype.forEach.call(tbody.querySelectorAll('tr'), function (tr) {
+        const acc = tr.querySelector('.cpv-line-account-display');
+        const desc = tr.querySelector('[name="description[]"]');
+        const amt = tr.querySelector('[name="amount[]"]');
+        if (acc && !acc.disabled) fields.push(acc);
+        if (desc && !desc.disabled) fields.push(desc);
+        if (amt && !amt.disabled) fields.push(amt);
+      });
+      return fields;
+    }
+
+    function focusCpvField(el) {
+      if (!el || el.disabled) return;
+      requestAnimationFrame(function () {
+        el.focus({ preventScroll: false });
+        if (typeof el.select === 'function' && el.type !== 'date' && !el.readOnly) {
+          try { el.select(); } catch (err) { /* readonly */ }
+        }
+      });
+    }
+
+    function cpvFocusNext(el) {
+      const fields = collectCpvNavFields();
+      const idx = fields.indexOf(el);
+      if (idx >= 0 && idx < fields.length - 1) {
+        focusCpvField(fields[idx + 1]);
+        return;
+      }
+      const tr = el.closest('tr');
+      if (tr && tr.parentElement === tbody) {
+        const nextTr = tr.nextElementSibling;
+        if (nextTr) {
+          focusCpvField(nextTr.querySelector('.cpv-line-account-display'));
+          return;
+        }
+        const newRow = addRow();
+        if (newRow) focusCpvField(newRow.querySelector('.cpv-line-account-display'));
+      }
+    }
+
+    function cpvFocusPrev(el) {
+      const fields = collectCpvNavFields();
+      const idx = fields.indexOf(el);
+      if (idx > 0) {
+        focusCpvField(fields[idx - 1]);
+        return;
+      }
+      const tr = el.closest('tr');
+      if (tr && tr.previousElementSibling) {
+        focusCpvField(tr.previousElementSibling.querySelector('[name="amount[]"]'));
+      } else if (document.getElementById('cpvParentDisplay')) {
+        focusCpvField(document.getElementById('cpvParentDisplay'));
+      }
+    }
+
+    function cpvLineRow(el) {
+      if (!el || !tbody) return null;
+      const tr = el.closest('tr');
+      if (!tr || tr.parentElement !== tbody) return null;
+      return tr;
+    }
+
+    function onCpvNavKeydown(e) {
+      if (posted || (e.key !== 'Enter' && e.key !== 'Escape')) return;
+      const el = e.target;
+      if (!el.closest('#cpvForm')) return;
+      const isNav = el.matches(
+        'input[name="voucher_date"], input[name="reference_no"], #cpvPettyDisplay, #cpvParentDisplay, '
+        + '#narration, .cpv-line-account-display, input[name="description[]"], input[name="amount[]"]'
+      );
+      if (!isNav) return;
+
+      if (e.key === 'Enter') {
+        const tr = cpvLineRow(el);
+
+        if (el.matches('.cpv-line-account-display, .global-lookup__input.cpv-line-account-display') && tr) {
+          if (parentInput && !parentInput.value) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            alert('Select Expense Parent Account first.');
+            focusCpvField(document.getElementById('cpvParentDisplay'));
+            return;
+          }
+          if (lookupDropdownOpen(el)) return;
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          closeLookupDropdown(el);
+          focusCpvField(tr.querySelector('input[name="description[]"]'));
+          return;
+        }
+
+        if (el.matches('input[name="description[]"]') && tr) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          focusCpvField(tr.querySelector('input[name="amount[]"]'));
+          return;
+        }
+
+        if (el.matches('input[name="amount[]"]') && tr) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          totals();
+          if (tr === tbody.lastElementChild) ensureBlankRow();
+          const nextTr = tr.nextElementSibling || tbody.lastElementChild;
+          focusCpvField(nextTr ? nextTr.querySelector('.cpv-line-account-display') : null);
+          return;
+        }
+
+        if (lookupDropdownOpen(el)) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        cpvFocusNext(el);
+        return;
+      }
+
+      if (lookupDropdownOpen(el)) closeLookupDropdown(el);
+      e.preventDefault();
+      e.stopPropagation();
+      cpvFocusPrev(el);
+    }
+
+    function initCpvLookups(scope) {
+      if (!window.GlobalLookup || !window.GlobalLookup.initAll) return;
+      window.GlobalLookup.initAll(scope || form);
+      (scope || form).querySelectorAll('.cpv-line-account-lookup').forEach(function (root) {
+        root.addEventListener('global-lookup:select', function () {
+          const tr = root.closest('tr');
+          if (!tr) return;
+          ensureBlankRow();
+          totals();
+          focusCpvField(tr.querySelector('input[name="description[]"]'));
+        });
+      });
+      const parentLookup = document.getElementById('cpvParentDisplay');
+      if (parentLookup) {
+        parentLookup.addEventListener('global-lookup:select', function () {
+          clearInvalidLineAccounts();
+        });
+      }
+    }
+
+    function bindCpvEnterNav() {
+      if (posted || !form || form.dataset.cpvEnterNav === '1') return;
+      form.dataset.cpvEnterNav = '1';
+      form.addEventListener('keydown', onCpvNavKeydown, true);
+    }
+
+    function renumber() {
+      Array.from(tbody.querySelectorAll('tr')).forEach((row, idx) => {
+        row.querySelector('.cpv-line-no').textContent = String(idx + 1);
+      });
+    }
+
+    function totals() {
+      let total = 0;
+      let count = 0;
+      tbody.querySelectorAll('tr').forEach((row) => {
+        const account = row.querySelector('[name="expense_account[]"]').value;
+        const amount = toNumber(row.querySelector('[name="amount[]"]').value);
+        if (account || amount > 0) count += 1;
+        if (amount > 0) total += amount;
+      });
+      totalEl.textContent = total.toFixed(2);
+      countEl.textContent = String(count);
+      if (kpiTotalEl) kpiTotalEl.textContent = total.toFixed(2);
+      if (kpiLineCountEl) kpiLineCountEl.textContent = String(count);
+    }
+
+    function clearInvalidLineAccounts() {
+      const parentCode = parentInput ? parentInput.value : '';
+      const validCodes = new Set(
+        allAccounts
+          .filter((acc) => String(acc.status || 'ACTIVE').toUpperCase() === 'ACTIVE'
+            && acc.is_postable
+            && String(acc.parent_code || '') === String(parentCode || ''))
+          .map((acc) => String(acc.code || ''))
+      );
+      tbody.querySelectorAll('tr').forEach((row) => {
+        const hidden = row.querySelector('[name="expense_account[]"]');
+        const display = row.querySelector('.cpv-line-account-display');
+        const clearBtn = row.querySelector('.global-lookup__clear, .odoo-lookup__clear');
+        if (hidden && hidden.value && !validCodes.has(hidden.value)) {
+          hidden.value = '';
+          if (display) display.value = '';
+          if (clearBtn) clearBtn.hidden = true;
+        }
+      });
+      totals();
+    }
+
+    function lineAccountLookupHtml(code, label) {
+      const ro = posted ? 'readonly disabled' : '';
+      return (
+        '<div class="global-lookup odoo-lookup cpv-line-account-lookup global-lookup--inline"'
+        + ' data-search-url="' + htmlEscape(CPV_LINE_LOOKUP_URL) + '"'
+        + ' data-no-default="1" data-extra-from="#cpvForm input[name=\'expense_parent_account\']"'
+        + ' data-extra-param="parent_code" data-placeholder="Search expense sub account…"'
+        + ' data-limit="8" data-min-chars="1" data-enter-focus-next="input[name=\'description[]\']">'
+        + '<div class="global-lookup__row odoo-lookup__row">'
+        + '<input type="text" class="global-lookup__input odoo-lookup__input cpv-input cpv-line-account-display"'
+        + ' autocomplete="off" placeholder="Search expense sub account…" value="' + htmlEscape(label) + '" ' + ro + '>'
+        + '<input type="hidden" class="global-lookup__value odoo-lookup__value" name="expense_account[]" value="' + htmlEscape(code) + '">'
+        + '<button type="button" class="global-lookup__clear odoo-lookup__clear" aria-label="Clear account"'
+        + (code ? '' : ' hidden') + '>×</button>'
+        + '</div></div>'
+      );
+    }
+
+    function addRow(line) {
+      line = line || {};
+      const code = line.account_code || '';
+      const label = accountLabel(code);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><span class="cpv-line-no">1</span></td>
+        <td>${lineAccountLookupHtml(code, label)}</td>
+        <td><input class="cpv-input" name="description[]" maxlength="250" value="${String(line.description || '').replace(/"/g, '&quot;')}" placeholder="Description" data-cpv-line-field="description" ${posted ? 'readonly' : ''}></td>
+        <td><input class="cpv-input num" name="amount[]" type="number" min="0" step="0.01" value="${line.amount ? Number(line.amount).toFixed(2) : ''}" placeholder="0.00" data-cpv-line-field="amount" ${posted ? 'readonly' : ''}></td>
+        <td><button type="button" class="cpv-del" title="Delete row" ${posted ? 'disabled' : ''}>×</button></td>
+      `;
+      tbody.appendChild(tr);
+      renumber();
+      totals();
+      initCpvLookups(tr);
+      return tr;
+    }
+
+    function ensureBlankRow() {
+      if (posted) return;
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      const last = rows[rows.length - 1];
+      if (!last) {
+        addRow();
+        return;
+      }
+      const account = last.querySelector('[name="expense_account[]"]').value;
+      const amount = toNumber(last.querySelector('[name="amount[]"]').value);
+      if (account || amount > 0) addRow();
+    }
+
+    document.getElementById('cpvAddRow').addEventListener('click', () => {
+      const row = addRow();
+      const acc = row.querySelector('.cpv-line-account-display');
+      if (acc) focusCpvField(acc);
+    });
+
+    tbody.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('.cpv-del');
+      if (!btn || posted) return;
+      btn.closest('tr').remove();
+      if (!tbody.querySelector('tr')) addRow();
+      renumber();
+      totals();
+    });
+
+    tbody.addEventListener('input', (ev) => {
+      if (ev.target.matches('[name="amount[]"]')) {
+        if (toNumber(ev.target.value) < 0) ev.target.value = '0';
+        if (ev.target.closest('tr') === tbody.lastElementChild && toNumber(ev.target.value) > 0) ensureBlankRow();
+        totals();
+      }
+    });
+
+    function validateBeforeSubmit(action) {
+      if (cpvPeriodGuard) {
+        const closedMsg = cpvPeriodGuard.message();
+        if (closedMsg) {
+          cpvPeriodGuard.refresh();
+          return closedMsg;
+        }
+      }
+      const rows = Array.from(tbody.querySelectorAll('tr')).filter((row) => {
+        const account = row.querySelector('[name="expense_account[]"]').value;
+        const amount = toNumber(row.querySelector('[name="amount[]"]').value);
+        return account || amount > 0 || row.querySelector('[name="description[]"]').value.trim();
+      });
+      if (!pettyInput.value) return 'Petty Cash Account is required.';
+      if (!parentInput.value) return 'Expense Parent Account is required.';
+      if (!rows.length) return 'At least one line item is required.';
+      for (let i = 0; i < rows.length; i += 1) {
+        const account = rows[i].querySelector('[name="expense_account[]"]').value;
+        const description = rows[i].querySelector('[name="description[]"]').value.trim();
+        const amount = toNumber(rows[i].querySelector('[name="amount[]"]').value);
+        if (!account) return `Line ${i + 1}: Expense Sub Account is required.`;
+        if (!description) return `Line ${i + 1}: Description is required.`;
+        if (amount <= 0) return `Line ${i + 1}: Amount must be greater than zero.`;
+      }
+      if (action === 'post' && !window.confirm('Post this Cash Payment Voucher and create the GL entry?')) {
+        return 'cancelled';
+      }
+      return '';
+    }
+
+    function setSubmitLocked(action) {
+      form.dataset.submitLocked = '1';
+      const msg = action === 'post'
+        ? 'Posting Cash Payment Voucher…'
+        : 'Saving Cash Payment Voucher draft…';
+      if (typeof window.showLoadingOverlay === 'function') {
+        window.showLoadingOverlay(msg);
+      }
+      if (submitOverlayText) submitOverlayText.textContent = msg;
+      if (submitOverlay) {
+        submitOverlay.classList.add('show');
+        submitOverlay.setAttribute('aria-hidden', 'false');
+      }
+      window.setTimeout(() => {
+        if (form.dataset.submitLocked !== '1') return;
+        form.querySelectorAll('button[type="submit"]').forEach((btn) => {
+          btn.disabled = true;
+        });
+      }, 0);
+    }
+
+    function ensureSubmitUiReady() {
+      resetSubmitUi();
+      if (typeof window.reEnableFormSubmit === 'function') {
+        window.reEnableFormSubmit(form);
+      }
+    }
+
+    function resetSubmitUi() {
+      form.dataset.submitLocked = '0';
+      form.querySelectorAll('button[type="submit"]').forEach((btn) => {
+        if (!posted) btn.disabled = false;
+      });
+      if (typeof window.hideLoadingOverlay === 'function') {
+        window.hideLoadingOverlay();
+      }
+      if (submitOverlay) {
+        submitOverlay.classList.remove('show');
+        submitOverlay.setAttribute('aria-hidden', 'true');
+      }
+    }
+
+    function bindAuditSubmitReset() {
+      if (form.dataset.cpvAuditResetBound === '1') return;
+      form.dataset.cpvAuditResetBound = '1';
+      form.addEventListener('submit', () => {
+        if (form.dataset.submitLocked !== '1') return;
+        const poll = window.setInterval(() => {
+          if (form.dataset.traSubmitting === '1') return;
+          window.clearInterval(poll);
+          resetSubmitUi();
+        }, 120);
+        window.setTimeout(() => { window.clearInterval(poll); }, 120000);
+      }, false);
+    }
+
+    function onCpvFormSubmit(ev) {
+      if (posted) {
+        ev.preventDefault();
+        return;
+      }
+      if (form.dataset.submitLocked === '1' || form.dataset.traSubmitting === '1') {
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        return;
+      }
+      const submitter = ev.submitter;
+      const action = submitter ? submitter.dataset.action || 'save' : actionInput.value || 'save';
+      actionInput.value = action;
+      const message = validateBeforeSubmit(action);
+      if (message) {
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        if (message !== 'cancelled') alert(message);
+        ensureSubmitUiReady();
+        return;
+      }
+      setSubmitLocked(action);
+    }
+
+    function submitCpvForm(action) {
+      if (posted || form.dataset.submitLocked === '1' || form.dataset.traSubmitting === '1') return;
+      actionInput.value = action || 'save';
+      const message = validateBeforeSubmit(actionInput.value);
+      if (message) {
+        if (message !== 'cancelled') alert(message);
+        return;
+      }
+      const btn = form.querySelector('button[type="submit"][data-action="' + actionInput.value + '"]');
+      if (typeof form.requestSubmit === 'function') {
+        form.requestSubmit(btn || undefined);
+      } else if (btn) {
+        btn.click();
+      } else {
+        form.submit();
+      }
+    }
+
+    form.addEventListener('submit', onCpvFormSubmit, true);
+    bindAuditSubmitReset();
+    ensureSubmitUiReady();
+    window.addEventListener('pageshow', ensureSubmitUiReady);
+
+    function printPage() { window.print(); }
+    document.getElementById('cpvPrint').addEventListener('click', printPage);
+    const cpvPrintBottom = document.getElementById('cpvPrintBottom');
+    if (cpvPrintBottom) cpvPrintBottom.addEventListener('click', printPage);
+
+    document.addEventListener('keydown', (ev) => {
+      if (!ev.ctrlKey || posted || form.dataset.submitLocked === '1' || form.dataset.traSubmitting === '1') return;
+      const key = ev.key.toLowerCase();
+      if (key === 's') {
+        ev.preventDefault();
+        submitCpvForm('save');
+      } else if (key === 'enter') {
+        ev.preventDefault();
+        submitCpvForm('post');
+      } else if (key === 'p') {
+        ev.preventDefault();
+        printPage();
+      }
+    });
+
+    (initialLines.length ? initialLines : [{}]).forEach(addRow);
+    ensureBlankRow();
+    initCpvLookups(form);
+    bindCpvEnterNav();
+    syncHeaderDisplays();
+    clearInvalidLineAccounts();
+    totals();
+  })();
+</script>
+<script src="{{ url_for('static', filename='js/transaction_recording_client.js') }}?v=7"></script>
+{% endblock %}

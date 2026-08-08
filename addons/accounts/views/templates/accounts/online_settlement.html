@@ -1,0 +1,371 @@
+{% extends "base.html" %}
+{% from 'includes/global_lookup_field.html' import global_lookup_field %}
+{% block title %}Online Settlement{% endblock %}
+{% block content %}
+{% set fd = form_defaults or {} %}
+<style>
+  .os-page { max-width: 1600px; margin: 0 auto; padding-bottom: 32px; }
+  .os-toolbar {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 14px;
+  }
+  .os-toolbar button, .os-toolbar label.os-import {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 7px 12px; border-radius: 7px; border: 1px solid #cbd5e1;
+    background: #f8fafc; font-size: 12px; font-weight: 600; color: #334155; cursor: pointer;
+  }
+  .os-toolbar button:hover, .os-toolbar label.os-import:hover { background: #e2e8f0; }
+  .os-toolbar .os-primary { background: #1a56a4; color: #fff; border-color: #1a56a4; }
+  .os-toolbar .os-primary:hover { background: #144a8a; }
+  .os-toolbar .os-success { background: #059669; color: #fff; border-color: #059669; }
+  .os-header {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; margin-bottom: 14px;
+  }
+  @media (max-width: 1100px) { .os-header { grid-template-columns: 1fr 1fr; } }
+  .os-field label { display: block; font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 4px; text-transform: uppercase; }
+  .os-field input, .os-field select {
+    width: 100%; padding: 7px 9px; border: 1px solid #cbd5e1; border-radius: 7px; font-size: 13px;
+  }
+  .os-field .global-lookup { width: 100%; }
+  .os-field .global-lookup__input,
+  .os-field .odoo-lookup__input { width: 100%; padding: 7px 9px; border: 1px solid #cbd5e1; border-radius: 7px; font-size: 13px; }
+  .os-acct-amt {
+    margin-top: 5px; font-size: 12px; font-weight: 700; font-family: ui-monospace, monospace;
+    color: #1a56a4; min-height: 1.2em;
+  }
+  .os-acct-amt.is-empty { color: #94a3b8; font-weight: 600; }
+  .os-acct-amt__tag {
+    display: inline-block; min-width: 22px; font-size: 10px; font-weight: 700;
+    color: #64748b; margin-right: 4px;
+  }
+  .os-format {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; margin-bottom: 14px;
+  }
+  .os-format h2 { margin: 0 0 8px; font-size: 14px; color: #0f172a; }
+  .os-format p { margin: 0 0 10px; font-size: 13px; color: #64748b; line-height: 1.5; }
+  .os-format pre {
+    font-size: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 10px; overflow: auto; margin: 0 0 10px;
+  }
+  .os-format-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .os-summary {
+    display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;
+  }
+  .os-kpi {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 14px; min-width: 110px;
+  }
+  .os-kpi span { display: block; font-size: 11px; color: #64748b; text-transform: uppercase; }
+  .os-kpi strong { font-size: 18px; color: #0f172a; font-family: ui-monospace, monospace; }
+  .os-scroll { max-height: 520px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; }
+  table.os-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.os-tbl th, table.os-tbl td { border-bottom: 1px solid #f1f5f9; padding: 6px 8px; white-space: nowrap; }
+  table.os-tbl th { background: #f8fafc; position: sticky; top: 0; z-index: 1; text-align: left; font-size: 11px; color: #64748b; }
+  table.os-tbl td.num { text-align: right; font-family: ui-monospace, monospace; }
+  table.os-tbl tr.selected { background: #f0f9ff; }
+  table.os-tbl tr.posted { opacity: .75; }
+  table.os-tbl tfoot tr.os-total-row { background: #f8fafc; font-weight: 700; }
+  table.os-tbl tfoot td { border-top: 2px solid #cbd5e1; color: #0f172a; }
+  table.os-tbl tfoot td.os-total-label { text-align: right; color: #334155; }
+  .os-pill {
+    display: inline-flex; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .02em;
+  }
+  .os-pill--matched { background: #dcfce7; color: #166534; }
+  .os-pill--error { background: #fee2e2; color: #991b1b; }
+  .os-pill--warn { background: #fef3c7; color: #92400e; }
+  .os-pill--posted { background: #dbeafe; color: #1d4ed8; }
+  .os-pill--neutral { background: #f1f5f9; color: #475569; }
+  .os-msg { padding: 8px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 10px; display: none; }
+  .os-msg.error { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+  .os-msg.ok { display: block; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+  .os-manual { width: 120px; font-size: 11px; padding: 4px 6px; }
+</style>
+
+<div class="page-po nexa-list-page os-page"
+     {% if batch_no %}
+     data-transaction-audit="Online Settlement"
+     data-transaction-no="{{ batch_no }}"
+     data-save-button="#osBtnPostAll"
+     data-track-root=".os-page"
+     data-save-url-pattern="/accounts/api/online-settlement/post"
+     {% endif %}>
+  <div class="page-po__topbar" style="margin-bottom:12px;">
+    <div>
+      <h1 class="page-po__title">Online Settlement</h1>
+      <p class="page-po__muted">Upload marketplace settlement files (Snoonu, Talabat, Deliveroo, Rafeeq, etc.), match by Order ID + Invoice Amount, and post receipts with commission expenses.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('accounts.online_settlement_history') }}" class="page-po__btn-secondary">Upload History</a>
+      <a href="{{ url_for('accounts.online_settlement_reports') }}" class="page-po__btn-secondary">Reports</a>
+    </div>
+  </div>
+
+  <div id="osMessage" class="os-msg" role="status"></div>
+
+  <form id="osUploadForm" class="os-header" enctype="multipart/form-data">
+    <input type="hidden" name="save_nonce" value="{{ global_save_nonce | default('') }}">
+    <div class="os-field">
+      {{ global_lookup_field(
+        field_id='osCustomer',
+        label='Marketplace Customer',
+        name='customer_code',
+        kind='customer',
+        value_code=fd.customer_code or '',
+        value_label=fd.customer_label or '',
+        placeholder='Search customer…',
+        no_default=true,
+        field_class='',
+        input_class='global-lookup__input odoo-lookup__input input',
+        disabled=batch_no,
+        readonly=batch_no,
+      ) }}
+      <div class="os-acct-amt is-empty" id="osAmtCustomer" aria-live="polite"><span class="os-acct-amt__tag">Cr</span> —</div>
+    </div>
+    <div class="os-field">
+      <label for="osMarketplace">Marketplace Name</label>
+      <input type="text" id="osMarketplace" name="marketplace_name" maxlength="100"
+             value="{{ fd.marketplace_name or '' }}"
+             placeholder="e.g. Talabat" {% if batch_no %}readonly{% endif %} />
+    </div>
+    <div class="os-field">
+      <label for="osSettlementDate">Settlement Date</label>
+      <input type="date" id="osSettlementDate" name="settlement_date" required
+             value="{{ batch_header.settlement_date if batch_header else today }}" {% if batch_no %}readonly{% endif %} />
+      <p class="muted" id="osSettlementDateHint" style="margin:6px 0 0;font-size:0.85rem;">
+        Closed accounting periods cannot be selected (Period Closing).
+      </p>
+    </div>
+    <div class="os-field">
+      {{ global_lookup_field(
+        field_id='osBank',
+        label='Bank / Clearing Account',
+        name='bank_account',
+        kind='cpv_petty',
+        value_code=fd.bank_account or '',
+        value_label=fd.bank_label or '',
+        placeholder='Search cash / bank…',
+        no_default=true,
+        field_class='',
+        input_class='global-lookup__input odoo-lookup__input input',
+        disabled=batch_no,
+        readonly=batch_no,
+      ) }}
+      <div class="os-acct-amt is-empty" id="osAmtBank" aria-live="polite"><span class="os-acct-amt__tag">Dr</span> —</div>
+    </div>
+    <div class="os-field">
+      {{ global_lookup_field(
+        field_id='osPm',
+        label='Payment Method Commission Expense',
+        name='pm_commission_account',
+        kind='gl_account',
+        value_code=fd.pm_commission_account or '',
+        value_label=fd.pm_label or '',
+        placeholder='Type ledger…',
+        no_default=true,
+        field_class='',
+        input_class='global-lookup__input odoo-lookup__input input',
+        disabled=batch_no,
+        readonly=batch_no,
+      ) }}
+      <div class="os-acct-amt is-empty" id="osAmtPm" aria-live="polite"><span class="os-acct-amt__tag">Dr</span> —</div>
+    </div>
+    <div class="os-field">
+      {{ global_lookup_field(
+        field_id='osSc',
+        label='Sales Commission Expense',
+        name='sales_commission_account',
+        kind='gl_account',
+        value_code=fd.sales_commission_account or '',
+        value_label=fd.sc_label or '',
+        placeholder='Type ledger…',
+        no_default=true,
+        field_class='',
+        input_class='global-lookup__input odoo-lookup__input input',
+        disabled=batch_no,
+        readonly=batch_no,
+      ) }}
+      <div class="os-acct-amt is-empty" id="osAmtSc" aria-live="polite"><span class="os-acct-amt__tag">Dr</span> —</div>
+    </div>
+    <div class="os-field">
+      {{ global_lookup_field(
+        field_id='osSplus',
+        label='SPlus Covered By Merchant Expense',
+        name='splus_account',
+        kind='gl_account',
+        value_code=fd.splus_account or '',
+        value_label=fd.sp_label or '',
+        placeholder='Type ledger…',
+        no_default=true,
+        field_class='',
+        input_class='global-lookup__input odoo-lookup__input input',
+        disabled=batch_no,
+        readonly=batch_no,
+      ) }}
+      <div class="os-acct-amt is-empty" id="osAmtSplus" aria-live="polite"><span class="os-acct-amt__tag">Dr</span> —</div>
+    </div>
+    <div class="os-field">
+      {{ global_lookup_field(
+        field_id='osOther',
+        label='Other Charges Expense',
+        name='other_charges_account',
+        kind='gl_account',
+        value_code=fd.other_charges_account or '',
+        value_label=fd.oc_label or '',
+        placeholder='Type ledger…',
+        no_default=true,
+        field_class='',
+        input_class='global-lookup__input odoo-lookup__input input',
+        disabled=batch_no,
+        readonly=batch_no,
+      ) }}
+      <div class="os-acct-amt is-empty" id="osAmtOther" aria-live="polite"><span class="os-acct-amt__tag">Dr</span> —</div>
+    </div>
+    <div class="os-field">
+      <label for="osFile">Upload File (.xlsx / .csv)</label>
+      <input type="file" id="osFile" name="file" accept=".xlsx,.xlsm,.csv" {% if not batch_no %}required{% endif %} {% if batch_no %}disabled{% endif %} />
+    </div>
+    <div class="os-field" style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;">
+      <button type="submit" class="page-po__btn-primary" id="osBtnUpload" {% if batch_no %}disabled title="Batch already loaded — start new upload from History"{% endif %}>Upload &amp; Create Batch</button>
+    </div>
+  </form>
+
+  <section class="os-format" aria-label="Import file format">
+    <h2>Settlement file format</h2>
+    <p>
+      Use the exact column headers below (case-insensitive; spaces and underscores are ignored on import).
+      Matching uses <strong>OrderId</strong> + <strong>InvoiceAmount</strong> only.
+      Validation checks: <code>InvoiceAmount = TotalAmount + PaymentMethodCommission + SalesCommission + SPlusCoveredByMerchant + OtherCharges</code>.
+      Negative values in the file are converted to positive on import (marketplace exports often show commissions as negative).
+    </p>
+    <pre>OrderId,InvoiceAmount,TotalAmount,PaymentMethodCommission,SalesCommission,SPlusCoveredByMerchant,OtherCharges
+77546052,66.00,50.13,1.65,11.22,3.00,0.00</pre>
+    <div class="os-format-actions">
+      <a class="page-po__btn-secondary" href="{{ url_for('accounts.online_settlement_sample_xlsx') }}">Download sample Excel</a>
+      <a class="page-po__btn-secondary" href="{{ url_for('accounts.online_settlement_sample_csv') }}">Download sample CSV</a>
+    </div>
+  </section>
+
+  <div class="os-toolbar" role="toolbar">
+    <span id="osBatchLabel" style="font-weight:700;color:#334155;margin-right:8px;">
+      {% if batch_no %}Batch: {{ batch_no }}{% else %}No batch loaded{% endif %}
+    </span>
+    <button type="button" id="osBtnValidate" class="os-primary" {% if not batch_no %}disabled{% endif %}>Validate</button>
+    <button type="button" id="osBtnMatch" {% if not batch_no %}disabled{% endif %}>Auto Match</button>
+    <button type="button" id="osBtnPostAll" class="os-success" {% if not batch_no %}disabled{% endif %}>Post All Matched</button>
+    <button type="button" id="osBtnPostSel" {% if not batch_no %}disabled{% endif %}>Post Selected</button>
+    <button type="button" id="osBtnExport" {% if not batch_no %}disabled{% endif %}>Export Exceptions</button>
+    <button type="button" id="osBtnReload" {% if not batch_no %}disabled{% endif %}>Refresh Grid</button>
+  </div>
+
+  <div class="os-summary" id="osSummary">
+    <div class="os-kpi"><span>Total</span><strong id="osKpiTotal">0</strong></div>
+    <div class="os-kpi"><span>Matched</span><strong id="osKpiMatched">0</strong></div>
+    <div class="os-kpi"><span>Posted</span><strong id="osKpiPosted">0</strong></div>
+    <div class="os-kpi"><span>Exceptions</span><strong id="osKpiExc">0</strong></div>
+  </div>
+
+  <div class="os-scroll">
+    <table class="os-tbl" id="osGrid">
+      <thead>
+        <tr>
+          <th style="width:36px;"><input type="checkbox" id="osSelectAll" title="Select matched rows" /></th>
+          <th>OrderId</th>
+          <th>ERP Invoice No</th>
+          <th>Invoice Date</th>
+          <th class="num">Uploaded Inv Amt</th>
+          <th class="num">ERP Inv Amt</th>
+          <th class="num">Net Received</th>
+          <th class="num">PM Comm</th>
+          <th class="num">Sales Comm</th>
+          <th class="num">SPlus</th>
+          <th class="num">Other Chg</th>
+          <th class="num">Diff</th>
+          <th>Manual Invoice</th>
+          <th></th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="osGridBody">
+        {% for ln in batch_lines %}
+        <tr data-line-id="{{ ln.line_id }}"
+            data-status="{{ ln.status|e }}"
+            data-excluded="{{ ln.excluded or 'N' }}"
+            class="{% if ln.status == 'Posted' %}posted{% endif %}">
+          <td style="text-align:center;">
+            <input type="checkbox" class="os-row-check" value="{{ ln.line_id }}"
+                   {% if ln.status != 'Matched' %}disabled{% endif %} />
+          </td>
+          <td>{{ ln.order_id or '—' }}</td>
+          <td>{{ ln.erp_invoice_no or '—' }}</td>
+          <td>{{ ln.erp_invoice_date or '—' }}</td>
+          <td class="num">{{ '{:,.2f}'.format((ln.upload_invoice_amount or 0)|float) if ln.upload_invoice_amount is not none else '—' }}</td>
+          <td class="num">{{ '{:,.2f}'.format((ln.erp_invoice_amount or 0)|float) if ln.erp_invoice_amount is not none else '—' }}</td>
+          <td class="num">{{ '{:,.2f}'.format((ln.net_amount_received or 0)|float) if ln.net_amount_received is not none else '—' }}</td>
+          <td class="num">{{ '{:,.2f}'.format((ln.pm_commission or 0)|float) }}</td>
+          <td class="num">{{ '{:,.2f}'.format((ln.sales_commission or 0)|float) }}</td>
+          <td class="num">{{ '{:,.2f}'.format((ln.splus_amount or 0)|float) }}</td>
+          <td class="num">{{ '{:,.2f}'.format((ln.other_charges or 0)|float) }}</td>
+          <td class="num">{{ '{:,.2f}'.format((ln.difference or 0)|float) if ln.difference is not none else '—' }}</td>
+          <td>
+            <input type="text" class="os-manual" data-line-id="{{ ln.line_id }}"
+                   value="{{ ln.manual_invoice_voucher or '' }}" placeholder="SI-…"
+                   {% if ln.status == 'Posted' %}disabled{% endif %} />
+          </td>
+          <td>
+            {% if ln.status != 'Posted' and ln.excluded != 'Y' %}
+            <button type="button" class="os-exclude" data-line-id="{{ ln.line_id }}" style="font-size:11px;padding:2px 6px;">Exclude</button>
+            {% elif ln.excluded == 'Y' %}
+            <span style="font-size:11px;color:#94a3b8;">Excluded</span>
+            {% endif %}
+          </td>
+          <td><span class="os-pill {{ 'os-pill--matched' if ln.status == 'Matched' else ('os-pill--posted' if ln.status == 'Posted' else ('os-pill--error' if ln.status in ['Validation Error','Order Not Found','Amount Mismatch','Post Failed'] else 'os-pill--warn')) }}">{{ ln.status or '—' }}</span></td>
+        </tr>
+        {% else %}
+        <tr id="osEmptyRow"><td colspan="15" style="text-align:center;padding:24px;color:#64748b;">Upload a settlement file to preview rows.</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot id="osGridFoot"{% if not batch_lines %} style="display:none;"{% endif %}>
+        <tr class="os-total-row">
+          <td colspan="4" class="os-total-label">Total:</td>
+          <td class="num" id="osTotUpload">—</td>
+          <td class="num" id="osTotErp">—</td>
+          <td class="num" id="osTotNet">—</td>
+          <td class="num" id="osTotPm">—</td>
+          <td class="num" id="osTotSc">—</td>
+          <td class="num" id="osTotSplus">—</td>
+          <td class="num" id="osTotOther">—</td>
+          <td class="num" id="osTotDiff">—</td>
+          <td colspan="3"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+
+<script>
+  window.OS_PAGE = {
+    batchNo: {{ batch_no|tojson if batch_no else 'null' }},
+    customerCode: {{ (batch_header.customer_code if batch_header else '')|tojson }},
+    urls: {
+      upload: {{ url_for('accounts.api_online_settlement_upload')|tojson }},
+      validate: {{ url_for('accounts.api_online_settlement_validate')|tojson }},
+      match: {{ url_for('accounts.api_online_settlement_auto_match')|tojson }},
+      post: {{ url_for('accounts.api_online_settlement_post')|tojson }},
+      batch: {{ url_for('accounts.api_online_settlement_batch', batch_no='__BNO__')|tojson }}.replace('__BNO__', ''),
+      line: {{ url_for('accounts.api_online_settlement_line', line_id=0)|tojson }}.replace('/0', ''),
+      exportExc: {{ url_for('accounts.api_online_settlement_export_exceptions')|tojson }},
+      config: {{ url_for('accounts.api_online_settlement_config')|tojson }},
+      page: {{ url_for('accounts.online_settlement_page')|tojson }},
+      openInv: {{ url_for('accounts.api_online_settlement_open_invoices')|tojson }}
+    }
+  };
+</script>
+<script type="application/json" id="osClosedPeriodsJson">{{ (closed_periods or [])|tojson }}</script>
+<script src="{{ url_for('static', filename='js/period_date_guard.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='js/online_settlement.js') }}?v=7"></script>
+{% if batch_no %}
+<script src="{{ url_for('static', filename='js/transaction_recording_client.js') }}?v=7"></script>
+{% endif %}
+{% endblock %}

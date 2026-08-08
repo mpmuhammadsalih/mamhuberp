@@ -1,0 +1,899 @@
+{% extends "base.html" %}
+{% block title %}POS Save Queue{% endblock %}
+
+{% block content %}
+<div class="page-po nexa-list-page pos-save-queue-page" style="max-width:1300px;">
+<style>
+  .pos-save-queue-page .psq-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .pos-save-queue-page .psq-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 11px;
+    border: 1px solid #e5eaf2;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, .06);
+  }
+  .pos-save-queue-page .psq-stat-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    border-radius: 9px;
+    color: #fff;
+    font-size: 17px;
+  }
+  .pos-save-queue-page .psq-stat-icon--blue { background: linear-gradient(135deg, #2563eb, #38bdf8); }
+  .pos-save-queue-page .psq-stat-icon--amber { background: linear-gradient(135deg, #f59e0b, #facc15); }
+  .pos-save-queue-page .psq-stat-icon--cyan { background: linear-gradient(135deg, #0891b2, #06b6d4); }
+  .pos-save-queue-page .psq-stat-icon--green { background: linear-gradient(135deg, #16a34a, #22c55e); }
+  .pos-save-queue-page .psq-stat-icon--rose { background: linear-gradient(135deg, #e11d48, #fb7185); }
+  .pos-save-queue-page .psq-stat-label { margin: 0 0 4px; color: #475569; font-size: 11px; font-weight: 700; }
+  .pos-save-queue-page .psq-stat-value { margin: 0; color: #0f172a; font-size: clamp(16px, 1.45vw, 21px); font-weight: 850; line-height: 1.1; }
+  .pos-save-queue-page .psq-stat-sub { margin: 3px 0 0; color: #64748b; font-size: 11px; }
+
+  .pos-save-queue-page .queue-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-weight: 700;
+    font-size: 11px;
+  }
+  .pos-save-queue-page .queue-badge--pending { background: #fef3c7; color: #92400e; }
+  .pos-save-queue-page .queue-badge--processing { background: #dbeafe; color: #1d4ed8; }
+  .pos-save-queue-page .queue-badge--posted { background: #dcfce7; color: #166534; }
+  .pos-save-queue-page .queue-badge--failed { background: #fee2e2; color: #991b1b; }
+
+  .pos-save-queue-page .queue-error {
+    max-width: 360px;
+    white-space: normal;
+    color: #991b1b;
+    font-size: 12px;
+  }
+  .pos-save-queue-page #queueTable tbody tr.queue-job-row { cursor: pointer; }
+
+  .pos-save-queue-page .queue-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .pos-save-queue-page .queue-post-now {
+    border: none;
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    color: #fff;
+    background: linear-gradient(135deg, #16a34a, #22c55e);
+    box-shadow: 0 2px 6px rgba(22, 163, 74, .25);
+  }
+  .pos-save-queue-page .queue-post-now:hover:not(:disabled) { filter: brightness(1.05); }
+  .pos-save-queue-page .queue-post-now:disabled { opacity: .65; cursor: wait; }
+
+  .pos-save-queue-page .queue-stuck-warn {
+    margin-left: 12px;
+    color: #b45309;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .pos-save-queue-page .po-tabs .po-tab__count {
+    font-size: 10px;
+    font-weight: 700;
+    margin-left: 4px;
+    opacity: 0.85;
+  }
+  .pos-save-queue-page .po-tabs .po-tab.active .po-tab__count { opacity: 1; }
+
+  .page-po.nexa-list-page.pos-save-queue-page {
+    max-width: 1300px !important;
+    margin: 0 auto !important;
+    padding: 8px 0 20px !important;
+  }
+
+  /* Modal is moved to document.body — selectors must not be under .pos-save-queue-page */
+  #queueJobModal.queue-job-modal { position: fixed; inset: 0; z-index: 120000; display: flex; align-items: flex-start; justify-content: center; padding: 24px 12px; overflow-y: auto; box-sizing: border-box; }
+  #queueJobModal.queue-job-modal[hidden] { display: none !important; }
+  #queueJobModal .queue-job-modal__backdrop { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.45); }
+  #queueJobModal .queue-job-modal__panel {
+    position: relative;
+    max-width: 920px;
+    width: 100%;
+    margin-top: 24px;
+    max-height: calc(100vh - 48px);
+    overflow: auto;
+    z-index: 1;
+    padding: 18px 20px;
+    border-radius: 14px;
+    background: #fff;
+    color: #0f172a;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, .16);
+    border: 1px solid #dbe3ef;
+  }
+  #queueJobModal .queue-job-modal__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e5eaf2;
+  }
+  #queueJobModal .queue-job-modal__head h2 { margin: 0; font-size: 15px; font-weight: 800; color: #0f172a; }
+  #queueJobModal .queue-job-modal__body { font-size: 13px; color: #334155; }
+  #queueJobModal .queue-job-modal__body .muted { color: #64748b; }
+  #queueJobModal .queue-detail-grid { display: grid; grid-template-columns: 160px 1fr; gap: 6px 14px; font-size: 12px; margin-bottom: 14px; }
+  #queueJobModal .queue-detail-grid dt { font-weight: 700; color: #64748b; margin: 0; }
+  #queueJobModal .queue-detail-grid dd { margin: 0; color: #0f172a; }
+  #queueJobModal .queue-lines-mini { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+  #queueJobModal .queue-lines-mini th,
+  #queueJobModal .queue-lines-mini td { border: 1px solid #cfd4da; padding: 6px 8px; text-align: left; }
+  #queueJobModal .queue-lines-mini th { background: linear-gradient(180deg, #eaf2fa 0%, #dfeaf5 100%); font-weight: 600; color: #374151; }
+  #queueJobModal .queue-audit-section {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid #e5eaf2;
+  }
+  #queueJobModal .queue-audit-match-yes { color: #166534; font-weight: 700; }
+  #queueJobModal .queue-audit-match-no { color: #b45309; font-weight: 700; }
+  #queueJobModal .queue-audit-match-na { color: #64748b; }
+
+  @media (max-width: 980px) {
+    .pos-save-queue-page .psq-stat-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+  }
+  @media (max-width: 560px) {
+    .pos-save-queue-page .psq-stat-grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+  <section class="psq-stat-grid" aria-label="Queue summary">
+    <div class="psq-stat-card">
+      <span class="psq-stat-icon psq-stat-icon--blue" aria-hidden="true"><i class="bi bi-list-task"></i></span>
+      <div>
+        <p class="psq-stat-label">Total jobs</p>
+        <p class="psq-stat-value" data-psq-stat="all">0</p>
+        <p class="psq-stat-sub">Loaded list</p>
+      </div>
+    </div>
+    <div class="psq-stat-card">
+      <span class="psq-stat-icon psq-stat-icon--amber" aria-hidden="true"><i class="bi bi-hourglass-split"></i></span>
+      <div>
+        <p class="psq-stat-label">Pending</p>
+        <p class="psq-stat-value" data-psq-stat="pending">0</p>
+        <p class="psq-stat-sub">Awaiting worker</p>
+      </div>
+    </div>
+    <div class="psq-stat-card">
+      <span class="psq-stat-icon psq-stat-icon--cyan" aria-hidden="true"><i class="bi bi-arrow-repeat"></i></span>
+      <div>
+        <p class="psq-stat-label">In progress</p>
+        <p class="psq-stat-value" data-psq-stat="processing">0</p>
+        <p class="psq-stat-sub">PROCESSING</p>
+      </div>
+    </div>
+    <div class="psq-stat-card">
+      <span class="psq-stat-icon psq-stat-icon--green" aria-hidden="true"><i class="bi bi-check-circle"></i></span>
+      <div>
+        <p class="psq-stat-label">Posted</p>
+        <p class="psq-stat-value" data-psq-stat="posted">0</p>
+        <p class="psq-stat-sub">Completed</p>
+      </div>
+    </div>
+    <div class="psq-stat-card">
+      <span class="psq-stat-icon psq-stat-icon--rose" aria-hidden="true"><i class="bi bi-exclamation-triangle"></i></span>
+      <div>
+        <p class="psq-stat-label">Failed</p>
+        <p class="psq-stat-value" data-psq-stat="failed">0</p>
+        <p class="psq-stat-sub">Needs retry</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">POS Save Queue</h1>
+      <p class="page-po__muted">Background POS invoice posting. Jobs post <strong>one at a time</strong>. If rows stay <strong>PROCESSING</strong> with no finish time, the queue is stuck — click <strong>Unstick all</strong>, then <strong>Post now</strong> on pending rows. Stale processing auto-resets after ~5 minutes.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <button type="button" class="page-po__btn-secondary" id="btnUnstickAllQueue">Unstick all</button>
+      <button type="button" class="page-po__btn-secondary" id="btnKickQueue">Run queue</button>
+      <button type="button" class="page-po__btn-primary" id="btnRefreshQueue">Refresh</button>
+    </div>
+  </div>
+
+  <div class="nexa-list-toolbar">
+    <span id="queueStatus" class="nexa-num">Loading…</span>
+    <span id="queueStuckWarn" class="queue-stuck-warn" hidden>Stuck jobs detected — use Unstick all, then Post now on pending rows.</span>
+  </div>
+
+  <div class="page-po__filters" style="padding-top: 0;">
+    <div class="po-tabs" id="queueStatusTabs" role="tablist" aria-label="Filter by job status">
+      <button type="button" class="po-tab active" role="tab" aria-selected="true" data-queue-tab="all" id="queueTabAll">All<span class="po-tab__count" data-count-for="all">0</span></button>
+      <button type="button" class="po-tab" role="tab" aria-selected="false" data-queue-tab="pending" id="queueTabPending">Pending<span class="po-tab__count" data-count-for="pending">0</span></button>
+      <button type="button" class="po-tab" role="tab" aria-selected="false" data-queue-tab="processing" id="queueTabProcessing">In progress<span class="po-tab__count" data-count-for="processing">0</span></button>
+      <button type="button" class="po-tab" role="tab" aria-selected="false" data-queue-tab="posted" id="queueTabPosted">Posted<span class="po-tab__count" data-count-for="posted">0</span></button>
+      <button type="button" class="po-tab" role="tab" aria-selected="false" data-queue-tab="failed" id="queueTabFailed">Failed<span class="po-tab__count" data-count-for="failed">0</span></button>
+    </div>
+  </div>
+
+  <div class="co-table-wrap">
+    <table class="co-table" id="queueTable">
+      <thead>
+        <tr>
+          <th data-sort="job_id" title="Sort by job">Job<span class="sort-arrow"></span></th>
+          <th data-sort="billno" title="Sort by bill number">Bill No<span class="sort-arrow"></span></th>
+          <th data-sort="status" title="Sort by status">Status<span class="sort-arrow"></span></th>
+          <th data-sort="posted_billno" title="Sort by posted bill">Posted Bill<span class="sort-arrow"></span></th>
+          <th data-sort="created_by" title="Sort by user">User<span class="sort-arrow"></span></th>
+          <th data-sort="countercode" title="Sort by counter">Counter<span class="sort-arrow"></span></th>
+          <th data-sort="created_at" title="Sort by created time">Created<span class="sort-arrow"></span></th>
+          <th data-sort="started_at" title="Sort by started time">Started<span class="sort-arrow"></span></th>
+          <th data-sort="finished_at" title="Sort by finished time">Finished<span class="sort-arrow"></span></th>
+          <th class="num" data-sort="attempts" title="Sort by attempts">Attempts<span class="sort-arrow"></span></th>
+          <th data-sort="error_message" title="Sort by error text">Error<span class="sort-arrow"></span></th>
+          <th title="Actions">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="12" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# Modal outside .page-po so parent transparency rules do not clip it #}
+<div id="queueJobModal" class="queue-job-modal" hidden aria-modal="true" role="dialog" aria-labelledby="queueJobModalTitle">
+  <div class="queue-job-modal__backdrop" id="queueJobModalBackdrop"></div>
+  <div class="queue-job-modal__panel" role="document">
+    <div class="queue-job-modal__head">
+      <h2 id="queueJobModalTitle">Queue job detail</h2>
+      <button type="button" class="page-po__btn-secondary" id="queueJobModalClose">Close</button>
+    </div>
+    <div id="queueJobModalBody" class="queue-job-modal__body">Loading…</div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const tbody = document.querySelector('#queueTable tbody');
+  const statusEl = document.getElementById('queueStatus');
+  const btnRefresh = document.getElementById('btnRefreshQueue');
+  const btnKick = document.getElementById('btnKickQueue');
+  const btnUnstickAll = document.getElementById('btnUnstickAllQueue');
+  const queueStuckWarn = document.getElementById('queueStuckWarn');
+  const queueJobModal = document.getElementById('queueJobModal');
+  const queueJobModalBody = document.getElementById('queueJobModalBody');
+  const queueJobModalClose = document.getElementById('queueJobModalClose');
+  const queueJobModalBackdrop = document.getElementById('queueJobModalBackdrop');
+  const queueStatusTabs = document.getElementById('queueStatusTabs');
+  const JOB_DETAIL_URL_TMPL = {{ url_for('pos_billing.pos_save_queue_job_detail_api', job_id=999888777) | tojson }};
+
+  let queueJobsCache = [];
+  let activeQueueTab = 'all';
+  /** @type {string} */
+  let sortColumn = 'created_at';
+  /** @type {'asc'|'desc'} */
+  let sortDir = 'desc';
+
+  const queueTableEl = document.getElementById('queueTable');
+
+  if (queueJobModal && queueJobModal.parentElement !== document.body) {
+    document.body.appendChild(queueJobModal);
+  }
+
+  function esc(v) {
+    const d = document.createElement('div');
+    d.textContent = v == null ? '' : String(v);
+    return d.innerHTML;
+  }
+
+  function jobDetailFetchUrl(jobId) {
+    const parsed = parseInt(String(jobId).trim(), 10);
+    const seg = Number.isFinite(parsed) ? String(parsed) : String(jobId).trim();
+    return JOB_DETAIL_URL_TMPL.replace('999888777', seg);
+  }
+
+  function closeQueueJobModal() {
+    if (!queueJobModal) return;
+    queueJobModal.hidden = true;
+    queueJobModal.style.display = '';
+  }
+
+  function showQueueJobModal() {
+    if (!queueJobModal) return;
+    queueJobModal.hidden = false;
+    queueJobModal.style.display = 'flex';
+  }
+
+  function fmtPairs(obj) {
+    if (!obj || typeof obj !== 'object') return '';
+    const parts = [];
+    Object.keys(obj).forEach((k) => {
+      const v = obj[k];
+      if (v === undefined || v === null) return;
+      parts.push('<dt>' + esc(k) + '</dt><dd>' + esc(typeof v === 'object' ? JSON.stringify(v) : v) + '</dd>');
+    });
+    return parts.length ? '<dl class="queue-detail-grid">' + parts.join('') + '</dl>' : '';
+  }
+
+  function renderPostingAuditHtml(job) {
+    const aud = job && job.posting_audit;
+    if (!aud || typeof aud !== 'object') return '';
+    if (aud.error) {
+      return '<div class="queue-audit-section"><h3 style="margin:0 0 8px; font-size:13px; font-weight:800; color:#991b1b;">Posting audit</h3>'
+        + '<pre style="white-space:pre-wrap;font-size:12px;background:#fef2f2;padding:10px;border-radius:10px;border:1px solid #fecaca;">' + esc(aud.error) + '</pre></div>';
+    }
+    let html = '<div class="queue-audit-section">';
+    html += '<h3 style="margin:0 0 8px; font-size:13px; font-weight:800; color:#0f172a;">Tables involved in background POS post</h3>';
+    html += '<p class="mini-muted" style="margin:0 0 8px;">These tables are written by <code>save_sales_invoice</code> / temp cleanup (depending on branch setup).</p>';
+    const tbl = aud.tables_involved;
+    if (tbl && tbl.length) {
+      html += '<table class="queue-lines-mini"><thead><tr><th>Table</th><th>Role</th></tr></thead><tbody>'
+        + tbl.map(function (row) {
+          return '<tr><td><code>' + esc(row.table || '') + '</code></td><td>' + esc(row.role || '') + '</td></tr>';
+        }).join('')
+        + '</tbody></table>';
+    }
+    const notes = aud.notes;
+    if (notes && notes.length) {
+      html += '<ul class="mini-muted" style="margin:10px 0 0; padding-left:18px;">'
+        + notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('')
+        + '</ul>';
+    }
+
+    const tc = aud.temp_cart;
+    if (tc && typeof tc === 'object') {
+      html += '<h3 style="margin:16px 0 8px; font-size:13px; font-weight:800; color:#0f172a;">Temp cart (TEMPBILLHDR)</h3>';
+      html += fmtPairs({
+        temp_billno: tc.temp_billno,
+        row_exists_now: tc.row_exists_now,
+        note: tc.note || '',
+      });
+    }
+
+    const qs = aud.queued_snapshot;
+    if (qs && typeof qs === 'object') {
+      html += '<h3 style="margin:16px 0 8px; font-size:13px; font-weight:800; color:#0f172a;">Before posting — queued snapshot</h3>';
+      html += '<p class="mini-muted" style="margin:0 0 8px;">' + esc(qs.label || '') + '</p>';
+      html += fmtPairs({
+        location_code: qs.location_code,
+        temp_billno: qs.temp_billno,
+        customercode: qs.customercode,
+        countercode: qs.countercode,
+        cashamount: qs.cashamount,
+        cardamount: qs.cardamount,
+        net_from_lines: qs.net_from_lines,
+        discount_sum_lines: qs.discount_sum_lines,
+        line_count: qs.line_count,
+      });
+      const ql = qs.lines;
+      if (ql && ql.length) {
+        html += '<table class="queue-lines-mini"><thead><tr><th>#</th><th>Item</th><th>Qty</th><th>Rate</th><th>Disc</th><th>Line net</th></tr></thead><tbody>'
+          + ql.map(function (ln) {
+            return '<tr><td>' + esc(ln.slno) + '</td><td>' + esc(ln.item_code) + '</td><td>' + esc(ln.quantity) + '</td><td>' + esc(ln.rate) + '</td><td>' + esc(ln.discount) + '</td><td>' + esc(ln.line_net) + '</td></tr>';
+          }).join('')
+          + '</tbody></table>';
+      }
+    }
+
+    const ps = aud.posted_snapshot;
+    if (ps && typeof ps === 'object') {
+      html += '<h3 style="margin:16px 0 8px; font-size:13px; font-weight:800; color:#0f172a;">After posting — current invoice rows</h3>';
+      html += '<p class="mini-muted" style="margin:0 0 8px;">' + esc(ps.label || '') + '</p>';
+      if (!ps.billhdr_found) {
+        html += '<p class="mini-muted">No BILLHDR row found for this posted bill number at this location (deleted or different branch).</p>';
+      }
+      if (ps.billhdr && typeof ps.billhdr === 'object' && Object.keys(ps.billhdr).length) {
+        html += fmtPairs(ps.billhdr);
+      }
+      const bd = ps.billdtl;
+      if (bd && bd.length) {
+        html += '<table class="queue-lines-mini"><thead><tr><th>#</th><th>Item</th><th>Qty</th><th>Rate</th><th>Disc</th></tr></thead><tbody>'
+          + bd.map(function (ln) {
+            return '<tr><td>' + esc(ln.slno) + '</td><td>' + esc(ln.itemcode) + '</td><td>' + esc(ln.quantity) + '</td><td>' + esc(ln.rate) + '</td><td>' + esc(ln.line_discount) + '</td></tr>';
+          }).join('')
+          + '</tbody></table>';
+      }
+    } else {
+      html += '<h3 style="margin:16px 0 8px; font-size:13px; font-weight:800; color:#64748b;">After posting — invoice snapshot</h3>';
+      html += '<p class="mini-muted">Shown when job status is <strong>POSTED</strong> and a posted bill number exists (live BILLHDR/BILLDTL).</p>';
+    }
+
+    const cmp = aud.comparison;
+    if (cmp && typeof cmp === 'object') {
+      const hc = cmp.header;
+      if (hc && hc.length) {
+        html += '<h3 style="margin:16px 0 8px; font-size:13px; font-weight:800; color:#0f172a;">Header: was vs now</h3>';
+        html += '<table class="queue-lines-mini"><thead><tr><th>Field</th><th>Was (queued)</th><th>Now (posted)</th><th>Note</th></tr></thead><tbody>'
+          + hc.map(function (row) {
+            const nb = row.note ? '<span class="mini-muted">' + esc(row.note) + '</span>' : '';
+            return '<tr><td>' + esc(row.field) + '</td><td>' + esc(row.before != null ? row.before : '—')
+              + '<div class="mini-muted">' + esc(row.before_label || '') + '</div></td><td>' + esc(row.after != null ? row.after : '—')
+              + '<div class="mini-muted">' + esc(row.after_label || '') + '</div></td><td>' + nb + '</td></tr>';
+          }).join('')
+          + '</tbody></table>';
+      }
+      const lc = cmp.lines;
+      if (lc && lc.length) {
+        html += '<h3 style="margin:16px 0 8px; font-size:13px; font-weight:800; color:#0f172a;">Lines: was vs now</h3>';
+        html += '<table class="queue-lines-mini"><thead><tr><th>#</th><th>Qty Δ</th><th>Rate Δ</th><th>Disc Δ</th><th>Item</th><th>Match</th></tr></thead><tbody>'
+          + lc.map(function (row) {
+            const b = row.before;
+            const a = row.after;
+            let qtyCell = '—';
+            let rateCell = '—';
+            let discCell = '—';
+            let itemCell = '—';
+            if (b && a) {
+              qtyCell = esc(b.quantity) + ' → ' + esc(a.quantity);
+              rateCell = esc(b.rate) + ' → ' + esc(a.rate);
+              discCell = esc(b.discount) + ' → ' + esc(a.discount);
+              itemCell = esc(b.item_code) + ' → ' + esc(a.item_code);
+            } else if (b && !a) {
+              qtyCell = esc(b.quantity);
+              rateCell = esc(b.rate);
+              discCell = esc(b.discount);
+              itemCell = esc(b.item_code);
+            } else if (!b && a) {
+              qtyCell = '— → ' + esc(a.quantity);
+              rateCell = '— → ' + esc(a.rate);
+              discCell = '— → ' + esc(a.discount);
+              itemCell = '— → ' + esc(a.item_code);
+            }
+            let matchHtml = '<span class="queue-audit-match-na">—</span>';
+            if (row.values_match === true) matchHtml = '<span class="queue-audit-match-yes">Yes</span>';
+            else if (row.values_match === false) matchHtml = '<span class="queue-audit-match-no">Diff</span>';
+            return '<tr><td>' + esc(row.slno) + '</td><td>' + qtyCell + '</td><td>' + rateCell + '</td><td>' + discCell + '</td><td>' + itemCell + '</td><td>' + matchHtml + '</td></tr>';
+          }).join('')
+          + '</tbody></table>';
+      }
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  async function openQueueJobDetail(jobId) {
+    if (!queueJobModal || !queueJobModalBody) return;
+    showQueueJobModal();
+    queueJobModalBody.innerHTML = 'Loading…';
+    try {
+      const res = await fetch(jobDetailFetchUrl(jobId), { credentials: 'same-origin' });
+      const data = await res.json().catch(() => ({}));
+      if (!data.success || !data.job) {
+        queueJobModalBody.textContent = data.error || res.statusText || 'Failed to load job.';
+        return;
+      }
+      const j = data.job;
+      const sum = j.payload_summary || {};
+      const header = sum.header || {};
+      let linesHtml = '';
+      const prev = sum.lines_preview || [];
+      if (prev.length) {
+        linesHtml = '<h3 style="margin:14px 0 6px; font-size:13px; font-weight:800; color:#0f172a;">Lines (first ' + prev.length + (sum.line_count > prev.length ? ' of ' + sum.line_count : '') + ')</h3>'
+          + '<table class="queue-lines-mini"><thead><tr><th>#</th><th>Item</th><th>Name</th><th>Qty</th><th>Rate</th><th>Disc</th><th>UOM</th></tr></thead><tbody>'
+          + prev.map((ln) => '<tr>'
+            + '<td>' + esc(ln.slno) + '</td>'
+            + '<td>' + esc(ln.item_code) + '</td>'
+            + '<td>' + esc(ln.item_name) + '</td>'
+            + '<td>' + esc(ln.qty) + '</td>'
+            + '<td>' + esc(ln.rate) + '</td>'
+            + '<td>' + esc(ln.discount) + '</td>'
+            + '<td>' + esc(ln.uom) + '</td>'
+            + '</tr>').join('')
+          + '</tbody></table>';
+      } else if (sum.line_count) {
+        linesHtml = '<p class="mini-muted" style="margin-top:10px;">Lines: ' + esc(sum.line_count) + ' (no preview)</p>';
+      }
+
+      queueJobModalBody.innerHTML = ''
+        + '<div style="margin-bottom:10px;">' + badge(j.status) + '</div>'
+        + fmtPairs({
+          job_id: j.job_id,
+          billno: j.billno,
+          locationcode: j.locationcode,
+          posted_billno: j.posted_billno != null && j.posted_billno !== '' ? j.posted_billno : undefined,
+          created_by: j.created_by || undefined,
+          countercode: j.countercode != null ? j.countercode : undefined,
+          attempts: j.attempts,
+          created_at: j.created_at || undefined,
+          started_at: j.started_at || undefined,
+          finished_at: j.finished_at || undefined,
+          payload_json_chars: j.payload_raw_chars,
+          temp_billno: sum.temp_billno,
+          line_count: sum.line_count,
+        })
+        + '<h3 style="margin:14px 0 6px; font-size:13px; font-weight:800; color:#0f172a;">Header (from payload)</h3>'
+        + fmtPairs(header)
+        + (Object.keys(sum.receipt_extras || {}).length ? '<h3 style="margin:14px 0 6px; font-size:13px; font-weight:800; color:#0f172a;">Receipt extras</h3>' + fmtPairs(sum.receipt_extras) : '')
+        + linesHtml
+        + renderPostingAuditHtml(j)
+        + (j.error_message ? '<h3 style="margin:14px 0 6px; font-size:13px; font-weight:800; color:#991b1b;">Error</h3><pre style="white-space:pre-wrap;font-size:12px;background:#f8fafc;padding:10px;border-radius:10px;border:1px solid #e2e8f0;color:#334155;">' + esc(j.error_message) + '</pre>' : '');
+    } catch (e) {
+      queueJobModalBody.textContent = e.message || 'Request failed.';
+    }
+  }
+
+  function normalizeQueueStatus(st) {
+    const s = String(st || '').trim().toUpperCase();
+    return s || 'PENDING';
+  }
+
+  function queueJobMatchesTab(job, tab) {
+    const s = normalizeQueueStatus(job.status);
+    if (tab === 'all') return true;
+    if (tab === 'pending') return s === 'PENDING';
+    if (tab === 'processing') return s === 'PROCESSING';
+    if (tab === 'posted') return s === 'POSTED';
+    if (tab === 'failed') return s === 'FAILED';
+    return true;
+  }
+
+  function queueTabCounts(jobs) {
+    const c = { all: jobs.length, pending: 0, processing: 0, posted: 0, failed: 0 };
+    jobs.forEach((job) => {
+      const s = normalizeQueueStatus(job.status);
+      if (s === 'PENDING') c.pending += 1;
+      else if (s === 'PROCESSING') c.processing += 1;
+      else if (s === 'POSTED') c.posted += 1;
+      else if (s === 'FAILED') c.failed += 1;
+    });
+    return c;
+  }
+
+  function updateQueueTabCountBadges(jobs) {
+    const c = queueTabCounts(jobs);
+    if (queueStatusTabs) {
+      queueStatusTabs.querySelectorAll('[data-count-for]').forEach((el) => {
+        const key = el.getAttribute('data-count-for');
+        if (key && Object.prototype.hasOwnProperty.call(c, key)) el.textContent = String(c[key]);
+      });
+    }
+    document.querySelectorAll('.pos-save-queue-page [data-psq-stat]').forEach((el) => {
+      const key = el.getAttribute('data-psq-stat');
+      if (key && Object.prototype.hasOwnProperty.call(c, key)) el.textContent = String(c[key]);
+    });
+  }
+
+  function setActiveQueueTab(tab) {
+    activeQueueTab = tab;
+    if (!queueStatusTabs) return;
+    queueStatusTabs.querySelectorAll('.po-tab[data-queue-tab]').forEach((btn) => {
+      const t = btn.getAttribute('data-queue-tab');
+      const on = t === tab;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+  }
+
+  function queueDateMs(raw) {
+    if (raw == null) return null;
+    const s = String(raw).trim();
+    if (!s) return null;
+    const t = Date.parse(s.includes('T') ? s : s.replace(/^(\d{4}-\d{2}-\d{2})\s+/, '$1T'));
+    return Number.isFinite(t) ? t : null;
+  }
+
+  function sortValueForJob(job, col) {
+    switch (col) {
+      case 'job_id': {
+        const n = Number(job.job_id);
+        return Number.isFinite(n) ? n : 0;
+      }
+      case 'billno': {
+        const n = Number(job.billno);
+        return Number.isFinite(n) ? n : 0;
+      }
+      case 'posted_billno': {
+        const v = job.posted_billno;
+        if (v == null || v === '') return null;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : String(v);
+      }
+      case 'countercode': {
+        const n = Number(job.countercode);
+        return Number.isFinite(n) ? n : 0;
+      }
+      case 'attempts': {
+        const n = Number(job.attempts);
+        return Number.isFinite(n) ? n : 0;
+      }
+      case 'status':
+        return normalizeQueueStatus(job.status);
+      case 'created_by':
+        return String(job.created_by || '').toLowerCase();
+      case 'error_message':
+        return String(job.error_message || '').toLowerCase();
+      case 'created_at':
+      case 'started_at':
+      case 'finished_at':
+        return queueDateMs(job[col]);
+      default:
+        return '';
+    }
+  }
+
+  function compareSortValuesNonNull(va, vb, col) {
+    const dateCols = { created_at: 1, started_at: 1, finished_at: 1 };
+    if (dateCols[col]) {
+      if (va < vb) return -1;
+      if (va > vb) return 1;
+      return 0;
+    }
+    if (typeof va === 'number' && typeof vb === 'number') {
+      if (va < vb) return -1;
+      if (va > vb) return 1;
+      return 0;
+    }
+    return String(va).localeCompare(String(vb), undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  function sortFilteredJobs(rows) {
+    const col = sortColumn;
+    const dir = sortDir;
+    const mult = dir === 'asc' ? 1 : -1;
+    return rows.slice().sort((a, b) => {
+      const va = sortValueForJob(a, col);
+      const vb = sortValueForJob(b, col);
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      return mult * compareSortValuesNonNull(va, vb, col);
+    });
+  }
+
+  function syncQueueSortHeaders() {
+    if (!queueTableEl) return;
+    queueTableEl.querySelectorAll('thead th[data-sort]').forEach((th) => {
+      const c = th.getAttribute('data-sort');
+      th.classList.remove('sort-asc', 'sort-desc');
+      if (c === sortColumn) {
+        th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+      }
+    });
+  }
+
+  function renderJobRowHtml(j) {
+    const st = normalizeQueueStatus(j.status);
+    const failed = st === 'FAILED';
+    const processing = st === 'PROCESSING';
+    const pending = st === 'PENDING';
+    const jidParsed = parseInt(String(j.job_id), 10);
+    const jobRowId = Number.isFinite(jidParsed) ? jidParsed : String(j.job_id || '').trim();
+    const actions = [];
+    if (pending || failed) {
+      actions.push('<button type="button" class="queue-post-now" data-job="' + esc(jobRowId) + '" title="Post this bill now (skip queue wait)">Post now</button>');
+    }
+    if (failed) {
+      actions.push('<button type="button" class="btn-view queue-reconcile" data-job="' + esc(jobRowId) + '" title="Bill already in BILLHDR — mark queue row POSTED">Mark posted</button>');
+      actions.push('<button type="button" class="btn-view queue-retry" data-job="' + esc(jobRowId) + '" data-unstick="0">Retry</button>');
+    } else if (processing) {
+      actions.push('<button type="button" class="btn-view queue-retry" data-job="' + esc(jobRowId) + '" data-unstick="1">Unstick</button>');
+    }
+    const actionHtml = actions.length
+      ? '<div class="queue-row-actions">' + actions.join('') + '</div>'
+      : '';
+    return '<tr class="queue-job-row" data-job-id="' + esc(jobRowId) + '" data-queue-status="' + esc(st) + '" title="Click for details">'
+      + '<td>' + esc(j.job_id) + '</td>'
+      + '<td>' + esc(j.billno) + '</td>'
+      + '<td>' + badge(j.status) + '</td>'
+      + '<td>' + esc(j.posted_billno || '') + '</td>'
+      + '<td>' + esc(j.created_by || '') + '</td>'
+      + '<td>' + esc(j.countercode || '') + '</td>'
+      + '<td>' + esc(j.created_at || '') + '</td>'
+      + '<td>' + esc(j.started_at || '') + '</td>'
+      + '<td>' + esc(j.finished_at || '') + '</td>'
+      + '<td class="num">' + esc(j.attempts || 0) + '</td>'
+      + '<td class="queue-error">' + esc(j.error_message || '') + '</td>'
+      + '<td>' + actionHtml + '</td>'
+      + '</tr>';
+  }
+
+  function renderQueueTableFromCache() {
+    if (!tbody) return;
+    const filtered = queueJobsCache.filter((j) => queueJobMatchesTab(j, activeQueueTab));
+    syncQueueSortHeaders();
+    if (!queueJobsCache.length) {
+      tbody.innerHTML = '<tr><td colspan="12" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">No queue jobs.</td></tr>';
+      return;
+    }
+    if (!filtered.length) {
+      const label = activeQueueTab === 'all' ? '' : ' for this status';
+      tbody.innerHTML = '<tr><td colspan="12" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">No jobs' + label + '. Try another tab.</td></tr>';
+      return;
+    }
+    const sorted = sortFilteredJobs(filtered);
+    tbody.innerHTML = sorted.map(renderJobRowHtml).join('');
+  }
+
+  function badge(status) {
+    const s = String(status || '').toUpperCase();
+    const cls = s === 'POSTED' ? 'posted' : s === 'FAILED' ? 'failed' : s === 'PROCESSING' ? 'processing' : 'pending';
+    return '<span class="queue-badge queue-badge--' + cls + '">' + esc(s || 'PENDING') + '</span>';
+  }
+
+  function updateQueueStuckWarning(jobs) {
+    if (!queueStuckWarn) return;
+    const stuckProcessing = (jobs || []).filter((j) => {
+      if (normalizeQueueStatus(j.status) !== 'PROCESSING') return false;
+      const startedMs = queueDateMs(j.started_at);
+      if (startedMs == null) return true;
+      return (Date.now() - startedMs) > (4 * 60 * 1000);
+    });
+    const dupProcessing = (jobs || []).filter((j) => normalizeQueueStatus(j.status) === 'PROCESSING').length > 1;
+    const show = stuckProcessing.length > 0 || dupProcessing;
+    queueStuckWarn.hidden = !show;
+  }
+
+  async function loadQueue() {
+    if (statusEl) statusEl.textContent = 'Loading…';
+    try {
+      const res = await fetch('{{ url_for("pos_billing.pos_save_queue_api") }}?limit=150', { credentials: 'same-origin' });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed');
+      queueJobsCache = data.jobs || [];
+      updateQueueTabCountBadges(queueJobsCache);
+      updateQueueStuckWarning(queueJobsCache);
+      renderQueueTableFromCache();
+      if (statusEl) statusEl.textContent = 'Last refreshed: ' + new Date().toLocaleTimeString();
+    } catch (e) {
+      if (statusEl) statusEl.textContent = e.message || 'Failed to load queue.';
+    }
+  }
+
+  async function kickQueue() {
+    await fetch('{{ url_for("pos_billing.pos_save_queue_kick") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({})
+    });
+    await loadQueue();
+  }
+
+  async function unstickAllQueue() {
+    if (statusEl) statusEl.textContent = 'Unsticking all processing jobs…';
+    await fetch('{{ url_for("pos_billing.pos_save_queue_unstick_all") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({}),
+    });
+    await loadQueue();
+  }
+
+  queueStatusTabs && queueStatusTabs.addEventListener('click', (e) => {
+    const btn = e.target.closest('.po-tab[data-queue-tab]');
+    if (!btn || !queueStatusTabs.contains(btn)) return;
+    const tab = btn.getAttribute('data-queue-tab');
+    if (!tab) return;
+    e.preventDefault();
+    setActiveQueueTab(tab);
+    renderQueueTableFromCache();
+  });
+
+  queueTableEl && queueTableEl.querySelector('thead') && queueTableEl.querySelector('thead').addEventListener('click', (e) => {
+    const th = e.target.closest('th[data-sort]');
+    if (!th || !queueTableEl.contains(th)) return;
+    const col = th.getAttribute('data-sort');
+    if (!col) return;
+    if (sortColumn === col) {
+      sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortColumn = col;
+      sortDir = 'asc';
+    }
+    renderQueueTableFromCache();
+  });
+
+  async function postQueueJobNow(btn) {
+    const jobId = btn.getAttribute('data-job');
+    if (!jobId) return;
+    btn.disabled = true;
+    const prevLabel = btn.textContent;
+    btn.textContent = 'Posting…';
+    if (statusEl) statusEl.textContent = 'Posting job #' + jobId + '…';
+    try {
+      const res = await fetch('{{ url_for("pos_billing.pos_save_queue_post_now") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ job_id: jobId }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        if (statusEl) statusEl.textContent = data.error || 'Post failed.';
+        return;
+      }
+      if (statusEl) {
+        statusEl.textContent = 'Posted job #' + jobId + (data.posted_billno ? ' as bill ' + data.posted_billno : '') + '.';
+      }
+    } catch (e) {
+      if (statusEl) statusEl.textContent = e.message || 'Post request failed.';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+      await loadQueue();
+    }
+  }
+
+  tbody.addEventListener('click', async (e) => {
+    const reconcileBtn = e.target.closest('.queue-reconcile');
+    if (reconcileBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const jobId = reconcileBtn.getAttribute('data-job');
+      if (!jobId || !confirm('Mark job #' + jobId + ' as POSTED? Use only if this bill is already in BILLHDR.')) return;
+      reconcileBtn.disabled = true;
+      try {
+        const res = await fetch('{{ url_for("pos_billing.pos_save_queue_reconcile") }}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ job_id: jobId }),
+        });
+        const data = await res.json();
+        if (statusEl) statusEl.textContent = data.success
+          ? ('Reconciled job #' + jobId + ' as bill ' + (data.posted_billno || '') + '.')
+          : (data.error || 'Reconcile failed.');
+      } catch (err) {
+        if (statusEl) statusEl.textContent = err.message || 'Reconcile request failed.';
+      } finally {
+        reconcileBtn.disabled = false;
+        await loadQueue();
+      }
+      return;
+    }
+    const postBtn = e.target.closest('.queue-post-now');
+    if (postBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      await postQueueJobNow(postBtn);
+      return;
+    }
+    const btn = e.target.closest('.queue-retry');
+    if (btn) {
+      e.preventDefault();
+      e.stopPropagation();
+      btn.disabled = true;
+      await fetch('{{ url_for("pos_billing.pos_save_queue_retry") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ job_id: btn.getAttribute('data-job'), unstick: btn.getAttribute('data-unstick') === '1' })
+      });
+      await loadQueue();
+      return;
+    }
+    const tr = e.target.closest('tr.queue-job-row[data-job-id]');
+    if (!tr || !tbody.contains(tr)) return;
+    const jobId = tr.getAttribute('data-job-id');
+    if (jobId) await openQueueJobDetail(jobId);
+  });
+
+  queueJobModalClose && queueJobModalClose.addEventListener('click', closeQueueJobModal);
+  queueJobModalBackdrop && queueJobModalBackdrop.addEventListener('click', closeQueueJobModal);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && queueJobModal && !queueJobModal.hidden) closeQueueJobModal();
+  });
+
+  btnRefresh && btnRefresh.addEventListener('click', loadQueue);
+  btnKick && btnKick.addEventListener('click', kickQueue);
+  btnUnstickAll && btnUnstickAll.addEventListener('click', unstickAllQueue);
+  loadQueue();
+  setInterval(loadQueue, 5000);
+})();
+</script>
+{% endblock %}

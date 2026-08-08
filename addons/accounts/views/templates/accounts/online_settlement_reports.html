@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Online Settlement Reports{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page" style="max-width:1400px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Online Settlement Reports</h1>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('accounts.online_settlement_page') }}" class="page-po__btn-secondary">Upload</a>
+      <a href="{{ url_for('accounts.online_settlement_history') }}" class="page-po__btn-secondary">History</a>
+    </div>
+  </div>
+
+  <form method="get" class="nexa-list-toolbar" style="margin-bottom:14px;">
+    <label>Report</label>
+    <select name="report" class="input">
+      <option value="receipts" {% if report == 'receipts' %}selected{% endif %}>Marketplace Receipt</option>
+      <option value="commission" {% if report == 'commission' %}selected{% endif %}>Commission Expense</option>
+      <option value="exceptions" {% if report == 'exceptions' %}selected{% endif %}>Exceptions</option>
+    </select>
+    <label>Batch</label>
+    <select name="batch" class="input">
+      <option value="">All batches</option>
+      {% for b in batches %}
+      <option value="{{ b.batch_no }}" {% if batch_no == b.batch_no %}selected{% endif %}>{{ b.batch_no }} — {{ b.marketplace_name or b.customer_code }}</option>
+      {% endfor %}
+    </select>
+    <label>From</label>
+    <input type="date" name="date_from" class="input" value="{{ date_from }}" />
+    <label>To</label>
+    <input type="date" name="date_to" class="input" value="{{ date_to }}" />
+    <button type="submit" class="page-po__btn-primary">Run</button>
+    <a class="page-po__btn-secondary"
+       href="{{ url_for('accounts.api_online_settlement_export_report', report=report, batch_no=batch_no, date_from=date_from, date_to=date_to) }}">Export CSV</a>
+  </form>
+
+  <div class="co-table-wrap">
+    {% if report == 'commission' %}
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th>Batch</th><th>Marketplace</th><th>Settlement Date</th><th>Order ID</th>
+          <th class="num">PM Comm</th><th class="num">Sales Comm</th><th class="num">SPlus</th><th class="num">Other Chg</th><th class="num">Total Expenses</th><th>Voucher</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.batch_no }}</td><td>{{ r.marketplace_name or '—' }}</td><td>{{ r.settlement_date or '—' }}</td><td>{{ r.order_id or '—' }}</td>
+          <td class="num">{{ '{:,.2f}'.format((r.pm_commission or 0)|float) }}</td>
+          <td class="num">{{ '{:,.2f}'.format((r.sales_commission or 0)|float) }}</td>
+          <td class="num">{{ '{:,.2f}'.format((r.splus_amount or 0)|float) }}</td>
+          <td class="num">{{ '{:,.2f}'.format((r.other_charges or 0)|float) }}</td>
+          <td class="num">{{ '{:,.2f}'.format((r.total_expenses or 0)|float) }}</td>
+          <td>{{ r.gl_voucher_no or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" style="text-align:center;padding:16px;color:#64748b;">No rows.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% elif report == 'exceptions' %}
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th>Batch</th><th>Marketplace</th><th>Upload Date</th><th>Line</th><th>Order ID</th>
+          <th class="num">Amount</th><th>Status</th><th>Message</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.batch_no }}</td><td>{{ r.marketplace_name or '—' }}</td><td>{{ r.upload_date or '—' }}</td>
+          <td>{{ r.line_no }}</td><td>{{ r.order_id or '—' }}</td>
+          <td class="num">{{ '{:,.2f}'.format((r.upload_invoice_amount or 0)|float) if r.upload_invoice_amount is not none else '—' }}</td>
+          <td>{{ r.status or '—' }}</td><td>{{ r.status_message or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" style="text-align:center;padding:16px;color:#64748b;">No exceptions.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th>Batch</th><th>Marketplace</th><th>Settlement Date</th><th>Order ID</th>
+          <th>Invoice No</th><th>Invoice Date</th><th class="num">Invoice Amt</th><th class="num">Received</th><th>Receipt No</th><th>Posted</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.batch_no }}</td><td>{{ r.marketplace_name or '—' }}</td><td>{{ r.settlement_date or '—' }}</td><td>{{ r.order_id or '—' }}</td>
+          <td>{{ r.invoice_no or '—' }}</td><td>{{ r.invoice_date or '—' }}</td>
+          <td class="num">{{ '{:,.2f}'.format((r.invoice_amount or 0)|float) if r.invoice_amount is not none else '—' }}</td>
+          <td class="num">{{ '{:,.2f}'.format((r.amount_received or 0)|float) if r.amount_received is not none else '—' }}</td>
+          <td>{{ r.receipt_no or '—' }}</td><td>{{ r.posted_date or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" style="text-align:center;padding:16px;color:#64748b;">No posted receipts.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

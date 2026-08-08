@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .iva-page { max-width: 1400px; margin: 0 auto; padding: 12px 16px 80px; font-size: 13px; color: #212529; }
+  .iva-title { margin: 0 0 12px; font-size: 26px; font-weight: 400; color: #212529; }
+  .iva-tabs { display: flex; gap: 0; border-bottom: 1px solid #dee2e6; margin-bottom: 14px; }
+  .iva-tab { padding: 8px 16px; border: none; background: transparent; font-size: 13px; color: #495057; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .iva-tab.is-active { color: #0d6efd; border-bottom-color: #0d6efd; font-weight: 600; }
+  .iva-header-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 280px; gap: 14px 20px; margin-bottom: 14px; align-items: start; }
+  .iva-field label { display: block; font-size: 12px; color: #6c757d; margin-bottom: 3px; }
+  .iva-field .input, .iva-field select, .iva-field textarea {
+    width: 100%; box-sizing: border-box; border: none; border-bottom: 1px solid #dee2e6;
+    padding: 4px 0; font-size: 13px; background: rgba(255,255,255,0.6); border-radius: 0;
+  }
+  .iva-field .input:focus, .iva-field select:focus, .iva-field textarea:focus { outline: none; border-bottom-color: #0d6efd; }
+  .iva-field .input[readonly] { color: #495057; }
+  .iva-status-card { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 10px 12px; }
+  .iva-status-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13px; }
+  .iva-status-row:last-child { margin-bottom: 0; }
+  .iva-status-label { color: #6c757d; }
+  .iva-status-value { font-weight: 600; color: #212529; }
+  .iva-toggle { position: relative; display: inline-block; width: 40px; height: 22px; }
+  .iva-toggle input { opacity: 0; width: 0; height: 0; }
+  .iva-toggle .slider { position: absolute; inset: 0; background: #ced4da; border-radius: 22px; cursor: pointer; transition: .2s; }
+  .iva-toggle .slider:before { content: ""; position: absolute; height: 16px; width: 16px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+  .iva-toggle input:checked + .slider { background: #198754; }
+  .iva-toggle input:checked + .slider:before { transform: translateX(18px); }
+  .iva-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .iva-toolbar .btn { border: 1px solid #dee2e6; background: #fff; border-radius: 4px; padding: 5px 12px; font-size: 12px; cursor: pointer; color: #212529; }
+  .iva-toolbar .btn:hover { background: #f8f9fa; }
+  .iva-toolbar .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .iva-table-wrap { overflow: auto; border: 1px solid #dee2e6; border-radius: 4px; max-height: 320px; }
+  .iva-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 1100px; }
+  .iva-table th, .iva-table td { padding: 6px 8px; border-bottom: 1px solid #e9ecef; white-space: nowrap; text-align: left; }
+  .iva-table th { background: #f8f9fa; font-weight: 600; color: #495057; position: sticky; top: 0; z-index: 1; }
+  .iva-table td.num, .iva-table th.num { text-align: right; }
+  .iva-table tbody tr { cursor: pointer; }
+  .iva-table tbody tr:hover { background: #f0f7ff; }
+  .iva-table tbody tr.is-selected { background: #e7f1ff; outline: 1px solid #0d6efd; outline-offset: -1px; }
+  .iva-table tbody tr.iva-empty td { text-align: center; color: #6c757d; font-style: italic; padding: 20px; cursor: default; }
+  .iva-table a.item-link { color: #0d6efd; text-decoration: none; }
+  .iva-detail-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 14px; }
+  .iva-detail-panel { border: 1px solid #dee2e6; border-radius: 4px; padding: 10px 12px; background: #fff; min-height: 140px; }
+  .iva-detail-panel h3 { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: #212529; }
+  .iva-detail-row { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: 12px; }
+  .iva-detail-row label { color: #6c757d; }
+  .iva-detail-row span { font-weight: 500; text-align: right; }
+  .iva-foot {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+    background: #fff; border-top: 1px solid #dee2e6; padding: 10px 16px;
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    box-shadow: 0 -4px 12px rgba(0,0,0,0.06);
+  }
+  .iva-foot-totals { display: flex; gap: 24px; font-size: 13px; color: #495057; }
+  .iva-foot-totals strong { color: #212529; font-variant-numeric: tabular-nums; }
+  .iva-foot-actions { display: flex; gap: 8px; align-items: center; }
+  .iva-foot .btn-post { background: #0d6efd; color: #fff; border: none; border-radius: 4px; padding: 8px 20px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .iva-foot .btn-post:hover { background: #0b5ed7; }
+  .iva-foot .btn-post:disabled { opacity: 0.55; cursor: not-allowed; }
+  .iva-foot .btn-secondary { background: #fff; border: 1px solid #dee2e6; border-radius: 4px; padding: 8px 14px; font-size: 13px; cursor: pointer; }
+  .iva-query-mode .iva-toolbar .btn-add,
+  .iva-query-mode .iva-toolbar .btn-remove,
+  .iva-query-mode .iva-foot .btn-post,
+  .iva-query-mode .iva-foot .btn-save { display: none !important; }
+  .iva-query-mode .iva-field .input:not([readonly]),
+  .iva-query-mode .iva-field select,
+  .iva-query-mode .iva-field textarea { pointer-events: none; opacity: 0.85; }
+  .iva-flash { margin-bottom: 10px; padding: 10px 12px; border-radius: 4px; font-size: 13px; }
+  .iva-flash--ok { background: #d1e7dd; color: #0f5132; border: 1px solid #badbcc; }
+  .iva-flash--err { background: #f8d7da; color: #842029; border: 1px solid #f5c2c7; }
+  .iva-other-panel { display: none; padding: 20px; color: #6c757d; font-style: italic; }
+  .iva-other-panel.is-active { display: block; }
+  #itemModal .modal__content { width: min(720px, 94vw); }
+  .modal { position: fixed; inset: 0; z-index: 1100; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal.hidden { display: none; }
+  .modal__overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.4); }
+  .modal__content { position: relative; background: #fff; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); max-height: 86vh; display: flex; flex-direction: column; overflow: hidden; }
+  .modal__header { padding: 10px 14px; border-bottom: 1px solid #dee2e6; display: flex; justify-content: space-between; align-items: center; }
+  .modal__header h4 { margin: 0; font-size: 15px; font-weight: 600; }
+  .modal__body { padding: 10px 14px; overflow: auto; flex: 1; }
+  .modal__close { border: none; background: transparent; font-size: 20px; cursor: pointer; color: #6c757d; }
+  @media (max-width: 1100px) {
+    .iva-header-grid { grid-template-columns: 1fr 1fr; }
+    .iva-detail-grid { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 700px) {
+    .iva-header-grid, .iva-detail-grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="iva-page{% if query_mode %} iva-query-mode{% endif %}" id="ivaPage"
+     data-query-mode="{{ 'true' if query_mode else 'false' }}"
+     data-existing="{{ 'true' if is_existing else 'false' }}"
+     data-save-url="{{ api_save_url }}"
+     data-list-url="{{ list_url }}"
+     data-item-context-url="{{ api_item_context_url }}">
+  <h1 class="iva-title">Inventory value adjustment{% if query_mode %} <span style="font-size:0.55em;color:#6c757d;">(View)</span>{% endif %}</h1>
+
+  <div class="iva-tabs" role="tablist">
+    <button type="button" class="iva-tab is-active" data-tab="overview">Overview</button>
+    <button type="button" class="iva-tab" data-tab="other">Other</button>
+  </div>
+
+  <div id="ivaFlash" class="iva-flash" hidden role="status"></div>
+
+  <div id="ivaOverviewPanel">
+    <div class="iva-header-grid">
+      <div class="iva-field">
+        <label for="ivaJournalName">Journal name</label>
+        <input class="input" id="ivaJournalName" type="text" value="{{ journal_name }}" readonly />
+        <input type="hidden" id="ivaJournalNo" value="{{ next_journal_no }}" />
+      </div>
+      <div class="iva-field">
+        <label for="ivaDescription">Description</label>
+        <input class="input" id="ivaDescription" type="text" value="Inventory value adjustment" maxlength="500" />
+      </div>
+      <div class="iva-field">
+        <label for="ivaAdjType">Adjustment type</label>
+        <select id="ivaAdjType" class="input">
+          {% for t in adj_types %}
+          <option value="{{ t }}"{% if t == 'VALUE' %} selected{% endif %}>{{ 'Value adjustment' if t == 'VALUE' else t.replace('_', ' ')|title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="iva-status-card">
+        <div class="iva-status-row">
+          <span class="iva-status-label">Status</span>
+          <span class="iva-status-value" id="ivaStatusLabel">In progress</span>
+        </div>
+        <div class="iva-status-row">
+          <span class="iva-status-label">Posted</span>
+          <label class="iva-toggle" title="Posted journals cannot be edited">
+            <input type="checkbox" id="ivaPostedToggle" disabled />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="iva-field">
+        <label for="ivaInvModel">Inventory model</label>
+        <select id="ivaInvModel" class="input">
+          {% for m in inv_models %}
+          <option value="{{ m }}"{% if m == 'FIFO' %} selected{% endif %}>{{ m.replace('_', ' ') }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="iva-field">
+        <label for="ivaJournalDate">Date</label>
+        <input class="input" id="ivaJournalDate" type="date" value="{{ default_date }}" />
+      </div>
+      <div class="iva-field">
+        <label for="ivaPostingDate">Posting date</label>
+        <input class="input" id="ivaPostingDate" type="date" value="{{ default_date }}" />
+      </div>
+      <div class="iva-field" style="grid-row: span 2;">
+        <label for="ivaNotes">Description</label>
+        <textarea id="ivaNotes" rows="4" maxlength="2000" placeholder="Value adjustment to correct item cost due to pricing update."></textarea>
+      </div>
+
+      <div class="iva-field">
+        <label for="ivaSite">Site</label>
+        <input class="input" id="ivaSite" type="text" value="{{ location_code or 1 }}" readonly />
+      </div>
+      <div class="iva-field">
+        <label for="ivaWarehouse">Warehouse</label>
+        <select id="ivaWarehouse" class="input">
+          <option value="">— All / default —</option>
+          {% for wh in warehouses %}
+          <option value="{{ wh.code }}" data-wh-id="{{ wh.id or '' }}">{{ wh.code }}{% if wh.name %} — {{ wh.name }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="iva-field">
+        <label for="ivaFinDim">Financial dimensions</label>
+        <input class="input" id="ivaFinDim" type="text" placeholder="DEPT-001" maxlength="50" />
+      </div>
+    </div>
+
+    <div class="iva-toolbar">
+      <button type="button" class="btn btn-add" id="ivaBtnAddLine">+ Add line</button>
+      <button type="button" class="btn btn-remove" id="ivaBtnRemoveLine" disabled>Remove</button>
+      <button type="button" class="btn" id="ivaBtnViewTxn" disabled title="Coming soon">View transactions</button>
+      <span style="margin-left:auto;font-size:12px;color:#6c757d;">Standard view ▾</span>
+    </div>
+
+    <div class="iva-table-wrap">
+      <table class="iva-table" id="ivaLinesTable">
+        <thead>
+          <tr>
+            <th style="width:28px;"><input type="checkbox" id="ivaSelectAll" title="Select all" /></th>
+            <th>Item number</th>
+            <th>Product name</th>
+            <th>Site</th>
+            <th>Warehouse</th>
+            <th>Adjustment</th>
+            <th class="num">Quantity</th>
+            <th>Unit</th>
+            <th class="num">Unit cost</th>
+            <th class="num">Adjustment amount</th>
+            <th class="num">New average cost</th>
+            <th>Financial dimensions</th>
+          </tr>
+        </thead>
+        <tbody id="ivaLinesBody">
+          <tr class="iva-empty"><td colspan="12">No journal lines. Click "+ Add line" to begin.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="iva-detail-grid">
+      <div class="iva-detail-panel">
+        <h3>Adjustment Details</h3>
+        <div class="iva-field" style="margin-bottom:8px;">
+          <label for="ivaReference">Reference</label>
+          <input class="input" id="ivaReference" type="text" maxlength="100" placeholder="PC-2025-05-26" />
+        </div>
+        <div class="iva-field" style="margin-bottom:8px;">
+          <label for="ivaAdjReason">Adjustment reason</label>
+          <select id="ivaAdjReason" class="input">
+            <option value="">— Select —</option>
+            {% for r in adj_reasons %}
+            <option value="{{ r }}">{{ r }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="iva-field">
+          <label for="ivaLineNotes">Notes</label>
+          <textarea id="ivaLineNotes" rows="2" maxlength="300" placeholder="Line notes"></textarea>
+        </div>
+      </div>
+      <div class="iva-detail-panel">
+        <h3>Current Inventory</h3>
+        <div class="iva-detail-row"><label>Quantity</label><span id="ivaDetCurQty">—</span></div>
+        <div class="iva-detail-row"><label>Current average cost</label><span id="ivaDetCurAvg">—</span></div>
+        <div class="iva-detail-row"><label>Inventory value</label><span id="ivaDetCurVal">—</span></div>
+      </div>
+      <div class="iva-detail-panel">
+        <h3>Adjustment</h3>
+        <div class="iva-detail-row"><label>Quantity</label><span id="ivaDetAdjQty">0.00</span></div>
+        <div class="iva-detail-row"><label>Value</label><span id="ivaDetAdjVal">—</span></div>
+      </div>
+      <div class="iva-detail-panel">
+        <h3>New Inventory (after adjustment)</h3>
+        <div class="iva-detail-row"><label>Quantity</label><span id="ivaDetNewQty">—</span></div>
+        <div class="iva-detail-row"><label>New average cost</label><span id="ivaDetNewAvg">—</span></div>
+        <div class="iva-detail-row"><label>New inventory value</label><span id="ivaDetNewVal">—</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="ivaOtherPanel" class="iva-other-panel">
+    Additional settings and audit fields will appear here in a future release.
+  </div>
+</div>
+
+<div class="iva-foot">
+  <div style="font-size:12px;color:#6c757d;" id="ivaFootHint">Enter a reference for the adjustment.</div>
+  <div class="iva-foot-totals">
+    <span>Total quantity: <strong id="ivaTotalQty">0.00</strong></span>
+    <span>Total adjustment amount: <strong id="ivaTotalAdj">0.00</strong></span>
+  </div>
+  <div class="iva-foot-actions">
+    <a class="btn-secondary" href="{{ list_url }}">Back to list</a>
+    {% if not query_mode %}
+    <button type="button" class="btn-secondary btn-save" id="ivaBtnSave">Save</button>
+    <button type="button" class="btn-post" id="ivaBtnPost">Post ▾</button>
+    {% endif %}
+  </div>
+</div>
+
+<div class="modal hidden" id="itemModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="itemModal"></div>
+  <div class="modal__content">
+    <header class="modal__header">
+      <h4>Select item</h4>
+      <button type="button" class="modal__close" data-close="itemModal" aria-label="Close">&times;</button>
+    </header>
+    <div class="modal__body">
+      <input type="search" id="itemSearch" class="input" placeholder="Search code or name…" style="width:100%;margin-bottom:8px;border:1px solid #dee2e6;border-radius:4px;padding:6px 8px;" />
+      <div style="max-height:50vh;overflow:auto;border:1px solid #dee2e6;border-radius:4px;">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;" id="itemPickTable">
+          <thead style="background:#334155;color:#fff;">
+            <tr><th style="padding:6px 8px;">Code</th><th style="padding:6px 8px;">Name</th><th style="padding:6px 8px;text-align:right;">Stock</th><th style="padding:6px 8px;text-align:right;">Avg cost</th></tr>
+          </thead>
+          <tbody id="itemPickBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="application/json" id="ivaInitialData">{{ (initial_data or {})|tojson }}</script>
+<script>
+  window.__IVA_ITEMS_URL__ = {{ api_items_url|tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/inventory_value_adjustment.js') }}?v=1"></script>
+{% endblock %}

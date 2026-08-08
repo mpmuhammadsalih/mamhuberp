@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}Warehouse Master{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .wl-list-page .wl-status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+  .wl-list-page .wl-status-pill--y { background: #dcfce7; color: #166534; }
+  .wl-list-page .wl-status-pill--n { background: #f1f5f9; color: #64748b; }
+  .wl-list-page .wl-type-pill {
+    display: inline-flex;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    background: #e0f2fe;
+    color: #0369a1;
+  }
+  .wl-list-page .wl-row-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .wl-list-page .wl-row-actions .page-po__btn-secondary {
+    padding: 4px 10px !important;
+    min-height: 28px !important;
+    font-size: 11px !important;
+  }
+  .wl-list-page #wlTable tbody tr { cursor: pointer; }
+  .wl-list-page #wlTable tbody tr:hover { background: #f8fafc !important; }
+</style>
+
+{% set ns = namespace(active=0, batch=0, bin=0) %}
+{% for r in rows or [] %}
+  {% if (r.get('is_active') or 'Y')|upper == 'Y' %}{% set ns.active = ns.active + 1 %}{% endif %}
+  {% if (r.get('batch_enabled') or 'Y')|upper == 'Y' %}{% set ns.batch = ns.batch + 1 %}{% endif %}
+  {% if (r.get('bin_enabled') or 'Y')|upper == 'Y' %}{% set ns.bin = ns.bin + 1 %}{% endif %}
+{% endfor %}
+{% set _total = (rows or [])|length %}
+{% set _inactive = _total - ns.active %}
+
+<div class="page-po nexa-list-page nexa-setup-list-page wl-list-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title page-po__title--with-icon">
+        <span class="page-po__title-icon" aria-hidden="true"><i class="bi bi-geo-alt-fill"></i></span>
+        Warehouse Master
+      </h1>
+      <p class="page-po__muted">
+        Sites in <strong>WAREHOUSE_MASTER</strong> linked to branch <strong>LOCATIONCODE</strong>.
+        Bins and stock use <code>WAREHOUSE_ID</code> from this master.
+      </p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('warehouse.warehouse_locations_new') }}" class="page-po__btn-primary">+ Add warehouse</a>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div class="nexa-stat-grid" aria-label="Warehouse summary">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue" aria-hidden="true"><i class="bi bi-building"></i></span>
+      <div>
+        <p class="nexa-stat-label">Total warehouses</p>
+        <p class="nexa-stat-value">{{ _total }}</p>
+        <p class="nexa-stat-sub">All sites</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green" aria-hidden="true"><i class="bi bi-check-circle"></i></span>
+      <div>
+        <p class="nexa-stat-label">Active</p>
+        <p class="nexa-stat-value">{{ ns.active }}</p>
+        <p class="nexa-stat-sub">Ready for transactions</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber" aria-hidden="true"><i class="bi bi-layers"></i></span>
+      <div>
+        <p class="nexa-stat-label">Batch enabled</p>
+        <p class="nexa-stat-value">{{ ns.batch }}</p>
+        <p class="nexa-stat-sub">Lot / batch tracking</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple" aria-hidden="true"><i class="bi bi-grid-3x3-gap"></i></span>
+      <div>
+        <p class="nexa-stat-label">Bin enabled</p>
+        <p class="nexa-stat-value">{{ ns.bin }}</p>
+        <p class="nexa-stat-sub">Shelf / bin structure</p>
+      </div>
+    </div>
+    {% if _inactive > 0 %}
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--cyan" aria-hidden="true"><i class="bi bi-pause-circle"></i></span>
+      <div>
+        <p class="nexa-stat-label">Inactive</p>
+        <p class="nexa-stat-value">{{ _inactive }}</p>
+        <p class="nexa-stat-sub">Not active</p>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="nexa-list-toolbar">
+    <input type="text" id="wlListSearch" class="input" placeholder="Search code, name, branch, type…"
+           style="min-width:220px; max-width:360px;" autocomplete="off" />
+    <button type="button" class="page-po__btn-secondary" id="wlListSearchClear" style="padding:4px 10px; font-size:11px;">Clear</button>
+    <span id="wlListMeta" class="nexa-num"></span>
+  </div>
+
+  <div class="page-po__section-title">Warehouse sites</div>
+  {% if not rows %}
+  <p class="page-po__muted" style="font-style:italic;">No warehouses yet. Click <strong>+ Add warehouse</strong>.</p>
+  {% else %}
+  <div class="co-table-wrap">
+    <table class="co-table" id="wlTable">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Branch</th>
+          <th>Type</th>
+          <th>Active</th>
+          <th>Batch</th>
+          <th>Bin</th>
+          <th style="cursor:default;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        {% set _act = (r.get('is_active') or 'Y')|upper == 'Y' %}
+        {% set _bat = (r.get('batch_enabled') or 'Y')|upper == 'Y' %}
+        {% set _bin = (r.get('bin_enabled') or 'Y')|upper == 'Y' %}
+        {% set _lc = r.get('locationcode') or '' %}
+        {% set _ln = (r.get('locationname') or '')|string|trim %}
+        {% set _branch = (_lc ~ ' — ' ~ _ln) if _ln else _lc %}
+        <tr data-search="{{ r.get('warehouse_code') or '' }} {{ r.get('warehouse_name') or '' }} {{ _lc }} {{ _ln }} {{ _branch }} {{ r.get('warehouse_type') or '' }}"
+            data-href="{{ url_for('warehouse.warehouse_locations_edit', id=r.get('warehouse_id')) }}">
+          <td><a class="pi-link" href="{{ url_for('warehouse.warehouse_locations_edit', id=r.get('warehouse_id')) }}" onclick="event.stopPropagation();">{{ r.get('warehouse_code') or '' }}</a></td>
+          <td>{{ r.get('warehouse_name') or '' }}</td>
+          <td>{{ _branch or '-' }}</td>
+          <td><span class="wl-type-pill">{{ r.get('warehouse_type') or '' }}</span></td>
+          <td><span class="wl-status-pill wl-status-pill--{{ 'y' if _act else 'n' }}">{{ 'Yes' if _act else 'No' }}</span></td>
+          <td><span class="wl-status-pill wl-status-pill--{{ 'y' if _bat else 'n' }}">{{ 'Yes' if _bat else 'No' }}</span></td>
+          <td><span class="wl-status-pill wl-status-pill--{{ 'y' if _bin else 'n' }}">{{ 'Yes' if _bin else 'No' }}</span></td>
+          <td>
+            <div class="wl-row-actions">
+              <a class="page-po__btn-secondary" href="{{ url_for('warehouse.warehouse_locations_edit', id=r.get('warehouse_id')) }}" onclick="event.stopPropagation();">Edit</a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+<script>
+(function () {
+  const searchEl = document.getElementById('wlListSearch');
+  const clearBtn = document.getElementById('wlListSearchClear');
+  const metaEl = document.getElementById('wlListMeta');
+  const rows = document.querySelectorAll('#wlTable tbody tr[data-search]');
+
+  function filterRows() {
+    const q = (searchEl && searchEl.value || '').trim().toLowerCase();
+    let visible = 0;
+    rows.forEach(function (tr) {
+      const hay = (tr.getAttribute('data-search') || '').toLowerCase();
+      const show = !q || hay.indexOf(q) !== -1;
+      tr.style.display = show ? '' : 'none';
+      if (show) visible += 1;
+    });
+    if (metaEl) metaEl.textContent = q ? (visible + ' of ' + rows.length + ' shown') : (rows.length + ' warehouse(s)');
+  }
+
+  rows.forEach(function (tr) {
+    tr.addEventListener('click', function (e) {
+      if (e.target.closest('a, button')) return;
+      const href = tr.getAttribute('data-href');
+      if (href) window.location.href = href;
+    });
+  });
+
+  if (searchEl) searchEl.addEventListener('input', filterRows);
+  if (clearBtn) clearBtn.addEventListener('click', function () {
+    if (searchEl) searchEl.value = '';
+    filterRows();
+  });
+  filterRows();
+})();
+</script>
+{% endblock %}

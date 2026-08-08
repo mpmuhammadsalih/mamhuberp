@@ -1,0 +1,782 @@
+{% extends "base.html" %}
+{% from 'includes/global_lookup_field.html' import global_lookup_field %}
+{% block title %}{{ voucher_cfg.title }}{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+{% set is_posted = (voucher.status or 'DRAFT')|upper == 'POSTED' %}
+{% set is_receipt = voucher_kind == 'receipt' %}
+{% set is_payment = voucher_kind == 'payment' %}
+{% set is_contra = voucher_kind == 'contra' %}
+<style>
+  .tally-page {
+    max-width: 1480px;
+    padding: 8px 12px 28px;
+    --im-toolbar-bg: linear-gradient(180deg, #f0f7fb 0%, #e3eef8 100%);
+    --im-toolbar-border: rgba(13, 110, 253, 0.14);
+    --im-field-fill-strong: #eaf2fa;
+    --im-field-readonly: rgba(226, 236, 247, 0.92);
+    --im-border: #e5eaf2;
+    --im-border-soft: #dbe3ef;
+    --im-text: #212529;
+    --im-muted: #64748b;
+    --im-accent: #0d6efd;
+    --im-accent-dark: #1a56a4;
+    --im-green: #16a34a;
+  }
+  body:has(.tally-page) { background: #f5f6f8 !important; }
+  .tally-title-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+    background: var(--im-toolbar-bg);
+    border: 1px solid var(--im-toolbar-border);
+    border-radius: 10px;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+  }
+  .tally-title-bar h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--im-text);
+    letter-spacing: .02em;
+  }
+  .tally-title-bar h1 i { color: var(--im-accent); }
+  .tally-title-bar .tally-vno {
+    font-family: Consolas, "Courier New", monospace;
+    color: var(--im-accent-dark);
+  }
+  .tally-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .tally-status--draft { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+  .tally-status--posted { background: #ecfdf5; border: 1px solid #bbf7d0; color: var(--im-green); }
+  .tally-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .tally-btn {
+    min-height: 32px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--im-border-soft);
+    background: #fff;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 3px 8px rgba(15, 23, 42, 0.04);
+  }
+  .tally-btn:hover { background: var(--im-field-fill-strong); border-color: var(--im-toolbar-border); }
+  .tally-btn--accept { background: var(--im-green); border-color: #15803d; color: #fff; }
+  .tally-btn--accept:hover { filter: brightness(1.05); background: var(--im-green); }
+  .tally-btn--save { background: var(--im-accent); border-color: var(--im-accent); color: #fff; box-shadow: 0 8px 18px rgba(13, 110, 253, 0.22); }
+  .tally-btn--save:hover { filter: brightness(1.05); background: var(--im-accent); }
+  .tally-btn[disabled] { opacity: .55; cursor: not-allowed; }
+  .tally-layout { display: grid; grid-template-columns: 320px 1fr; gap: 10px; align-items: start; }
+  .tally-panel {
+    background: var(--im-field-fill-strong);
+    border: 1px solid var(--im-border);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+  }
+  .tally-panel__head {
+    padding: 8px 10px;
+    background: linear-gradient(180deg, #e4ecf4 0%, #d5e1ec 100%);
+    border-bottom: 1px solid #b8c8d4;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: #14324a;
+  }
+  .tally-panel__body { padding: 10px; display: grid; gap: 8px; }
+  .tally-field label {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: #475569;
+  }
+  .tally-input, .tally-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 30px;
+    border: 1px solid var(--im-border-soft);
+    border-radius: 6px;
+    background: #fff;
+    padding: 4px 8px;
+    font-size: 13px;
+    color: var(--im-text);
+  }
+  .tally-textarea { min-height: 72px; resize: vertical; }
+  .tally-input:focus, .tally-textarea:focus {
+    outline: none;
+    border-color: var(--im-accent);
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.10);
+  }
+  .tally-input[readonly], .tally-textarea:disabled { background: var(--im-field-readonly); color: var(--im-muted); }
+  .tally-main {
+    background: #fff;
+    border: 1px solid var(--im-border);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+  }
+  .tally-grid-wrap { overflow: auto; max-height: calc(100vh - 280px); }
+  .tally-grid { width: 100%; min-width: 720px; border-collapse: collapse; font-size: 13px; }
+  .tally-grid thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f8fafc;
+    color: #334155;
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--im-border);
+  }
+  .tally-grid td { padding: 6px 8px; border-bottom: 1px solid #eef2f7; vertical-align: middle; }
+  .tally-grid tbody tr:nth-child(even) { background: #fafbfd; }
+  .tally-grid tbody tr:hover { background: #f8fbff; }
+  .tally-grid .num { text-align: right; }
+  .tally-line-no { font-weight: 700; color: var(--im-accent-dark); width: 48px; text-align: center; }
+  .tally-del { width: 30px; height: 28px; border: 1px solid #fecaca; background: #fff5f5; color: #b91c1c; cursor: pointer; border-radius: 6px; }
+  .tally-del:hover { background: #fee2e2; }
+  .tally-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--im-field-fill-strong);
+    border-top: 1px solid var(--im-border-soft);
+  }
+  .tally-total { font-size: 14px; font-weight: 800; color: var(--im-text); }
+  .tally-total span { color: var(--im-accent-dark); font-family: Consolas, monospace; font-size: 18px; }
+  .tally-help { font-size: 11px; color: var(--im-muted); }
+  .tally-audit {
+    margin-top: 10px;
+    padding: 10px;
+    background: #fff;
+    border: 1px solid var(--im-border-soft);
+    border-radius: 10px;
+    font-size: 12px;
+    color: #475569;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+  }
+  .tally-audit b { display: block; font-size: 10px; text-transform: uppercase; color: #94a3b8; }
+  .tally-page .global-lookup__input { min-height: 28px; font-size: 12px; }
+  .tally-submit-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 12000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, .38);
+  }
+  .tally-submit-overlay.show { display: flex; }
+  .tally-submit-box {
+    min-width: 270px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 18px;
+    border-radius: 12px;
+    background: #fff;
+    color: #1e293b;
+    box-shadow: 0 16px 36px rgba(15, 23, 42, .26);
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .tally-submit-spinner {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid #dbe3ef;
+    border-top-color: #0d6efd;
+    animation: tally-submit-spin .75s linear infinite;
+  }
+  @keyframes tally-submit-spin { to { transform: rotate(360deg); } }
+  .tally-req { color: #dc2626; font-weight: 700; }
+  @media (max-width: 960px) {
+    .tally-layout { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="im-page setup-im-page tally-page"
+     data-transaction-audit="{{ voucher_cfg.audit_label }}"
+     data-transaction-no="{{ voucher.voucher_no }}"
+     data-audit-intercept-form="#tallyForm">
+  <form id="tallyForm" method="post" autocomplete="off">
+    <input type="hidden" name="save_nonce" value="{{ global_save_nonce | default('') }}">
+    <input type="hidden" name="action" id="tallyAction" value="save">
+
+    <div class="tally-title-bar">
+      <div>
+        <h1>{% if is_receipt %}<i class="bi bi-box-arrow-in-down" aria-hidden="true"></i> {% elif is_contra %}<i class="bi bi-arrow-left-right" aria-hidden="true"></i> {% elif is_payment %}<i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> {% endif %}{{ voucher_cfg.title }} <span class="tally-vno">{{ voucher.voucher_no }}</span></h1>
+        <div class="tally-help" style="margin-top:4px;">
+          {% if is_receipt %}Money received — Dr Cash/Bank, Cr Customer/Income/Loan/Capital/Receivable
+          {% elif is_contra %}Cash / bank transfer only — Cr From Cash/Bank, Dr To Cash/Bank
+          {% else %}Money paid — Dr Supplier/Expense/Loan/Asset/Payable, Cr Cash/Bank{% endif %}
+          · Enter → next field · Esc → back · Ctrl+S save draft · Ctrl+Enter post · save once
+        </div>
+      </div>
+      <div class="tally-actions">
+        <span class="tally-status {{ 'tally-status--posted' if is_posted else 'tally-status--draft' }}">{{ 'Posted' if is_posted else 'Draft' }}</span>
+        <button type="submit" class="tally-btn tally-btn--save" data-action="save" data-tra-save {{ 'disabled' if is_posted else '' }}>Save draft</button>
+        <button type="submit" class="tally-btn tally-btn--accept" data-action="post" {{ 'disabled' if is_posted else '' }}>Accept (Post)</button>
+        {% if is_posted %}
+        <a class="tally-btn" href="{{ url_for(voucher_cfg.pdf_endpoint, voucher_no=voucher.voucher_no) }}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+        {% endif %}
+        <a class="tally-btn" href="{{ url_for(voucher_cfg.list_endpoint) }}">List</a>
+        <a class="tally-btn" href="{{ url_for(voucher_cfg.form_endpoint, new=1) }}">Clear</a>
+        {% if voucher.gl_voucher_no %}
+        <a class="tally-btn" href="{{ url_for('accounts.journal_voucher_view', voucher_no=voucher.gl_voucher_no) }}">GL {{ voucher.gl_voucher_no }}</a>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="tally-layout">
+      <aside class="tally-panel">
+        <div class="tally-panel__head">Voucher details</div>
+        <div class="tally-panel__body">
+          <div class="tally-field">
+            <label for="voucher_no">Voucher no.</label>
+            <input class="tally-input" id="voucher_no" name="voucher_no" value="{{ voucher.voucher_no }}" readonly>
+          </div>
+          <div class="tally-field">
+            <label for="voucher_date">Date</label>
+            <input class="tally-input" id="voucher_date" type="date" name="voucher_date" value="{{ (voucher.voucher_date|string)[:10] if voucher.voucher_date else today }}" {{ 'readonly' if is_posted else '' }}>
+          </div>
+          <div class="tally-field">
+            <label for="reference_no">Reference</label>
+            <input class="tally-input" id="reference_no" name="reference_no" maxlength="50" placeholder="Cheque / UTR / ref" value="{{ voucher.reference_no or '' }}" {{ 'readonly' if is_posted else '' }}>
+          </div>
+          {{ global_lookup_field(
+            field_id='tallyCashBank',
+            label=voucher_cfg.cash_label,
+            name='cash_bank_account',
+            kind=(voucher_cfg.cash_lookup_kind or 'cash_bank_strict'),
+            value_code=voucher.cash_bank_account or '',
+            value_label=voucher.cash_bank_label or '',
+            placeholder='Search cash / bank…',
+            no_default=true,
+            field_class='tally-field',
+            input_class='global-lookup__input odoo-lookup__input tally-input',
+            readonly=is_posted,
+            disabled=is_posted,
+          ) }}
+          <div class="tally-field">
+            <label for="narration">Narration</label>
+            <textarea class="tally-textarea" id="narration" name="narration" placeholder="Narration" {{ 'disabled' if is_posted else '' }}>{{ voucher.narration or '' }}</textarea>
+          </div>
+        </div>
+      </aside>
+
+      <section class="tally-main">
+        <div class="tally-panel__head" style="display:flex;justify-content:space-between;align-items:center;">
+          <span>{{ voucher_cfg.particulars_title }}</span>
+          <button type="button" class="tally-btn" id="tallyAddRow" {{ 'disabled' if is_posted else '' }}>+ Add line</button>
+        </div>
+        <div class="tally-grid-wrap">
+          <table class="tally-grid" id="tallyGrid">
+            <thead>
+              <tr>
+                <th style="width:52px;">#</th>
+                <th>{{ voucher_cfg.line_account_col or 'Ledger account' }}</th>
+                <th>Particulars <span class="tally-req" title="Required">*</span></th>
+                <th class="num" style="width:140px;">Amount</th>
+                <th style="width:44px;"></th>
+              </tr>
+            </thead>
+            <tbody id="tallyLines"></tbody>
+          </table>
+        </div>
+        <div class="tally-foot">
+          <div class="tally-total">Total: <span id="tallyTotal">0.00</span></div>
+          <div class="tally-help"><span id="tallyLineCount">0</span> line(s)</div>
+        </div>
+      </section>
+    </div>
+
+    {% if voucher.created_by or voucher.posted_by %}
+    <div class="tally-audit">
+      <div><b>Created by</b>{{ voucher.created_by or '—' }}</div>
+      <div><b>Created at</b>{{ voucher.created_at or '—' }}</div>
+      <div><b>Posted by</b>{{ voucher.posted_by or '—' }}</div>
+      <div><b>Posted at</b>{{ voucher.posted_at or '—' }}</div>
+    </div>
+    {% endif %}
+  </form>
+</div>
+
+<div class="tally-submit-overlay" id="tallySubmitOverlay" aria-hidden="true" role="status">
+  <div class="tally-submit-box">
+    <span class="tally-submit-spinner" aria-hidden="true"></span>
+    <span id="tallySubmitOverlayText">Saving…</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  const allAccounts = {{ accounts|tojson }};
+  const initialLines = {{ lines|tojson }};
+  const posted = {{ 'true' if is_posted else 'false' }};
+  const LINE_LOOKUP_URL = {{ url_for('api.global_lookup', kind=(voucher_cfg.line_lookup_kind or 'cash_bank_strict'))|tojson }};
+  const LINE_LOOKUP_PLACEHOLDER = {{ (
+    'Search cash / bank…' if is_contra else (
+      'Customer, Income, Loan, Capital, Receivable…' if is_receipt else 'Supplier, Expense, Loan, Asset, Payable…'
+    )
+  )|tojson }};
+  const tbody = document.getElementById('tallyLines');
+  const form = document.getElementById('tallyForm');
+  (function syncSaveNonce() {
+    const pageNonce = {{ (global_save_nonce | default('')) | tojson }};
+    const h = form && form.querySelector('input[name="save_nonce"]');
+    if (pageNonce) {
+      window.__GLOBAL_SAVE_NONCE = pageNonce;
+      if (h) h.value = pageNonce;
+    } else if (h && String(h.value || '').trim()) {
+      window.__GLOBAL_SAVE_NONCE = String(h.value).trim();
+    }
+  })();
+  const actionInput = document.getElementById('tallyAction');
+  const totalEl = document.getElementById('tallyTotal');
+  const countEl = document.getElementById('tallyLineCount');
+  const submitOverlay = document.getElementById('tallySubmitOverlay');
+  const submitOverlayText = document.getElementById('tallySubmitOverlayText');
+  const voucherTitle = {{ voucher_cfg.title|tojson }};
+
+  function setSubmitLocked(action) {
+    form.dataset.submitLocked = '1';
+    const msg = action === 'post'
+      ? ('Posting ' + voucherTitle + '…')
+      : ('Saving ' + voucherTitle + ' draft…');
+    if (typeof window.showLoadingOverlay === 'function') {
+      window.showLoadingOverlay(msg);
+    }
+    if (submitOverlayText) submitOverlayText.textContent = msg;
+    if (submitOverlay) {
+      submitOverlay.classList.add('show');
+      submitOverlay.setAttribute('aria-hidden', 'false');
+    }
+    // Defer disable so requestSubmit / named submit buttons still post correctly.
+    window.setTimeout(function () {
+      if (form.dataset.submitLocked !== '1') return;
+      form.querySelectorAll('button[type="submit"]').forEach(function (btn) {
+        btn.disabled = true;
+      });
+    }, 0);
+  }
+
+  function ensureSubmitUiReady() {
+    resetSubmitUi();
+    if (typeof window.reEnableFormSubmit === 'function') {
+      window.reEnableFormSubmit(form);
+    }
+  }
+
+  function resetSubmitUi() {
+    form.dataset.submitLocked = '0';
+    form.querySelectorAll('button[type="submit"]').forEach(function (btn) {
+      if (!posted) btn.disabled = false;
+    });
+    if (typeof window.hideLoadingOverlay === 'function') {
+      window.hideLoadingOverlay();
+    }
+    if (submitOverlay) {
+      submitOverlay.classList.remove('show');
+      submitOverlay.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  function bindAuditSubmitReset() {
+    if (form.dataset.tallyAuditResetBound === '1') return;
+    form.dataset.tallyAuditResetBound = '1';
+    form.addEventListener('submit', function () {
+      if (form.dataset.submitLocked !== '1') return;
+      const poll = window.setInterval(function () {
+        if (form.dataset.traSubmitting === '1') return;
+        window.clearInterval(poll);
+        resetSubmitUi();
+      }, 120);
+      window.setTimeout(function () { window.clearInterval(poll); }, 120000);
+    }, false);
+  }
+
+  function validateBeforeSubmit(action) {
+    if (action === 'post' && !window.confirm('Post this ' + voucherTitle + ' to accounts?')) {
+      return 'cancelled';
+    }
+    const lineErrors = [];
+    let focusDesc = null;
+    Array.prototype.forEach.call(tbody.querySelectorAll('tr'), function (tr, idx) {
+      const codeEl = tr.querySelector('[name="ledger_account[]"]');
+      const descEl = tr.querySelector('[name="description[]"]');
+      const amtEl = tr.querySelector('[name="amount[]"]');
+      const code = codeEl ? String(codeEl.value || '').trim() : '';
+      const desc = descEl ? String(descEl.value || '').trim() : '';
+      const amt = toNumber(amtEl && amtEl.value);
+      if (!code && amt <= 0) return;
+      if (!desc) {
+        lineErrors.push('Line ' + (idx + 1) + ': enter particulars.');
+        if (!focusDesc && descEl) focusDesc = descEl;
+      }
+    });
+    if (lineErrors.length) {
+      if (focusDesc) focusTallyField(focusDesc);
+      window.alert(lineErrors[0]);
+      return lineErrors[0];
+    }
+    return '';
+  }
+
+  function submitTallyForm(action) {
+    if (posted || form.dataset.submitLocked === '1' || form.dataset.traSubmitting === '1') return;
+    if (actionInput) actionInput.value = action || 'save';
+    const message = validateBeforeSubmit(actionInput ? actionInput.value : action);
+    if (message) return;
+    const btn = form.querySelector('button[type="submit"][data-action="' + (action || 'save') + '"]');
+    if (typeof form.requestSubmit === 'function') {
+      form.requestSubmit(btn || undefined);
+    } else if (btn) {
+      btn.click();
+    } else {
+      form.submit();
+    }
+  }
+
+  function onTallyFormSubmit(e) {
+    if (posted) {
+      e.preventDefault();
+      return;
+    }
+    if (form.dataset.submitLocked === '1' || form.dataset.traSubmitting === '1') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
+    const submitter = e.submitter;
+    const action = submitter ? (submitter.getAttribute('data-action') || 'save') : (actionInput && actionInput.value) || 'save';
+    if (actionInput) actionInput.value = action;
+    const message = validateBeforeSubmit(action);
+    if (message) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      ensureSubmitUiReady();
+      return;
+    }
+    setSubmitLocked(action);
+  }
+
+  function toNumber(v) {
+    const n = Number(String(v || '').replace(/,/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function fmt(n) {
+    return toNumber(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function htmlEscape(v) {
+    return String(v || '').replace(/[&<>"']/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+  }
+
+  function accountLabel(code) {
+    const acc = allAccounts.find(function (a) { return String(a.code) === String(code); });
+    return acc ? (acc.code + ' — ' + (acc.name || '')) : (code || '');
+  }
+
+  function totals() {
+    let sum = 0;
+    let count = 0;
+    Array.prototype.forEach.call(tbody.querySelectorAll('tr'), function (tr) {
+      const amt = toNumber(tr.querySelector('[name="amount[]"]') && tr.querySelector('[name="amount[]"]').value);
+      if (amt > 0) count += 1;
+      sum += amt;
+    });
+    if (totalEl) totalEl.textContent = fmt(sum);
+    if (countEl) countEl.textContent = String(count);
+  }
+
+  function lookupDropdownOpen(el) {
+    const root = el && el.closest('.global-lookup, .odoo-lookup');
+    if (!root || !root.classList.contains('is-open')) return false;
+    const dd = root.id ? document.querySelector('[data-lookup-owner="' + root.id + '"]') : null;
+    return !!(dd && dd.style.display !== 'none' && dd.querySelector('.global-lookup__option, .odoo-lookup__option'));
+  }
+
+  function closeLookupDropdown(el) {
+    const root = el && el.closest('.global-lookup, .odoo-lookup');
+    if (!root) return;
+    root.classList.remove('is-open');
+    const inp = root.querySelector('.global-lookup__input, .odoo-lookup__input');
+    if (inp) inp.setAttribute('aria-expanded', 'false');
+    const dd = root.id ? document.querySelector('[data-lookup-owner="' + root.id + '"]') : null;
+    if (dd) { dd.style.display = 'none'; dd.innerHTML = ''; }
+  }
+
+  function focusTallyField(el) {
+    if (!el || el.disabled) return;
+    requestAnimationFrame(function () {
+      el.focus({ preventScroll: false });
+      if (typeof el.select === 'function' && el.type !== 'date' && !el.readOnly) {
+        try { el.select(); } catch (err) { /* readonly */ }
+      }
+    });
+  }
+
+  function tallyLineRow(el) {
+    if (!el || !tbody) return null;
+    const tr = el.closest('tr');
+    if (!tr || tr.parentElement !== tbody) return null;
+    return tr;
+  }
+
+  function collectTallyNavFields() {
+    const fields = [];
+    ['voucher_date', 'reference_no'].forEach(function (name) {
+      const el = form.querySelector('input[name="' + name + '"]');
+      if (el && !el.disabled && !el.readOnly) fields.push(el);
+    });
+    const cashBank = document.getElementById('tallyCashBankDisplay');
+    if (cashBank && !cashBank.disabled) fields.push(cashBank);
+    const narr = document.getElementById('narration');
+    if (narr && !narr.disabled) fields.push(narr);
+    Array.prototype.forEach.call(tbody.querySelectorAll('tr'), function (tr) {
+      const acc = tr.querySelector('.tally-line-account-display');
+      const desc = tr.querySelector('[name="description[]"]');
+      const amt = tr.querySelector('[name="amount[]"]');
+      if (acc && !acc.disabled) fields.push(acc);
+      if (desc && !desc.disabled) fields.push(desc);
+      if (amt && !amt.disabled) fields.push(amt);
+    });
+    return fields;
+  }
+
+  function tallyFocusNext(el) {
+    const fields = collectTallyNavFields();
+    const idx = fields.indexOf(el);
+    if (idx >= 0 && idx < fields.length - 1) {
+      focusTallyField(fields[idx + 1]);
+      return;
+    }
+    const tr = tallyLineRow(el);
+    if (tr && tr.parentElement === tbody) {
+      const nextTr = tr.nextElementSibling;
+      if (nextTr) {
+        focusTallyField(nextTr.querySelector('.tally-line-account-display'));
+        return;
+      }
+      const newRow = addRow();
+      if (newRow) focusTallyField(newRow.querySelector('.tally-line-account-display'));
+    }
+  }
+
+  function tallyFocusPrev(el) {
+    const fields = collectTallyNavFields();
+    const idx = fields.indexOf(el);
+    if (idx > 0) {
+      focusTallyField(fields[idx - 1]);
+      return;
+    }
+    const tr = tallyLineRow(el);
+    if (tr && tr.previousElementSibling) {
+      focusTallyField(tr.previousElementSibling.querySelector('[name="amount[]"]'));
+    } else if (document.getElementById('narration')) {
+      focusTallyField(document.getElementById('narration'));
+    }
+  }
+
+  function ensureBlankRow() {
+    const rows = tbody.querySelectorAll('tr');
+    const last = rows[rows.length - 1];
+    if (!last) return addRow();
+    const hasValue = last.querySelector('[name="ledger_account[]"]') && last.querySelector('[name="ledger_account[]"]').value
+      || (last.querySelector('[name="description[]"]') && last.querySelector('[name="description[]"]').value.trim())
+      || toNumber(last.querySelector('[name="amount[]"]') && last.querySelector('[name="amount[]"]').value) > 0;
+    if (hasValue) return addRow();
+    return last;
+  }
+
+  function onTallyNavKeydown(e) {
+    if (posted || (e.key !== 'Enter' && e.key !== 'Escape')) return;
+    const el = e.target;
+    if (!el.closest('#tallyForm')) return;
+    const isNav = el.matches(
+      'input[name="voucher_date"], input[name="reference_no"], #tallyCashBankDisplay, '
+      + '#narration, .tally-line-account-display, input[name="description[]"], input[name="amount[]"]'
+    );
+    if (!isNav) return;
+
+    if (e.key === 'Enter') {
+      const tr = tallyLineRow(el);
+
+      if (el.matches('.tally-line-account-display') && tr) {
+        if (lookupDropdownOpen(el)) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        closeLookupDropdown(el);
+        focusTallyField(tr.querySelector('input[name="description[]"]'));
+        return;
+      }
+
+      if (el.matches('input[name="description[]"]') && tr) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        focusTallyField(tr.querySelector('input[name="amount[]"]'));
+        return;
+      }
+
+      if (el.matches('input[name="amount[]"]') && tr) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        totals();
+        if (tr === tbody.lastElementChild) ensureBlankRow();
+        const nextTr = tr.nextElementSibling || tbody.lastElementChild;
+        focusTallyField(nextTr ? nextTr.querySelector('.tally-line-account-display') : null);
+        return;
+      }
+
+      if (lookupDropdownOpen(el)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      tallyFocusNext(el);
+      return;
+    }
+
+    if (lookupDropdownOpen(el)) closeLookupDropdown(el);
+    e.preventDefault();
+    e.stopPropagation();
+    tallyFocusPrev(el);
+  }
+
+  function initTallyLineLookups(scope) {
+    const root = scope || form;
+    if (window.initAllGlobalLookups) {
+      window.initAllGlobalLookups(root);
+    } else if (window.GlobalLookup && window.GlobalLookup.initAll) {
+      window.GlobalLookup.initAll(root);
+    }
+    root.querySelectorAll('.tally-line-account-lookup').forEach(function (lookupRoot) {
+      if (lookupRoot.dataset.tallySelectBound === '1') return;
+      lookupRoot.dataset.tallySelectBound = '1';
+      lookupRoot.addEventListener('global-lookup:select', function () {
+        const tr = lookupRoot.closest('tr');
+        if (!tr) return;
+        totals();
+        focusTallyField(tr.querySelector('input[name="description[]"]'));
+      });
+    });
+  }
+
+  function bindTallyEnterNav() {
+    if (posted || !form || form.dataset.tallyEnterNav === '1') return;
+    form.dataset.tallyEnterNav = '1';
+    form.addEventListener('keydown', onTallyNavKeydown, true);
+  }
+
+  function bindRow(tr) {
+    const amt = tr.querySelector('[name="amount[]"]');
+    if (amt) amt.addEventListener('input', totals);
+    const del = tr.querySelector('.tally-del');
+    if (del) {
+      del.addEventListener('click', function () {
+        if (posted) return;
+        tr.remove();
+        renumber();
+        totals();
+        if (!tbody.querySelector('tr')) addRow();
+      });
+    }
+  }
+
+  function renumber() {
+    Array.prototype.forEach.call(tbody.querySelectorAll('tr'), function (tr, idx) {
+      const cell = tr.querySelector('.tally-line-no');
+      if (cell) cell.textContent = String(idx + 1);
+    });
+  }
+
+  function addRow(data) {
+    if (!tbody || posted) return null;
+    data = data || {};
+    const tr = document.createElement('tr');
+    const code = data.account_code || data.ACCOUNT_CODE || '';
+    const desc = data.description || data.DESCRIPTION || '';
+    const amt = data.amount != null ? data.amount : (data.AMOUNT != null ? data.AMOUNT : '');
+    tr.innerHTML =
+      '<td class="tally-line-no">1</td>' +
+      '<td><div class="global-lookup odoo-lookup global-lookup--inline tally-line-account-lookup" data-search-url="' + htmlEscape(LINE_LOOKUP_URL) + '" data-no-default="1" data-limit="8" data-min-chars="1" data-enter-focus-next="input[name=\'description[]\']">' +
+        '<div class="global-lookup__row odoo-lookup__row">' +
+          '<input type="text" class="global-lookup__input odoo-lookup__input tally-line-account-display tally-input" ' +
+            'autocomplete="off" placeholder="' + htmlEscape(LINE_LOOKUP_PLACEHOLDER) + '" value="' + htmlEscape(accountLabel(code)) + '">' +
+          '<input type="hidden" class="global-lookup__value odoo-lookup__value" name="ledger_account[]" value="' + htmlEscape(code) + '">' +
+          '<button type="button" class="global-lookup__clear odoo-lookup__clear" aria-label="Clear"' + (code ? '' : ' hidden') + '>×</button>' +
+        '</div></div></td>' +
+      '<td><input class="tally-input" type="text" name="description[]" maxlength="500" placeholder="Required" value="' + htmlEscape(desc) + '"></td>' +
+      '<td class="num"><input class="tally-input" type="text" name="amount[]" inputmode="decimal" value="' + htmlEscape(amt) + '"></td>' +
+      '<td><button type="button" class="tally-del" title="Remove">×</button></td>';
+    tbody.appendChild(tr);
+    bindRow(tr);
+    renumber();
+    totals();
+    initTallyLineLookups(tr);
+    return tr;
+  }
+
+  (initialLines && initialLines.length ? initialLines : [{}]).forEach(function (line) { addRow(line); });
+  if (!tbody.querySelector('tr')) addRow();
+  bindTallyEnterNav();
+
+  document.getElementById('tallyAddRow').addEventListener('click', function () {
+    const row = addRow();
+    const disp = row && row.querySelector('.tally-line-account-display');
+    if (disp) disp.focus();
+  });
+
+  form.addEventListener('submit', onTallyFormSubmit, true);
+  bindAuditSubmitReset();
+  ensureSubmitUiReady();
+  window.addEventListener('pageshow', ensureSubmitUiReady);
+
+  form.querySelectorAll('button[type="submit"][data-action]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (actionInput) actionInput.value = btn.getAttribute('data-action') || 'save';
+    });
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (posted || form.dataset.submitLocked === '1' || form.dataset.traSubmitting === '1') return;
+    if (e.ctrlKey && e.key === 's') {
+      e.preventDefault();
+      submitTallyForm('save');
+    }
+    if (e.ctrlKey && e.key === 'Enter') {
+      e.preventDefault();
+      submitTallyForm('post');
+    }
+  });
+})();
+</script>
+{% endblock %}

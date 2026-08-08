@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="card">
+    <div class="page-header">
+      <div>
+        <h1>Access Denied</h1>
+        <p class="muted">You do not have permission to open this menu.</p>
+      </div>
+      <a class="button button--secondary" href="{{ url_for('dashboard.dashboard') }}">Go to Dashboard</a>
+    </div>
+
+    {% if deny_reason == 'no_permissions' %}
+      <p>Your user account has role <strong>{{ role_id or '—' }}</strong>, but that role has <strong>no menus allowed</strong>. Open <strong>Roles &amp; Permissions</strong>, edit the role, and tick at least one menu under the <strong>ERP (web)</strong> tab.</p>
+    {% elif role_id %}
+      <p>Your user is assigned role <strong>{{ role_id }}</strong>{% if denied_endpoint %} and tried to open <code>{{ denied_endpoint }}</code>{% endif %}.</p>
+      <ul style="margin: 12px 0 0 1.2rem; color: #374151; line-height: 1.6;">
+        <li>In <strong>Roles &amp; Permissions</strong>, open that role and enable the matching item on the <strong>ERP (web)</strong> tab (e.g. <em>Sales Return</em> → <code>sales.sales_return</code>).</li>
+        <li>Mobile-only checkboxes (Mobile app tab) do not replace ERP checkboxes unless the menu is linked — after a recent update, mobile Sales Return also grants web Sales Return.</li>
+        <li>In <strong>User Management</strong>, confirm this user’s <strong>Role</strong> is the role you edited (not a different role).</li>
+        <li>Log out and log in again if you just changed the user’s role.</li>
+      </ul>
+    {% else %}
+      <p>If you need access, contact your administrator to update your role permissions.</p>
+    {% endif %}
+  </section>
+{% endblock %}

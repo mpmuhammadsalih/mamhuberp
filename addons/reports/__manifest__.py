@@ -1,0 +1,2 @@
+"""Addon manifest — Reports."""
+MANIFEST = {'technical_name': 'reports', 'name': 'Reports', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Migrated from blueprints/reports.py', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/reports'}, 'flask': {'blueprint': 'reports', 'blueprint_ref': 'addons.reports:bp', 'models_package': 'addons.reports.models', 'routes_module': 'addons.reports.controllers.routes'}}

@@ -1,0 +1,521 @@
+{% extends "base.html" %}
+{% block title %}Profit &amp; Loss{% endblock %}
+{% block content %}
+<style>
+  .pl-fs { max-width: 1100px; margin: 0 auto; }
+  .pl-fs * { box-sizing: border-box; }
+  .pl-toolbar {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 1.5rem; padding: 12px 14px;
+    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; font-family: system-ui, sans-serif;
+  }
+  .pl-toolbar .label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px; }
+  .pl-toolbar .input { padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; }
+  .pl-toolbar .pl-export {
+    display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    text-decoration: none; border: 1px solid #cbd5e1; background: #fff; color: #334155; margin-left: 4px;
+  }
+  .pl-toolbar .pl-export--primary { background: #1a56a4; color: #fff; border-color: #1a56a4; }
+  .pl-toolbar .pl-export:hover { filter: brightness(0.95); }
+  .pl-header {
+    font-family: "Times New Roman", Times, "Liberation Serif", Georgia, serif;
+    color: #111;
+    margin-bottom: 1.25rem;
+  }
+  .pl-header__company {
+    font-size: 1.35rem; font-weight: 700; letter-spacing: 0.02em; margin: 0 0 6px 0; line-height: 1.2;
+  }
+  .pl-header__period {
+    font-size: 0.95rem; font-style: italic; color: #333; margin: 0 0 6px 0; line-height: 1.35;
+  }
+  .pl-header__note {
+    font-size: 0.8rem; font-style: italic; color: #555; margin: 0; line-height: 1.4;
+  }
+  .pl-title {
+    font-family: "Times New Roman", Times, "Liberation Serif", Georgia, serif;
+    font-size: 1.05rem; font-weight: 700; letter-spacing: 0.06em; color: #6b0f1a; text-align: center;
+    margin: 1.25rem 0 0.5rem; padding-bottom: 6px; border-bottom: 2.5px solid #1a1a1a;
+  }
+  .pl-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .pl-tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: "Times New Roman", Times, "Liberation Serif", Georgia, serif;
+    font-size: 0.9rem;
+    color: #111;
+  }
+  .pl-tbl thead th {
+    font-weight: 600;
+    text-align: left;
+    padding: 10px 8px 8px 8px;
+    border: none;
+    border-bottom: 2px solid #1a1a1a;
+    background: #fff;
+    vertical-align: bottom;
+  }
+  .pl-tbl thead th.pl-th-note {
+    width: 4.5rem; text-align: center; font-size: 0.75rem; color: #444;
+  }
+  .pl-tbl thead th.pl-th-amt {
+    text-align: right; white-space: nowrap; min-width: 7.5rem; font-size: 0.8rem; font-weight: 700;
+  }
+  .pl-tbl thead th.pl-th--current { background: #e8e8e8; }
+  .pl-tbl tbody tr td {
+    border: none;
+    padding: 5px 8px; vertical-align: top;
+  }
+  .pl-tbl tbody tr td.pl-td--current { background: #e8e8e8; }
+  .pl-tbl td.pl-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pl-tbl tr.pl-h1 td {
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.8rem; padding-top: 14px;
+    color: #111;
+  }
+  .pl-tbl tr.pl-h2 td { font-weight: 700; font-size: 0.88rem; padding-top: 10px; padding-left: 2px; }
+  .pl-tbl tr.pl-line td.pl-desc { padding-left: 0.4rem; }
+  .pl-tbl tr.pl-line-clickable { cursor: pointer; }
+  .pl-tbl tr.pl-line-clickable:hover td { background: #e8f0fe !important; }
+  .pl-tbl tr.pl-line-clickable td.pl-td--current:hover,
+  .pl-tbl tr.pl-line-clickable:hover td.pl-td--current { background: #dbeafe !important; }
+  #plDetailModal .modal__content {
+    width: min(1100px, 96vw);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+  }
+  #plDetailModal .modal__body {
+    overflow: auto;
+    flex: 1;
+    min-height: 0;
+  }
+  #plDetailLedgerTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    font-family: system-ui, sans-serif;
+  }
+  #plDetailLedgerTable th,
+  #plDetailLedgerTable td {
+    border: 1px solid #e2e8f0;
+    padding: 6px 8px;
+  }
+  #plDetailLedgerTable thead th {
+    background: #f1f5f9;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  #plDetailLedgerTable td.num {
+    text-align: right;
+    font-family: ui-monospace, monospace;
+  }
+  .pl-detail-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px 16px;
+    font-size: 13px;
+    margin-bottom: 12px;
+    font-family: system-ui, sans-serif;
+  }
+  .pl-detail-meta dt { color: #94a3b8; font-size: 11px; margin: 0; }
+  .pl-detail-meta dd { margin: 2px 0 0 0; font-weight: 600; color: #1e293b; }
+  .pl-detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .pl-detail-loading { color: #64748b; padding: 24px; text-align: center; font-family: system-ui, sans-serif; }
+  .pl-detail-err { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 10px 12px; border-radius: 8px; font-size: 13px; font-family: system-ui, sans-serif; }
+  .pl-tbl tr.pl-sub td { font-weight: 700; }
+  .pl-tbl tr.pl-sub td { border-top: 1px solid #333; }
+  .pl-tbl tr.pl-total-rev td, .pl-tbl tr.pl-total-exp td { padding-top: 6px; padding-bottom: 4px; }
+  .pl-tbl tr.pl-gp td {
+    font-weight: 700;
+    border-top: 1px solid #333;
+    border-bottom: 1px solid #333;
+    background: #f8fafc;
+  }
+  .pl-tbl tr.pl-net td {
+    font-weight: 700; border-top: 3px double #1a1a1a; border-bottom: 3px double #1a1a1a; padding: 8px 8px; }
+  .pl-tbl tr.pl-spacer td { height: 8px; padding: 0; border: none; }
+  .pl-tbl tfoot { display: table-footer-group; }
+  .pl-foot {
+    font-family: "Times New Roman", Times, "Liberation Serif", Georgia, serif;
+    font-size: 0.72rem; color: #555; text-align: center; margin-top: 1.5rem; padding-top: 1rem;
+    border-top: 2.5px solid #1a1a1a;
+  }
+  @media print {
+    .pl-toolbar { display: none; }
+    .pl-fs { max-width: none; }
+  }
+</style>
+<div class="page-po pl-fs">
+  <form method="get" class="pl-toolbar" action="{{ url_for('accounts.profit_loss') }}">
+    <div>
+      <span class="label">From</span>
+      <input class="input" type="date" name="date_from" value="{{ date_from or '' }}">
+    </div>
+    <div>
+      <span class="label">To</span>
+      <input class="input" type="date" name="date_to" value="{{ date_to or '' }}">
+    </div>
+    <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#334155;align-self:end;padding-bottom:6px;cursor:pointer;user-select:none;" title="Omit period-closing journals (PERIOD_CLOSE) and any reopen reversal of those journals (JE_REV)">
+      <input type="checkbox" name="exclude_closing" value="1" {% if exclude_closing %}checked{% endif %}>
+      Exclude closing journal
+    </label>
+    <div>
+      <button class="page-po__btn-primary" type="submit">Update period</button>
+    </div>
+    <div style="margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+      <span style="font-size: 12px; color: #64748b;">Export</span>
+      <a class="pl-export pl-export--primary" id="plPdfSingle"
+         href="{{ url_for('accounts.profit_loss_pdf', date_from=date_from or none, date_to=date_to or none, exclude_closing='1' if exclude_closing else none, pdf_mode='single') }}"
+         target="_blank" rel="noopener"
+         title="PDF for the selected From–To period only (one amount column)">PDF (Period)</a>
+      <a class="pl-export" id="plPdfCompare"
+         href="{{ url_for('accounts.profit_loss_pdf', date_from=date_from or none, date_to=date_to or none, exclude_closing='1' if exclude_closing else none, pdf_mode='comparison') }}"
+         target="_blank" rel="noopener"
+         title="PDF with selected period plus two equal-length comparative columns">PDF (Comparison)</a>
+      <a class="pl-export" id="plExcelLink"
+         href="{{ url_for('accounts.profit_loss_excel', date_from=date_from or none, date_to=date_to or none, exclude_closing='1' if exclude_closing else none) }}">Excel</a>
+    </div>
+  </form>
+
+  <div class="pl-header">
+    <h2 class="pl-header__company">{{ (company_name or "Company")|e }}</h2>
+    <p class="pl-header__period">{% if date_from_display and date_to_display %}Consolidated statement of profit or loss for the period from <strong>{{ date_from_display|e }}</strong> to <strong>{{ date_to_display|e }}</strong> (and comparative periods of equal length).{% else %}Consolidated statement of profit or loss.{% endif %}{% if exclude_closing %} <em>Period closing journals and reopen reversals excluded.</em>{% endif %}</p>
+    <p class="pl-header__note">(All amounts are expressed in the company reporting currency unless otherwise stated. Click an account line to view GL detail for the current period.)</p>
+  </div>
+
+  <h3 class="pl-title">CONSOLIDATED STATEMENT OF PROFIT OR LOSS</h3>
+
+  <div class="pl-table-wrap">
+    <table class="pl-tbl" aria-label="Profit and loss">
+      <thead>
+        <tr>
+          <th style="min-width: 40%;">Description</th>
+          <th class="pl-th-note">Ref.</th>
+          <th class="pl-th-amt pl-th--current">{{ (period_labels[0] if period_labels) | e }}<br><span style="font-weight: 400; font-size: 0.72em;">(current range)</span></th>
+          <th class="pl-th-amt">{% if period_labels|length > 1 %}{{ period_labels[1]|e }}{% endif %}<br><span style="font-weight: 400; font-size: 0.72em;">(comparative)</span></th>
+          <th class="pl-th-amt">{% if period_labels|length > 2 %}{{ period_labels[2]|e }}{% endif %}<br><span style="font-weight: 400; font-size: 0.72em;">(comparative)</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="pl-h1">
+          <td colspan="2">Revenue</td>
+          <td class="pl-td--current"></td>
+          <td></td>
+          <td></td>
+        </tr>
+        {% for row in revenue_rows %}
+        {% if row.code %}
+        <tr class="pl-line pl-line-clickable"
+            tabindex="0"
+            role="button"
+            aria-label="View ledger for {{ row.code|e }}"
+            data-code="{{ row.code|e }}"
+            data-name="{{ (row.name or '')|e }}">
+        {% else %}
+        <tr class="pl-line">
+        {% endif %}
+          <td class="pl-desc">{{ (row.name or '')|e }}</td>
+          <td class="pl-num" style="text-align:center;">{{ (row.code or '')|e }}</td>
+          <td class="pl-num pl-td--current">{{ "{:,.2f}".format((row.amounts[0] if row.amounts and row.amounts|length > 0 else 0) | float) }}</td>
+          <td class="pl-num">{{ "{:,.2f}".format((row.amounts[1] if row.amounts and row.amounts|length > 1 else 0) | float) }}</td>
+          <td class="pl-num">{{ "{:,.2f}".format((row.amounts[2] if row.amounts and row.amounts|length > 2 else 0) | float) }}</td>
+        </tr>
+        {% else %}
+        <tr class="pl-line">
+          <td class="pl-desc" colspan="2" style="color:#777;font-style:italic;">No revenue postings in these periods.</td>
+          <td class="pl-num pl-td--current">—</td>
+          <td class="pl-num">—</td>
+          <td class="pl-num">—</td>
+        </tr>
+        {% endfor %}
+        <tr class="pl-sub pl-total-rev">
+          <td class="pl-desc" colspan="2" style="text-align:right; padding-right:1rem;">Total revenue</td>
+          <td class="pl-num pl-td--current">{{ "{:,.2f}".format((total_revenue[0] if total_revenue) | float) }}</td>
+          <td class="pl-num">{{ "{:,.2f}".format((total_revenue[1] if total_revenue) | float) }}</td>
+          <td class="pl-num">{{ "{:,.2f}".format((total_revenue[2] if total_revenue) | float) }}</td>
+        </tr>
+
+        <tr class="pl-spacer"><td colspan="5"></td></tr>
+
+        <tr class="pl-h1">
+          <td colspan="2">Cost of sales</td>
+          <td class="pl-td--current"></td>
+          <td></td>
+          <td></td>
+        </tr>
+        {% for row in cost_of_sales_rows %}
+        {% if row.code %}
+        <tr class="pl-line pl-line-clickable"
+            tabindex="0"
+            role="button"
+            aria-label="View ledger for {{ row.code|e }}"
+            data-code="{{ row.code|e }}"
+            data-name="{{ (row.name or '')|e }}">
+        {% else %}
+        <tr class="pl-line">
+        {% endif %}
+          <td class="pl-desc">{{ (row.name or '')|e }}</td>
+          <td class="pl-num" style="text-align:center;">{{ (row.code or '')|e }}</td>
+          <td class="pl-num pl-td--current">{{ "{:,.2f}".format((row.amounts[0] if row.amounts and row.amounts|length > 0 else 0) | float) }}</td>
+          <td class="pl-num">{{ "{:,.2f}".format((row.amounts[1] if row.amounts and row.amounts|length > 1 else 0) | float) }}</td>
+          <td class="pl-num">{{ "{:,.2f}".format((row.amounts[2] if row.amounts and row.amounts|length > 2 else 0) | float) }}</td>
+        </tr>
+        {% else %}
+        <tr class="pl-line">
+          <td class="pl-desc" colspan="2" style="color:#777;font-style:italic;">No cost of sales postings in these periods.</td>
+          <td class="pl-num pl-td--current">—</td>
+          <td class="pl-num">—</td>
+          <td class="pl-num">—</td>
+        </tr>
+        {% endfor %}
+        <tr class="pl-sub pl-total-cos">
+          <td class="pl-desc" colspan="2" style="text-align:right; padding-right:1rem;">Total cost of sales</td>
+          <td class="pl-num pl-td--current">{{ "{:,.2f}".format((total_cost_of_sales[0] if total_cost_of_sales) | float) }}</td>
+          <td class="pl-num">{{ "{:,.2f}".format((total_cost_of_sales[1] if total_cost_of_sales) | float) }}</td>
+          <td class="pl-num">{{ "{:,.2f}".format((total_cost_of_sales[2] if total_cost_of_sales) | float) }}</td>
+        </tr>
+
+        <tr class="pl-gp">
+          <td class="pl-desc" colspan="2" style="text-align:right; padding-right:1rem;">Gross profit</td>
+          <td class="pl-num pl-td--current">{{ "{:,.2f}".format((gross_profit[0] if gross_profit) | float) }}</td>
+          <td class="pl-num">{{ "{:,.2f}".format((gross_profit[1] if gross_profit) | float) }}</td>
+          <td class="pl-num">{{ "{:,.2f}".format((gross_profit[2] if gross_profit) | float) }}</td>
+        </tr>
+
+        <tr class="pl-spacer"><td colspan="5"></td></tr>
+
+        <tr class="pl-h1">
+          <td colspan="2">Operating expenses</td>
+          <td class="pl-td--current"></td>
+          <td></td>
+          <td></td>
+        </tr>
+        {% for row in operating_expense_rows %}
+        {% if row.code %}
+        <tr class="pl-line pl-line-clickable"
+            tabindex="0"
+            role="button"
+            aria-label="View ledger for {{ row.code|e }}"
+            data-code="{{ row.code|e }}"
+            data-name="{{ (row.name or '')|e }}">
+        {% else %}
+        <tr class="pl-line">
+        {% endif %}
+          <td class="pl-desc">{{ (row.name or '')|e }}</td>
+          <td class="pl-num" style="text-align:center;">{{ (row.code or '')|e }}</td>
+          <td class="pl-num pl-td--current">{{ "{:,.2f}".format((row.amounts[0] if row.amounts and row.amounts|length > 0 else 0) | float) }}</td>
+          <td class="pl-num">{{ "{:,.2f}".format((row.amounts[1] if row.amounts and row.amounts|length > 1 else 0) | float) }}</td>
+          <td class="pl-num">{{ "{:,.2f}".format((row.amounts[2] if row.amounts and row.amounts|length > 2 else 0) | float) }}</td>
+        </tr>
+        {% else %}
+        <tr class="pl-line">
+          <td class="pl-desc" colspan="2" style="color:#777;font-style:italic;">No operating expense postings in these periods.</td>
+          <td class="pl-num pl-td--current">—</td>
+          <td class="pl-num">—</td>
+          <td class="pl-num">—</td>
+        </tr>
+        {% endfor %}
+        <tr class="pl-sub pl-total-exp">
+          <td class="pl-desc" colspan="2" style="text-align:right; padding-right:1rem;">Total operating expenses</td>
+          <td class="pl-num pl-td--current">{{ "{:,.2f}".format((total_operating_expense[0] if total_operating_expense) | float) }}</td>
+          <td class="pl-num">{{ "{:,.2f}".format((total_operating_expense[1] if total_operating_expense) | float) }}</td>
+          <td class="pl-num">{{ "{:,.2f}".format((total_operating_expense[2] if total_operating_expense) | float) }}</td>
+        </tr>
+
+        <tr class="pl-spacer"><td colspan="5"></td></tr>
+
+        <tr class="pl-net">
+          <td class="pl-desc" colspan="2" style="text-align:right; padding-right:1rem;">Net profit / (loss)</td>
+          <td class="pl-num pl-td--current">{{ "{:,.2f}".format((net_profit[0] if net_profit) | float) }}</td>
+          <td class="pl-num">{{ "{:,.2f}".format((net_profit[1] if net_profit) | float) }}</td>
+          <td class="pl-num">{{ "{:,.2f}".format((net_profit[2] if net_profit) | float) }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="pl-foot">This report is generated from the general ledger for the selected range and two equal-length prior periods. The reference column uses account code (mapping to notes in your chart of accounts as applicable). No signature is required for system-generated management accounts.</p>
+</div>
+
+<div class="modal hidden" id="plDetailModal" role="dialog" aria-modal="true" aria-labelledby="plDetailTitle">
+  <div class="modal__overlay" data-close="plDetailModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3 id="plDetailTitle">Account detail</h3>
+      <button type="button" class="modal__close" data-close="plDetailModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body" id="plDetailBody">
+      <div class="pl-detail-loading">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const LEDGER_API = {{ url_for('accounts.trial_balance_ledger_api')|tojson }};
+  const LEDGER_PAGE = {{ url_for('accounts.account_ledger_page')|tojson }};
+  const DATE_FROM = {{ (date_from or '')|tojson }};
+  const DATE_TO = {{ (date_to or '')|tojson }};
+  const EXCLUDE_CLOSING = {{ (exclude_closing or false)|tojson }};
+
+  const modal = document.getElementById('plDetailModal');
+  const bodyEl = document.getElementById('plDetailBody');
+  const titleEl = document.getElementById('plDetailTitle');
+  const formEl = document.querySelector('form.pl-toolbar');
+  const PDF_BASE = {{ url_for('accounts.profit_loss_pdf')|tojson }};
+  const EXCEL_BASE = {{ url_for('accounts.profit_loss_excel')|tojson }};
+
+  function syncExportLinks() {
+    if (!formEl) return;
+    const df = (formEl.querySelector('input[name="date_from"]') || {}).value || '';
+    const dt = (formEl.querySelector('input[name="date_to"]') || {}).value || '';
+    const excl = !!(formEl.querySelector('input[name="exclude_closing"]') || {}).checked;
+    function build(base, mode) {
+      const p = new URLSearchParams();
+      if (df) p.set('date_from', df);
+      if (dt) p.set('date_to', dt);
+      if (excl) p.set('exclude_closing', '1');
+      if (mode) p.set('pdf_mode', mode);
+      const q = p.toString();
+      return q ? (base + '?' + q) : base;
+    }
+    const a1 = document.getElementById('plPdfSingle');
+    const a2 = document.getElementById('plPdfCompare');
+    const a3 = document.getElementById('plExcelLink');
+    if (a1) a1.href = build(PDF_BASE, 'single');
+    if (a2) a2.href = build(PDF_BASE, 'comparison');
+    if (a3) a3.href = build(EXCEL_BASE, '');
+  }
+  if (formEl) {
+    formEl.addEventListener('change', syncExportLinks);
+    formEl.addEventListener('input', syncExportLinks);
+    syncExportLinks();
+  }
+
+  function openModal() {
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeModal() {
+    if (!modal) return;
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+  document.querySelectorAll('[data-close="plDetailModal"]').forEach(function (el) {
+    el.addEventListener('click', closeModal);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) closeModal();
+  });
+
+  function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+  function fmtNum(n) {
+    const v = parseFloat(n);
+    if (isNaN(v) || Math.abs(v) < 0.005) return '—';
+    return v.toFixed(2);
+  }
+
+  function renderLedger(data) {
+    const acc = data.account || {};
+    const led = data.ledger || {};
+    const lines = led.lines || [];
+    let fullLedgerUrl = LEDGER_PAGE;
+    const q = new URLSearchParams();
+    if (acc.account_id) q.set('account_id', String(acc.account_id));
+    if (DATE_FROM) q.set('date_from', DATE_FROM);
+    if (DATE_TO) q.set('date_to', DATE_TO);
+    if (q.toString()) fullLedgerUrl += '?' + q.toString();
+
+    let html = '<div class="pl-detail-actions">';
+    html += '<a class="page-po__btn-primary" style="text-decoration:none;display:inline-flex;align-items:center;" href="' + esc(fullLedgerUrl) + '">Open full account ledger</a>';
+    html += '</div>';
+    html += '<dl class="pl-detail-meta">';
+    html += '<div><dt>Code</dt><dd>' + esc(acc.code) + '</dd></div>';
+    html += '<div><dt>Name</dt><dd>' + esc(acc.name) + '</dd></div>';
+    html += '<div><dt>Type</dt><dd>' + esc(acc.type || '—') + '</dd></div>';
+    html += '<div><dt>Period</dt><dd>' + esc((DATE_FROM || '—') + ' to ' + (DATE_TO || '—')) + '</dd></div>';
+    html += '<div><dt>Opening</dt><dd>' + fmtNum(led.opening_balance) + '</dd></div>';
+    html += '<div><dt>Period debit</dt><dd>' + fmtNum(led.total_debit) + '</dd></div>';
+    html += '<div><dt>Period credit</dt><dd>' + fmtNum(led.total_credit) + '</dd></div>';
+    html += '<div><dt>Closing</dt><dd>' + fmtNum(led.closing_balance) + '</dd></div>';
+    html += '</dl>';
+
+    html += '<div class="table-wrap"><table id="plDetailLedgerTable"><thead><tr>';
+    html += '<th>Sl.</th><th>Date</th><th>Voucher</th><th>Reference</th><th>Narration</th><th>Source</th><th>Remarks</th><th>Party</th>';
+    html += '<th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th></tr></thead><tbody>';
+    html += '<tr><td>—</td><td colspan="7">Opening balance (before period)</td><td class="num">—</td><td class="num">—</td><td class="num">' + fmtNum(led.opening_balance) + '</td></tr>';
+    if (!lines.length) {
+      html += '<tr><td colspan="11" style="text-align:center;color:#94a3b8;padding:20px;">No GL lines in this date range.</td></tr>';
+    } else {
+      lines.forEach(function (row, i) {
+        const party = (row.party_type || row.party_code)
+          ? [row.party_type, row.party_code].filter(Boolean).join(' ')
+          : '—';
+        html += '<tr>';
+        html += '<td>' + (i + 1) + '</td>';
+        html += '<td>' + esc(row.voucher_date) + '</td>';
+        html += '<td>' + esc(row.voucher_no) + '</td>';
+        html += '<td>' + esc(row.reference_no) + '</td>';
+        html += '<td>' + esc(row.narration) + '</td>';
+        html += '<td>' + esc(row.source) + '</td>';
+        html += '<td>' + esc(row.remarks) + '</td>';
+        html += '<td>' + esc(party) + '</td>';
+        html += '<td class="num">' + fmtNum(row.debit) + '</td>';
+        html += '<td class="num">' + fmtNum(row.credit) + '</td>';
+        html += '<td class="num">' + fmtNum(row.running_balance) + '</td>';
+        html += '</tr>';
+      });
+      html += '<tr style="font-weight:600;background:#eff6ff;">';
+      html += '<td colspan="8">Period totals / closing</td>';
+      html += '<td class="num">' + fmtNum(led.total_debit) + '</td>';
+      html += '<td class="num">' + fmtNum(led.total_credit) + '</td>';
+      html += '<td class="num">' + fmtNum(led.closing_balance) + '</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table></div>';
+    bodyEl.innerHTML = html;
+  }
+
+  function loadDetail(code, name) {
+    titleEl.textContent = (code ? code + ' — ' : '') + (name || 'Account detail');
+    bodyEl.innerHTML = '<div class="pl-detail-loading">Loading ledger…</div>';
+    openModal();
+    const params = new URLSearchParams({ account_code: code });
+    if (DATE_FROM) params.set('date_from', DATE_FROM);
+    if (DATE_TO) params.set('date_to', DATE_TO);
+    if (EXCLUDE_CLOSING) params.set('exclude_closing', '1');
+    fetch(LEDGER_API + '?' + params.toString(), { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.j || !res.j.success) {
+          const err = (res.j && res.j.error) ? res.j.error : 'Could not load ledger.';
+          bodyEl.innerHTML = '<div class="pl-detail-err">' + esc(err) + '</div>';
+          return;
+        }
+        renderLedger(res.j);
+      })
+      .catch(function () {
+        bodyEl.innerHTML = '<div class="pl-detail-err">Network error loading ledger.</div>';
+      });
+  }
+
+  document.querySelectorAll('.pl-tbl tr.pl-line-clickable').forEach(function (tr) {
+    function activate() {
+      const code = tr.getAttribute('data-code');
+      const name = tr.getAttribute('data-name');
+      if (code) loadDetail(code, name);
+    }
+    tr.addEventListener('click', activate);
+    tr.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        activate();
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

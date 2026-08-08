@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Price Update{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/stock_count_desktop.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page sc-desktop-page">
+  <div class="sc-desktop-header">
+    <div>
+      <h1 class="page-title">Price Update</h1>
+      <p class="sc-desktop-sub">Review prices from <code>STOCK_COUNT_PRICE_UPDATE</code> and apply to Item Master &amp; alternate UOM.</p>
+    </div>
+    <div class="sc-desktop-actions">
+      <a href="{{ url_for('warehouse.warehouse_stock_count_price_new') }}" class="btn btn-primary">New price batch</a>
+    </div>
+  </div>
+
+  <form method="get" class="sc-desktop-filters">
+    <label>Status
+      <select name="status" class="input" onchange="this.form.submit()">
+        <option value="">All</option>
+        {% for s in statuses %}
+        <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </form>
+
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th>Batch #</th>
+          <th>Date</th>
+          <th>Status</th>
+          <th>Lines</th>
+          <th>Pending</th>
+          <th>Source count</th>
+          <th>Created</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.batch_no }}</td>
+          <td>{{ r.batch_date.strftime('%Y-%m-%d') if r.batch_date and r.batch_date.strftime else r.batch_date }}</td>
+          <td><span class="co-status co-status--{{ (r.status or '')|lower }}">{{ r.status }}</span></td>
+          <td>{{ r.line_count or 0 }}</td>
+          <td>{{ r.pending_count or 0 }}</td>
+          <td>{% if r.source_count_no %}{{ r.source_count_no }}{% else %}—{% endif %}</td>
+          <td>{{ r.created_by or '' }}</td>
+          <td>
+            <a href="{{ url_for('warehouse.warehouse_stock_count_price_detail', batch_no=r.batch_no) }}">Open</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="text-muted">No price batches yet. Click <strong>New price batch</strong>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

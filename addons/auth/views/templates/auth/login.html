@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  /* Match dashboard main canvas: static/css/style.css → .layout:not(.layout--auth) .content */
+  body {
+    background:
+      radial-gradient(circle at top right, rgba(22, 183, 255, 0.12), transparent 30%),
+      #f5f8fd !important;
+    min-height: 100vh;
+  }
+  .login-po {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 24px;
+  }
+  .login-po__card {
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 20px;
+  }
+  .login-po__form-panel {
+    min-width: 0;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    text-align: center;
+  }
+  .login-po__form-panel .form {
+    text-align: left;
+  }
+  .login-po__logo-panel {
+    min-width: 0;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 8px 4px;
+    background: transparent;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+  }
+  .login-po__brand {
+    text-align: center;
+    width: 100%;
+    max-width: 100%;
+  }
+  .login-po__brand-logo {
+    display: block;
+    width: auto;
+    max-width: min(220px, 92%);
+    max-height: 140px;
+    height: auto;
+    margin: 0 auto;
+    border: none;
+    outline: none;
+    box-shadow: none;
+    vertical-align: middle;
+    object-fit: contain;
+  }
+  .login-po__title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #212529;
+    margin: 0;
+    padding-bottom: 4px;
+    border-bottom: 2px solid #007bff;
+    display: inline-block;
+  }
+  .login-po__muted {
+    font-size: 12px;
+    color: #6c757d;
+    margin: 0 0 8px 0;
+  }
+  .login-po .form label {
+    display: block;
+    font-size: 13px;
+    color: #495057;
+    margin-bottom: 0;
+    line-height: 1.15;
+  }
+  .login-po .form input[type="text"],
+  .login-po .form input[type="password"] {
+    width: 100%;
+    font-size: 14px;
+    padding: 3px 0 2px 0;
+    border: none;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 0;
+    background: transparent;
+    margin-bottom: 4px;
+  }
+  .login-po .form input:focus {
+    outline: none;
+    border-bottom-color: var(--nexa-focus-color);
+  }
+  .login-po .form button[type="submit"] {
+    width: 100%;
+    background: linear-gradient(135deg, #061a4d 0%, #0057d9 58%, #16b7ff 100%);
+    color: #fff;
+    border: none;
+    padding: 8px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 0;
+  }
+  .login-po .form button[type="submit"]:hover {
+    filter: brightness(1.06);
+  }
+  .login-po .flash-list { margin-bottom: 8px; }
+  @media (max-width: 480px) {
+    .login-po__card {
+      max-width: 100%;
+      gap: 16px;
+    }
+    .login-po__logo-panel {
+      padding: 8px 4px 0;
+    }
+    .login-po__brand-logo {
+      max-width: min(190px, 88%);
+      max-height: 118px;
+    }
+  }
+</style>
+<div class="login-po">
+  <div class="login-po__card">
+    <div class="login-po__logo-panel">
+      <div class="login-po__brand">
+        <img class="login-po__brand-logo" src="{{ url_for('static', filename='img/nexus-erp-logo.png') }}?v={{ login_logo_v }}" alt="Nexus ERP" />
+      </div>
+    </div>
+    <div class="login-po__form-panel">
+
+      <div class="login-po__title">Sign in</div>
+      <p class="login-po__muted">Use your credentials to continue</p>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-list">
+            {% for category, message in messages %}
+              <div class="flash flash--{{ category }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      <form method="post" action="/auth/login" class="form" autocomplete="off">
+        {% if next_url %}
+        <input type="hidden" name="next" value="{{ next_url }}" />
+        {% endif %}
+        <label for="login-username">Username</label>
+        <input type="text" id="login-username" name="username" required autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" autofocus />
+
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" name="password" required autocomplete="off" />
+
+        <button type="submit">Login</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

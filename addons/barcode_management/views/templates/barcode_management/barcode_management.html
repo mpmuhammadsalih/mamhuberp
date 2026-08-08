@@ -1,0 +1,1819 @@
+{% extends "base.html" %}
+{% block title %}Barcode management{% endblock %}
+{% block content %}
+<style>
+  .bc-page { max-width: 1180px; margin: 0 auto; }
+  .bc-tabs { display: flex; gap: 0; border: 1px solid #cfd4da; border-radius: 8px 8px 0 0; overflow: hidden; margin-bottom: 0; }
+  .bc-tabs a {
+    flex: 1; text-align: center; padding: 10px 16px; font-size: 14px; font-weight: 600; text-decoration: none; color: #475569;
+    background: #f8fafc; border-bottom: 3px solid transparent;
+  }
+  .bc-tabs a:hover { background: #f1f5f9; color: #0f172a; }
+  .bc-tabs a.active { background: #fff; color: #0f766e; border-bottom-color: #0f766e; }
+  .bc-panel {
+    border: 1px solid #cfd4da; border-top: none; border-radius: 0 0 8px 8px; padding: 16px;
+    background: #fff;
+  }
+  .bc-muted { font-size: 13px; color: #64748b; margin: 0 0 12px; }
+  .bc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .bc-table th, .bc-table td {
+    border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; vertical-align: middle;
+  }
+  .bc-table thead th { background: #f1f5f9; font-weight: 600; color: #334155; }
+  .bc-table tbody tr:nth-child(even) { background: #fafbfc; }
+  .bc-table input[type=text], .bc-table select.bc-uom-select {
+    width: 100%; min-width: 88px; padding: 5px 8px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 4px;
+    background: #fff;
+  }
+  .bc-table input.bc-print-cnt {
+    width: 56px; min-width: 56px; max-width: 72px; text-align: center; padding: 5px 4px;
+  }
+  .bc-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+  .bc-toolbar--add { flex-wrap: nowrap; justify-content: space-between; gap: 12px; }
+  .bc-toolbar-left { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; }
+  .bc-toolbar-right {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px; flex: 0 0 auto; margin-left: auto;
+  }
+  @media (max-width: 900px) {
+    .bc-toolbar--add { flex-wrap: wrap; }
+    .bc-toolbar-right { margin-left: 0; width: 100%; justify-content: flex-end; }
+  }
+  .bc-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .bc-badge-base { background: #dbeafe; color: #1d4ed8; }
+  .bc-badge-alt { background: #ede9fe; color: #5b21b6; }
+  .bc-loc-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
+  .bc-btn-print {
+    font-size: 12px; padding: 6px 12px; border-radius: 6px; border: 1px solid #334155; background: #fff; color: #334155; cursor: pointer; font-weight: 600;
+  }
+  .bc-btn-print:hover { background: #f8fafc; }
+  .bc-btn-print--primary { border-color: #0f766e; background: #ecfdf5; color: #0f766e; }
+  .bc-add-matches {
+    margin-bottom: 12px; padding: 10px 12px; background: #fffbeb; border: 1px solid #fde68a;
+    border-radius: 8px; font-size: 13px;
+  }
+  .bc-add-matches.hidden { display: none; }
+  .bc-add-matches__title { font-weight: 600; color: #92400e; margin: 0 0 8px; }
+  .bc-add-match-btn {
+    display: block; width: 100%; text-align: left; margin: 0 0 6px; padding: 8px 10px;
+    border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; cursor: pointer; font-size: 13px;
+  }
+  .bc-add-match-btn:hover { background: #ecfdf5; border-color: #99f6e4; }
+  .bc-list-count { font-size: 13px; color: #64748b; white-space: nowrap; }
+  .bc-btn-remove { font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid #fecaca; background: #fff; color: #b91c1c; cursor: pointer; font-weight: 600; }
+  .bc-btn-remove:hover { background: #fef2f2; }
+  .bc-toggle-all {
+    display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;
+  }
+  .bc-toggle-all-label { font-size: 13px; font-weight: 600; color: #475569; }
+  .bc-switch {
+    position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0;
+  }
+  .bc-switch input {
+    opacity: 0; width: 0; height: 0; position: absolute; margin: 0;
+  }
+  .bc-switch-slider {
+    position: absolute; inset: 0; cursor: pointer; background: #cbd5e1;
+    transition: background 0.2s, box-shadow 0.2s; border-radius: 22px;
+  }
+  .bc-switch-slider:before {
+    position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px;
+    background: #fff; transition: transform 0.2s; border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .bc-switch input:checked + .bc-switch-slider { background: #0f766e; }
+  .bc-switch input:focus-visible + .bc-switch-slider { box-shadow: 0 0 0 2px #99f6e4; }
+  .bc-switch input:checked + .bc-switch-slider:before { transform: translateX(18px); }
+  .bc-table td .bc-switch { vertical-align: middle; }
+  .bc-qz-bar {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px;
+    padding: 12px 14px; background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 8px;
+  }
+  .bc-qz-bar label { font-size: 13px; font-weight: 600; color: #134e4a; margin: 0; }
+  .bc-qz-bar .input { min-width: 200px; flex: 1 1 220px; max-width: 420px; }
+  .bc-qz-save-badge { font-size: 11px; color: #0f766e; margin-left: 4px; display: none; }
+  .bc-qz-save-badge.visible { display: inline; }
+  /* Item popup — same pattern as purchase order */
+  #bcItemModal .modal__content { width: 520px; max-width: 95vw; box-sizing: border-box; }
+  #bcItemModal .modal__header { padding: 6px 12px; }
+  #bcItemModal .modal__header h4 { margin: 0; padding: 0; font-size: 15px; font-weight: 600; line-height: 1.25; }
+  #bcItemModal .modal__body { padding: 6px 12px 10px; max-height: 65vh; overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box; }
+  #bcItemModal #bcItemSearch {
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0 0 6px;
+    flex-shrink: 0;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 0 10px;
+    line-height: 26px;
+    min-height: 26px;
+  }
+  #bcItemModal #bcItemBody { overflow-y: auto; overflow-x: hidden; flex: 1; min-height: 120px; }
+  #bcItemModal .item-row { display: block; padding: 6px 10px; border-bottom: 1px solid #e2e8f0; cursor: pointer; outline: none; }
+  #bcItemModal .item-row:hover, #bcItemModal .item-row:focus { background: #f0f9ff; }
+  #bcItemModal .item-row .item-line1 { font-weight: 600; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #bcItemModal .item-row .item-line2 { font-size: 12px; color: #64748b; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #bcItemModal .item-row.item-empty { color: #94a3b8; font-style: italic; padding: 8px 10px; text-align: center; cursor: default; }
+  .bc-printer-modal.hidden { display: none; }
+  .bc-printer-modal { position: fixed; inset: 0; z-index: 1050; }
+  .bc-printer-modal__overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.35); }
+  .bc-printer-modal__content {
+    position: relative; width: min(720px, 94vw); margin: 8vh auto; background: #fff;
+    border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;
+  }
+  .bc-printer-modal__head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 12px; border-bottom: 1px solid #e2e8f0;
+  }
+  .bc-printer-modal__title { font-size: 14px; font-weight: 600; color: #0f172a; }
+  .bc-printer-modal__close { border: none; background: transparent; font-size: 20px; cursor: pointer; color: #64748b; }
+  .bc-printer-modal__body { padding: 10px 12px; max-height: 64vh; overflow: auto; }
+  .bc-printer-search { width: 100%; border: 1px solid #cbd5e1; border-radius: 4px; padding: 7px 8px; font-size: 13px; margin-bottom: 8px; }
+  .bc-printer-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .bc-printer-table th, .bc-printer-table td { border: 1px solid #e2e8f0; padding: 6px 8px; text-align: left; }
+  .bc-printer-table thead th { position: sticky; top: 0; background: #f8fafc; }
+  .qz-printer-row { cursor: pointer; }
+  .qz-printer-row:hover { background: #ecfdf5; }
+  .bc-add-matches {
+    margin-bottom: 12px; padding: 10px 12px; background: #fffbeb; border: 1px solid #fde68a;
+    border-radius: 8px; font-size: 13px;
+  }
+  .bc-add-matches.hidden { display: none; }
+  .bc-add-matches__title { font-weight: 600; color: #92400e; margin: 0 0 8px; }
+  .bc-add-match-btn {
+    display: block; width: 100%; text-align: left; margin: 0 0 6px; padding: 8px 10px;
+    border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; cursor: pointer; font-size: 13px;
+  }
+  .bc-add-match-btn:hover { background: #ecfdf5; border-color: #99f6e4; }
+  .bc-list-count { font-size: 13px; color: #64748b; white-space: nowrap; }
+  .bc-btn-remove { font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid #fecaca; background: #fff; color: #b91c1c; cursor: pointer; }
+  .bc-btn-remove:hover { background: #fef2f2; }
+  .bc-thumb-svg { max-width: 120px; height: 36px; display: block; }
+  .bc-thumb-wrap { min-width: 130px; }
+  /* Print sheet: shown only while printing */
+  #bcPrintArea {
+    display: none;
+  }
+  @media print {
+    /* Remove browser margins so thermal / die-cut sheets land on label origin */
+    @page {
+      margin: 0;
+      size: auto;
+    }
+    html, body {
+      margin: 0 !important;
+      padding: 0 !important;
+      width: 100% !important;
+      height: auto !important;
+      background: #fff !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    body * { visibility: hidden !important; }
+    #bcPrintArea, #bcPrintArea * { visibility: visible !important; }
+    #bcPrintArea {
+      display: grid !important;
+      grid-template-columns: repeat(auto-fill, 48mm);
+      justify-content: start;
+      align-content: start;
+      gap: 0;
+      column-gap: 0;
+      row-gap: 0;
+      position: absolute !important;
+      left: 0 !important;
+      top: 0 !important;
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      background: #fff !important;
+      box-sizing: border-box !important;
+    }
+    /* One physical label — fixed size matches common 48×30 mm stickers */
+    .bc-print-label {
+      box-sizing: border-box;
+      width: 48mm;
+      height: 30mm;
+      min-height: 30mm;
+      max-height: 30mm;
+      padding: 1mm 2mm;
+      margin: 0;
+      border: none;
+      outline: none;
+      text-align: center;
+      page-break-inside: avoid;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+    }
+    .bc-print-names {
+      width: 100%;
+      max-height: 11mm;
+      overflow: hidden;
+      flex: 0 0 auto;
+      margin: 0 0 0.4mm;
+    }
+    .bc-print-loc {
+      font-size: 5.5pt;
+      font-weight: 600;
+      color: #000;
+      margin: 0 0 0.15mm;
+      line-height: 1.1;
+      max-height: 3mm;
+      overflow: hidden;
+      width: 100%;
+      text-align: center;
+      word-break: break-word;
+    }
+    .bc-print-cap {
+      font-size: 6.5pt;
+      font-weight: 700;
+      color: #000;
+      margin: 0;
+      line-height: 1.05;
+      max-height: 3.8mm;
+      overflow: hidden;
+      width: 100%;
+      text-align: center;
+      word-break: break-word;
+    }
+    .bc-print-cap-ar {
+      font-size: 6pt;
+      font-weight: 600;
+      color: #000;
+      margin: 0.2mm 0 0;
+      line-height: 1.1;
+      max-height: 4mm;
+      overflow: hidden;
+      width: 100%;
+      text-align: center;
+      direction: rtl;
+      unicode-bidi: embed;
+      word-break: break-word;
+      font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+    }
+    .bc-print-meta {
+      font-size: 6pt;
+      color: #000;
+      margin: 0 0 0.5mm;
+      line-height: 1.15;
+      text-align: center;
+      max-height: 4mm;
+      overflow: hidden;
+      width: 100%;
+    }
+    .bc-print-bar-wrap {
+      flex: 0 0 auto;
+      width: 100%;
+      max-width: 44mm;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 0 auto;
+      line-height: 0;
+    }
+    .bc-print-bar-wrap svg {
+      max-width: 100% !important;
+      width: auto !important;
+      height: auto !important;
+      display: block;
+      margin: 0 auto !important;
+    }
+    .bc-print-sub {
+      font-size: 5.5pt;
+      color: #000;
+      margin: 0.2mm 0 0;
+      line-height: 1.05;
+      width: 100%;
+      text-align: center;
+      max-height: 3mm;
+      overflow: hidden;
+    }
+    .bc-print-info-row {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      gap: 2mm;
+      margin: 0.3mm 0 0;
+      flex: 0 0 auto;
+      max-height: 11mm;
+      overflow: hidden;
+      text-align: center;
+    }
+    .bc-print-info-right {
+      text-align: center;
+      flex: 0 0 auto;
+      line-height: 1.12;
+    }
+    .bc-print-uom {
+      font-size: 5.5pt;
+      font-weight: 600;
+      color: #000;
+    }
+    .bc-print-prices {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      text-align: center;
+      margin: 0;
+      line-height: 1.05;
+      max-height: 10mm;
+      overflow: hidden;
+      gap: 1mm;
+    }
+    .bc-print-price-text {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      line-height: 1.05;
+    }
+    .bc-print-ean {
+      width: 100%;
+      text-align: center;
+      font-size: 6pt;
+      font-weight: 600;
+      color: #000;
+      letter-spacing: 0.04em;
+      margin-top: 0.25mm;
+      max-height: 3mm;
+      overflow: hidden;
+      flex: 0 0 auto;
+    }
+    .bc-print-price {
+      font-size: 11pt;
+      font-weight: 800;
+      color: #000;
+      letter-spacing: 0.02em;
+    }
+    .bc-print-price-ar {
+      font-size: 9pt;
+      font-weight: 700;
+      color: #000;
+      direction: rtl;
+      unicode-bidi: embed;
+      font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+      margin-top: 0.2mm;
+    }
+  }
+</style>
+
+<div class="list-refresh-slot" style="display:flex;justify-content:flex-end;margin:6px 0 12px;">{% include 'includes/list_refresh_bar.html' %}</div>
+
+<div class="bc-page page-po no-print">
+  <div class="page-po__topbar" style="margin-bottom: 12px;">
+    <h1 class="page-po__title">Barcode management</h1>
+  </div>
+  <div class="bc-qz-bar" aria-label="Barcode label printer">
+    <label for="bcQzPrinterInput">Barcode printer (QZ)</label>
+    <input type="text" id="bcQzPrinterInput" class="input" placeholder="Label printer name from QZ Tray" autocomplete="off" />
+    <button type="button" class="bc-btn-print" id="bcQzPickPrinter">Printer list</button>
+    <button type="button" class="bc-btn-print bc-btn-print--primary" id="bcQzSavePrinter">Save<span id="bcQzSaveBadge" class="bc-qz-save-badge">Saved</span></button>
+    <button type="button" class="bc-btn-print" id="bcQzTestPrint" title="Send a sample 48×30 mm label">Test print</button>
+    <span id="bcQzPrinterHint" class="bc-muted" style="margin:0; flex:1 1 100%; font-size:12px;"></span>
+  </div>
+
+  <nav class="bc-tabs" aria-label="Barcode sections">
+    <a href="{{ url_for('barcode_management.barcode_management_page', tab='product') }}" class="{% if tab == 'product' %}active{% endif %}">Product barcode</a>
+    <a href="{% if selected_loc_key %}{{ url_for('barcode_management.barcode_management_page', tab='shelf', loc=selected_loc_key) }}{% else %}{{ url_for('barcode_management.barcode_management_page', tab='shelf') }}{% endif %}" class="{% if tab == 'shelf' %}active{% endif %}">Shelf barcode</a>
+  </nav>
+
+  <div class="bc-panel">
+    {% if tab == 'product' %}
+      <div class="bc-toolbar bc-toolbar--add">
+        <div class="bc-toolbar-left">
+          <label for="bcProdSearch" class="muted" style="font-weight:600;">Add</label>
+          <input type="text" id="bcProdSearch" class="input" placeholder="Scan barcode or type code / name…" style="min-width:200px; flex:1 1 280px; max-width:420px;" autocomplete="off" title="F1 — browse items">
+          <button type="button" class="bc-btn-print" id="bcProdOpenItems" title="Browse items (F1)">Items…</button>
+          <button type="button" class="page-po__btn-primary" id="bcProdAdd">Add</button>
+        </div>
+        <div class="bc-toolbar-right">
+          <button type="button" class="bc-btn-print bc-btn-print--primary" id="bcProdPrintAll" title="Print every row; Count column repeats each barcode">Print all</button>
+          <button type="button" class="bc-btn-print" id="bcProdPrintSel" title="Print checked rows; Count column repeats each barcode">Print selected</button>
+          <button type="button" class="bc-btn-print" id="bcProdExport" title="Export the current list to an Excel (CSV) file">Export Excel</button>
+          <button type="button" class="bc-btn-print" id="bcProdClearList" title="Remove all rows from the list">Clear list</button>
+          <label class="bc-toggle-all muted" style="margin:0;" for="bcProdSelectAll">
+            <span class="bc-toggle-all-label">All</span>
+            <span class="bc-switch">
+              <input type="checkbox" id="bcProdSelectAll" />
+              <span class="bc-switch-slider" aria-hidden="true"></span>
+            </span>
+          </label>
+          <span class="bc-list-count" id="bcListCount">0 labels in list</span>
+        </div>
+      </div>
+      <div class="bc-toolbar-grn" style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:-4px 0 12px; padding:10px 0; border-top:1px solid #e2e8f0; border-bottom:1px solid #e2e8f0;">
+        <label for="bcGrnNo" class="muted" style="font-weight:600;">Load from GRN</label>
+        <input type="number" id="bcGrnNo" class="input" min="1" step="1" placeholder="Receipt no." style="width:130px;" autocomplete="off" title="Goods receipt number — Enter to load" />
+        <button type="button" class="bc-btn-print bc-btn-print--primary" id="bcGrnLoad" title="Load all GRN lines into the print list">Load items</button>
+        <span id="bcGrnStatus" class="bc-muted" style="font-size:12px;" aria-live="polite"></span>
+      </div>
+      <div id="bcAddMatches" class="bc-add-matches hidden" aria-live="polite">
+        <p class="bc-add-matches__title">Multiple items found — pick one to add:</p>
+        <div id="bcAddMatchesBody"></div>
+      </div>
+      <div style="overflow:auto; max-height: calc(100vh - 380px);">
+        <table class="bc-table" id="bcProdTable">
+          <thead>
+            <tr>
+              <th style="width:32px;">#</th>
+              <th style="width:52px;" title="Include in print"></th>
+              <th style="width:90px;">Type</th>
+              <th>Barcode</th>
+              <th>Item</th>
+              <th>Name</th>
+              <th style="min-width:100px;">Unit (UOM)</th>
+              <th style="width:72px;text-align:right;">Price</th>
+              <th style="width:64px;text-align:center;" title="Labels to print for this row">Count</th>
+              <th class="bc-thumb-wrap">Preview</th>
+              <th style="width:120px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="bcProdBody">
+            <tr><td colspan="11" class="muted">Add items above — each Add creates a row you can print together.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal hidden" id="bcItemModal" role="dialog" aria-modal="true" aria-labelledby="bcItemModalTitle">
+        <div class="modal__overlay" data-close="bcItemModal"></div>
+        <div class="modal__content">
+          <div class="modal__header">
+            <h4 id="bcItemModalTitle">Select item (UOM / barcode)</h4>
+            <button type="button" class="modal__close" data-close="bcItemModal" aria-label="Close">×</button>
+          </div>
+          <div class="modal__body">
+            <input type="text" id="bcItemSearch" class="input" placeholder="Search by code, barcode or name…" autocomplete="off" />
+            <div id="bcItemBody" class="item-list"></div>
+          </div>
+        </div>
+      </div>
+      <script>
+        (function() {
+          const url = {{ url_for('barcode_management.barcode_products_api')|tojson }};
+          const apiItems = {{ url_for('barcode_management.barcode_items_api')|tojson }};
+          const apiGrnLines = {{ url_for('barcode_management.barcode_grn_lines_api')|tojson }};
+          const q = document.getElementById('bcProdSearch');
+          const bcGrnNo = document.getElementById('bcGrnNo');
+          const bcGrnLoad = document.getElementById('bcGrnLoad');
+          const bcGrnStatus = document.getElementById('bcGrnStatus');
+          const btnAdd = document.getElementById('bcProdAdd');
+          const btnOpenItems = document.getElementById('bcProdOpenItems');
+          const bcItemModal = document.getElementById('bcItemModal');
+          const bcItemBody = document.getElementById('bcItemBody');
+          const bcItemSearch = document.getElementById('bcItemSearch');
+          var bcItemsList = [];
+          var bcItemFetchAbort = null;
+          var bcItemFetchSeq = 0;
+          var bcSuppressItemSearchInput = false;
+          var bcItemSearchDebounce = null;
+          const body = document.getElementById('bcProdBody');
+          const printSel = document.getElementById('bcProdPrintSel');
+          const printAll = document.getElementById('bcProdPrintAll');
+          const exportXls = document.getElementById('bcProdExport');
+          const clearList = document.getElementById('bcProdClearList');
+          const selAll = document.getElementById('bcProdSelectAll');
+          const listCount = document.getElementById('bcListCount');
+          const addMatches = document.getElementById('bcAddMatches');
+          const addMatchesBody = document.getElementById('bcAddMatchesBody');
+          var bcPrintQueue = [];
+          var bcQueueSeq = 0;
+          var bcAddBusy = false;
+
+          function esc(s) {
+            const d = document.createElement('div');
+            d.textContent = s == null ? '' : String(s);
+            return d.innerHTML;
+          }
+          function escAttr(s) {
+            return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+          }
+          function thumbId(i) { return 'bcpt' + i; }
+          function bcFormatPrice(rp) {
+            var pnum = parseFloat(rp);
+            var p = isNaN(pnum) ? '0.00' : pnum.toFixed(2);
+            return p + ' QR';
+          }
+          function bcToArabicDigits(s) {
+            var ar = ['\u0660', '\u0661', '\u0662', '\u0663', '\u0664', '\u0665', '\u0666', '\u0667', '\u0668', '\u0669'];
+            return String(s || '').replace(/\d/g, function(d) {
+              return ar[parseInt(d, 10)] || d;
+            });
+          }
+          function bcFormatPriceArabic(rp) {
+            var pnum = parseFloat(rp);
+            var p = isNaN(pnum) ? '0.00' : pnum.toFixed(2);
+            return bcToArabicDigits(p).replace('.', '\u066B') + ' \u0631.\u0642';
+          }
+          window.bcFormatPrice = bcFormatPrice;
+          window.bcFormatPriceArabic = bcFormatPriceArabic;
+          function bcSourceBadge(src) {
+            return String(src || '').toUpperCase() === 'ALT'
+              ? '<span class="bc-badge bc-badge-alt">Alt UOM</span>'
+              : '<span class="bc-badge bc-badge-base">Base</span>';
+          }
+          function bcParsePrintCount(val) {
+            var n = parseInt(String(val == null ? '' : val).trim(), 10);
+            if (isNaN(n) || n < 1) return 1;
+            if (n > 999) return 999;
+            return n;
+          }
+          function bcNormalizeProductRow(r) {
+            var bv = String(r.barcode != null ? r.barcode : '').trim();
+            var uom = String(r.uom != null ? r.uom : '').trim();
+            var src = String(r.source || 'BASE').toUpperCase();
+            var opts = r.uom_options || [];
+            if (!opts.length) {
+              opts = [{ uom: uom, barcode: bv, retailprice: r.retailprice, source: src }];
+            }
+            return {
+              itemcode: r.itemcode,
+              itemname: String(r.itemname != null ? r.itemname : ''),
+              itemnameara: String(r.itemnameara != null ? r.itemnameara : ''),
+              location_name: String(r.locationname != null ? r.locationname : r.location_name || '').trim(),
+              barcode: bv,
+              uom: uom,
+              retailprice: r.retailprice,
+              averagecost: (r.averagecost != null ? r.averagecost : 0),
+              category: String(r.category != null ? r.category : ''),
+              source: src,
+              uom_options: opts,
+              print_count: bcParsePrintCount(r.print_count != null ? r.print_count : 1)
+            };
+          }
+          function bcSyncPrintCountToQueue(tr) {
+            var qid = tr.getAttribute('data-bc-queue-id');
+            var inp = tr.querySelector('.bc-print-cnt');
+            if (!qid || !inp) return;
+            var cnt = bcParsePrintCount(inp.value);
+            inp.value = String(cnt);
+            tr.setAttribute('data-bc-print-count', String(cnt));
+            for (var i = 0; i < bcPrintQueue.length; i++) {
+              if (String(bcPrintQueue[i].id) === String(qid)) {
+                bcPrintQueue[i].print_count = cnt;
+                break;
+              }
+            }
+            bcUpdateListCount();
+          }
+          function bcHideMatchPicker() {
+            if (addMatches) addMatches.classList.add('hidden');
+            if (addMatchesBody) addMatchesBody.innerHTML = '';
+          }
+          function bcFocusAdd() {
+            if (!q) return;
+            q.value = '';
+            q.focus();
+            q.select();
+          }
+          function bcCountFromTr(tr) {
+            if (!tr) return 1;
+            var inp = tr.querySelector('.bc-print-cnt');
+            if (inp) return bcParsePrintCount(inp.value);
+            return bcParsePrintCount(tr.getAttribute('data-bc-print-count'));
+          }
+          function bcUpdateListCount() {
+            if (!listCount) return;
+            var rows = bcPrintQueue.length;
+            var labels = 0;
+            var domRows = body ? body.querySelectorAll('tr[data-bc-queue-id]') : [];
+            if (domRows.length) {
+              domRows.forEach(function(tr) { labels += bcCountFromTr(tr); });
+            } else {
+              bcPrintQueue.forEach(function(r) {
+                labels += bcParsePrintCount(r.print_count);
+              });
+            }
+            if (!rows) {
+              listCount.textContent = '0 labels in list';
+              return;
+            }
+            if (rows === 1 && labels === 1) {
+              listCount.textContent = '1 row · 1 label';
+            } else if (labels === rows) {
+              listCount.textContent = rows + ' rows · ' + labels + ' labels';
+            } else {
+              listCount.textContent = rows + ' rows · ' + labels + ' labels total';
+            }
+          }
+          function bcRefreshRowThumb(tr, idx) {
+            if (!window.JsBarcode || !window.bcRenderBarcodeThumb) return;
+            var v = (tr.getAttribute('data-bc-value') || '').trim();
+            var svg = tr.querySelector('.bc-thumb-svg');
+            if (!svg || !v) return;
+            var cell = svg.parentElement;
+            if (!cell) return;
+            if (!cell.querySelector('.bc-thumb-svg')) {
+              cell.innerHTML = '<svg class="bc-thumb-svg" role="img" aria-label="Barcode preview"></svg>';
+              svg = cell.querySelector('.bc-thumb-svg');
+            }
+            svg.removeAttribute('id');
+            svg.textContent = '';
+            var sid = thumbId(idx);
+            svg.setAttribute('id', sid);
+            if (!window.bcRenderBarcodeThumb('#' + sid, v)) {
+              cell.innerHTML = '<span class="muted" style="font-size:11px;">Preview failed</span>';
+            }
+          }
+          function bcApplyVariantToRow(tr, variant, rowIdx) {
+            if (!tr || !variant) return;
+            var qid = tr.getAttribute('data-bc-queue-id');
+            var bv = String(variant.barcode != null ? variant.barcode : '').trim();
+            var uom = String(variant.uom != null ? variant.uom : '').trim();
+            var priceShown = bcFormatPrice(variant.retailprice);
+            var src = String(variant.source || 'BASE').toUpperCase();
+            tr.setAttribute('data-bc-value', bv);
+            tr.setAttribute('data-bc-uom', uom);
+            tr.setAttribute('data-bc-price', priceShown);
+            tr.setAttribute('data-bc-price-ar', bcFormatPriceArabic(variant.retailprice));
+            tr.setAttribute('data-bc-source', src);
+            if (qid) {
+              for (var i = 0; i < bcPrintQueue.length; i++) {
+                if (String(bcPrintQueue[i].id) === String(qid)) {
+                  bcPrintQueue[i].barcode = bv;
+                  bcPrintQueue[i].uom = uom;
+                  bcPrintQueue[i].retailprice = variant.retailprice;
+                  bcPrintQueue[i].source = src;
+                  break;
+                }
+              }
+            }
+            var bcCell = tr.querySelector('.bc-cell-barcode');
+            var prCell = tr.querySelector('.bc-cell-price');
+            var typeCell = tr.querySelector('.bc-cell-type');
+            if (bcCell) bcCell.textContent = bv;
+            if (prCell) {
+              prCell.innerHTML = '<div style="font-weight:700;line-height:1.2;">' + esc(priceShown) + '</div>'
+                + '<div style="font-size:11px;direction:rtl;line-height:1.2;">' + esc(bcFormatPriceArabic(variant.retailprice)) + '</div>';
+            }
+            if (typeCell) typeCell.innerHTML = bcSourceBadge(src);
+            bcRefreshRowThumb(tr, rowIdx);
+          }
+          function bcBuildUomSelect(r) {
+            var uom = String(r.uom != null ? r.uom : '').trim();
+            var opts = r.uom_options || [];
+            var html = '<select class="bc-uom-select" title="Change unit to update barcode and price">';
+            opts.forEach(function(o) {
+              var ou = String(o.uom != null ? o.uom : '').trim();
+              var ob = String(o.barcode != null ? o.barcode : '').trim();
+              var op = bcFormatPrice(o.retailprice);
+              var os = String(o.source || 'ALT').toUpperCase();
+              var selAttr = (ou === uom) ? ' selected' : '';
+              html += '<option value="' + escAttr(ou) + '" data-barcode="' + escAttr(ob) + '" data-price="' + escAttr(op) + '" data-source="' + escAttr(os) + '"' + selAttr + '>' + esc(ou) + '</option>';
+            });
+            return html + '</select>';
+          }
+          function bcToggleHtml(className, checked, idAttr) {
+            var chk = checked ? ' checked' : '';
+            var id = idAttr ? ' id="' + escAttr(idAttr) + '"' : '';
+            return '<label class="bc-switch" title="Include in print">'
+              + '<input type="checkbox" class="' + escAttr(className) + '"' + id + chk + ' />'
+              + '<span class="bc-switch-slider" aria-hidden="true"></span></label>';
+          }
+          function bcBuildListRowHtml(r, lineNo) {
+            var bv = String(r.barcode != null ? r.barcode : '').trim();
+            var title = String(r.itemname != null ? r.itemname : '');
+            var titleAra = String(r.itemnameara != null ? r.itemnameara : '');
+            var icode = String(r.itemcode != null ? r.itemcode : '');
+            var uom = String(r.uom != null ? r.uom : '').trim();
+            var src = String(r.source || 'BASE').toUpperCase();
+            var priceShown = bcFormatPrice(r.retailprice);
+            var priceAr = bcFormatPriceArabic(r.retailprice);
+            var priceEsc = escAttr(priceShown);
+            var pcnt = bcParsePrintCount(r.print_count);
+            var locName = String(r.location_name != null ? r.location_name : '').trim();
+            return '<tr data-bc-queue-id="' + escAttr(r.id) + '" data-bc-itemcode="' + escAttr(icode) + '" data-bc-value="' + escAttr(bv) + '" data-bc-title="' + escAttr(title) + '" data-bc-title-ara="' + escAttr(titleAra) + '" data-bc-location-name="' + escAttr(locName) + '" data-bc-code="' + escAttr(icode) + '" data-bc-uom="' + escAttr(uom) + '" data-bc-price="' + priceEsc + '" data-bc-price-ar="' + escAttr(priceAr) + '" data-bc-source="' + escAttr(src) + '" data-bc-print-count="' + pcnt + '">'
+              + '<td class="muted" style="text-align:center;">' + lineNo + '</td>'
+              + '<td>' + bcToggleHtml('bc-row-chk', true) + '</td>'
+              + '<td class="bc-cell-type">' + bcSourceBadge(src) + '</td>'
+              + '<td class="bc-cell-barcode">' + esc(bv) + '</td>'
+              + '<td>' + esc(icode) + '</td>'
+              + '<td>' + (titleAra
+                ? '<div>' + esc(title) + '</div><div style="font-size:12px;direction:rtl;color:#475569;margin-top:2px;">' + esc(titleAra) + '</div>'
+                : esc(title)) + '</td>'
+              + '<td>' + bcBuildUomSelect(r) + '</td>'
+              + '<td class="bc-cell-price" style="text-align:right;">'
+              + '<div style="font-weight:700;line-height:1.2;">' + esc(priceShown) + '</div>'
+              + '<div style="font-size:11px;direction:rtl;line-height:1.2;">' + esc(priceAr) + '</div></td>'
+              + '<td style="text-align:center;"><input type="number" class="bc-print-cnt input" min="1" max="999" step="1" value="' + pcnt + '" title="Number of labels to print" aria-label="Print count" /></td>'
+              + '<td><svg class="bc-thumb-svg" role="img" aria-label="Barcode preview"></svg></td>'
+              + '<td style="white-space:nowrap;">'
+              + '<button type="button" class="bc-btn-print bc-one-print" style="margin-right:4px;">Print</button>'
+              + '<button type="button" class="bc-btn-remove bc-one-remove">Remove</button>'
+              + '</td></tr>';
+          }
+          function bcBindListRows() {
+            body.querySelectorAll('tr[data-bc-queue-id]').forEach(function(tr, idx) {
+              var sel = tr.querySelector('.bc-uom-select');
+              if (sel && !sel._bcBound) {
+                sel._bcBound = true;
+                sel.addEventListener('change', function() {
+                  var opt = sel.options[sel.selectedIndex];
+                  if (!opt) return;
+                  bcApplyVariantToRow(tr, {
+                    barcode: opt.getAttribute('data-barcode') || '',
+                    uom: opt.value || '',
+                    retailprice: opt.getAttribute('data-price') || '0',
+                    source: opt.getAttribute('data-source') || 'BASE'
+                  }, idx);
+                });
+              }
+              var btnP = tr.querySelector('.bc-one-print');
+              if (btnP && !btnP._bcBound) {
+                btnP._bcBound = true;
+                btnP.addEventListener('click', function() {
+                  bcSyncPrintCountToQueue(tr);
+                  if (window.bcPrintLabelsFromRow) window.bcPrintLabelsFromRow(tr);
+                });
+              }
+              var btnR = tr.querySelector('.bc-one-remove');
+              if (btnR && !btnR._bcBound) {
+                btnR._bcBound = true;
+                btnR.addEventListener('click', function() {
+                  var qid = tr.getAttribute('data-bc-queue-id');
+                  bcPrintQueue = bcPrintQueue.filter(function(x) { return String(x.id) !== String(qid); });
+                  bcRenderPrintList();
+                  bcFocusAdd();
+                });
+              }
+              var cntInp = tr.querySelector('.bc-print-cnt');
+              if (cntInp && !cntInp._bcBound) {
+                cntInp._bcBound = true;
+                cntInp.addEventListener('input', function() { bcUpdateListCount(); });
+                cntInp.addEventListener('change', function() { bcSyncPrintCountToQueue(tr); });
+                cntInp.addEventListener('blur', function() { bcSyncPrintCountToQueue(tr); });
+              }
+            });
+            body.querySelectorAll('tr[data-bc-value]').forEach(function(tr, idx) {
+              bcRefreshRowThumb(tr, idx);
+            });
+          }
+          function bcRenderPrintList() {
+            bcUpdateListCount();
+            if (!bcPrintQueue.length) {
+              body.innerHTML = '<tr><td colspan="11" class="muted">Add items above — each Add creates a row you can print together.</td></tr>';
+              if (selAll) selAll.checked = false;
+              return;
+            }
+            body.innerHTML = bcPrintQueue.map(function(r, i) {
+              return bcBuildListRowHtml(r, i + 1);
+            }).join('');
+            bcBindListRows();
+            if (selAll) selAll.checked = true;
+          }
+          window.bcSyncPrintCountForTr = function(tr) {
+            bcSyncPrintCountToQueue(tr);
+          };
+          window.bcSyncAllPrintCounts = function() {
+            body.querySelectorAll('tr[data-bc-queue-id]').forEach(function(tr) {
+              bcSyncPrintCountToQueue(tr);
+            });
+          };
+          function bcLoadFromGrn() {
+            var rno = parseInt(bcGrnNo && bcGrnNo.value, 10) || 0;
+            if (!rno) {
+              alert('Enter a GRN (receipt) number.');
+              if (bcGrnNo) bcGrnNo.focus();
+              return;
+            }
+            if (bcPrintQueue.length) {
+              if (!window.confirm('Add GRN lines to the current print list? (Cancel = replace list)')) {
+                bcPrintQueue = [];
+              }
+            }
+            if (bcGrnLoad) bcGrnLoad.disabled = true;
+            if (bcGrnStatus) bcGrnStatus.textContent = 'Loading GRN ' + rno + '…';
+            fetch(apiGrnLines + '?receiptno=' + encodeURIComponent(String(rno)), { credentials: 'same-origin' })
+              .then(function(r) {
+                return r.json().then(function(j) {
+                  if (!r.ok) throw new Error((j && j.error) ? String(j.error) : ('HTTP ' + r.status));
+                  return j;
+                });
+              })
+              .then(function(j) {
+                if (!j || !j.success) {
+                  alert((j && j.error) ? j.error : 'Could not load GRN.');
+                  if (bcGrnStatus) bcGrnStatus.textContent = '';
+                  return;
+                }
+                var rows = j.rows || [];
+                var added = 0;
+                var failed = 0;
+                rows.forEach(function(r) {
+                  if (bcEnqueueProduct(r, true)) added++;
+                  else failed++;
+                });
+                var hdr = j.header || {};
+                var parts = ['GRN ' + rno];
+                if (hdr.invoiceno) parts.push('Inv ' + hdr.invoiceno);
+                if (hdr.receiptdate) {
+                  var rd = hdr.receiptdate;
+                  parts.push(String(rd).slice(0, 10));
+                }
+                parts.push(added + ' line(s) added');
+                if (failed) parts.push(failed + ' skipped');
+                if (j.skipped) parts.push(j.skipped + ' no barcode');
+                if (bcGrnStatus) bcGrnStatus.textContent = parts.join(' · ');
+              })
+              .catch(function(err) {
+                alert((err && err.message) ? err.message : 'Request failed.');
+                if (bcGrnStatus) bcGrnStatus.textContent = '';
+              })
+              .finally(function() {
+                if (bcGrnLoad) bcGrnLoad.disabled = false;
+              });
+          }
+          function bcEnqueueProduct(apiRow, silentNoBarcode) {
+            var row = bcNormalizeProductRow(apiRow);
+            if (!row.barcode) {
+              if (!silentNoBarcode) alert('This item has no barcode to print.');
+              return false;
+            }
+            bcQueueSeq += 1;
+            row.id = 'q' + bcQueueSeq;
+            bcPrintQueue.push(row);
+            bcRenderPrintList();
+            bcHideMatchPicker();
+            bcFocusAdd();
+            return true;
+          }
+          function bcShowMatchPicker(rows) {
+            if (!addMatches || !addMatchesBody) return;
+            addMatchesBody.innerHTML = rows.map(function(r, i) {
+              var bv = String(r.barcode != null ? r.barcode : '').trim();
+              var label = esc(String(r.itemcode)) + ' — ' + esc(String(r.itemname || '')) + ' · ' + esc(String(r.uom || '')) + ' · ' + esc(bv);
+              return '<button type="button" class="bc-add-match-btn" data-match-idx="' + i + '">' + label + '</button>';
+            }).join('');
+            addMatches.classList.remove('hidden');
+            addMatchesBody.querySelectorAll('.bc-add-match-btn').forEach(function(b) {
+              b.addEventListener('click', function() {
+                var idx = parseInt(b.getAttribute('data-match-idx'), 10);
+                if (!isNaN(idx) && rows[idx]) bcEnqueueProduct(rows[idx]);
+              });
+            });
+          }
+          function bcAddFromInput() {
+            if (bcAddBusy) return;
+            var term = (q && q.value) ? q.value.trim() : '';
+            if (!term) {
+              alert('Enter or scan a barcode, item code, or name.');
+              if (q) q.focus();
+              return;
+            }
+            bcAddBusy = true;
+            if (btnAdd) btnAdd.disabled = true;
+            bcHideMatchPicker();
+            fetch(url + '?q=' + encodeURIComponent(term)).then(function(r) { return r.json(); }).then(function(j) {
+              if (!j || !j.success) {
+                alert((j && j.error) || 'Lookup failed.');
+                return;
+              }
+              var rows = j.rows || [];
+              if (!rows.length) {
+                alert('No item found for: ' + term);
+                if (q) q.focus();
+                return;
+              }
+              if (rows.length === 1) {
+                bcEnqueueProduct(rows[0]);
+                return;
+              }
+              bcShowMatchPicker(rows);
+              if (q) q.focus();
+            }).catch(function(err) {
+              alert((err && err.message) ? err.message : 'Request failed.');
+            }).finally(function() {
+              bcAddBusy = false;
+              if (btnAdd) btnAdd.disabled = false;
+            });
+          }
+          function bcRenderItemPicker(list) {
+            var term = (bcItemSearch && bcItemSearch.value || '').toLowerCase();
+            var L = term ? (list || []).filter(function(i) {
+              return (String(i.code || '').toLowerCase().indexOf(term) !== -1) ||
+                     (String(i.barcode || '').toLowerCase().indexOf(term) !== -1) ||
+                     (String(i.name || '').toLowerCase().indexOf(term) !== -1) ||
+                     (String(i.uom || '').toLowerCase().indexOf(term) !== -1);
+            }) : (list || []);
+            if (!bcItemBody) return;
+            if (!L.length) {
+              bcItemBody.innerHTML = '<div class="item-row item-empty">No items</div>';
+              return;
+            }
+            bcItemBody.innerHTML = L.map(function(i) {
+              var code = (i.code != null ? i.code : '');
+              var barcode = String(i.barcode || '').replace(/"/g, '&quot;');
+              var name = String(i.name || '').replace(/"/g, '&quot;');
+              var uom = String(i.uom || 'PCS').replace(/"/g, '&quot;');
+              var rp = parseFloat(i.retailprice);
+              if (isNaN(rp)) rp = 0;
+              var src = String(i.source || 'BASE').replace(/"/g, '&quot;');
+              var line1 = code + (i.name ? ' · ' + (i.name || '') : '');
+              var line2 = [barcode, uom, rp.toFixed(2)].filter(Boolean).join(' | ');
+              return '<div class="item-row" tabindex="0" data-code="' + code + '" data-name="' + name + '" data-barcode="' + barcode + '" data-uom="' + uom + '" data-retailprice="' + rp + '" data-source="' + src + '"><div class="item-line1">' + esc(line1 || '—') + '</div><div class="item-line2">' + esc(line2 || '—') + '</div></div>';
+            }).join('');
+          }
+          function bcFetchItemPickerList(searchTerm, limit, done) {
+            if (!apiItems) {
+              if (bcItemBody) bcItemBody.innerHTML = '<div class="item-row item-empty">Item search API not configured.</div>';
+              if (done) done();
+              return;
+            }
+            var u = apiItems + '?limit=' + (limit || 200);
+            if (searchTerm && String(searchTerm).trim()) {
+              u += '&search=' + encodeURIComponent(String(searchTerm).trim());
+            }
+            var seq = ++bcItemFetchSeq;
+            if (bcItemFetchAbort) {
+              try { bcItemFetchAbort.abort(); } catch (eAbort) {}
+            }
+            bcItemFetchAbort = new AbortController();
+            fetch(u, { signal: bcItemFetchAbort.signal })
+              .then(function(r) {
+                if (!r.ok) {
+                  return r.json().catch(function() { return {}; }).then(function(j) {
+                    var msg = (j && (j.error || j.detail)) ? String(j.error || j.detail) : ('HTTP ' + r.status);
+                    throw new Error(msg);
+                  });
+                }
+                return r.json();
+              })
+              .then(function(d) {
+                if (seq !== bcItemFetchSeq) return;
+                if (!d || d.success === false) {
+                  throw new Error((d && d.error) ? String(d.error) : 'Search failed.');
+                }
+                bcItemsList = Array.isArray(d.items) ? d.items : [];
+                if (done) done();
+                else bcRenderItemPicker(bcItemsList);
+              })
+              .catch(function(err) {
+                if (err && err.name === 'AbortError') return;
+                if (seq !== bcItemFetchSeq) return;
+                bcItemsList = [];
+                if (bcItemBody) {
+                  bcItemBody.innerHTML = '<div class="item-row item-empty">' + esc((err && err.message) ? err.message : 'Search failed.') + '</div>';
+                }
+                if (done) done();
+                else bcRenderItemPicker(bcItemsList);
+              });
+          }
+          function bcOpenItemModal() {
+            if (bcItemModal && !bcItemModal.classList.contains('hidden')) {
+              if (bcItemSearch) bcItemSearch.focus();
+              return;
+            }
+            if (bcItemModal) bcItemModal.classList.remove('hidden');
+            if (bcItemSearch) {
+              bcSuppressItemSearchInput = true;
+              bcItemSearch.value = '';
+              bcSuppressItemSearchInput = false;
+              bcItemSearch.focus();
+            }
+            if (bcItemBody) bcItemBody.innerHTML = '<div class="item-row item-empty">Loading…</div>';
+            bcFetchItemPickerList('', 200, function() { bcRenderItemPicker(bcItemsList); });
+          }
+          function bcCloseItemModal() {
+            if (bcItemModal) bcItemModal.classList.add('hidden');
+            bcFocusAdd();
+          }
+          function bcSelectItemFromPicker(row) {
+            if (!row || row.dataset.code == null || row.dataset.code === '') return;
+            var code = row.dataset.code;
+            var uomHint = (row.dataset.uom || '').trim().toUpperCase();
+            var barcodeHint = (row.dataset.barcode || '').trim();
+            bcCloseItemModal();
+            fetch(url + '?q=' + encodeURIComponent(String(code))).then(function(r) { return r.json(); }).then(function(j) {
+              if (!j || !j.success) {
+                alert((j && j.error) || 'Lookup failed.');
+                return;
+              }
+              var rows = j.rows || [];
+              var hit = null;
+              for (var ri = 0; ri < rows.length; ri++) {
+                if (String(rows[ri].itemcode) !== String(code)) continue;
+                var opts = rows[ri].uom_options || [];
+                for (var oi = 0; oi < opts.length; oi++) {
+                  var ou = (opts[oi].uom || '').trim().toUpperCase();
+                  var ob = String(opts[oi].barcode != null ? opts[oi].barcode : '').trim();
+                  if (uomHint && ou === uomHint && (!barcodeHint || ob === barcodeHint)) {
+                    hit = Object.assign({}, rows[ri], {
+                      barcode: opts[oi].barcode,
+                      uom: opts[oi].uom,
+                      retailprice: opts[oi].retailprice,
+                      source: opts[oi].source
+                    });
+                    break;
+                  }
+                }
+                if (!hit && uomHint && (rows[ri].uom || '').trim().toUpperCase() === uomHint) hit = rows[ri];
+                if (!hit) hit = rows[ri];
+                break;
+              }
+              if (!hit && rows.length) hit = rows[0];
+              if (hit) bcEnqueueProduct(hit);
+              else alert('Item not found.');
+            }).catch(function(err) {
+              alert((err && err.message) ? err.message : 'Request failed.');
+            });
+          }
+          if (btnOpenItems) btnOpenItems.addEventListener('click', bcOpenItemModal);
+          if (bcItemModal) {
+            bcItemModal.addEventListener('click', function(e) {
+              if (e.target.dataset.close === 'bcItemModal' || e.target.classList.contains('modal__close')) {
+                bcCloseItemModal();
+              }
+            });
+          }
+          if (bcItemSearch) {
+            bcItemSearch.addEventListener('input', function() {
+              if (bcSuppressItemSearchInput) return;
+              var term = (bcItemSearch.value || '').trim();
+              if (bcItemSearchDebounce) clearTimeout(bcItemSearchDebounce);
+              if (!term) {
+                bcRenderItemPicker(bcItemsList);
+                return;
+              }
+              bcItemSearchDebounce = setTimeout(function() {
+                bcItemSearchDebounce = null;
+                if (bcItemBody) bcItemBody.innerHTML = '<div class="item-row item-empty">Searching…</div>';
+                bcFetchItemPickerList(term, 200, function() { bcRenderItemPicker(bcItemsList); });
+              }, 280);
+            });
+            bcItemSearch.addEventListener('keydown', function(e) {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                var firstRow = bcItemBody && bcItemBody.querySelector('.item-row[data-code]');
+                if (firstRow) firstRow.focus();
+              }
+            });
+          }
+          if (bcItemBody) {
+            bcItemBody.addEventListener('click', function(e) {
+              var row = e.target.closest('.item-row');
+              if (row && row.dataset.code) bcSelectItemFromPicker(row);
+            });
+            bcItemBody.addEventListener('keydown', function(e) {
+              var row = e.target.closest('.item-row');
+              if (e.key === 'Enter') {
+                if (row && row.dataset.code) {
+                  e.preventDefault();
+                  bcSelectItemFromPicker(row);
+                }
+              } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                if (!row || !row.dataset.code) return;
+                var rows = Array.prototype.slice.call(bcItemBody.querySelectorAll('.item-row[data-code]'));
+                var idx = rows.indexOf(row);
+                if (idx === -1) return;
+                e.preventDefault();
+                if (e.key === 'ArrowDown' && idx < rows.length - 1) rows[idx + 1].focus();
+                if (e.key === 'ArrowUp' && idx > 0) rows[idx - 1].focus();
+              }
+            });
+          }
+          document.addEventListener('keydown', function(e) {
+            if (e.key !== 'F1' && e.keyCode !== 112) return;
+            if (!q || document.activeElement !== q) return;
+            e.preventDefault();
+            bcOpenItemModal();
+          });
+          if (btnAdd) btnAdd.addEventListener('click', bcAddFromInput);
+          if (bcGrnLoad) bcGrnLoad.addEventListener('click', bcLoadFromGrn);
+          if (bcGrnNo) {
+            bcGrnNo.addEventListener('keydown', function(e) {
+              if (e.key === 'Enter') { e.preventDefault(); bcLoadFromGrn(); }
+            });
+          }
+          if (q) {
+            q.addEventListener('keydown', function(e) {
+              if (e.key === 'Enter') { e.preventDefault(); bcAddFromInput(); }
+            });
+          }
+          if (selAll) selAll.addEventListener('change', function() {
+            body.querySelectorAll('.bc-row-chk').forEach(function(c) { c.checked = selAll.checked; });
+          });
+          function bcCollectRowsForPrint(onlyChecked) {
+            var pick = [];
+            body.querySelectorAll('tr[data-bc-value]').forEach(function(tr) {
+              if (onlyChecked) {
+                var c = tr.querySelector('.bc-row-chk');
+                if (!c || !c.checked) return;
+              }
+              bcSyncPrintCountToQueue(tr);
+              pick.push(tr);
+            });
+            return pick;
+          }
+          if (printSel) printSel.addEventListener('click', function() {
+            var pick = bcCollectRowsForPrint(true);
+            if (!pick.length) { alert('Add items to the list, or tick rows to print.'); return; }
+            if (window.bcPrintLabelsFromRows) window.bcPrintLabelsFromRows(pick);
+          });
+          if (printAll) printAll.addEventListener('click', function() {
+            if (!bcPrintQueue.length) { alert('Add at least one item to the list.'); return; }
+            var all = bcCollectRowsForPrint(false);
+            if (window.bcPrintLabelsFromRows) window.bcPrintLabelsFromRows(all);
+          });
+          function bcCsvCell(v) {
+            var s = (v == null) ? '' : String(v);
+            if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+            return s;
+          }
+          function bcExportListToExcel() {
+            if (!bcPrintQueue.length) {
+              alert('Add at least one item to the list before exporting.');
+              bcFocusAdd();
+              return;
+            }
+            // Keep counts/UOM in sync with what is on screen before exporting.
+            body.querySelectorAll('tr[data-bc-queue-id]').forEach(function(tr) { bcSyncPrintCountToQueue(tr); });
+            var headers = ['#', 'Type', 'Barcode', 'Item Code', 'Item Name', 'Arabic Name', 'Category', 'UOM', 'Price', 'Average Cost', 'Count', 'Location'];
+            var lines = [headers.map(bcCsvCell).join(',')];
+            bcPrintQueue.forEach(function(r, i) {
+              var pnum = parseFloat(r.retailprice);
+              var price = isNaN(pnum) ? '0.00' : pnum.toFixed(2);
+              var cnum = parseFloat(r.averagecost);
+              var avgCost = isNaN(cnum) ? '0.00' : cnum.toFixed(2);
+              var typeLabel = (String(r.source || 'BASE').toUpperCase() === 'ALT') ? 'Alt UOM' : 'Base';
+              lines.push([
+                bcCsvCell(i + 1),
+                bcCsvCell(typeLabel),
+                bcCsvCell(r.barcode),
+                bcCsvCell(r.itemcode),
+                bcCsvCell(r.itemname),
+                bcCsvCell(r.itemnameara),
+                bcCsvCell(r.category),
+                bcCsvCell(r.uom),
+                bcCsvCell(price),
+                bcCsvCell(avgCost),
+                bcCsvCell(bcParsePrintCount(r.print_count)),
+                bcCsvCell(r.location_name)
+              ].join(','));
+            });
+            var csv = '\ufeff' + lines.join('\r\n');
+            var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            var pad = function(n) { return (n < 10 ? '0' : '') + n; };
+            var d = new Date();
+            var stamp = '' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '_' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
+            var fname = 'barcode_list_' + stamp + '.csv';
+            var a = document.createElement('a');
+            var href = URL.createObjectURL(blob);
+            a.href = href;
+            a.download = fname;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(function() { URL.revokeObjectURL(href); }, 1500);
+          }
+          if (exportXls) exportXls.addEventListener('click', bcExportListToExcel);
+          if (clearList) clearList.addEventListener('click', function() {
+            if (!bcPrintQueue.length) return;
+            if (!confirm('Clear all rows from the print list?')) return;
+            bcPrintQueue = [];
+            bcRenderPrintList();
+            bcFocusAdd();
+          });
+          bcRenderPrintList();
+          if (q) setTimeout(function() { q.focus(); }, 100);
+        })();
+      </script>
+    {% else %}
+      <div class="bc-loc-bar">
+        <form method="get" action="{{ url_for('barcode_management.barcode_management_page') }}" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0;">
+          <input type="hidden" name="tab" value="shelf" />
+          <label for="locPick" style="font-weight:600;color:#334155;margin:0;">Warehouse site</label>
+          <select name="loc" id="locPick" class="input" style="min-width:240px;">
+            {% for s in location_sites %}
+              <option value="{{ s.key }}" {% if selected_loc_key and (s.key|string) == (selected_loc_key|string) %}selected{% endif %}>{{ s.name }} — {{ s.key }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="page-po__btn-primary">Apply</button>
+        </form>
+      </div>
+      {% if not location_sites or not selected_loc_key %}
+        <p class="bc-muted">No warehouse locations are available. Configure warehouse sites first.</p>
+      {% elif not shelf_rows %}
+        <p class="bc-muted">No shelf / bin / staging rows at this site. Use <strong>Shelf / Bin / Rack</strong> under Warehouse to create storage first.</p>
+      {% else %}
+        <div class="bc-toolbar">
+          <button type="button" class="bc-btn-print bc-btn-print--primary" id="bcShelfPrintSel">Print selected</button>
+          <label class="bc-toggle-all muted" style="margin:0;" for="bcShelfSelectAll">
+            <span class="bc-toggle-all-label">All</span>
+            <span class="bc-switch">
+              <input type="checkbox" id="bcShelfSelectAll" />
+              <span class="bc-switch-slider" aria-hidden="true"></span>
+            </span>
+          </label>
+        </div>
+        <div style="overflow:auto; max-height: calc(100vh - 340px);">
+          <table class="bc-table" id="bcShelfTable">
+            <thead>
+              <tr>
+                <th style="width:52px;" title="Include in print"></th>
+                <th>Kind</th>
+                <th>Path</th>
+                <th>Code</th>
+                <th>Name</th>
+                <th style="min-width:200px;">Shelf barcode</th>
+                <th style="width:88px;">Save</th>
+                <th style="width:88px;">Print</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in shelf_rows %}
+              <tr class="bc-shelf-tr"
+                  data-sid="{{ r.storage_id }}"
+                  data-code="{{ r.code|e }}"
+                  data-name="{{ r.name|e }}"
+                  data-type="{{ r.storage_type|e }}"
+                  data-path="{{ r.path_text|e }}">
+                <td>
+                  <label class="bc-switch" title="Include in print">
+                    <input type="checkbox" class="bc-shelf-chk" />
+                    <span class="bc-switch-slider" aria-hidden="true"></span>
+                  </label>
+                </td>
+                <td><span style="font-size:11px;font-weight:700;">{{ r.storage_type }}</span></td>
+                <td class="muted" style="font-size:12px;">
+                  {% if r.parent_rack_code %}{{ r.parent_rack_code }}{% endif %}
+                  {% if r.parent_shelf_code %} › {{ r.parent_shelf_code }}{% endif %}
+                </td>
+                <td><code>{{ r.code }}</code></td>
+                <td>{{ r.name }}</td>
+                <td>
+                  <input type="text" class="bc-sb-val" maxlength="80" value="{{ r.storage_barcode or '' }}" placeholder="Scan / type label…" autocomplete="off" />
+                </td>
+                <td>
+                  <button type="button" class="bc-sb-save bc-btn-print bc-btn-print--primary">Save</button>
+                </td>
+                <td>
+                  <button type="button" class="bc-shelf-print bc-btn-print">Print</button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <script>
+          (function() {
+            var saveUrl = {{ url_for('barcode_management.barcode_storage_save_api')|tojson }};
+            function shelfValue(tr) {
+              var inp = tr.querySelector('.bc-sb-val');
+              var v = inp ? inp.value.trim() : '';
+              if (v) return v;
+              return (tr.getAttribute('data-code') || '').trim();
+            }
+            function shelfTitle(tr) {
+              return tr.getAttribute('data-name') || tr.getAttribute('data-code') || '';
+            }
+            function shelfSubtitle(tr) {
+              var t = tr.getAttribute('data-type') || '';
+              var p = tr.getAttribute('data-path') || '';
+              return (t ? t + ' · ' : '') + (p || tr.getAttribute('data-code') || '');
+            }
+            document.querySelectorAll('.bc-sb-save').forEach(function(btn) {
+              btn.addEventListener('click', function() {
+                var tr = btn.closest('tr');
+                if (!tr) return;
+                var sid = tr.getAttribute('data-sid');
+                var inp = tr.querySelector('.bc-sb-val');
+                var v = inp ? inp.value : '';
+                btn.disabled = true;
+                fetch(saveUrl, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ storage_id: sid, storage_barcode: v }) })
+                  .then(function(r) { return r.json(); })
+                  .then(function(j) {
+                    btn.disabled = false;
+                    if (!j || !j.success) { alert(j && j.error ? j.error : 'Save failed.'); return; }
+                    btn.textContent = 'Saved';
+                    setTimeout(function() { btn.textContent = 'Save'; }, 1200);
+                  })
+                  .catch(function() {
+                    btn.disabled = false;
+                    alert('Network error.');
+                  });
+              });
+            });
+            document.querySelectorAll('.bc-shelf-print').forEach(function(btn) {
+              btn.addEventListener('click', function() {
+                var tr = btn.closest('tr');
+                if (!tr || !window.bcShelfPrintTr) return;
+                window.bcShelfPrintTr(tr);
+              });
+            });
+            var sa = document.getElementById('bcShelfSelectAll');
+            var tbl = document.getElementById('bcShelfTable');
+            if (sa && tbl) sa.addEventListener('change', function() {
+              tbl.querySelectorAll('.bc-shelf-chk').forEach(function(c) { c.checked = sa.checked; });
+            });
+            var ps = document.getElementById('bcShelfPrintSel');
+            if (ps && tbl) ps.addEventListener('click', function() {
+              var pick = [];
+              tbl.querySelectorAll('tbody tr.bc-shelf-tr').forEach(function(tr) {
+                var c = tr.querySelector('.bc-shelf-chk');
+                if (c && c.checked) pick.push(tr);
+              });
+              if (!pick.length) { alert('Tick the shelf/bin rows to print.'); return; }
+              if (window.bcPrintShelfRows) window.bcPrintShelfRows(pick);
+            });
+            window.bcShelfPrintTr = function(tr) {
+              var val = shelfValue(tr);
+              if (!val) { alert('No barcode text: enter a shelf barcode or use a row with a code.'); return; }
+              if (window.bcPrintLabels) window.bcPrintLabels([{ value: val, title: shelfTitle(tr), sub: shelfSubtitle(tr) }]);
+            };
+            window.bcPrintShelfRows = function(rows) {
+              var items = [];
+              for (var i = 0; i < rows.length; i++) {
+                var tr = rows[i];
+                var val = shelfValue(tr);
+                if (!val) continue;
+                items.push({ value: val, title: shelfTitle(tr), sub: shelfSubtitle(tr) });
+              }
+              if (!items.length) { alert('Nothing selected with a barcode or code.'); return; }
+              if (window.bcPrintLabels) window.bcPrintLabels(items);
+            };
+          })();
+        </script>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+<div id="bcPrintArea" aria-hidden="true"></div>
+
+<div class="bc-printer-modal hidden" id="bcPrinterModal">
+  <div class="bc-printer-modal__overlay" id="bcPrinterModalOverlay"></div>
+  <div class="bc-printer-modal__content">
+    <div class="bc-printer-modal__head">
+      <div class="bc-printer-modal__title" id="bcPrinterModalTitle">Barcode label printer</div>
+      <button type="button" class="bc-printer-modal__close" id="bcPrinterModalClose" aria-label="Close">&times;</button>
+    </div>
+    <div class="bc-printer-modal__body">
+      <input type="text" class="bc-printer-search" id="bcPrinterSearch" placeholder="Search printer…" autocomplete="off" />
+      <table class="bc-printer-table">
+        <thead><tr><th>Printer name</th></tr></thead>
+        <tbody id="bcPrinterListBody"><tr><td>Click Printer list to load from QZ Tray.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+window.__BC_QZ_URLS__ = {
+  certificate: {{ url_for('reports.qz_certificate')|tojson }},
+  sign: {{ url_for('reports.qz_sign')|tojson }}
+};
+</script>
+<script src="{{ url_for('static', filename='js/qz_printer_prefs.js') }}"></script>
+<script src="{{ url_for('static', filename='js/qz_invoice_print.js') }}"></script>
+<script src="{{ url_for('static', filename='js/qz_printer_picker.js') }}"></script>
+<script src="{{ url_for('static', filename='js/qz_barcode_print.js') }}?v=3"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+<script>
+(function() {
+  function bcDigitsOnly(raw) {
+    return String(raw || '').replace(/\D/g, '');
+  }
+
+  /** True when value is exactly 13 digits with a valid EAN-13 check digit (13th digit). */
+  function bcEan13IsValid(raw) {
+    var d = bcDigitsOnly(raw);
+    if (d.length !== 13) return false;
+    var body = d.slice(0, 12);
+    return bcEan13CheckDigit(body) === d.charAt(12);
+  }
+
+  /** EAN-13 only for a full valid 13-digit GTIN; all other values print as CODE128 (exact text). */
+  function bcBarcodeMode(raw) {
+    return bcEan13IsValid(raw) ? 'EAN13' : 'CODE128';
+  }
+
+  /** First 12 digits of a valid 13-digit EAN; empty otherwise. */
+  function bcNormalizeEan12(raw) {
+    var d = bcDigitsOnly(raw);
+    if (!bcEan13IsValid(raw)) return '';
+    return d.slice(0, 12);
+  }
+
+  function bcCode128Payload(raw) {
+    return String(raw || '').trim();
+  }
+
+  function bcEan13CheckDigit(d12) {
+    var sum = 0;
+    for (var i = 0; i < 12; i++) {
+      var n = parseInt(d12.charAt(i), 10);
+      if (isNaN(n)) return '';
+      sum += (i % 2 === 0) ? n : n * 3;
+    }
+    return String((10 - (sum % 10)) % 10);
+  }
+
+  function bcEan13FullTxt(d12) {
+    var c = bcEan13CheckDigit(d12);
+    return c === '' ? d12 : (d12 + c);
+  }
+
+  window.bcBarcodeMode = bcBarcodeMode;
+  window.bcNormalizeEan12 = bcNormalizeEan12;
+
+  function bcFormatPrice(rp) {
+    var pnum = parseFloat(rp);
+    var p = isNaN(pnum) ? '0.00' : pnum.toFixed(2);
+    return p + ' QR';
+  }
+  function bcToArabicDigits(s) {
+    var ar = ['\u0660', '\u0661', '\u0662', '\u0663', '\u0664', '\u0665', '\u0666', '\u0667', '\u0668', '\u0669'];
+    return String(s || '').replace(/\d/g, function(d) {
+      return ar[parseInt(d, 10)] || d;
+    });
+  }
+  function bcFormatPriceArabic(rp) {
+    var pnum = parseFloat(rp);
+    var p = isNaN(pnum) ? '0.00' : pnum.toFixed(2);
+    return bcToArabicDigits(p).replace('.', '\u066B') + ' \u0631.\u0642';
+  }
+  function bcConcatNameCode(titleEn, code, barcode) {
+    var parts = [];
+    var t = String(titleEn || '').trim();
+    var c = String(code != null ? code : '').trim();
+    var b = String(barcode != null ? barcode : '').trim();
+    if (t) parts.push(t);
+    if (c) parts.push(c);
+    if (b) parts.push(b);
+    return parts.join(' · ');
+  }
+  function bcAppendPrintNames(wrap, locationName, titleEn, titleAra, code, barcode) {
+    var box = document.createElement('div');
+    box.className = 'bc-print-names';
+    var loc = String(locationName != null ? locationName : '').trim();
+    if (loc) {
+      var locEl = document.createElement('div');
+      locEl.className = 'bc-print-loc';
+      locEl.textContent = loc;
+      box.appendChild(locEl);
+    }
+    var en = document.createElement('div');
+    en.className = 'bc-print-cap';
+    en.textContent = bcConcatNameCode(titleEn, code, barcode);
+    box.appendChild(en);
+    var ara = String(titleAra != null ? titleAra : '').trim();
+    if (ara) {
+      var ar = document.createElement('div');
+      ar.className = 'bc-print-cap-ar';
+      ar.textContent = ara;
+      box.appendChild(ar);
+    }
+    wrap.appendChild(box);
+  }
+  function bcAppendPrintProductDetails(wrap, uom, priceVal) {
+    var row = document.createElement('div');
+    row.className = 'bc-print-info-row';
+    var hasRow = false;
+    if (priceVal != null && String(priceVal).trim() !== '') {
+      var prices = document.createElement('div');
+      prices.className = 'bc-print-prices';
+      var prEn = document.createElement('div');
+      prEn.className = 'bc-print-price';
+      prEn.textContent = bcFormatPrice(priceVal);
+      var prAr = document.createElement('div');
+      prAr.className = 'bc-print-price-ar';
+      prAr.textContent = bcFormatPriceArabic(priceVal);
+      prices.appendChild(prEn);
+      prices.appendChild(prAr);
+      row.appendChild(prices);
+      hasRow = true;
+    }
+    var u = String(uom != null ? uom : '').trim();
+    if (u) {
+      var right = document.createElement('div');
+      right.className = 'bc-print-info-right';
+      var uomEl = document.createElement('div');
+      uomEl.className = 'bc-print-uom';
+      uomEl.textContent = u;
+      right.appendChild(uomEl);
+      row.appendChild(right);
+      hasRow = true;
+    }
+    if (hasRow) wrap.appendChild(row);
+  }
+  function bcRenderPrintSvg(svg, vRaw, showBarText) {
+    var mode = bcBarcodeMode(vRaw);
+    if (mode === 'EAN13') {
+      var n12 = bcNormalizeEan12(vRaw);
+      if (n12.length === 12) {
+        try {
+          window.JsBarcode(svg, n12, {
+            format: 'EAN13',
+            width: 1.38,
+            height: 32,
+            displayValue: showBarText,
+            fontSize: 7,
+            textMargin: 1,
+            textAlign: 'center',
+            marginTop: 2,
+            marginBottom: 2,
+            marginLeft: 6,
+            marginRight: 6,
+            margin: 0
+          });
+          return { ok: true, barcodeText: bcDigitsOnly(vRaw) };
+        } catch (e) { /* fall through to CODE128 */ }
+      }
+    }
+    var t128 = bcCode128Payload(vRaw);
+    if (!t128) {
+      return { ok: false, error: 'Barcode value is empty.' };
+    }
+    window.JsBarcode(svg, t128, {
+      format: 'CODE128',
+      width: 1.22,
+      height: 32,
+      displayValue: showBarText,
+      fontSize: 7,
+      textMargin: 1,
+      textAlign: 'center',
+      marginTop: 2,
+      marginBottom: 2,
+      marginLeft: 6,
+      marginRight: 6,
+      margin: 0
+    });
+    return { ok: true, barcodeText: t128 };
+  }
+
+  window.bcRenderBarcodeThumb = function(sel, raw) {
+    var mode = bcBarcodeMode(raw);
+    try {
+      if (mode === 'EAN13') {
+        var n12 = bcNormalizeEan12(raw);
+        if (n12.length !== 12) return false;
+        window.JsBarcode(sel, n12, {
+          format: 'EAN13',
+          width: 1.15,
+          height: 34,
+          displayValue: false,
+          margin: 2
+        });
+        return true;
+      }
+      var t128 = bcCode128Payload(raw);
+      if (!t128) return false;
+      window.JsBarcode(sel, t128, {
+        format: 'CODE128',
+        width: 1.0,
+        height: 34,
+        displayValue: false,
+        margin: 2
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  /** Label printers often ignore page-breaks in one HTML job — use one QZ job per copy when Count > 1. */
+  function bcNeedsPerLabelJobs(items) {
+    if (!items || items.length <= 1) return false;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i]._labelCopy > 1) return true;
+    }
+    var seen = {};
+    for (var j = 0; j < items.length; j++) {
+      var k = String(items[j].value || '').trim();
+      if (seen[k]) return true;
+      seen[k] = true;
+    }
+    return false;
+  }
+
+  function bcPrintLabels(items) {
+    if (!window.JsBarcode) {
+      alert('Barcode library not loaded.');
+      return;
+    }
+    var area = document.getElementById('bcPrintArea');
+    if (!area) return;
+    area.innerHTML = '';
+    var anySvg = false;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var vRaw = String(it.value || '').trim();
+      if (!vRaw) continue;
+      var wrap = document.createElement('div');
+      wrap.className = 'bc-print-label';
+      if (it._labelCopy != null) {
+        var copyGhost = document.createElement('span');
+        copyGhost.setAttribute('aria-hidden', 'true');
+        copyGhost.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none;font-size:1px;line-height:0;';
+        copyGhost.textContent = '\u200b' + String(it._labelCopy);
+        wrap.appendChild(copyGhost);
+      }
+      var hasProductAttrs = typeof it.code !== 'undefined';
+      var shelfSub = '';
+      var prodCode = '';
+      var prodUom = '';
+      if (hasProductAttrs) {
+        prodCode = String(it.code != null ? it.code : '').trim();
+        prodUom = String(it.uom != null ? it.uom : '').trim();
+        bcAppendPrintNames(wrap, it.location_name, it.title, it.title_ara, prodCode, vRaw);
+      } else {
+        shelfSub = String(it.sub || '').trim();
+        var cap = document.createElement('div');
+        cap.className = 'bc-print-cap';
+        cap.textContent = it.title || '';
+        wrap.appendChild(cap);
+      }
+      var sub = document.createElement('div');
+      sub.className = 'bc-print-sub';
+      var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('id', 'bc-print-svg-' + i);
+      var barWrap = document.createElement('div');
+      barWrap.className = 'bc-print-bar-wrap';
+      barWrap.appendChild(svg);
+      var showBarText = !hasProductAttrs;
+
+      wrap.appendChild(barWrap);
+      try {
+        var rendered = bcRenderPrintSvg(svg, vRaw, showBarText);
+        if (!rendered.ok) {
+          throw new Error(rendered.error || 'Barcode render failed.');
+        }
+        if (!hasProductAttrs) {
+          sub.textContent = (shelfSub ? shelfSub + ' · ' : '') + String(rendered.barcodeText || vRaw);
+          wrap.appendChild(sub);
+        } else {
+          bcAppendPrintProductDetails(wrap, prodUom, it.price);
+        }
+        area.appendChild(wrap);
+        anySvg = true;
+      } catch (e) {
+        try { wrap.removeChild(barWrap); } catch (ignore) {}
+        sub.textContent = (hasProductAttrs ? '' : (shelfSub ? shelfSub + ' — ' : '')) +
+          (e.message || String(e));
+        wrap.appendChild(sub);
+        area.appendChild(wrap);
+      }
+    }
+    if (!area.children.length) {
+      alert('No labels to print.');
+      return;
+    }
+    if (!anySvg) {
+      alert('No printable barcodes. Check barcode value and try again.');
+      area.innerHTML = '';
+      return;
+    }
+    function clearArea() {
+      area.innerHTML = '';
+    }
+    var bcInp = document.getElementById('bcQzPrinterInput');
+    if (bcInp && window.QzPrinterPrefs && typeof window.QzPrinterPrefs.set === 'function') {
+      var pn = String(bcInp.value || '').trim();
+      if (pn) window.QzPrinterPrefs.set('barcode_label', pn);
+    }
+    if (window.BcQzPrint && typeof window.BcQzPrint.printLabelsFromArea === 'function') {
+      var printOpts = bcNeedsPerLabelJobs(items)
+        ? { perLabelJob: true, betweenMs: 250 }
+        : undefined;
+      window.BcQzPrint.printLabelsFromArea(area, printOpts)
+        .then(clearArea)
+        .catch(function(err) {
+          clearArea();
+          alert((err && err.message) ? err.message : String(err));
+        });
+      return;
+    }
+    alert('QZ barcode print not loaded. Install QZ Tray and reload the page.');
+  }
+  window.bcPrintLabels = bcPrintLabels;
+
+  function bcRefreshQzPrinterHint() {
+    var el = document.getElementById('bcQzPrinterHint');
+    var inp = document.getElementById('bcQzPrinterInput');
+    if (!el) return;
+    var name = '';
+    if (inp && inp.value) name = String(inp.value).trim();
+    if (!name && window.QzPrinterPrefs && typeof window.QzPrinterPrefs.get === 'function') {
+      name = String(window.QzPrinterPrefs.get('barcode_label') || '').trim();
+    }
+    if (name) {
+      el.textContent = 'QZ Tray must be running on this PC. Active printer: ' + name + '.';
+    } else {
+      el.textContent = 'Pick a printer from the list, Save, then use Print on rows. Install QZ Tray if not installed.';
+    }
+  }
+  bcRefreshQzPrinterHint();
+
+  (function bcInitQzPrinterBar() {
+    if (!window.QzPrinterPicker || typeof window.QzPrinterPicker.init !== 'function') return;
+    var picker = window.QzPrinterPicker.init({
+      urls: window.__BC_QZ_URLS__ || {},
+      inputEl: document.getElementById('bcQzPrinterInput'),
+      modalEl: document.getElementById('bcPrinterModal'),
+      modalOverlayEl: document.getElementById('bcPrinterModalOverlay'),
+      modalCloseEl: document.getElementById('bcPrinterModalClose'),
+      modalTitleEl: document.getElementById('bcPrinterModalTitle'),
+      searchEl: document.getElementById('bcPrinterSearch'),
+      listBodyEl: document.getElementById('bcPrinterListBody'),
+      saveBadgeEl: document.getElementById('bcQzSaveBadge'),
+      prefRole: 'barcode_label',
+      popupTitle: 'Barcode label printer'
+    });
+    var btnPick = document.getElementById('bcQzPickPrinter');
+    var btnSave = document.getElementById('bcQzSavePrinter');
+    var btnTest = document.getElementById('bcQzTestPrint');
+    if (btnPick) {
+      btnPick.addEventListener('click', function() {
+        btnPick.disabled = true;
+        picker.loadPrinters()
+          .then(function() { picker.openModal(); })
+          .catch(function(err) { alert((err && err.message) ? err.message : String(err)); })
+          .finally(function() { btnPick.disabled = false; });
+      });
+    }
+    if (btnSave) {
+      btnSave.addEventListener('click', function() {
+        if (picker.savePref()) bcRefreshQzPrinterHint();
+      });
+    }
+    if (btnTest) {
+      btnTest.addEventListener('click', function() {
+        if (!window.BcQzPrint || typeof window.BcQzPrint.printTestLabel !== 'function') {
+          alert('Barcode QZ print script missing.');
+          return;
+        }
+        picker.savePref();
+        bcRefreshQzPrinterHint();
+        var old = btnTest.textContent;
+        btnTest.disabled = true;
+        btnTest.textContent = 'Printing…';
+        window.BcQzPrint.printTestLabel()
+          .then(function() { alert('Test label sent to barcode printer via QZ Tray.'); })
+          .catch(function(err) { alert((err && err.message) ? err.message : String(err)); })
+          .finally(function() { btnTest.disabled = false; btnTest.textContent = old; });
+      });
+    }
+  })();
+
+  function bcParsePrintCountGlobal(val) {
+    var n = parseInt(String(val == null ? '' : val).trim(), 10);
+    if (isNaN(n) || n < 1) return 1;
+    if (n > 999) return 999;
+    return n;
+  }
+  function bcPrintCountFromTr(tr) {
+    var inp = tr.querySelector('.bc-print-cnt');
+    if (inp) return bcParsePrintCountGlobal(inp.value);
+    return bcParsePrintCountGlobal(tr.getAttribute('data-bc-print-count'));
+  }
+  function bcItemFromTr(tr) {
+    var v = String(tr.getAttribute('data-bc-value') || '').trim();
+    var title = tr.getAttribute('data-bc-title') || '';
+    var codeAttr = tr.getAttribute('data-bc-code');
+    var item = { value: v, title: title };
+    if (codeAttr !== null) {
+      item.code = codeAttr;
+      item.uom = tr.getAttribute('data-bc-uom') || '';
+      item.price = tr.getAttribute('data-bc-price') || '';
+      item.price_ar = tr.getAttribute('data-bc-price-ar') || '';
+      item.title_ara = tr.getAttribute('data-bc-title-ara') || '';
+      item.location_name = tr.getAttribute('data-bc-location-name') || '';
+    } else {
+      item.sub = tr.getAttribute('data-bc-sub') || '';
+    }
+    return item;
+  }
+  function bcExpandTrsToItems(trs) {
+    var items = [];
+    trs.forEach(function(tr) {
+      if (window.bcSyncPrintCountForTr) window.bcSyncPrintCountForTr(tr);
+      var v = String(tr.getAttribute('data-bc-value') || '').trim();
+      if (!v) return;
+      var o = bcItemFromTr(tr);
+      var cnt = bcPrintCountFromTr(tr);
+      for (var i = 0; i < cnt; i++) {
+        items.push(Object.assign({}, o, { _labelCopy: i + 1 }));
+      }
+    });
+    return items;
+  }
+  window.bcPrintLabelsFromRow = function(tr) {
+    if (!tr) return;
+    var items = bcExpandTrsToItems([tr]);
+    if (!items.length) { alert('This row has no barcode value.'); return; }
+    bcPrintLabels(items);
+  };
+  window.bcPrintLabelsFromRows = function(trs) {
+    var items = bcExpandTrsToItems(trs);
+    if (!items.length) { alert('Selected rows have no barcode text.'); return; }
+    bcPrintLabels(items);
+  };
+})();
+</script>
+{% endblock %}

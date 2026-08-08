@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<style>
+  .gs-page { max-width: 760px; margin: 0 auto; }
+  .gs-page h1 { margin: 0 0 6px; font-size: 1.35rem; color: #0f172a; }
+  .gs-page .gs-lead { margin: 0 0 18px; color: #64748b; font-size: 13px; line-height: 1.45; }
+  .gs-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 14px;
+  }
+  .gs-card h2 { margin: 0 0 6px; font-size: 15px; color: #111827; }
+  .gs-card p { margin: 0 0 12px; font-size: 13px; color: #64748b; line-height: 1.45; }
+  .gs-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #111827;
+  }
+  .gs-toggle input { margin-top: 3px; }
+  .gs-actions { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .gs-btn-primary {
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .gs-btn-primary:hover { background: #1d4ed8; }
+  .gs-status {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 999px;
+    margin-bottom: 10px;
+  }
+  .gs-status--on { background: #dcfce7; color: #166534; }
+  .gs-status--off { background: #fee2e2; color: #991b1b; }
+  .gs-note {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    font-size: 12px;
+    color: #475569;
+    line-height: 1.45;
+  }
+</style>
+
+<div class="gs-page">
+  <h1>General Setup</h1>
+  <p class="gs-lead">Organization-wide options that apply to all users and branches.</p>
+
+  <form method="post" action="{{ url_for('general_setup.general_setup_page') }}">
+    <div class="gs-card">
+      <h2>Customer request alerts</h2>
+      <span class="gs-status {% if customer_request_alert_poll_enabled %}gs-status--on{% else %}gs-status--off{% endif %}">
+        Currently: {% if customer_request_alert_poll_enabled %}Enabled{% else %}Disabled{% endif %}
+      </span>
+      <p>
+        When enabled, users with customer-creation access poll the server every 30 seconds for pending
+        customer requests (badge, toast, and optional sound).
+      </p>
+      <label class="gs-toggle">
+        <input type="checkbox" name="customer_request_alert_poll" value="Y" {% if customer_request_alert_poll_enabled %}checked{% endif %} />
+        <span>
+          <strong>Enable customer request pending alerts</strong>
+          (background polling every 30 seconds)
+        </span>
+      </label>
+      <div class="gs-note">
+        To <strong>disable</strong> polling and stop log lines like
+        <code>/ho/api/customer-request-pending-count</code>, uncheck the box above and click Save.
+        Open browser tabs stop polling within one cycle; new pages will not poll at all.
+      </div>
+    </div>
+
+    <div class="gs-card">
+      <h2>Transaction recording audit</h2>
+      <span class="gs-status {% if transaction_recording_enabled %}gs-status--on{% else %}gs-status--off{% endif %}">
+        Currently: {% if transaction_recording_enabled %}Enabled{% else %}Disabled{% endif %}
+      </span>
+      <p>
+        When enabled, transaction screens (Sales, GRN, PO, vouchers, etc.) capture field changes,
+        before/after screenshots, and optional tab video via the Nexa Audit Recorder extension.
+        Recordings are stored under <code>/audit/recording</code> and can be reviewed in
+        Transaction Audit Viewer.
+      </p>
+      <label class="gs-toggle">
+        <input type="checkbox" name="transaction_recording_enabled" value="Y" {% if transaction_recording_enabled %}checked{% endif %} />
+        <span>
+          <strong>Enable transaction screen recording</strong>
+          (screenshots, field audit trail, optional video)
+        </span>
+      </label>
+      <div class="gs-note">
+        Uncheck to stop new recordings on all users and branches. Existing audit logs remain
+        available in Reports → Transaction Audit Viewer. Users must refresh open transaction
+        pages for the change to take effect.
+      </div>
+    </div>
+
+    <div class="gs-actions">
+      <button type="submit" class="gs-btn-primary">Save</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

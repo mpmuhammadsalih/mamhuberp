@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}{{ title or 'Database backup' }}{% endblock %}
+{% block content %}
+<style>
+.bk-page { max-width: 920px; margin: 24px auto 56px; padding: 0 16px; }
+.bk-page h1 { font-size: 22px; margin-bottom: 8px; }
+.bk-page > p.lead { color: #495057; font-size: 15px; margin-bottom: 20px; line-height: 1.5; }
+.bk-page h2 { font-size: 17px; margin: 28px 0 10px; border-bottom: 1px solid #dee2e6; padding-bottom: 6px; }
+.bk-page p, .bk-page li { font-size: 14px; line-height: 1.55; color: #212529; }
+.bk-page ul { margin: 8px 0 12px 1.1em; }
+.bk-page .callout {
+  background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 14px 16px; margin: 14px 0;
+  font-size: 13px;
+}
+.bk-page .callout-warn { background: #fff8e6; border-color: #ffe08a; }
+.bk-page pre, .bk-page code {
+  font-family: ui-monospace, Consolas, monospace; font-size: 12.5px;
+  background: #f1f3f5; border-radius: 4px;
+}
+.bk-page pre {
+  padding: 12px 14px; overflow-x: auto; border: 1px solid #e9ecef; margin: 10px 0;
+  white-space: pre-wrap; word-break: break-word;
+}
+.bk-page code { padding: 2px 5px; }
+.bk-card {
+  border: 1px solid #dee2e6; border-radius: 10px; padding: 16px 18px; margin: 16px 0; background: #fff;
+}
+.bk-card label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+.bk-card select { width: 100%; max-width: 420px; padding: 6px 10px; font-size: 13px; margin-bottom: 12px; }
+.bk-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.bk-btn {
+  display: inline-block; padding: 8px 14px; border-radius: 6px; font-size: 13px; font-weight: 600;
+  border: 1px solid #dee2e6; background: #fff; cursor: pointer; text-decoration: none; color: #212529;
+}
+.bk-btn-primary { background: #0d6efd; border-color: #0d6efd; color: #fff; }
+.bk-btn-secondary { background: #f8f9fa; }
+.bk-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+.bk-table th, .bk-table td { padding: 8px 10px; border-bottom: 1px solid #e9ecef; text-align: left; }
+.bk-table th { background: #f8f9fa; font-weight: 600; }
+.bk-table td.num { text-align: right; }
+.bk-muted { color: #6c757d; font-size: 13px; }
+</style>
+
+<div class="bk-page">
+  <h1>Database backup</h1>
+  <p class="lead">
+    Export Oracle <strong>schema structure</strong> (CREATE TABLE DDL) for the current database connection.
+    Backups are saved under <code>exports/backups/</code> on the server and can be downloaded from here.
+    For a <strong>full data clone</strong>, use Oracle Data Pump (<code>expdp</code> / <code>impdp</code>) with your DBA.
+  </p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="callout{% if category == 'error' %} callout-warn{% endif %}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="callout">
+    <strong>Deployment mode:</strong>
+    {% if is_multi_db %}Multi-DB{% else %}Single-DB{% endif %}.
+    Schema export uses the credentials configured for the selected target below.
+    DDL backups contain <em>structure only</em> — not business data.
+  </div>
+
+  <h2>Create backup</h2>
+  <div class="bk-card">
+    <form method="post" action="{{ url_for('utilities_backup.backup_page') }}">
+      <label for="bkTarget">Database target</label>
+      <select id="bkTarget" name="target">
+        {% for t in targets %}
+          <option value="{{ t.key }}"{% if t.key == default_target %} selected{% endif %}>
+            {{ t.label }} — {{ t.user }} @ {{ t.dsn }}
+          </option>
+        {% endfor %}
+      </select>
+      <div class="bk-actions">
+        <button type="submit" class="bk-btn bk-btn-primary" name="action" value="export_schema">
+          Export schema DDL
+        </button>
+        <button type="submit" class="bk-btn bk-btn-secondary" name="action" value="show_expdp">
+          Show Data Pump command
+        </button>
+      </div>
+    </form>
+    <p class="bk-muted" style="margin-top:12px;">
+      <strong>Schema DDL</strong> — safe, read-only export of table definitions via <code>DBMS_METADATA</code>.<br>
+      <strong>Data Pump</strong> — run on the database server; requires Oracle client tools and a configured <code>DIRECTORY</code> object.
+    </p>
+  </div>
+
+  {% if expdp_hint %}
+  <h2>Data Pump command (copy to server)</h2>
+  <div class="callout callout-warn">
+    Replace <code>&lt;password&gt;</code> and verify the Oracle <code>directory=</code> name with your DBA before running.
+  </div>
+  <pre>{{ expdp_hint }}</pre>
+  {% endif %}
+
+  <h2>Saved backup files</h2>
+  {% if backups %}
+  <table class="bk-table">
+    <thead>
+      <tr>
+        <th>File</th>
+        <th>Type</th>
+        <th class="num">Size (KB)</th>
+        <th>Modified</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in backups %}
+      <tr>
+        <td><code>{{ b.name }}</code></td>
+        <td>{{ b.kind }}</td>
+        <td class="num">{{ b.size_kb }}</td>
+        <td>{{ b.modified }}</td>
+        <td>
+          <a class="bk-btn bk-btn-secondary" href="{{ url_for('utilities_backup.backup_download', filename=b.name) }}">Download</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="bk-muted">No backup files yet. Use <strong>Export schema DDL</strong> to create the first one.</p>
+  {% endif %}
+
+  <h2>Before major changes</h2>
+  <ul>
+    <li>Keep a copy of <code>.env</code> (database credentials) in a secure location.</li>
+    <li>Run schema DDL export before New Company setup or schema migrations.</li>
+    <li>Schedule full <code>expdp</code> backups with your DBA for production data recovery.</li>
+  </ul>
+</div>
+{% endblock %}

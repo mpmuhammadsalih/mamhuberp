@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+{% block title %}POS Accounts Configuration{% endblock %}
+
+{% block content %}
+<div class="page-po nexa-list-page pos-ac-page im-productlist-page" style="max-width:1200px;">
+  <style>
+    .page-po.nexa-list-page.pos-ac-page.im-productlist-page {
+      max-width: 1200px !important;
+      margin: 0 auto !important;
+      padding: 8px 0 20px !important;
+    }
+    .pos-ac-page .pos-ac-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(140px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    @media (max-width: 720px) {
+      .pos-ac-page .pos-ac-stat-grid { grid-template-columns: 1fr; }
+    }
+    .pos-ac-page .pos-ac-stat-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      padding: 11px;
+      border: 1px solid #e5eaf2;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, .06);
+    }
+    .pos-ac-page .pos-ac-stat-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      flex: 0 0 36px;
+      border-radius: 9px;
+      color: #fff;
+      font-size: 17px;
+    }
+    .pos-ac-page .pos-ac-stat-icon--blue { background: linear-gradient(135deg, #2563eb, #38bdf8); }
+    .pos-ac-page .pos-ac-stat-icon--green { background: linear-gradient(135deg, #16a34a, #22c55e); }
+    .pos-ac-page .pos-ac-stat-icon--slate { background: linear-gradient(135deg, #475569, #94a3b8); }
+    .pos-ac-page .pos-ac-stat-label { margin: 0 0 4px; color: #475569; font-size: 11px; font-weight: 700; }
+    .pos-ac-page .pos-ac-stat-value { margin: 0; color: #0f172a; font-size: clamp(16px, 1.45vw, 21px); font-weight: 850; line-height: 1.1; }
+    .pos-ac-page .pos-ac-stat-sub { margin: 3px 0 0; color: #64748b; font-size: 11px; }
+    .pos-ac-page .pos-ac-key { font-family: ui-monospace, monospace; font-weight: 700; color: #0f172a; }
+    .pos-ac-page .pos-ac-side {
+      display: inline-flex;
+      min-width: 34px;
+      justify-content: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #f0f9ff;
+      color: #1d4ed8;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .pos-ac-page .pos-ac-side--cr {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    .pos-ac-page #posAcStatusLine { font-size: 13px; margin-top: 10px; min-height: 1.2em; color: #64748b; }
+    .pos-ac-page #posAcStatusLine.pos-ac--warn { color: #b45309; }
+    .pos-ac-page #posAcStatusLine.pos-ac--ok { color: #047857; }
+  </style>
+
+  <section class="pos-ac-stat-grid" aria-label="POS account setup summary">
+    <div class="pos-ac-stat-card">
+      <span class="pos-ac-stat-icon pos-ac-stat-icon--blue" aria-hidden="true"><i class="bi bi-journal-check"></i></span>
+      <div>
+        <p class="pos-ac-stat-label">Configured accounts</p>
+        <p class="pos-ac-stat-value" id="posAcStatConfigured">0</p>
+        <p class="pos-ac-stat-sub">Non-tender settlement rows</p>
+      </div>
+    </div>
+    <div class="pos-ac-stat-card">
+      <span class="pos-ac-stat-icon pos-ac-stat-icon--green" aria-hidden="true"><i class="bi bi-check-circle"></i></span>
+      <div>
+        <p class="pos-ac-stat-label">Required for posting</p>
+        <p class="pos-ac-stat-value">5</p>
+        <p class="pos-ac-stat-sub">Expense, short, excess, sales, tax</p>
+      </div>
+    </div>
+    <div class="pos-ac-stat-card">
+      <span class="pos-ac-stat-icon pos-ac-stat-icon--slate" aria-hidden="true"><i class="bi bi-diagram-3"></i></span>
+      <div>
+        <p class="pos-ac-stat-label">Tender accounts</p>
+        <p class="pos-ac-stat-value">Separate</p>
+        <p class="pos-ac-stat-sub">Cash/card/wallet remain in Tender Types</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">POS Accounts Configuration</h1>
+      <p class="page-po__muted">Set the accounts used by POS Settlement beyond tender clearing accounts. Cash, card, and wallet still come from <a href="{{ tender_types_url }}">POS Tender Types</a>.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a class="page-po__btn-secondary" href="{{ settlement_url }}">POS Settlement</a>
+      <button type="button" class="page-po__btn-primary" id="posAcSave">Save configuration</button>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div class="co-table-wrap">
+    <table class="co-table" id="posAcTable" aria-label="POS accounts configuration">
+      <thead>
+        <tr>
+          <th>Account type</th>
+          <th>Purpose</th>
+          <th>GL account</th>
+          <th>Account name</th>
+          <th style="text-align:center;">Normal side</th>
+        </tr>
+      </thead>
+      <tbody id="posAcTbody"></tbody>
+    </table>
+  </div>
+  <p id="posAcStatusLine" role="status"></p>
+</div>
+
+<script>
+(function () {
+  var apiBootstrapUrl = {{ api_bootstrap_url|tojson }};
+  var apiSaveUrl = {{ api_save_url|tojson }};
+  var rows = [];
+  var coa = [];
+  var statusEl = document.getElementById('posAcStatusLine');
+
+  var helpText = {
+    EXPENSE: 'Cashier expense paid from POS cash drawer.',
+    SHORT: 'Cash shortage when counted cash is below expected cash.',
+    EXCESS: 'Cash excess when counted cash is above expected cash.',
+    SALES_REVENUE: 'Revenue account for POS settlement sales credit.',
+    TAX: 'Tax output account for POS bills with tax.'
+  };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+  }
+
+  function setStatus(msg, kind) {
+    statusEl.textContent = msg || '';
+    statusEl.className = kind === 'ok' ? 'pos-ac--ok' : kind === 'warn' ? 'pos-ac--warn' : '';
+  }
+
+  function accountName(code) {
+    var c = String(code || '').trim();
+    if (!c) return '—';
+    for (var i = 0; i < coa.length; i++) {
+      if (String(coa[i].code || '').trim() === c) return String(coa[i].name || '').trim() || '—';
+    }
+    return '—';
+  }
+
+  function selectHtml(row) {
+    var current = String(row.account_code || '').trim();
+    var html = '<select class="input pos-ac-account" data-key="' + esc(row.config_key) + '"><option value="">Select…</option>';
+    coa.forEach(function (a) {
+      var code = String(a.code || '').trim();
+      html += '<option value="' + esc(code) + '"' + (code === current ? ' selected' : '') + '>' +
+        esc(code + ' — ' + (a.name || '')) + '</option>';
+    });
+    html += '</select>';
+    return html;
+  }
+
+  function render() {
+    var body = document.getElementById('posAcTbody');
+    if (!body) return;
+    body.innerHTML = rows.map(function (r) {
+      var side = String(r.normal_side || '').trim() || 'Dr';
+      return '<tr data-key="' + esc(r.config_key) + '">' +
+        '<td><span class="pos-ac-key">' + esc(r.label || r.config_key) + '</span></td>' +
+        '<td>' + esc(helpText[r.config_key] || '') + '</td>' +
+        '<td>' + selectHtml(r) + '</td>' +
+        '<td data-name-for="' + esc(r.config_key) + '">' + esc(accountName(r.account_code)) + '</td>' +
+        '<td style="text-align:center;"><span class="pos-ac-side ' + (side === 'Cr' ? 'pos-ac-side--cr' : '') + '">' + esc(side) + '</span></td>' +
+        '</tr>';
+    }).join('');
+    document.getElementById('posAcStatConfigured').textContent = String(rows.filter(function (r) {
+      return String(r.account_code || '').trim();
+    }).length);
+    Array.prototype.forEach.call(body.querySelectorAll('.pos-ac-account'), function (sel) {
+      sel.addEventListener('change', function () {
+        var key = sel.getAttribute('data-key');
+        var row = rows.find(function (x) { return x.config_key === key; });
+        if (row) row.account_code = sel.value || '';
+        var nm = body.querySelector('[data-name-for="' + key + '"]');
+        if (nm) nm.textContent = accountName(sel.value);
+        document.getElementById('posAcStatConfigured').textContent = String(rows.filter(function (r) {
+          return String(r.account_code || '').trim();
+        }).length);
+        setStatus('', '');
+      });
+    });
+  }
+
+  function load() {
+    setStatus('Loading configuration…', '');
+    fetch(apiBootstrapUrl, { credentials: 'same-origin' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) throw new Error(data.error || 'Load failed');
+        rows = data.accounts || [];
+        coa = data.coa || [];
+        render();
+        setStatus('Configuration loaded.', 'ok');
+      })
+      .catch(function (e) {
+        setStatus(e.message || 'Load failed', 'warn');
+      });
+  }
+
+  document.getElementById('posAcSave').addEventListener('click', function () {
+    setStatus('Saving configuration…', '');
+    fetch(apiSaveUrl, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ accounts: rows })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) throw new Error(data.error || 'Save failed');
+        setStatus('POS accounts configuration saved.', 'ok');
+      })
+      .catch(function (e) {
+        setStatus(e.message || 'Save failed', 'warn');
+      });
+  });
+
+  load();
+})();
+</script>
+{% endblock %}

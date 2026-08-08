@@ -1,0 +1,2 @@
+"""Addon manifest — Itemmaster."""
+MANIFEST = {'technical_name': 'itemmaster', 'name': 'Itemmaster', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Migrated from blueprints/itemmaster.py', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/itemmaster'}, 'flask': {'blueprint': 'itemmaster', 'blueprint_ref': 'addons.itemmaster:bp', 'models_package': 'addons.itemmaster.models', 'routes_module': 'addons.itemmaster.controllers.routes'}}

@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .page { max-width: 98vw; margin: 0 auto; padding: 14px 10px; }
+  .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #dee2e6; padding-bottom: 10px; }
+  .title { margin: 0; font-size: 22px; font-weight: 400; color: #212529; }
+  .sub { margin: 4px 0 0; font-size: 12px; color: #6c757d; max-width: 720px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { border: 1px solid #dee2e6; border-radius: 4px; background: #fff; color: #212529; padding: 7px 12px; font-size: 12px; text-decoration: none; cursor: pointer; }
+  .btn-primary { background: #007bff; border-color: #007bff; color: #fff; }
+  .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 10px; }
+  .field label { display: block; font-size: 11px; color: #495057; margin-bottom: 3px; }
+  .input { width: 100%; border: 1px solid #dee2e6; border-radius: 4px; padding: 7px 8px; font-size: 12px; box-sizing: border-box; }
+  .field--grow { flex: 1; min-width: 220px; }
+  .field--narrow { width: 110px; }
+  .field--date { width: 150px; }
+  .field--category { min-width: 240px; }
+  .field--transaction { width: 190px; }
+  .meta { margin: 8px 0 10px; font-size: 12px; color: #495057; }
+  .table-wrap { overflow: auto; border: 1px solid #dee2e6; border-radius: 4px; background: #fff; max-height: 72vh; }
+  table { width: 100%; min-width: 1500px; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #dee2e6; padding: 6px 8px; text-align: left; white-space: nowrap; }
+  th { background: #f8f9fa; position: sticky; top: 0; z-index: 2; font-size: 11px; }
+  td.dt { text-align: center; }
+</style>
+
+<div class="page">
+  <div class="top">
+    <div>
+      <h1 class="title">Last transactions</h1>
+      <p class="sub">
+        Per item at this location: item identifiers, base UOM, cost, stock, category, and the selected last transaction dates.
+        Date filters apply to the selected transaction types.
+      </p>
+    </div>
+    <div class="actions">
+      <a class="btn" href="{{ url_for('reports.last_transactions_report') }}">Clear</a>
+      <button class="btn" type="submit" form="ltFilterForm" formaction="{{ url_for('reports.last_transactions_report_export_excel') }}">Export CSV</button>
+    </div>
+  </div>
+
+  <form id="ltFilterForm" method="get" action="{{ url_for('reports.last_transactions_report') }}">
+    <div class="filters">
+      <div class="field field--grow">
+        <label for="ltSearch">Search (item code, name, RAWABICODE, manufacturer id)</label>
+        <input id="ltSearch" class="input" type="text" name="search" placeholder="Optional filter…" value="{{ (filters.search if filters else '') or '' }}" />
+      </div>
+      <div class="field field--date">
+        <label for="ltDateFrom">Date from</label>
+        <input id="ltDateFrom" class="input" type="date" name="date_from" value="{{ (filters.date_from if filters else '') or '' }}" />
+      </div>
+      <div class="field field--date">
+        <label for="ltDateTo">Date to</label>
+        <input id="ltDateTo" class="input" type="date" name="date_to" value="{{ (filters.date_to if filters else '') or '' }}" />
+      </div>
+      <div class="field field--category">
+        <label for="ltCategory">Category</label>
+        <select id="ltCategory" class="input" name="category_code">
+          <option value="">All categories</option>
+          {% set cur_cat = ((filters.category_code if filters else '') or '')|string %}
+          {% for c in category_options or [] %}
+            {% set cc = (c.categorycode|string) %}
+            <option value="{{ cc }}" {% if cur_cat == cc %}selected{% endif %}>{{ cc }}{% if c.categoryname %} - {{ c.categoryname }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% set tx_scope = (filters.transaction_scope if filters else 'all') or 'all' %}
+      <div class="field field--transaction">
+        <label for="ltTransactionScope">Transaction filter</label>
+        <select id="ltTransactionScope" class="input" name="transaction_scope">
+          <option value="all" {% if tx_scope == 'all' %}selected{% endif %}>All transactions</option>
+          <option value="sale" {% if tx_scope == 'sale' %}selected{% endif %}>Sale only</option>
+          <option value="purchase" {% if tx_scope == 'purchase' %}selected{% endif %}>Purchase only</option>
+          <option value="purchase_return" {% if tx_scope == 'purchase_return' %}selected{% endif %}>Purchase return only</option>
+          <option value="sale_return" {% if tx_scope == 'sale_return' %}selected{% endif %}>Sale return only</option>
+        </select>
+      </div>
+      <div class="field field--narrow">
+        <label for="ltCap">Max rows</label>
+        <input id="ltCap" class="input" type="number" name="max_rows" min="1" max="15000" value="{{ (filters.max_rows if filters else '6000') or '6000' }}" />
+      </div>
+      <button class="btn btn-primary" type="submit">Run</button>
+    </div>
+  </form>
+
+  <div class="meta">
+    Rows shown: {{ rows|length }}{% if filters and filters.max_rows %} (cap {{ filters.max_rows }}){% endif %}
+    {% if filters and filters.transaction_scope and filters.transaction_scope != 'all' %}
+      | Filter: {{ filters.transaction_scope.replace('_', ' ')|title }} only
+    {% endif %}
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Sl No</th>
+          <th>RAWABICODE</th>
+          <th>Manufacturer ID</th>
+          <th>Item code</th>
+          <th>Item name</th>
+          <th>Base UOM</th>
+          <th>Cost price</th>
+          <th>Current stock</th>
+          <th>Stock value</th>
+          <th>Category</th>
+          <th>Last sale date</th>
+          <th>Last purchase date</th>
+          <th>Last purchase return</th>
+          <th>Last sale return</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if rows %}
+          {% for r in rows %}
+            <tr>
+              <td class="dt">{{ loop.index }}</td>
+              <td>{{ r.rawabicode or '' }}</td>
+              <td>{{ r.manufacturerid or '' }}</td>
+              <td>{{ r.itemcode if r.itemcode is not none else '' }}</td>
+              <td>{{ r.itemname or '' }}</td>
+              <td>{{ r.baseuom or '' }}</td>
+              <td class="dt">{{ '%.3f'|format(r.costprice or 0) }}</td>
+              <td class="dt">{{ '%.3f'|format(r.currentstock or 0) }}</td>
+              <td class="dt">{{ '%.3f'|format(r.stockvalue or 0) }}</td>
+              <td>{{ r.categoryname or r.categorycode or '' }}</td>
+              <td class="dt">{{ r.last_sale_date or '' }}</td>
+              <td class="dt">{{ r.last_purchase_date or '' }}</td>
+              <td class="dt">{{ r.last_purchase_return_date or '' }}</td>
+              <td class="dt">{{ r.last_sale_return_date or '' }}</td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="14" style="padding:16px;color:#6c757d;">No rows (or required tables missing).</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

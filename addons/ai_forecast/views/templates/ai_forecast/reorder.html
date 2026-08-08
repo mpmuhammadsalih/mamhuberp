@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "ai_forecast/_nav.html" import ai_nav %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('ai_forecast.static', filename='css/ai_forecast.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="ai-fc-page">
+  <div class="ai-fc-topbar">
+    <div><h1 class="ai-fc-title">Smart Reorder</h1><p class="ai-fc-sub">Reorder Point = (Avg Daily Sales × Lead Time) + Safety Stock</p></div>
+    {{ ai_nav('reorder') }}
+  </div>
+  <div class="ai-fc-card"><div class="ai-fc-card__body" style="overflow:auto;">
+    <table class="ai-fc-table"><thead><tr><th>Item</th><th>Name</th><th>Stock</th><th>Pending PO</th><th>Reorder pt</th><th>Suggest</th><th>Days cover</th><th>Risk</th></tr></thead><tbody id="aiFcTb"></tbody></table>
+  </div></div>
+</div>
+<script>
+fetch({{ url_for('ai_forecast.api_reorder')|tojson }}).then(r=>r.json()).then(d=>{
+  document.getElementById('aiFcTb').innerHTML = (d.rows||[]).map(r=>`<tr>
+    <td>${r.itemcode}</td><td>${r.itemname||''}</td><td class="num">${r.current_stock}</td><td class="num">${r.pending_lpo_qty}</td>
+    <td class="num">${r.reorder_point}</td><td class="num">${r.recommended_qty}</td><td class="num">${r.days_of_cover!=null?r.days_of_cover:'—'}</td><td>${r.risk}</td></tr>`).join('');
+});
+</script>
+{% endblock %}

@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+{% block title %}{% if supplier %}{{ (supplier.suppliercode or selected_supplier_code or '')|e }} — {% endif %}Supplier ledger{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .sl-wrap { max-width: 1200px; }
+  .sl-top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+  .sl-back { font-size: 13px; }
+  .sl-back a { color: #1a56a4; text-decoration: none; }
+  .sl-back a:hover { text-decoration: underline; }
+  .sl-title { font-size: 1.5rem; font-weight: 600; color: #0f172a; margin: 0 0 4px 0; }
+  .sl-sub { color: #64748b; font-size: 13px; margin: 0; }
+  .sl-card {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 18px; margin-bottom: 16px;
+  }
+  .sl-meta { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px 20px; font-size: 13px; }
+  .sl-meta dt { color: #94a3b8; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin: 0; }
+  .sl-meta dd { margin: 2px 0 0 0; font-weight: 600; color: #1e293b; }
+  .sl-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+  .sl-filters label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px; }
+  .sl-filters input[type="date"] { padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; }
+  .sl-filters .sl-sup-pick { display: flex; align-items: stretch; width: 100%; max-width: 520px; min-height: 40px; border: 1px solid #cbd5e1; border-radius: 10px; background: #f8fafc; overflow: hidden; }
+  .sl-filters .sl-sup-pick:focus-within { border-color: #1a56a4; box-shadow: 0 0 0 2px rgba(26, 86, 164, 0.12); background: #fff; }
+  .sl-filters .sl-sup-pick input[readonly] { flex: 1; min-width: 0; border: none; background: transparent; padding: 8px 10px; font-size: 14px; cursor: pointer; }
+  .sl-filters .sl-sup-pick .search-clear { position: static; transform: none; width: 40px; background: #f1f5f9; border: none; border-left: 1px solid #e2e8f0; }
+  .sl-filters .sl-sup-pick .search-picker { min-width: 44px; background: #1a56a4; color: #fff; border: none; border-left: 1px solid #e2e8f0; font-size: 16px; font-weight: 600; cursor: pointer; }
+  .sl-filters .sl-sup-pick .search-picker:hover { background: #144a8a; }
+  .sl-filters button[type="submit"] { background: #1a56a4; color: #fff; border: none; padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .sl-filters .sl-pdf-link {
+    display: inline-flex; align-items: center; padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    text-decoration: none; border: 1px solid #cbd5e1; background: #fff; color: #334155;
+  }
+  .sl-filters .sl-pdf-link--primary { background: #1a56a4; color: #fff; border-color: #1a56a4; }
+  .sl-filters .sl-pdf-link--primary:hover { background: #144a8a; color: #fff; }
+  .sl-filters .sl-pdf-label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px; }
+  .sl-filters .sl-pdf-note { font-size: 11px; color: #64748b; margin: 4px 0 0 0; max-width: 240px; }
+  .sl-filters button[type="submit"]:hover { background: #144a8a; }
+  .sl-err { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
+  .sl-hint { font-size: 12px; color: #64748b; margin: 0 0 8px 0; }
+  .sl-prompt { text-align: center; color: #64748b; padding: 28px 16px; font-size: 14px; }
+  #slLedgerTable { width: 100%; border-collapse: collapse; font-size: 13px; }
+  #slLedgerTable th, #slLedgerTable td { border: 1px solid #e2e8f0; padding: 8px 10px; }
+  #slLedgerTable thead th { background: #f1f5f9; font-weight: 600; text-align: left; color: #334155; }
+  #slLedgerTable td.num { text-align: right; font-family: ui-monospace, monospace; }
+  #slLedgerTable tbody tr:nth-child(even) { background: #fafbfc; }
+  .sl-sum-row { font-weight: 600; background: #eff6ff !important; }
+  .nexa-setup-list-page .page-po__topbar-actions .sl-pdf-link { margin-left: 8px; }
+</style>
+
+<div class="page-po nexa-list-page nexa-setup-list-page sl-wrap">
+  {% if supplier and selected_supplier_code %}
+  <section class="nexa-stat-grid" aria-label="Ledger totals">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-list-nested" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Lines</p>
+        <p class="nexa-stat-value">{{ "{:,}".format((ledger.lines or [])|length) }}</p>
+        <p class="nexa-stat-sub">In date range</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--cyan"><i class="bi bi-box-arrow-in-right" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Opening</p>
+        <p class="nexa-stat-value">{{ ledger.opening_balance|round(2) }}</p>
+        <p class="nexa-stat-sub">Cr − Dr basis</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-plus-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Debit</p>
+        <p class="nexa-stat-value">{{ ledger.total_debit|round(2) }}</p>
+        <p class="nexa-stat-sub">Period</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-dash-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Credit</p>
+        <p class="nexa-stat-value">{{ ledger.total_credit|round(2) }}</p>
+        <p class="nexa-stat-sub">Period</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-calculator" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Closing</p>
+        <p class="nexa-stat-value">{{ ledger.closing_balance|round(2) }}</p>
+        <p class="nexa-stat-sub">Cr − Dr</p>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  <div class="page-po__topbar">
+    <div>
+      <p class="sl-back" style="margin:0 0 6px;"><a href="{{ url_for('accounts.chart_of_accounts_list') }}">← Chart of accounts</a></p>
+      <h1 class="page-po__title">Supplier ledger</h1>
+      <p class="page-po__muted">Liability GL lines with party <strong>SUPPLIER</strong> — same basis as Accounts Payable.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% if selected_supplier_code %}
+      <a class="sl-pdf-link sl-pdf-link--primary" href="{{ url_for('accounts.supplier_ledger_pdf', supplier_code=selected_supplier_code, date_from=date_from or none, date_to=date_to or none) }}" target="_blank" rel="noopener">PDF (A4)</a>
+      {% endif %}
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div class="sl-card">
+    <p class="sl-hint">The ledger includes only <strong>LIABILITY</strong> chart accounts with this supplier as party (same basis as the <strong>Accounts Payable</strong> list balance). Use <strong>From / To</strong> to limit the period, or leave them blank to include all such lines. For a <strong>lifetime</strong> running balance, set <strong>From</strong> to an early date (e.g. 2000-01-01).</p>
+    <form method="get" action="{{ url_for('accounts.supplier_ledger_page') }}" class="sl-filters nexa-list-filter-panel" id="slLedgerForm">
+      <div>
+        <label for="sl_supplier_display">Supplier</label>
+        <input type="hidden" name="supplier_code" id="sl_supplier_code" value="{{ (selected_supplier_code or '')|e }}">
+        <span class="search-field search-field--popup sl-sup-pick" style="width:100%;max-width:520px;">
+          <input type="text" id="sl_supplier_display" readonly placeholder="Click to search and select supplier…"
+            value="{% if supplier and selected_supplier_code %}{{ (supplier.suppliercode or selected_supplier_code or '')|e }} — {{ (supplier.suppliername or '')|e }}{% endif %}">
+          <button type="button" class="search-clear" id="slSupplierClear" title="Clear" aria-label="Clear" {% if not selected_supplier_code %}style="display:none"{% endif %}>×</button>
+          <button type="button" class="search-picker" id="slSupplierPickerOpen" aria-label="Open supplier list">▾</button>
+        </span>
+      </div>
+      <div>
+        <label for="date_from">From</label>
+        <input type="date" id="date_from" name="date_from" value="{{ date_from or '' }}">
+      </div>
+      <div>
+        <label for="date_to">To</label>
+        <input type="date" id="date_to" name="date_to" value="{{ date_to or '' }}">
+      </div>
+      <div>
+        <button type="submit">Show ledger</button>
+      </div>
+    </form>
+  </div>
+
+  {% if supplier and selected_supplier_code %}
+  <div class="sl-card">
+    <dl class="sl-meta">
+      <div><dt>Code</dt><dd>{{ (supplier.suppliercode or selected_supplier_code or '')|e }}</dd></div>
+      <div><dt>Name</dt><dd>{{ (supplier.suppliername or '—')|e }}</dd></div>
+      <div><dt>Payable A/c</dt><dd>{{ (supplier.payableaccount or '—')|e }}</dd></div>
+      <div><dt>GL filter</dt><dd>Liability only (same basis as <strong>AP</strong> list balance)</dd></div>
+    </dl>
+  </div>
+  {% endif %}
+
+  {% if ledger_error %}
+  <div class="sl-err">Could not load ledger: {{ ledger_error|e }}</div>
+  {% endif %}
+
+  {% if supplier and selected_supplier_code %}
+  <div class="table-wrap co-table-wrap" style="overflow-x:auto;">
+    <table id="slLedgerTable" class="co-table">
+      <thead>
+        <tr>
+          <th style="text-align:center;width:52px;">Sl.No</th>
+          <th>Date</th>
+          <th>Voucher</th>
+          <th>Reference</th>
+          <th>GL account</th>
+          <th>Narration</th>
+          <th>Source</th>
+          <th>Remarks (line)</th>
+          <th class="num">Debit</th>
+          <th class="num">Credit</th>
+          <th class="num">Balance (Cr−Dr)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="sl-op-row">
+          <td>—</td>
+          <td colspan="7">Opening balance (before {{ (date_from or '')|e }})</td>
+          <td class="num">—</td>
+          <td class="num">—</td>
+          <td class="num">{{ ledger.opening_balance|round(2) }}</td>
+        </tr>
+        {% for row in ledger.lines %}
+        <tr>
+          <td style="text-align:center;">{{ loop.index }}</td>
+          <td>{{ (row.voucher_date or '')|e }}</td>
+          <td>{{ (row.voucher_no or '')|e }}</td>
+          <td>{{ (row.reference_no or '')|e }}</td>
+          <td>{{ (row.account_code or '')|e }}</td>
+          <td>{{ (row.narration or '')|e }}</td>
+          <td>{{ (row.source or '')|e }}</td>
+          <td>{{ (row.remarks or '')|e }}</td>
+          <td class="num">{% if row.debit %}{{ row.debit|round(2) }}{% else %}—{% endif %}</td>
+          <td class="num">{% if row.credit %}{{ row.credit|round(2) }}{% else %}—{% endif %}</td>
+          <td class="num">{{ row.running_balance|round(2) }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="11" style="text-align:center;color:#94a3b8;padding:24px;">No supplier-tagged GL lines in this range. Post transactions with <strong>party = SUPPLIER</strong> and this supplier code, or adjust dates.</td>
+        </tr>
+        {% endfor %}
+        {% if ledger.lines %}
+        <tr class="sl-sum-row">
+          <td colspan="8">Period totals / closing</td>
+          <td class="num">{{ ledger.total_debit|round(2) }}</td>
+          <td class="num">{{ ledger.total_credit|round(2) }}</td>
+          <td class="num">{{ ledger.closing_balance|round(2) }}</td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="sl-card sl-prompt">Select a <strong>supplier</strong> and date range above, then click <strong>Show ledger</strong>.</div>
+  {% endif %}
+</div>
+
+<div class="modal hidden" id="slSupplierPickerModal" role="dialog" aria-modal="true" aria-labelledby="slSupPickerTitle">
+  <div class="modal__overlay" data-close="slSupplierPickerModal"></div>
+  <div class="modal__content" style="width: min(700px, 95vw); max-height: 85vh;">
+    <div class="modal__header">
+      <h3 id="slSupPickerTitle">Select supplier</h3>
+      <button type="button" class="modal__close" data-close="slSupplierPickerModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__search" style="margin-bottom: 10px;">
+        <div class="search-field" style="width: 100%;">
+          <input type="text" id="slSupPickerSearch" placeholder="Search by code or name…" autocomplete="off" style="width: 100%;">
+          <button type="button" class="search-clear" id="slSupPickerSearchClear" style="display: none;">×</button>
+        </div>
+      </div>
+      <div class="scroll-table modal__table" style="max-height: 52vh;">
+        <table class="table" id="slSupPickerTable" style="width: 100%;">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Location</th>
+            </tr>
+          </thead>
+          <tbody id="slSupPickerBody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var SL_SUPPLIERS = {{ all_suppliers|tojson }};
+  if (!Array.isArray(SL_SUPPLIERS)) SL_SUPPLIERS = [];
+  var slModalList = [];
+
+  function esc(s) {
+    if (s == null) return '';
+    var d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+  }
+
+  function openSlSupPicker() {
+    var m = document.getElementById('slSupplierPickerModal');
+    if (!m) return;
+    slModalList = SL_SUPPLIERS.slice();
+    renderSlSupPickerRows(slModalList);
+    var s = document.getElementById('slSupPickerSearch');
+    if (s) { s.value = ''; s.focus(); }
+    var c = document.getElementById('slSupPickerSearchClear');
+    if (c) c.style.display = 'none';
+    m.classList.remove('hidden');
+  }
+
+  function closeSlSupPicker() {
+    var m = document.getElementById('slSupplierPickerModal');
+    if (m) m.classList.add('hidden');
+  }
+
+  function renderSlSupPickerRows(list) {
+    var tbody = document.getElementById('slSupPickerBody');
+    if (!tbody) return;
+    tbody.innerHTML = (list || []).map(function(s) {
+      var code = s.suppliercode != null ? String(s.suppliercode) : '';
+      if (!code) return '';
+      var name = s.suppliername != null ? String(s.suppliername) : '';
+      var loc = s.locationcode != null ? String(s.locationcode) : '—';
+      return '<tr data-code="' + esc(code).replace(/"/g, '&quot;') + '" style="cursor:pointer;">' +
+        '<td><strong>' + esc(code) + '</strong></td><td>' + esc(name) + '</td><td>' + esc(loc) + '</td></tr>';
+    }).join('');
+  }
+
+  function filterSlSupPickerRows(q) {
+    var t = (q || '').trim().toLowerCase();
+    if (!t) { renderSlSupPickerRows(slModalList); return; }
+    var f = (slModalList || []).filter(function(s) {
+      return (String(s.suppliercode != null ? s.suppliercode : '').toLowerCase().indexOf(t) !== -1) ||
+        (String(s.suppliername || '').toLowerCase().indexOf(t) !== -1);
+    });
+    renderSlSupPickerRows(f);
+  }
+
+  document.getElementById('slSupplierPickerOpen') && document.getElementById('slSupplierPickerOpen').addEventListener('click', function(e) { e.preventDefault(); openSlSupPicker(); });
+  document.getElementById('sl_supplier_display') && document.getElementById('sl_supplier_display').addEventListener('click', function(e) { e.preventDefault(); openSlSupPicker(); });
+  var slModal = document.getElementById('slSupplierPickerModal');
+  if (slModal) {
+    slModal.addEventListener('click', function(e) {
+      if (e.target.classList.contains('modal__overlay') || (e.target.dataset && e.target.dataset.close === 'slSupplierPickerModal') || e.target.classList.contains('modal__close')) {
+        closeSlSupPicker();
+      }
+    });
+  }
+  var slBody = document.getElementById('slSupPickerBody');
+  if (slBody) {
+    slBody.addEventListener('click', function(e) {
+      var tr = e.target.closest('tr');
+      if (!tr) return;
+      var code = tr.getAttribute('data-code');
+      if (code) {
+        var rec = (SL_SUPPLIERS || []).filter(function(x) { return String(x && x.suppliercode) === code; })[0];
+        var label = rec ? (String(rec.suppliercode != null ? rec.suppliercode : '') + ' — ' + String(rec.suppliername != null ? rec.suppliername : '')) : (code + ' — ');
+        var hid = document.getElementById('sl_supplier_code');
+        var disp = document.getElementById('sl_supplier_display');
+        if (hid) hid.value = code;
+        if (disp) disp.value = label;
+        var clr = document.getElementById('slSupplierClear');
+        if (clr) clr.style.display = 'block';
+      }
+      closeSlSupPicker();
+    });
+  }
+  var slSrch = document.getElementById('slSupPickerSearch');
+  var slSrchClr = document.getElementById('slSupPickerSearchClear');
+  if (slSrch) {
+    slSrch.addEventListener('input', function() {
+      filterSlSupPickerRows(slSrch.value);
+      if (slSrchClr) slSrchClr.style.display = slSrch.value ? 'block' : 'none';
+    });
+  }
+  if (slSrchClr) {
+    slSrchClr.addEventListener('click', function() {
+      if (slSrch) { slSrch.value = ''; slSrch.focus(); }
+      slSrchClr.style.display = 'none';
+      filterSlSupPickerRows('');
+    });
+  }
+  var slClear = document.getElementById('slSupplierClear');
+  if (slClear) {
+    slClear.addEventListener('click', function(e) {
+      e.preventDefault();
+      var hid = document.getElementById('sl_supplier_code');
+      var disp = document.getElementById('sl_supplier_display');
+      if (hid) hid.value = '';
+      if (disp) disp.value = '';
+      slClear.style.display = 'none';
+    });
+  }
+})();
+</script>
+{% endblock %}

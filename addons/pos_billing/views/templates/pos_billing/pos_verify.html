@@ -1,0 +1,1254 @@
+{% extends "base.html" %}
+{% block title %}POS Verify{% endblock %}
+
+{% block content %}
+<style>
+  .pv-wrap {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px 20px 48px;
+  }
+  .pv-page-header {
+    margin-bottom: 28px;
+    padding-right: 4px;
+  }
+  .pv-ai-layout {
+    display: grid;
+    grid-template-columns: minmax(360px, 460px) 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 960px) { .pv-ai-layout { grid-template-columns: 1fr; } }
+
+  .pv-card {
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .pv-card h3 {
+    margin: 0 0 10px 0;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #64748b;
+    font-weight: 700;
+  }
+
+  .pv-ai-hero {
+    border-radius: 14px;
+    border: 1px solid #c7d2fe;
+    background: linear-gradient(165deg, #f8fafc 0%, #eef2ff 45%, #faf5ff 100%);
+    min-height: 320px;
+    display: flex;
+    flex-direction: column;
+  }
+  .pv-ai-hero-h {
+    padding: 14px 18px 8px;
+    border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+  }
+  .pv-ai-hero-h h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #1e1b4b;
+  }
+  .pv-ai-hero-body {
+    flex: 1;
+    padding: 14px 18px 18px;
+    overflow: auto;
+    max-height: min(70vh, 640px);
+  }
+  .pv-ai-out {
+    font-size: 14px;
+    line-height: 1.55;
+    color: #0f172a;
+    white-space: pre-wrap;
+  }
+  .pv-ai-out.muted { color: #64748b; }
+
+  .pv-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 12px;
+    font-size: 12px;
+  }
+  .pv-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    font-weight: 600;
+  }
+  .pv-chip-ok { border-color: #86efac; background: #ecfdf5; color: #166534; }
+  .pv-chip-bad { border-color: #fca5a5; background: #fef2f2; color: #991b1b; }
+  .pv-chip-warn { border-color: #fcd34d; background: #fffbeb; color: #92400e; }
+
+  .pv-ai-main {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+  }
+
+  .pv-actions-panel {
+    border-radius: 14px;
+    border: 1px solid #e2e8f0;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 55%, #f1f5f9 100%);
+    box-shadow: 0 4px 18px rgba(15, 23, 42, 0.07);
+    padding: 16px 18px;
+    margin: 0;
+  }
+  .pv-actions-panel-head {
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(99, 102, 241, 0.15);
+  }
+  .pv-actions-panel-head h3 {
+    margin: 0;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: #64748b;
+    font-weight: 700;
+  }
+  .pv-actions-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+  }
+  @media (max-width: 1180px) {
+    .pv-actions-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @media (max-width: 720px) {
+    .pv-actions-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  .pv-actions-grid .pv-action-btn {
+    display: inline-flex;
+    align-items: center;
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.25;
+    white-space: normal;
+    box-sizing: border-box;
+  }
+  .pv-actions-toggles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px 28px;
+    align-items: center;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px dashed #cbd5e1;
+    font-size: 13px;
+    color: #475569;
+  }
+  .pv-actions-toggles label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-weight: 500;
+    margin: 0;
+  }
+  .pv-actions-status {
+    margin: 12px 0 0;
+    font-size: 12px;
+    min-height: 1.25em;
+    color: #64748b;
+  }
+
+  .pv-table-wrap { overflow: auto; border-radius: 10px; border: 1px solid var(--border-color, #e5e7eb); max-height: 260px; }
+  .pv-table-wide-wrap { overflow: auto; border-radius: 10px; border: 1px solid var(--border-color, #e5e7eb); max-height: 220px; }
+  .pv-table-wide { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 11px; }
+  .pv-table-wide th, .pv-table-wide td { padding: 6px 8px; border-bottom: 1px solid #eef2f7; text-align: left; white-space: nowrap; }
+  .pv-table-wide th { background: #f1f5f9; font-weight: 600; position: sticky; top: 0; z-index: 1; }
+
+  .pv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .pv-table th, .pv-table td { padding: 8px 10px; border-bottom: 1px solid #eef2f7; text-align: left; vertical-align: top; }
+  .pv-table th { background: #f8fafc; font-weight: 600; color: #475569; position: sticky; top: 0; z-index: 1; }
+  .pv-table tbody tr[data-billno] { cursor: pointer; }
+  .pv-table tbody tr.pv-row-selected { background: #eef2ff; outline: 1px solid #a5b4fc; }
+
+  .pv-mono { font-family: ui-monospace, monospace; font-size: 11px; }
+  .pv-json { width: 100%; min-height: 88px; font-family: ui-monospace, monospace; font-size: 11px; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; }
+  .pv-safe { color: #15803d; font-weight: 600; }
+  .pv-low { color: #b45309; font-weight: 600; }
+  .pv-critical { color: #b91c1c; font-weight: 600; }
+
+  /* E‑commerce style carts */
+  .pv-cart-summary-card {
+    border-radius: 12px;
+    border: 1px solid #c7d2fe;
+    background: linear-gradient(145deg, #fafbff 0%, #f5f3ff 100%);
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    font-size: 12px;
+  }
+  .pv-cart-summary-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .pv-cart-summary-kicker {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    font-weight: 700;
+    color: #64748b;
+  }
+  .pv-cart-summary-title {
+    font-size: 17px;
+    font-weight: 800;
+    color: #1e1b4b;
+  }
+  .pv-cart-badge-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .pv-mini-badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #475569;
+  }
+  .pv-mini-badge--accent { border-color: #a5b4fc; background: #eef2ff; color: #3730a3; }
+  .pv-cart-dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 12px;
+    margin: 0;
+    font-size: 12px;
+  }
+  .pv-cart-dl dt {
+    margin: 0;
+    color: #64748b;
+    font-weight: 600;
+  }
+  .pv-cart-dl dd { margin: 0; color: #0f172a; word-break: break-word; }
+
+  .pv-cart-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: min(52vh, 320px);
+    overflow-y: auto;
+    padding: 2px 4px 2px 0;
+  }
+  .pv-cart-empty { padding: 12px; text-align: center; font-size: 13px; }
+  .pv-cart-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border-radius: 11px;
+    border: 1px solid #e2e8f0;
+    background: #fafafa;
+    padding: 10px 12px;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    transition: border-color .12s, box-shadow .12s, background .12s;
+  }
+  .pv-cart-item:hover { border-color: #cbd5e1; background: #fff; }
+  .pv-cart-item:focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+  }
+  .pv-cart-item--selected {
+    border-color: #818cf8;
+    background: #eef2ff;
+    box-shadow: 0 0 0 1px #a5b4fc;
+  }
+  .pv-cart-item-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 10px;
+    margin-bottom: 4px;
+  }
+  .pv-cart-item-top strong { font-size: 14px; color: #0f172a; }
+  .pv-cart-item-type { font-size: 11px; font-weight: 700; color: #475569; }
+  .pv-cart-item-flag { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: #f1f5f9; color: #475569; }
+  .pv-cart-item-customer {
+    font-size: 12px;
+    color: #334155;
+    margin-bottom: 4px;
+    line-height: 1.35;
+  }
+  .pv-cart-item-meta {
+    font-size: 11px;
+    color: #64748b;
+    margin-bottom: 6px;
+  }
+  .pv-cart-item-foot {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #0f172a;
+    border-top: 1px dashed #e2e8f0;
+    padding-top: 6px;
+    margin-top: 2px;
+  }
+  .pv-cart-item-net { color: #1e40af; }
+
+  .pv-line-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: min(42vh, 280px);
+    overflow-y: auto;
+    padding: 2px 4px 2px 0;
+  }
+  .pv-line-empty { padding: 12px; text-align: center; font-size: 13px; }
+  .pv-line-card {
+    display: grid;
+    grid-template-columns: 40px 1fr auto;
+    gap: 10px;
+    align-items: center;
+    border-radius: 11px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    padding: 10px 12px;
+  }
+  .pv-line-card--void {
+    opacity: 0.72;
+    border-style: dashed;
+    background: #fafafa;
+  }
+  .pv-line-thumb {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #e0e7ff 0%, #fae8ff 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 15px;
+    color: #4338ca;
+    flex-shrink: 0;
+  }
+  .pv-line-card--void .pv-line-thumb {
+    background: #f1f5f9;
+    color: #94a3b8;
+  }
+  .pv-line-name { font-weight: 700; font-size: 13px; color: #0f172a; line-height: 1.3; }
+  .pv-line-code { font-size: 11px; margin-top: 2px; }
+  .pv-line-prices { text-align: right; min-width: 7.5rem; }
+  .pv-line-qtyrate { font-size: 11px; color: #64748b; }
+  .pv-line-total { font-size: 14px; font-weight: 800; color: #1e40af; margin-top: 4px; }
+  .pv-line-disc { font-size: 11px; color: #b45309; margin-top: 2px; }
+  .pv-line-status { margin-top: 4px; font-size: 11px; }
+</style>
+
+<div class="pv-wrap page-po">
+  <div class="page-header pv-page-header">
+    <div>
+      <h1 style="margin:0;">POS Verify</h1>
+      <p class="muted" style="margin:6px 0 0; max-width:52rem;">
+        {% if openai_configured %}
+        AI-led verification: pick a <code>TEMPBILL</code>, we simulate inventory impact once, then the model explains risks, batch/bin behavior, and (optionally) compares live Oracle to the preview after posting.
+        {% else %}
+        Configure <code>OPENAI_API_KEY</code> for AI-led verification. Until then you can still preview stock impact from simulation data only.
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  <div class="pv-ai-layout">
+    <!-- Sidebar: data entry only (no duplicate stock grids) -->
+    <div class="pv-ai-side">
+      <div id="pvCartSummary" class="pv-cart-summary-card" hidden>
+        <div class="pv-cart-summary-head">
+          <span class="pv-cart-summary-kicker">Selected cart</span>
+          <span id="pvCartSummaryTitle" class="pv-cart-summary-title"></span>
+        </div>
+        <div id="pvCartSummaryBadges" class="pv-cart-badge-row"></div>
+        <dl id="pvCartSummaryDl" class="pv-cart-dl"></dl>
+      </div>
+
+      <div class="pv-card" style="margin-bottom:12px;">
+        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
+          <h3 style="margin:0;">Open carts</h3>
+          <span class="muted" style="font-size:11px;" title="Updates every 3s while this tab is visible">Auto · 3s</span>
+        </div>
+        <p class="muted" style="margin:0 0 8px; font-size:11px;">Bills with <strong>at least one</strong> detail line only (empty headers hidden). Click a card to load. Includes <code>Q</code> queued bills. Refreshes every 3 seconds while this tab is visible.</p>
+        <div id="pvBillCart" class="pv-cart-list" role="listbox" aria-label="Temp bills"></div>
+      </div>
+
+      <div class="pv-card" style="margin-bottom:12px;">
+        <h3>Items in cart</h3>
+        <p class="muted" id="pvSelectedMeta" style="margin-top:0; font-size:12px;">No bill selected.</p>
+        <p class="muted" style="font-size:11px; margin:0 0 8px;">Line layout mirrors a cart; stock / batch / bin detail stays in <strong>AI</strong> and <strong>Technical</strong>.</p>
+        <div id="pvLineCards" class="pv-line-cards"></div>
+      </div>
+
+      <details class="pv-card" style="margin-top:12px;">
+        <summary style="cursor:pointer; font-weight:600; font-size:13px;">Technical data</summary>
+        <p class="muted" style="font-size:11px; margin:8px 0;">Checkout JSON, raw TEMP rows, live snapshot, engine diagnostics — for auditors.</p>
+        <label class="muted" style="font-size:11px;">Checkout payload</label>
+        <textarea id="pvJson" class="pv-json" style="margin-bottom:10px;" placeholder='{"header":{},"lines":[]}'></textarea>
+        <button type="button" class="button button--secondary" id="pvLiveSnap" style="margin-bottom:10px;">Refresh live DB snapshot</button>
+        <span class="muted" id="pvLiveSnapHint" style="font-size:11px;"></span>
+        <details style="margin-top:8px;">
+          <summary class="pv-mono" style="cursor:pointer;">TEMPBILLDTL — all columns</summary>
+          <div class="pv-table-wide-wrap">
+            <table class="pv-table-wide" id="pvBillLinesFull"><thead><tr></tr></thead><tbody></tbody></table>
+          </div>
+        </details>
+        <details style="margin-top:8px;">
+          <summary class="pv-mono" style="cursor:pointer;">Live DB snapshot JSON</summary>
+          <pre id="pvLiveSnapPre" class="pv-mono muted" style="margin:8px 0; white-space:pre-wrap; max-height:180px; overflow:auto;">—</pre>
+        </details>
+        <details style="margin-top:8px;">
+          <summary class="pv-mono" style="cursor:pointer;">TEMPBILLHDR JSON</summary>
+          <pre id="pvRawHdrJson" class="pv-mono muted" style="margin:8px 0; white-space:pre-wrap; max-height:140px; overflow:auto;">—</pre>
+        </details>
+        <details style="margin-top:8px;">
+          <summary class="pv-mono" style="cursor:pointer;">Simulation engine JSON</summary>
+          <pre id="pvSimJson" class="pv-mono muted" style="margin:8px 0; white-space:pre-wrap; max-height:220px; overflow:auto;">—</pre>
+        </details>
+        <details style="margin-top:8px;">
+          <summary class="pv-mono" style="cursor:pointer;">Engine diagnostics (warnings / errors)</summary>
+          <div id="pvEngineDiagBody" class="muted" style="font-size:12px; margin-top:8px;">No simulation yet.</div>
+        </details>
+      </details>
+    </div>
+
+    <!-- Main: actions above AI surface -->
+    <div class="pv-ai-main">
+      <div class="pv-actions-panel">
+        <div class="pv-actions-panel-head">
+          <h3>Actions</h3>
+        </div>
+        <div class="pv-actions-grid">
+          <button type="button" class="button button--primary pv-action-btn" id="pvAnalyzeAi" {% if not openai_configured %}disabled title="Configure OPENAI_API_KEY"{% endif %}>Analyze with AI</button>
+          <button type="button" class="button button--secondary pv-action-btn" id="pvAiVerifyDb" {% if not openai_configured %}disabled{% endif %} title="Live Oracle vs preview (after queue posts)">AI vs live DB</button>
+          <button type="button" class="button button--secondary pv-action-btn" id="pvSimStrict">Strict simulate</button>
+          <button type="button" class="button button--secondary pv-action-btn" id="pvLoadBill">Session bill</button>
+          <button type="button" class="button button--secondary pv-action-btn" id="pvSave">Save (queue)</button>
+        </div>
+        <div class="pv-actions-toggles">
+          <label><input type="checkbox" id="pvAutoSim" checked /> Auto-simulate on select</label>
+          {% if openai_configured %}
+          <label><input type="checkbox" id="pvAutoAi" checked /> Auto-AI after simulate</label>
+          {% endif %}
+        </div>
+        <p class="pv-actions-status" id="pvStatus"></p>
+      </div>
+
+      <div class="pv-ai-hero pv-card" style="border:none; box-shadow: 0 8px 30px rgba(79, 70, 229, 0.08);">
+        <div class="pv-ai-hero-h">
+          <h2>{% if openai_configured %}AI verification{% else %}Verification preview{% endif %}</h2>
+          <p class="muted" style="margin:6px 0 0; font-size:12px;">
+            {% if openai_configured %}One narrative: bill context, projected stock, batches/bins, and posting risks. Use “AI vs live DB” after stock posts.{% else %}Simulation metrics below; enable OpenAI for narrative verification.{% endif %}
+          </p>
+        </div>
+        <div class="pv-ai-hero-body">
+          <div id="pvSimStrip" class="pv-chip-row muted">Select a temp bill or session cart — we’ll simulate once and feed the model.</div>
+          <div id="pvAiOut" class="pv-ai-out muted">{% if openai_configured %}Waiting for a bill…{% else %}OpenAI not configured — Technical → Simulation engine JSON has numeric preview.{% endif %}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const PV_TEMP_BILLS_URL = {{ url_for('pos_billing.pos_verify_temp_bills_api')|tojson }};
+  const PV_TEMP_BILL_URL = {{ url_for('pos_billing.pos_verify_temp_bill_detail_api')|tojson }};
+  const PV_LIVE_STOCK_URL = {{ url_for('pos_billing.pos_verify_live_stock_api')|tojson }};
+  const OPENAI_ON = {{ openai_configured|tojson }};
+
+  const el = (id) => document.getElementById(id);
+  const statusEl = el('pvStatus');
+  const billLinesFullHead = el('pvBillLinesFull').querySelector('thead tr');
+  const billLinesFullBody = el('pvBillLinesFull').querySelector('tbody');
+
+  let lastSimulation = null;
+  let lastPayload = null;
+  let lastBillContext = null;
+  let selectedBillNo = null;
+  let lastBillLinesSnapshot = [];
+  let lastLiveSnapshot = null;
+  let listPollTimer = null;
+  const LIST_POLL_MS = 3000;
+
+  function setStatus(t) { statusEl.textContent = t || ''; }
+
+  function fmtAmt(v) {
+    if (v === null || v === undefined || v === '') return '';
+    var n = Number(v);
+    if (isNaN(n)) return String(v);
+    return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function pickStr(obj, keys) {
+    obj = obj || {};
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      var x = obj[k];
+      if (x !== null && x !== undefined && String(x).trim() !== '') return String(x).trim();
+    }
+    return '';
+  }
+
+  function clearCartSummary() {
+    var sum = el('pvCartSummary');
+    sum.setAttribute('hidden', '');
+    el('pvCartSummaryTitle').textContent = '';
+    el('pvCartSummaryBadges').innerHTML = '';
+    el('pvCartSummaryDl').innerHTML = '';
+  }
+
+  /**
+   * @param {Record<string, *>} rawHdr lowercase TEMPBILLHDR-style keys
+   * @param {Record<string, *>} chHdr checkout header from API
+   */
+  function renderCartSummary(rawHdr, chHdr, ctx) {
+    rawHdr = rawHdr || {};
+    chHdr = chHdr || {};
+    ctx = ctx || {};
+    var billno = ctx.billno != null ? ctx.billno : (rawHdr.billno != null ? rawHdr.billno : chHdr.billno);
+    var hasAny =
+      billno != null ||
+      Object.keys(rawHdr).length > 0 ||
+      Object.keys(chHdr).length > 0;
+    if (!hasAny) {
+      clearCartSummary();
+      return;
+    }
+    el('pvCartSummary').removeAttribute('hidden');
+    el('pvCartSummaryTitle').textContent = billno != null ? ('Bill #' + billno) : 'Cart';
+
+    var badges = el('pvCartSummaryBadges');
+    badges.innerHTML = '';
+    function addBadge(label, accent) {
+      var s = document.createElement('span');
+      s.className = 'pv-mini-badge' + (accent ? ' pv-mini-badge--accent' : '');
+      s.textContent = label;
+      badges.appendChild(s);
+    }
+    var bt = pickStr(rawHdr, ['billtype']) || pickStr(chHdr, ['billtype']);
+    if (bt) addBadge('Type ' + bt, true);
+    if (rawHdr.flag !== undefined && rawHdr.flag !== null && rawHdr.flag !== '') {
+      addBadge('Flag ' + rawHdr.flag, false);
+    }
+    if (ctx.source === 'session_last_in_progress') addBadge('Session cart', true);
+
+    var dl = el('pvCartSummaryDl');
+    dl.innerHTML = '';
+
+    function addRow(lbl, val) {
+      if (val === '' || val === null || val === undefined) return;
+      var dt = document.createElement('dt');
+      dt.textContent = lbl;
+      var dd = document.createElement('dd');
+      dd.textContent = String(val);
+      dl.appendChild(dt);
+      dl.appendChild(dd);
+    }
+
+    var ctr = rawHdr.countercode != null ? rawHdr.countercode : chHdr.countercode;
+    if (ctr !== null && ctr !== undefined && ctr !== '') addRow('Counter', ctr);
+
+    var cashier = pickStr(rawHdr, ['createdby']) || pickStr(chHdr, ['createdby']);
+    if (cashier) addRow('Cashier / user', cashier);
+
+    var emp = rawHdr.employeecode != null ? rawHdr.employeecode : chHdr.employeecode;
+    if (emp !== null && emp !== undefined && emp !== '') addRow('Employee code', emp);
+
+    var sm = rawHdr.salesmancode != null ? rawHdr.salesmancode : chHdr.salesmancode;
+    if (sm !== null && sm !== undefined && sm !== '') addRow('Salesman', sm);
+
+    var cname = pickStr(rawHdr, ['customername']);
+    var ccode = rawHdr.customercode != null ? rawHdr.customercode : chHdr.customercode;
+    var loy = rawHdr.loyaltycustomercode != null ? rawHdr.loyaltycustomercode : chHdr.loyaltycustomercode;
+    var custBits = [];
+    if (cname) custBits.push(cname);
+    if (ccode !== null && ccode !== undefined && ccode !== '') custBits.push('Cust #' + ccode);
+    if (loy !== null && loy !== undefined && loy !== '' && String(loy) !== '0') custBits.push('Loyalty #' + loy);
+    if (custBits.length) addRow('Customer', custBits.join(' · '));
+
+    var net = rawHdr.netbillamount != null ? rawHdr.netbillamount : chHdr.netbillamount;
+    var disc = rawHdr.discountamount != null ? rawHdr.discountamount : chHdr.discountamount;
+    if (net !== null && net !== undefined && net !== '') addRow('Net', fmtAmt(net));
+    if (disc !== null && disc !== undefined && disc !== '' && Number(disc) !== 0) addRow('Discount', fmtAmt(disc));
+
+    var when = (pickStr(rawHdr, ['billdate']) + ' ' + pickStr(rawHdr, ['billtime'])).trim()
+      || (pickStr(chHdr, ['billdate']) + ' ' + pickStr(chHdr, ['billtime'])).trim();
+    if (when) addRow('Date / time', when);
+
+    var sess = pickStr(rawHdr, ['sessioncode']);
+    if (sess) addRow('Session', sess);
+
+    var rem = pickStr(rawHdr, ['remarks']);
+    if (rem) addRow('Remarks', rem.length > 120 ? rem.slice(0, 117) + '…' : rem);
+
+    if (ctx.tempRows != null || ctx.checkoutLines != null) {
+      var tr = ctx.tempRows != null ? ctx.tempRows : '—';
+      var ck = ctx.checkoutLines != null ? ctx.checkoutLines : '—';
+      addRow('Lines', tr + ' temp rows · ' + ck + ' checkout lines');
+    }
+  }
+
+  function parsePayload() {
+    const raw = el('pvJson').value.trim();
+    if (!raw) return { header: {}, lines: [] };
+    const j = JSON.parse(raw);
+    return { header: j.header || {}, lines: j.lines || [] };
+  }
+
+  function renderBillCart(rows) {
+    var root = el('pvBillCart');
+    root.innerHTML = '';
+    if (!(rows || []).length) {
+      var empty = document.createElement('div');
+      empty.className = 'muted pv-cart-empty';
+      empty.textContent = 'No temp bills.';
+      root.appendChild(empty);
+      return;
+    }
+    (rows || []).forEach(function (r) {
+      var bn = String(r.billno);
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'pv-cart-item';
+      btn.dataset.billno = bn;
+      btn.setAttribute('role', 'option');
+
+      var top = document.createElement('div');
+      top.className = 'pv-cart-item-top';
+      var strong = document.createElement('strong');
+      strong.textContent = 'Bill #' + r.billno;
+      top.appendChild(strong);
+      if (r.billtype) {
+        var ty = document.createElement('span');
+        ty.className = 'pv-cart-item-type';
+        ty.textContent = String(r.billtype);
+        top.appendChild(ty);
+      }
+      if (r.flag !== undefined && r.flag !== null && r.flag !== '') {
+        var fg = document.createElement('span');
+        fg.className = 'pv-cart-item-flag';
+        fg.textContent = 'F ' + r.flag;
+        top.appendChild(fg);
+      }
+      btn.appendChild(top);
+
+      var custLine = '';
+      if (r.customername && String(r.customername).trim()) custLine = String(r.customername).trim();
+      else {
+        var parts = [];
+        if (r.customercode != null && r.customercode !== '') parts.push('Cust #' + r.customercode);
+        if (r.loyaltycustomercode != null && r.loyaltycustomercode !== '' && String(r.loyaltycustomercode) !== '0') {
+          parts.push('Loyalty #' + r.loyaltycustomercode);
+        }
+        custLine = parts.join(' · ');
+      }
+      if (custLine) {
+        var custEl = document.createElement('div');
+        custEl.className = 'pv-cart-item-customer';
+        custEl.textContent = custLine;
+        btn.appendChild(custEl);
+      }
+
+      var meta = document.createElement('div');
+      meta.className = 'pv-cart-item-meta';
+      var who = r.createdby ? String(r.createdby) : '—';
+      var ctr = r.countercode != null ? r.countercode : '—';
+      var linesTxt =
+        (r.active_lines != null ? r.active_lines : '—') +
+        '/' +
+        (r.total_lines != null ? r.total_lines : '—') +
+        ' lines';
+      meta.textContent = who + ' · Counter ' + ctr + ' · ' + linesTxt;
+      btn.appendChild(meta);
+
+      var foot = document.createElement('div');
+      foot.className = 'pv-cart-item-foot';
+      var netEl = document.createElement('span');
+      netEl.className = 'pv-cart-item-net';
+      netEl.textContent =
+        r.netbillamount != null && r.netbillamount !== '' ? ('Net ' + fmtAmt(r.netbillamount)) : '';
+      var whenEl = document.createElement('span');
+      whenEl.className = 'muted pv-mono';
+      whenEl.style.fontSize = '11px';
+      whenEl.textContent = ((r.billdate || '') + ' ' + (r.billtime || '')).trim();
+      foot.appendChild(netEl);
+      foot.appendChild(whenEl);
+      btn.appendChild(foot);
+
+      btn.addEventListener('click', function () {
+        selectBill(parseInt(btn.dataset.billno, 10));
+      });
+      root.appendChild(btn);
+    });
+  }
+
+  function highlightBillRow(billno) {
+    el('pvBillCart').querySelectorAll('.pv-cart-item[data-billno]').forEach(function (node) {
+      node.classList.toggle(
+        'pv-cart-item--selected',
+        billno != null && billno !== '' && node.dataset.billno === String(billno)
+      );
+    });
+  }
+
+  /** Billing-only line cards — no duplicate stock columns (AI + Technical hold numbers). */
+  function renderBillLinesBillingOnly(billLines) {
+    var root = el('pvLineCards');
+    root.innerHTML = '';
+    if (!(billLines || []).length) {
+      var emp = document.createElement('div');
+      emp.className = 'muted pv-line-empty';
+      emp.textContent = 'No lines.';
+      root.appendChild(emp);
+      return;
+    }
+    (billLines || []).forEach(function (ln) {
+      var active = ln.item_flag !== 0 && ln.item_flag !== '0';
+      var row = document.createElement('div');
+      row.className = 'pv-line-card' + (active ? '' : ' pv-line-card--void');
+
+      var thumb = document.createElement('div');
+      thumb.className = 'pv-line-thumb';
+      var initial = (ln.item_name || ln.item_code || '?').toString().trim().charAt(0).toUpperCase();
+      thumb.textContent = initial || '?';
+
+      var mid = document.createElement('div');
+      mid.className = 'pv-line-mid';
+      var h = document.createElement('div');
+      h.className = 'pv-line-name';
+      h.textContent = ln.item_name || '(No name)';
+      var code = document.createElement('div');
+      code.className = 'muted pv-mono pv-line-code';
+      var codeTxt = ln.item_code != null ? String(ln.item_code) : '';
+      if (ln.slno != null) codeTxt += (codeTxt ? ' · ' : '') + 'SL ' + ln.slno;
+      code.textContent = codeTxt;
+      mid.appendChild(h);
+      mid.appendChild(code);
+
+      var lineTot = ln.amount;
+      if (lineTot === undefined || lineTot === null) {
+        lineTot =
+          (Number(ln.quantity) || 0) * (Number(ln.rate) || 0) - (Number(ln.discount) || 0);
+      }
+
+      var right = document.createElement('div');
+      right.className = 'pv-line-prices';
+      var qr = document.createElement('div');
+      qr.className = 'pv-line-qtyrate';
+      qr.textContent =
+        (ln.quantity != null ? ln.quantity : '—') +
+        ' × ' +
+        fmtAmt(ln.rate != null ? ln.rate : '');
+      var tot = document.createElement('div');
+      tot.className = 'pv-line-total';
+      tot.textContent = fmtAmt(lineTot);
+      right.appendChild(qr);
+      var disc = Number(ln.discount) || 0;
+      if (disc > 0) {
+        var dEl = document.createElement('div');
+        dEl.className = 'pv-line-disc';
+        dEl.textContent = '−Disc ' + fmtAmt(ln.discount);
+        right.appendChild(dEl);
+      }
+      right.appendChild(tot);
+      var st = document.createElement('div');
+      st.className = 'pv-line-status ' + (active ? 'pv-safe' : 'pv-critical');
+      st.textContent = active ? 'Active' : 'Void';
+      right.appendChild(st);
+
+      row.appendChild(thumb);
+      row.appendChild(mid);
+      row.appendChild(right);
+      root.appendChild(row);
+    });
+  }
+
+  function renderBillLinesFullDb(rawRows, colOrder) {
+    billLinesFullHead.innerHTML = '';
+    billLinesFullBody.innerHTML = '';
+    const cols = (colOrder && colOrder.length) ? colOrder.slice() : [];
+    if (!cols.length && rawRows && rawRows.length) {
+      Object.keys(rawRows[0]).forEach(function (k) { cols.push(k); });
+      cols.sort();
+    }
+    cols.forEach(function (c) {
+      const th = document.createElement('th');
+      th.textContent = c;
+      billLinesFullHead.appendChild(th);
+    });
+    (rawRows || []).forEach(function (row) {
+      const tr = document.createElement('tr');
+      cols.forEach(function (c) {
+        const td = document.createElement('td');
+        const v = row[c];
+        td.textContent = v === null || v === undefined ? '' : String(v);
+        tr.appendChild(td);
+      });
+      billLinesFullBody.appendChild(tr);
+    });
+    if (!(rawRows || []).length) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = Math.max(cols.length, 1);
+      td.className = 'muted';
+      td.textContent = 'No rows.';
+      tr.appendChild(td);
+      billLinesFullBody.appendChild(tr);
+    }
+  }
+
+  function renderEngineDiagnostics(data) {
+    const summ = data.summary || {};
+    const lines = data.lines || [];
+    let html = '';
+    (summ.errors || []).forEach(function (w) {
+      html += '<div class="pv-critical" style="margin-bottom:6px;">✗ ' + String(w) + '</div>';
+    });
+    (summ.warnings || []).forEach(function (w) {
+      html += '<div class="pv-low" style="margin-bottom:6px;">⚠ ' + String(w) + '</div>';
+    });
+    if (data.simulation_message) {
+      html += '<div style="margin-bottom:8px;"><strong>Message:</strong> ' + String(data.simulation_message) + '</div>';
+    }
+    let beforeAgg = '';
+    let afterAgg = '';
+    lines.forEach(function (ln) {
+      var sd = ln.store_breakdown || {};
+      var stc = sd.pos_store_code || ln.store || '';
+      var imStoreB = ln.itemmaster_store_col_before != null ? ln.itemmaster_store_col_before : '—';
+      var imStoreA = ln.itemmaster_store_col_after != null ? ln.itemmaster_store_col_after : '—';
+      var vb =
+        ln.company_stock_value_before != null && ln.company_stock_value_before !== ''
+          ? fmtAmt(ln.company_stock_value_before)
+          : '—';
+      var va =
+        ln.company_stock_value_after != null && ln.company_stock_value_after !== ''
+          ? fmtAmt(ln.company_stock_value_after)
+          : '—';
+      var avgc =
+        ln.average_unit_cost != null && ln.average_unit_cost !== '' ? fmtAmt(ln.average_unit_cost) : '—';
+      var marginAmt =
+        ln.gross_margin_avg_cost != null && ln.gross_margin_avg_cost !== ''
+          ? fmtAmt(ln.gross_margin_avg_cost)
+          : '—';
+      var marginPct =
+        ln.gross_margin_pct_avg_cost != null && ln.gross_margin_pct_avg_cost !== ''
+          ? String(ln.gross_margin_pct_avg_cost) + '%'
+          : '—';
+      beforeAgg +=
+        '#' +
+        ln.line_no +
+        ' [' +
+        stc +
+        '] co. qty ' +
+        ln.current_stock_itemmaster +
+        ', stock val ' +
+        vb +
+        ' (avg cost ' +
+        avgc +
+        '), IM store-col ' +
+        imStoreB +
+        ', store table ' +
+        (ln.store_inventory_before != null ? ln.store_inventory_before : '—') +
+        ', bin ' +
+        (ln.default_bin_stock ? ln.default_bin_stock.qty_before : '—') +
+        '\n';
+      afterAgg +=
+        '#' +
+        ln.line_no +
+        ' → co. qty ' +
+        ln.after_stock_itemmaster +
+        ', stock val ' +
+        va +
+        ', sales ' +
+        fmtAmt(ln.line_net_sales || 0) +
+        ', COGS avg ' +
+        fmtAmt(ln.cogs_at_average_cost || 0) +
+        ', margin ' +
+        marginAmt +
+        ' (' +
+        marginPct +
+        '), IM store-col ' +
+        imStoreA +
+        ', store table ' +
+        (ln.store_inventory_after != null ? ln.store_inventory_after : '—') +
+        ', bin ' +
+        (ln.default_bin_stock ? ln.default_bin_stock.qty_after : '—') +
+        '\n';
+    });
+    html += '<div style="margin-top:10px;"><strong>Before / after (qty + company stock value @ avg cost)</strong></div>';
+    html += '<pre class="pv-mono" style="margin:6px 0; white-space:pre-wrap;">' + (beforeAgg || '—') + '</pre>';
+    html += '<pre class="pv-mono" style="margin:6px 0; white-space:pre-wrap;">' + (afterAgg || '—') + '</pre>';
+    if (
+      summ.total_line_net_sales != null ||
+      summ.total_cogs_at_average_cost != null ||
+      summ.total_gross_margin_avg_cost != null
+    ) {
+      html +=
+        '<div style="margin-top:8px;"><strong>Bill totals (average cost)</strong></div>' +
+        '<div class="pv-mono" style="margin:6px 0;">Sales ' +
+        fmtAmt(summ.total_line_net_sales || 0) +
+        ' · COGS ' +
+        fmtAmt(summ.total_cogs_at_average_cost || 0) +
+        ' · Margin ' +
+        fmtAmt(summ.total_gross_margin_avg_cost || 0) +
+        '</div>';
+    }
+    if (!(summ.errors || []).length && !(summ.warnings || []).length && !data.simulation_message) {
+      html += '<div class="pv-safe">No engine warnings.</div>';
+    }
+    el('pvEngineDiagBody').innerHTML = html || '<span class="muted">—</span>';
+  }
+
+  function renderSimulationStrip(data) {
+    lastSimulation = data;
+    const summ = data.summary || {};
+    const ok = data.simulation_ok;
+    const errN = (summ.errors || []).length;
+    const warnN = (summ.warnings || []).length;
+    const flags = data.flags || {};
+    const storeLbl = flags.store_inventory_table ? ('store:' + String(flags.store_inventory_table).slice(0, 14)) : 'store row N/A';
+    el('pvSimStrip').innerHTML =
+      '<span class="pv-chip ' + (ok ? 'pv-chip-ok' : 'pv-chip-bad') + '">' + (ok ? 'Preview OK' : 'Issues') + '</span>' +
+      '<span class="pv-chip">' + (summ.items_affected || 0) + ' SKUs</span>' +
+      '<span class="pv-chip">−' + (summ.total_qty_reduction || 0) + ' qty</span>' +
+      '<span class="pv-chip" title="Σ line net sales (qty×rate − discount)">' + 'Sales ' + fmtAmt(summ.total_line_net_sales || 0) + '</span>' +
+      '<span class="pv-chip" title="Σ qty × average unit cost">' + 'COGS avg ' + fmtAmt(summ.total_cogs_at_average_cost || 0) + '</span>' +
+      '<span class="pv-chip" title="Sales − COGS at average cost">' + 'Margin ' + fmtAmt(summ.total_gross_margin_avg_cost || 0) + '</span>' +
+      '<span class="pv-chip">' + (summ.batch_moves || 0) + ' batches</span>' +
+      '<span class="pv-chip" title="Per-store stock table detection">' + storeLbl + '</span>' +
+      '<span class="pv-chip ' + (errN ? 'pv-chip-bad' : warnN ? 'pv-chip-warn' : '') + '">' + errN + ' err · ' + warnN + ' warn</span>';
+    try {
+      el('pvSimJson').textContent = JSON.stringify(data, null, 2);
+    } catch (e) {
+      el('pvSimJson').textContent = String(e);
+    }
+    renderEngineDiagnostics(data);
+    renderBillLinesBillingOnly(lastBillLinesSnapshot);
+  }
+
+  async function refreshTempBills(opts) {
+    opts = opts || {};
+    const silent = !!opts.silent;
+    if (!silent) setStatus('Loading bills…');
+    try {
+      const res = await fetch(PV_TEMP_BILLS_URL + '?limit=200', { credentials: 'same-origin' });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'List failed');
+      const bills = data.bills || [];
+      let sel = selectedBillNo;
+      if (sel != null && !bills.some(function (b) { return Number(b.billno) === Number(sel); })) {
+        sel = selectedBillNo = null;
+      }
+      renderBillCart(bills);
+      if (sel != null) highlightBillRow(sel);
+      if (!silent) setStatus('Ready.');
+    } catch (e) {
+      if (!silent) setStatus(String(e.message || e));
+    }
+  }
+
+  function startListPollTimer() {
+    if (listPollTimer) {
+      clearInterval(listPollTimer);
+      listPollTimer = null;
+    }
+    listPollTimer = setInterval(function () {
+      if (document.visibilityState !== 'visible') return;
+      refreshTempBills({ silent: true });
+    }, LIST_POLL_MS);
+  }
+
+  async function selectBill(billno) {
+    if (!billno) return;
+    selectedBillNo = billno;
+    highlightBillRow(billno);
+    setStatus('Loading #' + billno + '…');
+    try {
+      const res = await fetch(PV_TEMP_BILL_URL + '?billno=' + encodeURIComponent(String(billno)), { credentials: 'same-origin' });
+      const ct = (res.headers.get('content-type') || '').toLowerCase();
+      if (!ct.includes('application/json')) throw new Error('Bad response (' + res.status + ')');
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Load failed');
+      lastPayload = { header: data.header || {}, lines: data.lines || [] };
+      lastBillContext = {
+        billno: data.billno,
+        raw_header: data.raw_header || {},
+        bill_lines: data.bill_lines || [],
+        raw_lines: data.raw_lines || [],
+        checkout_lines: data.lines || [],
+        checkout_line_count: (data.lines || []).length,
+      };
+      el('pvJson').value = JSON.stringify(lastPayload, null, 2);
+      el('pvSelectedMeta').textContent =
+        '#' + billno + ' · ' + (data.bill_lines || []).length + ' TEMP rows · ' + (data.lines || []).length + ' checkout lines · ctr ' + (lastPayload.header.countercode != null ? lastPayload.header.countercode : '—');
+      renderCartSummary(data.raw_header || {}, lastPayload.header || {}, {
+        billno: data.billno,
+        tempRows: (data.bill_lines || []).length,
+        checkoutLines: (data.lines || []).length,
+      });
+      el('pvRawHdrJson').textContent = JSON.stringify(data.raw_header || {}, null, 2);
+      lastBillLinesSnapshot = data.bill_lines || [];
+      el('pvLiveSnapPre').textContent = '—';
+      el('pvLiveSnapHint').textContent = '';
+      renderBillLinesBillingOnly(lastBillLinesSnapshot);
+      renderBillLinesFullDb(data.raw_lines || [], data.tempbilldtl_column_order || []);
+      lastSimulation = null;
+      el('pvSimStrip').textContent = 'Run simulate…';
+      el('pvSimJson').textContent = '—';
+      el('pvEngineDiagBody').textContent = 'No simulation yet.';
+      el('pvAiOut').classList.add('muted');
+      el('pvAiOut').textContent = OPENAI_ON ? 'Building context… run Analyze with AI when ready.' : 'Simulation JSON will appear under Technical after you simulate.';
+      if (el('pvAutoSim').checked) {
+        await runSim(false);
+        if (OPENAI_ON && el('pvAutoAi') && el('pvAutoAi').checked) await runAi();
+      } else {
+        setStatus('Bill loaded.');
+      }
+    } catch (e) {
+      setStatus(String(e.message || e));
+      el('pvSelectedMeta').textContent = 'Load failed: ' + (e.message || e);
+      clearCartSummary();
+      lastBillLinesSnapshot = [];
+      renderBillLinesBillingOnly([]);
+      renderBillLinesFullDb([], []);
+    }
+  }
+
+  async function loadBill() {
+    setStatus('Session bill…');
+    try {
+      const res = await fetch('{{ url_for("pos_billing.pos_last_in_progress_bill") }}', { credentials: 'same-origin' });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed');
+      if (!data.header) {
+        el('pvJson').value = JSON.stringify({ header: {}, lines: [] }, null, 2);
+        lastBillContext = null;
+        clearCartSummary();
+        setStatus('No session bill.');
+        return;
+      }
+      lastPayload = { header: data.header || {}, lines: data.lines || [] };
+      lastBillContext = {
+        billno: data.header.billno,
+        raw_header: data.header || {},
+        bill_lines: data.lines || [],
+        raw_lines: [],
+        checkout_lines: data.lines || [],
+        checkout_line_count: (data.lines || []).length,
+        source: 'session_last_in_progress',
+      };
+      el('pvJson').value = JSON.stringify(lastPayload, null, 2);
+      el('pvSelectedMeta').textContent = 'Session #' + (data.header.billno || '—');
+      renderCartSummary(data.header || {}, data.header || {}, {
+        billno: data.header.billno,
+        tempRows: (data.lines || []).length,
+        checkoutLines: (data.lines || []).length,
+        source: 'session_last_in_progress',
+      });
+      el('pvRawHdrJson').textContent = JSON.stringify(data.header || {}, null, 2);
+      lastSimulation = null;
+      lastBillLinesSnapshot = data.lines || [];
+      renderBillLinesBillingOnly(lastBillLinesSnapshot);
+      renderBillLinesFullDb([], []);
+      highlightBillRow('');
+      el('pvSimStrip').textContent = 'Run simulate…';
+      if (el('pvAutoSim').checked) {
+        await runSim(false);
+        if (OPENAI_ON && el('pvAutoAi') && el('pvAutoAi').checked) await runAi();
+      }
+      setStatus('Session loaded.');
+    } catch (e) {
+      setStatus(String(e.message || e));
+    }
+  }
+
+  async function runSim(strict) {
+    setStatus('Simulating…');
+    try {
+      lastPayload = parsePayload();
+      const res = await fetch('{{ url_for("pos_billing.pos_verify_simulate_api") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ header: lastPayload.header, lines: lastPayload.lines, strict: !!strict }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Simulation failed');
+      renderSimulationStrip(data);
+      setStatus(data.simulation_ok ? 'Preview OK.' : 'Preview has blocking issues — see Technical → diagnostics.');
+    } catch (e) {
+      setStatus(String(e.message || e));
+    }
+  }
+
+  async function runAi() {
+    if (!lastSimulation) {
+      setStatus('Simulate first — use Analyze with AI.');
+      return;
+    }
+    if (!OPENAI_ON) return;
+    setStatus('AI…');
+    el('pvAiOut').textContent = '…';
+    el('pvAiOut').classList.remove('muted');
+    try {
+      const res = await fetch('{{ url_for("pos_billing.pos_verify_ai_api") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ simulation: lastSimulation, bill: lastBillContext }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'AI failed');
+      el('pvAiOut').innerHTML = data.insights.replace(/\n/g, '<br>');
+      setStatus('AI done.');
+    } catch (e) {
+      el('pvAiOut').textContent = String(e.message || e);
+      el('pvAiOut').classList.add('muted');
+      setStatus('');
+    }
+  }
+
+  async function analyzeWithAi() {
+    if (!OPENAI_ON) {
+      setStatus('OpenAI not configured.');
+      return;
+    }
+    try {
+      lastPayload = parsePayload();
+      if (!(lastPayload.lines || []).length) {
+        setStatus('Select a bill first.');
+        return;
+      }
+      await runSim(false);
+      await runAi();
+    } catch (e) {
+      setStatus(String(e.message || e));
+    }
+  }
+
+  async function fetchLiveStockSnapshot() {
+    lastPayload = parsePayload();
+    if (!(lastPayload.lines || []).length) throw new Error('No checkout lines.');
+    const res = await fetch(PV_LIVE_STOCK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ header: lastPayload.header, lines: lastPayload.lines }),
+    });
+    const ct = (res.headers.get('content-type') || '').toLowerCase();
+    if (!ct.includes('application/json')) throw new Error('Live snapshot HTTP ' + res.status);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Live snapshot failed');
+    lastLiveSnapshot = data;
+    el('pvLiveSnapPre').textContent = JSON.stringify(data, null, 2);
+    el('pvLiveSnapHint').textContent = (data.lines || []).length + ' line(s).';
+    return data;
+  }
+
+  async function runAiVerifyDb() {
+    if (!OPENAI_ON) return;
+    if (!lastSimulation) {
+      setStatus('Run Analyze with AI (or simulate) first.');
+      return;
+    }
+    setStatus('Live Oracle + AI compare…');
+    el('pvAiOut').textContent = '…';
+    el('pvAiOut').classList.remove('muted');
+    try {
+      const snap = await fetchLiveStockSnapshot();
+      const res = await fetch('{{ url_for("pos_billing.pos_verify_ai_api") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          simulation: lastSimulation,
+          bill: lastBillContext,
+          live_db_snapshot: {
+            lines: snap.lines,
+            flags: snap.flags,
+            note: 'Compare simulation projected AFTER vs live Oracle. Queued saves: run after stock posts.',
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'AI failed');
+      el('pvAiOut').innerHTML = data.insights.replace(/\n/g, '<br>');
+      setStatus('AI vs DB done.');
+    } catch (e) {
+      el('pvAiOut').textContent = String(e.message || e);
+      el('pvAiOut').classList.add('muted');
+      setStatus('');
+    }
+  }
+
+  async function saveBill() {
+    if (!lastPayload || !(lastPayload.lines || []).length) {
+      try { lastPayload = parsePayload(); } catch (e) {}
+    }
+    if (!lastPayload || !(lastPayload.lines || []).length) {
+      alert('Nothing to save.');
+      return;
+    }
+    setStatus('Saving…');
+    try {
+      const res = await fetch('{{ url_for("pos_billing.pos_save") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ header: lastPayload.header, lines: lastPayload.lines, receipt_extras: {} }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Save failed');
+      alert(data.queued ? ('Queued job #' + (data.queue_job_id || '')) : 'Saved.');
+      setStatus('Saved.');
+      refreshTempBills({ silent: false });
+    } catch (e) {
+      alert(String(e.message || e));
+      setStatus('');
+    }
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') refreshTempBills({ silent: true });
+  });
+  el('pvLoadBill').addEventListener('click', loadBill);
+  el('pvAnalyzeAi').addEventListener('click', analyzeWithAi);
+  el('pvAiVerifyDb').addEventListener('click', runAiVerifyDb);
+  el('pvSimStrict').addEventListener('click', function () { runSim(true); });
+  el('pvLiveSnap').addEventListener('click', async function () {
+    setStatus('Live snapshot…');
+    try {
+      await fetchLiveStockSnapshot();
+      setStatus('Live snapshot updated (Technical).');
+    } catch (e) {
+      setStatus(String(e.message || e));
+    }
+  });
+  el('pvSave').addEventListener('click', saveBill);
+
+  refreshTempBills({ silent: false });
+  startListPollTimer();
+})();
+</script>
+{% endblock %}

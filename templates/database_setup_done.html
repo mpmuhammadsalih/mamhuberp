@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="max-width: 560px; margin: 48px auto; padding: 16px;">
+  <h1 style="font-size: 22px; border-bottom: 2px solid #198754; display: inline-block;">Setup complete</h1>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <p class="flash flash--{{ category }}" style="margin-top:16px;">{{ message }}</p>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+  <p style="margin-top: 20px; color: #495057;">
+    Prefer to <strong>restart</strong> the Flask process once so every worker reloads environment variables from <code>.env</code>.
+  </p>
+  <p>
+    <a href="{{ login_url }}" style="color: #0d6efd;">Go to login</a>
+    ·
+    {% if setup_allowed %}
+      <a href="{{ setup_url }}" style="color: #6c757d;">Open setup again</a>
+    {% endif %}
+  </p>
+</div>
+{% endblock %}

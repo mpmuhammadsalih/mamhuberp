@@ -1,0 +1,2 @@
+"""Addon manifest — Dashboard."""
+MANIFEST = {'technical_name': 'dashboard', 'name': 'Dashboard', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Migrated from blueprints/dashboard.py', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/dashboard'}, 'flask': {'blueprint': 'dashboard', 'blueprint_ref': 'addons.dashboard:bp', 'models_package': 'addons.dashboard.models', 'routes_module': 'addons.dashboard.controllers.routes'}}

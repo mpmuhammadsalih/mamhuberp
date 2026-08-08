@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Customer categories{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+
+{% set ns = namespace(n=(categories or [])|length) %}
+
+<div class="page-po nexa-list-page nexa-setup-list-page">
+  <section class="nexa-stat-grid" aria-label="Category summary">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-tags" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Categories</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.n) }}</p>
+        <p class="nexa-stat-sub">TBLCUSTOMERCATEGORY</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-shop" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Uses</p>
+        <p class="nexa-stat-value">CRM</p>
+        <p class="nexa-stat-sub">Customer master</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-sliders" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Per branch</p>
+        <p class="nexa-stat-value">Codes</p>
+        <p class="nexa-stat-sub">LOCATIONCODE</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-plus-lg" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Add</p>
+        <p class="nexa-stat-value">New</p>
+        <p class="nexa-stat-sub">Top right</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--cyan"><i class="bi bi-geo-alt" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Branch</p>
+        <p class="nexa-stat-value" style="font-size:clamp(14px,1.2vw,18px);">{{ location_code }}</p>
+        <p class="nexa-stat-sub">{{ location_name or '' }}</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Customer category</h1>
+      <p class="page-po__muted">Categories per branch (<strong>TBLCUSTOMERCATEGORY</strong>).</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% include 'includes/list_refresh_bar.html' %}
+      <a href="{{ url_for('customer_category.category_create') }}" class="page-po__btn-primary">+ New category</a>
+    </div>
+  </div>
+
+  <form class="nexa-list-filter-panel" method="get" action="{{ url_for('customer_category.category_list') }}">
+    <div class="form-group" style="margin-bottom:0;">
+      <label for="catSearch" style="font-size:11px;font-weight:700;color:#64748b;">Search</label>
+      <input id="catSearch" type="text" name="search" class="input" placeholder="Code or name…" value="{{ search_term or '' }}" style="min-width:220px;" />
+    </div>
+    <button type="submit" class="page-po__btn-secondary">Filter</button>
+  </form>
+
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th style="text-align:center;width:52px;">Sl.No</th>
+          <th>Loc</th>
+          <th>Code</th>
+          <th>Name</th>
+          <th style="text-align:center;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if categories %}
+          {% for c in categories %}
+            <tr>
+              <td style="text-align:center;">{{ loop.index }}</td>
+              <td>{{ c.locationcode or '-' }}</td>
+              <td>{{ c.categorycode if c.categorycode is not none else '-' }}</td>
+              <td>{{ c.categoryname or '-' }}</td>
+              <td style="text-align:center;">
+                <a href="{{ url_for('customer_category.category_edit', location_code=c.locationcode, category_code=c.categorycode) }}" class="btn-view">Edit</a>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="5" style="text-align:center;padding:18px;color:#64748b;">No categories for this branch or table missing.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

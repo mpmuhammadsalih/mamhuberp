@@ -1,0 +1,2 @@
+"""Addon manifest — database modes documentation (utilities)."""
+MANIFEST = {'technical_name': 'utilities_db_modes', 'name': 'Database modes guide', 'version': '1.0.0', 'category': 'Technical', 'summary': 'Single-DB vs multi-DB Oracle configuration (.env, HO tenant)', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/utilities/database-modes-guide'}, 'flask': {'blueprint': 'utilities_db_modes', 'blueprint_ref': 'addons.utilities_db_modes.controllers.routes:bp', 'routes_module': 'addons.utilities_db_modes.controllers.routes'}}

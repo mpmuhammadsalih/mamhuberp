@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="tsrl-container nexa-list-page">
+<style>
+  body { overflow-x: auto; min-height: 100vh; background: #fff; color: #212529; }
+  .tsrl-page { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
+  .tsrl-topbar { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #dee2e6; }
+  .tsrl-topbar h1 { margin: 0; font-size: 24px; font-weight: 400; color: #212529; }
+  .tsrl-topbar .tsrl-muted { font-size: 12px; color: #6c757d; margin-top: 4px; }
+  .tsrl-topbar .tsrl-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .tsrl-btn-secondary { background: transparent; border: 1px solid #dee2e6; color: #495057; padding: 8px 16px; border-radius: 4px; font-size: 13px; cursor: pointer; text-decoration: none; }
+  .tsrl-btn-secondary:hover { background: #f8f9fa; color: #495057; }
+  .tsrl-btn-danger { background: #dc3545 !important; border: none; color: #fff !important; padding: 8px 16px; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .tsrl-btn-danger:hover { background: #c82333 !important; color: #fff !important; }
+  .tsrl-section-title { font-size: 14px; font-weight: 600; color: #212529; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #007bff; display: inline-block; }
+  #tempSettlementTable thead { position: sticky; top: 0; z-index: 1; background: #f8f9fa !important; }
+  #tempSettlementTable thead th { background: #f8f9fa !important; color: #495057 !important; padding: 10px 12px; font-weight: 600; font-size: 12px; border: none; border-bottom: 1px solid #dee2e6; }
+  #tempSettlementTable tbody td { padding: 8px 12px; border: none; border-bottom: 1px solid #dee2e6; font-size: 13px; }
+  #tempSettlementTable tbody tr:hover { background: #f8f9fa !important; }
+  .tsrl-container .scroll-table { border: 1px solid #dee2e6; border-radius: 4px; background: #fff; overflow: auto; }
+  .tsrl-container .table-total { background: #f8f9fa !important; }
+  .tsrl-container .table-total td { font-weight: 700; color: #212529; padding: 8px 12px !important; }
+  @keyframes reset-spin { to { transform: rotate(360deg); } }
+</style>
+<div class="list-refresh-slot" style="display:flex;justify-content:flex-end;flex-wrap:wrap;align-items:center;margin:6px 0 12px;">{% include 'includes/list_refresh_bar.html' %}</div>
+
+<div class="tsrl-page">
+  <div class="tsrl-topbar">
+    <div>
+      <h1>{% if is_credit %}Credit {% endif %}Temp Settlement (flag = 'R'){% if receipt_no %} – Receipt No {{ receipt_no }}{% endif %}{% if customer_code %} – Customer {{ customer_code }}{% endif %}</h1>
+      <p class="tsrl-muted">{% if is_credit %}tblcrsettlement{% else %}tbltempsettlement{% endif %} – Receipt No = pending no, Bill No = against no{% if receipt_no and customer_code %} (filtered by receipt no and customer code){% endif %}</p>
+    </div>
+    {% if receipt_no and customer_code and rows %}
+    <div class="tsrl-actions">
+      <a href="{{ url_for('temporary_collection.credit_receipt_list') if is_credit else url_for('temporary_collection.cash_receipt_list') }}" class="tsrl-btn-secondary">Back to list</a>
+      <button type="button" id="btnResetReceipt" class="tsrl-btn-danger">Reset Receipt</button>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Password modal for Reset -->
+  <div id="resetPasswordModal" class="modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; align-items: center; justify-content: center; flex-direction: row;">
+    <div class="modal-card" style="background: #fff; border-radius: 8px; padding: 24px; max-width: 400px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); border: 1px solid #dee2e6; position: relative;">
+      <div id="resetModalForm">
+        <h3 style="margin: 0 0 12px 0; color: #212529; font-size: 16px;">Highly secured</h3>
+        <p style="margin: 0 0 16px 0; color: #6c757d; font-size: 14px;">Enter password to reset this receipt (revise receipt no).</p>
+        <input type="password" id="resetPasswordInput" class="input" placeholder="Enter password..." style="width: 100%; padding: 8px 12px; margin-bottom: 16px; border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; font-size: 14px; box-sizing: border-box;" autocomplete="off">
+        <div style="display: flex; gap: 8px; justify-content: flex-end;">
+          <button type="button" id="resetPasswordCancel" class="tsrl-btn-secondary">Cancel</button>
+          <button type="button" id="resetPasswordSubmit" class="tsrl-btn-danger">Reset</button>
+        </div>
+      </div>
+      <div id="resetModalLoading" style="display: none; position: absolute; inset: 0; background: rgba(255,255,255,0.95); border-radius: 8px; align-items: center; justify-content: center; flex-direction: column; gap: 16px;">
+        <div class="reset-spinner" style="width: 48px; height: 48px; border: 4px solid #dee2e6; border-top-color: #dc3545; border-radius: 50%; animation: reset-spin 0.8s linear infinite;"></div>
+        <p style="margin: 0; color: #212529; font-weight: 600;">Resetting receipt…</p>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="tsrl-section-title">Settlement lines</h3>
+  <div class="scroll-table">
+    <table class="table" id="tempSettlementTable">
+      <thead>
+        <tr>
+          <th>Sl.No</th>
+          <th>Receipt No</th>
+          <th>Bill No</th>
+          <th>Customer Code</th>
+          <th>Customer Name</th>
+          <th>Date</th>
+          <th style="text-align: right;">Amount</th>
+        </tr>
+      </thead>
+        <tbody>
+          {% if rows %}
+            {% for item in rows %}
+              <tr>
+                <td>{{ item.slno or loop.index }}</td>
+                <td>{{ item.receiptno or '-' }}</td>
+                <td>{{ item.billno or '-' }}</td>
+                <td>{{ item.customercode or '-' }}</td>
+                <td>{{ item.customername or '-' }}</td>
+                <td>
+                  {% if item.paiddate %}
+                    {% if item.paiddate is string %}{{ item.paiddate }}{% else %}{{ item.paiddate.strftime('%d/%b/%Y').upper() }}{% endif %}
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td style="text-align: right;">{{ "%.2f"|format(item.amount|float) if item.amount is defined and item.amount is not none else '0.00' }}</td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr class="table-empty">
+              <td colspan="7">No temp settlement records found (flag = 'R').</td>
+            </tr>
+          {% endif %}
+        </tbody>
+        {% if rows %}
+        <tfoot>
+          <tr class="table-total">
+            <td colspan="6" style="text-align: right; font-weight: 700;">Total</td>
+            <td style="text-align: right; font-weight: 700;">{{ "%.2f"|format((rows|sum(attribute='amount')|default(0))|float) }}</td>
+          </tr>
+        </tfoot>
+        {% endif %}
+      </table>
+  </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if receipt_no and customer_code and rows %}
+<script>
+(function() {
+  const RESET_PASSWORD = '123';
+  const receiptNo = {{ receipt_no|tojson }};
+  const customerCode = {{ customer_code|tojson }};
+  {% if is_credit %}
+  const resetUrl = {{ url_for('temporary_collection.credit_receipt_temp_settlement_reset')|tojson }};
+  const listUrl = {{ url_for('temporary_collection.credit_receipt_list')|tojson }};
+  {% else %}
+  const resetUrl = {{ url_for('temporary_collection.cash_receipt_temp_settlement_reset')|tojson }};
+  const listUrl = {{ url_for('temporary_collection.cash_receipt_list')|tojson }};
+  {% endif %}
+
+  const modal = document.getElementById('resetPasswordModal');
+  const input = document.getElementById('resetPasswordInput');
+  const btnReset = document.getElementById('btnResetReceipt');
+  const btnCancel = document.getElementById('resetPasswordCancel');
+  const btnSubmit = document.getElementById('resetPasswordSubmit');
+  const formBox = document.getElementById('resetModalForm');
+  const loadingBox = document.getElementById('resetModalLoading');
+
+  function showModal() {
+    if (modal) {
+      modal.style.display = 'flex';
+      if (formBox) formBox.style.display = 'block';
+      if (loadingBox) loadingBox.style.display = 'none';
+      if (input) {
+        input.value = '';
+        input.focus();
+      }
+    }
+  }
+  function hideModal() {
+    if (modal) modal.style.display = 'none';
+  }
+  function showLoading() {
+    if (formBox) formBox.style.display = 'none';
+    if (loadingBox) loadingBox.style.display = 'flex';
+  }
+  function hideLoading() {
+    if (formBox) formBox.style.display = 'block';
+    if (loadingBox) loadingBox.style.display = 'none';
+  }
+
+  let resetInProgress = false;
+
+  if (btnReset) {
+    btnReset.addEventListener('click', function() {
+      if (resetInProgress) return;
+      showModal();
+      if (btnReset) btnReset.disabled = true;
+    });
+  }
+  if (btnCancel) {
+    btnCancel.addEventListener('click', function() {
+      hideModal();
+      if (!resetInProgress && btnReset) btnReset.disabled = false;
+    });
+  }
+  if (btnSubmit) {
+    btnSubmit.addEventListener('click', function() {
+      if (resetInProgress) return;
+      const pwd = (input && input.value) ? input.value.trim() : '';
+      if (pwd !== RESET_PASSWORD) {
+        alert('Invalid password.');
+        return;
+      }
+      resetInProgress = true;
+      if (btnSubmit) btnSubmit.disabled = true;
+      if (btnReset) btnReset.disabled = true;
+      showLoading();
+      fetch(resetUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          receipt_no: receiptNo,
+          customer_code: customerCode,
+          password: pwd
+        })
+      })
+        .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+        .then(function(result) {
+          resetInProgress = false;
+          hideLoading();
+          if (btnSubmit) btnSubmit.disabled = false;
+          if (btnReset) btnReset.disabled = false;
+          hideModal();
+          if (result.ok && result.data.success) {
+            alert('Revised Receipt No ' + receiptNo + '.');
+            window.location.href = listUrl;
+          } else {
+            alert(result.data.error || 'Reset failed.');
+          }
+        })
+        .catch(function(err) {
+          resetInProgress = false;
+          hideLoading();
+          if (btnSubmit) btnSubmit.disabled = false;
+          if (btnReset) btnReset.disabled = false;
+          hideModal();
+          alert('Reset failed: ' + (err.message || 'Network error'));
+        });
+    });
+  }
+  if (modal) {
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal && !resetInProgress) {
+        hideModal();
+        if (btnReset) btnReset.disabled = false;
+      }
+    });
+  }
+})();
+</script>
+{% endif %}
+{% endblock %}

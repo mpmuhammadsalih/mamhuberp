@@ -1,0 +1,2 @@
+"""Addon manifest — accounts."""
+MANIFEST = {'technical_name': 'accounts', 'name': 'GL & finance', 'version': '1.0.0', 'category': 'Finance / Accounts', 'summary': 'Chart of accounts, ledgers, journal, AP, PDC, trial balance, P&L, balance sheet.', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/accounts'}, 'flask': {'blueprint': 'accounts', 'blueprint_ref': 'addons.accounts:bp', 'models_package': 'addons.accounts.models', 'routes_module': 'addons.accounts.controllers.routes'}}

@@ -1,0 +1,3790 @@
+{% extends "base.html" %}
+{% block title %}POS Settlement{% endblock %}
+
+{% block content %}
+{% set settlement_list_url = settlement_list_url|default(url_for('pos_billing.pos_settlement_posting_page')) %}
+<div class="page-po nexa-list-page pos-settlement-page">
+  <style>
+    .pos-settlement-page {
+      max-width: 1680px;
+      margin: 0 auto;
+      padding: 0 12px 32px;
+      background: #f1f5f9;
+      min-height: calc(100vh - 48px);
+      box-sizing: border-box;
+      --psp-location-header-h: 46px;
+      --psp-settle-actions-h: 58px;
+    }
+    .pos-settlement-page .psp-shell {
+      background: transparent;
+    }
+    .pos-settlement-page .psp-page-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .pos-settlement-page .psp-page-head h1 {
+      margin: 0 0 4px;
+      font-size: clamp(1.35rem, 2.2vw, 1.65rem);
+      font-weight: 800;
+      color: #0f172a;
+      letter-spacing: -0.02em;
+    }
+    .pos-settlement-page .psp-page-head .psp-lead {
+      margin: 0;
+      font-size: 13px;
+      color: #64748b;
+      max-width: 640px;
+      line-height: 1.45;
+    }
+    .pos-settlement-page .psp-breadcrumb {
+      font-size: 12px;
+      color: #64748b;
+      white-space: nowrap;
+      padding-top: 4px;
+    }
+    .pos-settlement-page .psp-breadcrumb span { color: #94a3b8; }
+    .pos-settlement-page .psp-breadcrumb strong { color: #334155; font-weight: 600; }
+
+    /* KPI cards */
+    .pos-settlement-page .psp-kpi-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    @media (min-width: 1200px) {
+      .pos-settlement-page .psp-kpi-strip { grid-template-columns: repeat(6, 1fr); }
+    }
+    .pos-settlement-page .psp-kpi-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      background: #fff;
+      border-radius: 10px;
+      padding: 14px 16px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+    }
+    .pos-settlement-page .psp-kpi-card__icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      flex-shrink: 0;
+    }
+    .pos-settlement-page .psp-kpi-card__body { min-width: 0; flex: 1; }
+    .pos-settlement-page .psp-kpi-card__label {
+      margin: 0 0 4px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .pos-settlement-page .psp-kpi-card__value {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      color: #0f172a;
+      line-height: 1.25;
+    }
+    .pos-settlement-page .psp-kpi-card__sub {
+      margin: 4px 0 0;
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+    }
+    .pos-settlement-page .psp-kpi-card__icon--blue { background: #dbeafe; color: #1d4ed8; }
+    .pos-settlement-page .psp-kpi-card__icon--green { background: #d1fae5; color: #047857; }
+    .pos-settlement-page .psp-kpi-card__icon--purple { background: #ede9fe; color: #6d28d9; }
+    .pos-settlement-page .psp-kpi-card__icon--orange { background: #ffedd5; color: #c2410c; }
+    .pos-settlement-page .psp-kpi-card__icon--red { background: #ffe4e6; color: #be123c; }
+    .pos-settlement-page .psp-kpi-card__icon--teal { background: #ccfbf1; color: #0f766e; }
+
+    .pos-settlement-page .psp-nav-filters .psp-nav-kv--control {
+      align-items: center;
+    }
+    .pos-settlement-page .psp-nav-filters .psp-nav-kv__label label {
+      margin: 0;
+      cursor: inherit;
+      font-size: inherit;
+      font-weight: 600;
+      color: #3d5c73;
+      line-height: 1.35;
+      text-transform: none;
+      letter-spacing: normal;
+    }
+    .pos-settlement-page .psp-nav-filters .psp-nav-kv__control {
+      min-width: 0;
+    }
+    .pos-settlement-page .psp-nav-filters .psp-nav-kv__control > .input,
+    .pos-settlement-page .psp-nav-filters .psp-nav-kv__control > select.input {
+      width: 100%;
+      box-sizing: border-box;
+      border-radius: 2px;
+      border: 1px solid #b8c8d4;
+      font-size: 12px;
+      padding: 5px 8px;
+      background: #fff;
+    }
+    .pos-settlement-page .psp-nav-filters .psp-nav-kv__control > .input[readonly] {
+      background: #f4f7fb;
+      color: #334155;
+      cursor: default;
+    }
+    /* Filters grid: same vertical rhythm as General (.psp-nav-kv) */
+    .pos-settlement-page .psp-nav-filters .psp-nav-general__grid--filters {
+      gap: 0 36px;
+    }
+    .pos-settlement-page .psp-nav-filters .psp-nav-general__grid--filters > .psp-nav-kv {
+      grid-template-columns: minmax(0, 148px) minmax(0, 1fr);
+      gap: 10px 12px;
+      align-items: center;
+      padding: 5px 0;
+      border-bottom: 1px solid #f0f4f8;
+      margin: 0;
+    }
+    .pos-settlement-page .psp-nav-filters .psp-nav-general__grid--filters > .psp-nav-kv:last-child {
+      border-bottom: none;
+    }
+    @media (min-width: 901px) {
+      .pos-settlement-page .psp-nav-filters .psp-nav-general__grid--filters > .psp-nav-kv:nth-last-child(2) {
+        border-bottom: none;
+      }
+    }
+    .pos-settlement-page .psp-nav-filters .psp-counter-pick {
+      display: flex;
+      gap: 6px;
+      align-items: stretch;
+    }
+    .pos-settlement-page .psp-nav-filters .psp-counter-pick .input {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    .pos-settlement-page .psp-nav-filters .psp-counter-pick__btn {
+      flex-shrink: 0;
+      padding: 6px 10px;
+      font-size: 11px;
+      border-radius: 2px;
+    }
+    .pos-settlement-page .psp-nav-filters__toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 10px;
+      padding: 8px 14px;
+      border-top: 1px solid #f0f4f8;
+      background: #fff;
+      position: sticky;
+      top: calc(var(--psp-location-header-h) + var(--psp-settle-actions-h));
+      z-index: 91;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+    }
+    .pos-settlement-page .psp-nav-filters__toolbar .psp-btn-load {
+      padding: 7px 14px;
+      font-size: 12px;
+      border-radius: 2px;
+    }
+    .pos-settlement-page .psp-nav-filters__toolbar .psp-btn-outline {
+      padding: 7px 12px;
+      font-size: 12px;
+      border-radius: 2px;
+    }
+    .pos-settlement-page .psp-nav-filters__toolbar-sep {
+      color: #94a3b8;
+      font-size: 11px;
+      user-select: none;
+      margin: 0 2px;
+    }
+
+    .pos-settlement-page .psp-btn-load {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 18px;
+      font-weight: 700;
+      font-size: 13px;
+      border-radius: 8px;
+      border: none;
+      background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+      color: #fff;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
+    }
+    .pos-settlement-page .psp-btn-load:hover { filter: brightness(1.05); }
+    .pos-settlement-page .psp-btn-outline {
+      padding: 9px 16px;
+      font-weight: 600;
+      font-size: 13px;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      color: #475569;
+      cursor: pointer;
+    }
+    .pos-settlement-page .psp-btn-outline:hover { background: #f8fafc; }
+
+    .pos-settlement-page .psp-counter-pick {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+    .pos-settlement-page .psp-counter-pick .input {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    .pos-settlement-page .psp-counter-pick #pspCounterDisplay {
+      cursor: pointer;
+    }
+    .pos-settlement-page .psp-counter-pick__btn {
+      flex: 0 0 auto;
+      white-space: nowrap;
+      align-self: stretch;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .pos-settlement-page .psp-counter-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1080;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      box-sizing: border-box;
+    }
+    .pos-settlement-page .psp-counter-modal[hidden] {
+      display: none !important;
+    }
+    .pos-settlement-page .psp-counter-modal__backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      cursor: pointer;
+    }
+    .pos-settlement-page .psp-counter-modal__card {
+      position: relative;
+      width: min(440px, 100%);
+      max-height: min(72vh, 520px);
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .pos-settlement-page .psp-counter-modal__head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid #f1f5f9;
+      background: #f8fafc;
+    }
+    .pos-settlement-page .psp-counter-modal__head h2 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .pos-settlement-page .psp-counter-modal__close {
+      border: none;
+      background: transparent;
+      font-size: 22px;
+      line-height: 1;
+      color: #64748b;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+    .pos-settlement-page .psp-counter-modal__close:hover {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+    .pos-settlement-page .psp-counter-modal__card > .input {
+      margin: 12px 16px 8px;
+      width: calc(100% - 32px);
+      box-sizing: border-box;
+    }
+    .pos-settlement-page .psp-counter-modal__list {
+      flex: 1 1 auto;
+      overflow: auto;
+      padding: 4px 12px 14px;
+      min-height: 120px;
+    }
+    .pos-settlement-page .psp-counter-opt {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      background: #fff;
+      font-size: 13px;
+      color: #334155;
+      cursor: pointer;
+    }
+    .pos-settlement-page .psp-counter-opt:hover {
+      border-color: var(--nexa-focus-color);
+      background: #f0f9ff;
+    }
+    .pos-settlement-page .psp-counter-opt strong {
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .pos-settlement-page .psp-counter-opt code {
+      font-size: 12px;
+      color: #64748b;
+      font-weight: 600;
+      margin-left: 6px;
+    }
+    .pos-settlement-page .psp-counter-opt--all {
+      font-weight: 700;
+      border-style: dashed;
+    }
+    .pos-settlement-page .psp-counter-modal__hint {
+      padding: 24px 16px;
+      text-align: center;
+      color: #64748b;
+      font-size: 13px;
+    }
+
+    /* Legacy panel shell — still used where nav card is combined */
+    .pos-settlement-page .psp-table-panel {
+      background: #fff;
+      border-radius: 10px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+      padding: 14px 16px;
+      margin-bottom: 14px;
+    }
+    .pos-settlement-page .psp-table-panel__title {
+      margin: 0 0 12px;
+      font-size: 13px;
+      font-weight: 800;
+      color: #334155;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .pos-settlement-page .nexa-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: #e0e7ff;
+      color: #4338ca;
+    }
+    .pos-settlement-page .nexa-badge--pending {
+      background: #ffedd5;
+      color: #c2410c;
+      border: 1px solid #fdba74;
+    }
+    .pos-settlement-page .nexa-badge--posted {
+      background: #d1fae5;
+      color: #047857;
+      border: 1px solid #6ee7b7;
+    }
+    .pos-settlement-page .nexa-badge--cancel {
+      background: #fee2e2;
+      color: #b91c1c;
+      border: 1px solid #fca5a5;
+    }
+
+    .pos-settlement-page .psp-main-layout {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    /* Lower cards: narrow payment summary (~33%) + accounts posting same row */
+    .pos-settlement-page .psp-cards-below {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: 1fr;
+      align-items: start;
+      min-width: 0;
+    }
+    @media (min-width: 768px) {
+      .pos-settlement-page .psp-cards-below {
+        grid-template-columns: minmax(220px, 33%) minmax(0, 1fr);
+      }
+    }
+    /* Bottom row: same NAV chrome as Lines / Filters */
+    .pos-settlement-page .psp-cards-below > .psp-nav-lines-card {
+      min-width: 0;
+      margin-bottom: 0;
+    }
+    .pos-settlement-page .psp-cards-below > .psp-nav-lines-card > .psp-table-panel__title {
+      margin: 0;
+    }
+    .pos-settlement-page .psp-nav-panel-body {
+      padding: 14px 16px 16px;
+      background: #fff;
+    }
+    .pos-settlement-page .psp-nav-panel-hint {
+      font-size: 12px;
+      color: #5c7288;
+      margin: 0 0 12px;
+      line-height: 1.45;
+    }
+    .pos-settlement-page .psp-nav-panel-toolbar {
+      display: flex;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 14px -16px -16px;
+      padding: 10px 16px;
+      border-top: 1px solid #c5d3df;
+      background: #f2f5f8;
+    }
+    .pos-settlement-page .psp-nav-panel-toolbar .psp-btn-outline {
+      padding: 7px 12px;
+      font-size: 12px;
+      border-radius: 2px;
+    }
+    .pos-settlement-page .psp-cards-below .psp-nav-panel-body .psp-field label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #3d5c73;
+      text-transform: none;
+      letter-spacing: normal;
+      margin-bottom: 5px;
+    }
+    .pos-settlement-page .psp-cards-below .psp-nav-panel-body .psp-acc-grid .input,
+    .pos-settlement-page .psp-cards-below .psp-nav-panel-body .psp-acc-grid select.input {
+      border-radius: 2px;
+      border: 1px solid #b8c8d4;
+      font-size: 12px;
+      padding: 6px 8px;
+    }
+    .pos-settlement-page .psp-cards-below .psp-nav-panel-body .psp-acc-grid .input.psp-clearing-ro {
+      background: #f1f5f9;
+      color: #334155;
+      cursor: default;
+    }
+    .pos-settlement-page .psp-cards-below .psp-nav-panel-body .psp-journal {
+      margin-top: 12px;
+      border-radius: 2px;
+      border: 1px solid #b8c8d4;
+      background: #fafcfd;
+    }
+    .pos-settlement-page .psp-cards-below .psp-nav-panel-body .psp-pay-row {
+      border-bottom-color: #e8eef5;
+    }
+    .pos-settlement-page .psp-cards-below .psp-nav-panel-body .psp-pay-total {
+      border-top: 2px solid #c5d3df;
+    }
+    .pos-settlement-page .psp-cards-below .psp-nav-panel-body .psp-pay-total span:last-child {
+      color: #14324a;
+    }
+    .pos-settlement-page .psp-cashier-grid tfoot td {
+      background: #f8fafc;
+      border-top: 2px solid #cbd5e1;
+      color: #0f172a;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      position: sticky;
+      bottom: 0;
+      z-index: 1;
+    }
+    .pos-settlement-page .psp-cashier-grid tfoot td:first-child {
+      text-align: right;
+      color: #1e3a8a;
+      letter-spacing: .02em;
+    }
+
+    .pos-settlement-page .psp-settle-split {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px 20px;
+      align-items: start;
+    }
+    .pos-settlement-page .psp-settle-split > div {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .pos-settlement-page .psp-settle-split .psp-field {
+      margin-bottom: 0;
+    }
+    @media (max-width: 520px) {
+      .pos-settlement-page .psp-settle-split { grid-template-columns: 1fr; }
+    }
+    .pos-settlement-page .psp-field label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+      display: block;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      white-space: normal;
+      word-break: break-word;
+      line-height: 1.3;
+    }
+    .pos-settlement-page .psp-field {
+      margin-bottom: 10px;
+      min-width: 0;
+    }
+    .pos-settlement-page .psp-cards-below .psp-nav-panel-body .psp-acc-grid .psp-field {
+      margin-bottom: 0;
+    }
+    .pos-settlement-page .psp-field--danger .input {
+      color: #be123c;
+      font-weight: 800;
+      border-color: #fecdd3;
+      background: #fff1f2;
+    }
+
+    .pos-settlement-page .psp-pay-rows {
+      font-size: 13px;
+    }
+    .pos-settlement-page .psp-pay-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid #f1f5f9;
+      color: #475569;
+    }
+    .pos-settlement-page .psp-pay-row > span:first-child {
+      min-width: 0;
+      flex: 1;
+      line-height: 1.35;
+    }
+    .pos-settlement-page .psp-pay-row > strong {
+      flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+      color: #0f172a;
+    }
+    .pos-settlement-page .psp-pay-total {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 2px solid #bfdbfe;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 800;
+      font-size: 14px;
+    }
+    .pos-settlement-page .psp-pay-total span:last-child {
+      color: #1d4ed8;
+      font-variant-numeric: tabular-nums;
+      font-size: 1.05rem;
+    }
+
+    .pos-settlement-page .psp-acc-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+      gap: 12px 16px;
+      min-width: 0;
+    }
+    .pos-settlement-page .psp-acc-grid .psp-field {
+      margin-bottom: 0;
+    }
+    @media (max-width: 479px) {
+      .pos-settlement-page .psp-acc-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .pos-settlement-page .psp-journal {
+      width: 100%;
+      min-height: 100px;
+      margin-top: 10px;
+      box-sizing: border-box;
+      padding: 10px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 11px;
+      background: #f8fafc;
+    }
+    .pos-settlement-page .psp-posting-section {
+      margin-top: 14px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+    }
+    .pos-settlement-page .psp-posting-section:first-child { margin-top: 0; }
+    .pos-settlement-page .psp-posting-title {
+      margin: 0;
+      padding: 11px 12px;
+      border-bottom: 1px solid #e2e8f0;
+      background: #f8fafc;
+      color: #0f172a;
+      font-size: 14px;
+      font-weight: 800;
+    }
+    .pos-settlement-page .psp-posting-table-wrap { overflow-x: auto; }
+    .pos-settlement-page .psp-posting-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: 12px;
+    }
+    .pos-settlement-page .psp-posting-table th,
+    .pos-settlement-page .psp-posting-table td {
+      border: 1px solid #e2e8f0;
+      padding: 8px 10px;
+      vertical-align: middle;
+      color: #0f172a;
+    }
+    .pos-settlement-page .psp-posting-table thead th {
+      background: #f8fafc;
+      color: #1e3a8a;
+      font-weight: 800;
+      font-size: 11px;
+      text-align: left;
+    }
+    .pos-settlement-page .psp-posting-table .num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .pos-settlement-page .psp-posting-table tfoot td {
+      background: #f8fafc;
+      font-weight: 800;
+    }
+    .pos-settlement-page .psp-posting-table input.input,
+    .pos-settlement-page .psp-posting-table select.input {
+      width: 100%;
+      min-height: 30px;
+      box-sizing: border-box;
+      border-radius: 3px;
+      border: 1px solid #cbd5e1;
+      font-size: 12px;
+      padding: 5px 8px;
+      background: #fff;
+    }
+    .pos-settlement-page .psp-posting-table input[readonly] {
+      background: #f8fafc;
+      color: #334155;
+    }
+    .pos-settlement-page .psp-posting-check {
+      display: flex;
+      justify-content: center;
+    }
+    .pos-settlement-page .psp-posting-check input {
+      width: 16px;
+      height: 16px;
+    }
+    .pos-settlement-page .psp-additional-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(180px, 1fr));
+      gap: 12px 24px;
+      padding: 12px;
+    }
+    .pos-settlement-page .psp-additional-grid .psp-field {
+      margin: 0;
+    }
+    @media (max-width: 700px) {
+      .pos-settlement-page .psp-additional-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Action toolbar (below location header / top of page content) */
+    .pos-settlement-page .psp-action-bar {
+      position: sticky;
+      top: var(--psp-location-header-h);
+      z-index: 92;
+      margin: 0 0 16px 0;
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+      box-sizing: border-box;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      overflow: hidden;
+    }
+    .pos-settlement-page .psp-action-footer {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 16px 10px;
+      margin: 0;
+      background: transparent;
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+      box-sizing: border-box;
+    }
+    .pos-settlement-page .psp-workflow-alert {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin: 0;
+      padding: 8px 16px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #9a3412;
+      background: #fff7ed;
+      border-top: 1px solid #fed7aa;
+      text-align: center;
+      line-height: 1.4;
+    }
+    .pos-settlement-page .psp-workflow-alert i {
+      font-size: 14px;
+      flex-shrink: 0;
+      color: #ea580c;
+    }
+    @media (max-width: 900px) {
+      .pos-settlement-page {
+        --psp-settle-actions-h: 96px;
+      }
+    }
+    .pos-settlement-page .psp-footer-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: none;
+      font-weight: 700;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+    }
+    .pos-settlement-page .psp-footer-btn:hover { filter: brightness(1.06); }
+    .pos-settlement-page .psp-footer-btn--green { background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%); color: #fff; }
+    .pos-settlement-page .psp-footer-btn--blue { background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%); color: #fff; }
+    .pos-settlement-page .psp-footer-btn--navy { background: linear-gradient(180deg, #1e3a8a 0%, #1e40af 100%); color: #fff; }
+    .pos-settlement-page .psp-footer-btn--red { background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%); color: #fff; }
+    .pos-settlement-page .psp-footer-btn--teal { background: linear-gradient(180deg, #14b8a6 0%, #0d9488 100%); color: #fff; }
+    .pos-settlement-page .psp-footer-btn--orange { background: linear-gradient(180deg, #fb923c 0%, #ea580c 100%); color: #fff; }
+
+    .pos-settlement-page .psp-status-line {
+      font-size: 12px;
+      color: #64748b;
+      margin: 6px 0 12px;
+      min-height: 1.25em;
+    }
+    .pos-settlement-page .psp-status-line.psp-ok { color: #047857; font-weight: 700; }
+    .pos-settlement-page .psp-status-line.psp-warn { color: #c2410c; font-weight: 700; }
+
+    .pos-settlement-page .psp-busy-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10050;
+      background: rgba(15, 23, 42, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(2px);
+    }
+    .pos-settlement-page .psp-busy-overlay[hidden] {
+      display: none !important;
+    }
+    .pos-settlement-page .psp-busy-overlay__panel {
+      background: #fff;
+      padding: 28px 36px;
+      border-radius: 12px;
+      box-shadow: 0 12px 40px rgba(15, 23, 42, 0.2);
+      text-align: center;
+      min-width: 240px;
+      max-width: 90vw;
+    }
+    .pos-settlement-page .psp-busy-overlay__spinner {
+      width: 40px;
+      height: 40px;
+      margin: 0 auto 14px;
+      border: 3px solid #e2e8f0;
+      border-top-color: #2563eb;
+      border-radius: 50%;
+      animation: psp-busy-spin 0.75s linear infinite;
+    }
+    @keyframes psp-busy-spin {
+      to { transform: rotate(360deg); }
+    }
+    .pos-settlement-page .psp-busy-overlay__text {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 700;
+      color: #334155;
+      line-height: 1.4;
+    }
+
+    .pos-settlement-page .psp-cashier-settle-panel .psp-table-panel__title span {
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .pos-settlement-page .psp-cashier-grid-wrap {
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      overflow: auto;
+      max-height: min(440px, 52vh);
+      background: #fff;
+    }
+    .pos-settlement-page .psp-cashier-grid {
+      min-width: 920px;
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+    .pos-settlement-page .psp-cashier-grid thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: linear-gradient(180deg, #eaf2fa 0%, #dfeaf5 100%);
+      font-size: 11px;
+      font-weight: 800;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 10px 8px;
+      border-bottom: 1px solid #cbd5e1;
+      white-space: nowrap;
+    }
+    .pos-settlement-page .psp-cashier-grid tbody td {
+      padding: 8px;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 13px;
+      vertical-align: middle;
+    }
+    .pos-settlement-page .psp-cashier-grid tbody tr:hover td {
+      background: #f8fafc;
+    }
+    .pos-settlement-page .psp-cashier-grid .psp-cashier-name {
+      font-weight: 700;
+      color: #0f172a;
+      max-width: 200px;
+      word-break: break-word;
+      white-space: normal;
+      line-height: 1.25;
+    }
+    .pos-settlement-page .psp-cashier-grid .psp-cs-input {
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+      padding: 6px 8px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 12px;
+      background: #fff;
+    }
+    .pos-settlement-page .psp-cashier-grid .psp-cs-input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+    }
+    .pos-settlement-page .psp-cashier-grid td.num {
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .pos-settlement-page .psp-cashier-grid .psp-cs-cell--danger {
+      color: #be123c;
+      font-weight: 800;
+    }
+    .pos-settlement-page .psp-cashier-settle-footer {
+      display: grid;
+      grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+      gap: 14px 18px;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid #f1f5f9;
+      align-items: start;
+    }
+    .pos-settlement-page .psp-cashier-settle-footer .psp-field {
+      margin-bottom: 0;
+    }
+    .pos-settlement-page .psp-cashier-settle-footer .psp-field--remarks-line {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 12px;
+    }
+    .pos-settlement-page .psp-cashier-settle-footer .psp-field--remarks-line label {
+      flex: 0 0 auto;
+      margin-bottom: 0;
+      white-space: nowrap;
+    }
+    .pos-settlement-page .psp-cashier-settle-footer .psp-field--remarks-line .input {
+      flex: 1;
+      min-width: 0;
+    }
+    @media (max-width: 720px) {
+      .pos-settlement-page .psp-cashier-settle-footer {
+        grid-template-columns: 1fr;
+      }
+    }
+    .pos-settlement-page .psp-pay-row--danger strong {
+      color: #be123c !important;
+    }
+    .pos-settlement-page .psp-pay-total--danger span:last-child {
+      color: #be123c !important;
+    }
+
+    .pos-settlement-page .co-table td.psp-wrap {
+      white-space: normal;
+      max-width: 200px;
+      vertical-align: top;
+    }
+
+    /* NAV / Dynamics-style: General header + Lines worksheet */
+    .pos-settlement-page .psp-nav-general {
+      background: #fff;
+      border: 1px solid #b8c8d4;
+      border-radius: 2px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(15, 35, 55, 0.08);
+      overflow: hidden;
+    }
+    .pos-settlement-page .psp-nav-filters {
+      overflow: visible;
+    }
+    .pos-settlement-page .psp-nav-general > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 8px 14px;
+      font-weight: 700;
+      font-size: 13px;
+      color: #14324a;
+      background: linear-gradient(180deg, #e4ecf4 0%, #d5e1ec 100%);
+      border-bottom: 1px solid #a9bac9;
+      user-select: none;
+    }
+    .pos-settlement-page .psp-nav-general > summary::-webkit-details-marker {
+      display: none;
+    }
+    .pos-settlement-page .psp-nav-general > summary::before {
+      content: '▼';
+      display: inline-block;
+      margin-right: 8px;
+      font-size: 9px;
+      color: #456882;
+      transform: rotate(-90deg);
+      transition: transform 0.15s ease;
+    }
+    .pos-settlement-page .psp-nav-general[open] > summary::before {
+      transform: rotate(0deg);
+    }
+    .pos-settlement-page .psp-nav-general__body {
+      padding: 14px 18px 16px;
+      border-top: 1px solid #eef2f6;
+    }
+    .pos-settlement-page .psp-nav-general__grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px 36px;
+    }
+    @media (max-width: 900px) {
+      .pos-settlement-page .psp-nav-general__grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .pos-settlement-page .psp-nav-kv {
+      display: grid;
+      grid-template-columns: minmax(0, 148px) minmax(0, 1fr);
+      gap: 10px 12px;
+      font-size: 12px;
+      align-items: baseline;
+      padding: 5px 0;
+      border-bottom: 1px solid #f0f4f8;
+    }
+    .pos-settlement-page .psp-nav-kv:last-child {
+      border-bottom: none;
+    }
+    .pos-settlement-page .psp-nav-kv__label {
+      color: #3d5c73;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    .pos-settlement-page .psp-nav-kv__val {
+      color: #0f172a;
+      font-weight: 600;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+    .pos-settlement-page .psp-nav-link {
+      color: #0066c8;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: underline;
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: inherit;
+      font-family: inherit;
+    }
+    .pos-settlement-page .psp-nav-link:hover {
+      color: #004a93;
+    }
+
+    .pos-settlement-page .psp-nav-lines-card {
+      background: #fff;
+      border: 1px solid #b8c8d4;
+      border-radius: 2px;
+      box-shadow: 0 1px 3px rgba(15, 35, 55, 0.08);
+      padding: 0;
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+    .pos-settlement-page .psp-nav-lines-card .psp-table-panel__title {
+      margin: 0;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #14324a;
+      background: linear-gradient(180deg, #e4ecf4 0%, #d5e1ec 100%);
+      border-bottom: 1px solid #a9bac9;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .pos-settlement-page .psp-nav-lines-card .psp-table-panel__title span {
+      font-weight: 600;
+      color: #5c7288;
+      font-size: 11px;
+    }
+    .pos-settlement-page .psp-lines-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      background: #f2f5f8;
+      border-bottom: 1px solid #c5d3df;
+      font-size: 11px;
+      color: #334155;
+    }
+    .pos-settlement-page .psp-lines-toolbar__sep {
+      color: #94a3b8;
+      margin: 0 2px;
+      user-select: none;
+    }
+    .pos-settlement-page .psp-lines-toolbar button {
+      padding: 3px 10px;
+      border: 1px solid transparent;
+      border-radius: 2px;
+      background: transparent;
+      font-size: 11px;
+      font-weight: 600;
+      color: #1e4976;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .pos-settlement-page .psp-lines-toolbar button:hover {
+      background: #e2ecf4;
+      border-color: #a8bdd2;
+    }
+    .pos-settlement-page .psp-cashier-grid-wrap.psp-cashier-grid-wrap--nav {
+      border-radius: 0;
+      border: none;
+      border-top: 1px solid #c5d3df;
+      max-height: min(480px, 56vh);
+      background: #fafcfd;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav {
+      min-width: 1020px;
+      border-collapse: collapse;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav thead th {
+      background: linear-gradient(180deg, #f4f7fb 0%, #e8eef5 100%);
+      border-right: 1px solid #c5d3df;
+      border-bottom: 1px solid #9eb1c4;
+      box-shadow: none;
+      font-size: 11px;
+      padding: 7px 8px;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav thead th:last-child {
+      border-right: none;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav thead th.psp-cs-sortable {
+      cursor: pointer;
+      user-select: none;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav thead th.psp-cs-sortable:hover {
+      background: linear-gradient(180deg, #e8f0f9 0%, #d9e6f2 100%);
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav thead th.psp-cs-sortable.psp-cs-sort-active {
+      color: #0f172a;
+      box-shadow: inset 0 -2px 0 #2563eb;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav thead th.psp-cs-sortable .psp-cs-sort-icon {
+      font-size: 10px;
+      margin-left: 4px;
+      opacity: 0.45;
+      font-weight: 800;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav thead th.psp-cs-sortable.psp-cs-sort-active .psp-cs-sort-icon {
+      opacity: 1;
+      color: #1d4ed8;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav tbody td {
+      border-right: 1px solid #e2e8f0;
+      border-bottom: 1px solid #dce4ec;
+      padding: 5px 8px;
+      font-size: 12px;
+      background: #fff;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav tbody td:last-child {
+      border-right: none;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav tbody tr:nth-child(even) td {
+      background: #f7fafc;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav tbody tr:hover td {
+      background: #eef6ff !important;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav .psp-cs-tender {
+      font-weight: 700;
+      color: #14324a;
+      white-space: nowrap;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav .psp-cs-terminal {
+      font-size: 11px;
+      color: #475569;
+      max-width: 140px;
+      word-break: break-word;
+      white-space: normal;
+      line-height: 1.25;
+    }
+    .pos-settlement-page .psp-nav-lines-card .psp-cashier-settle-footer {
+      margin: 0;
+      padding: 12px 14px;
+      border-top: 1px solid #c5d3df;
+      background: #f8fafc;
+    }
+
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav .psp-cs-na {
+      color: #94a3b8;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    @media print {
+      .pos-settlement-page .psp-action-bar,
+      .pos-settlement-page .psp-lines-toolbar,
+      .pos-settlement-page .psp-nav-filters__toolbar,
+      .pos-settlement-page .psp-busy-overlay { display: none !important; }
+      .pos-settlement-page { padding-bottom: 12px; background: #fff; }
+      .pos-settlement-page .co-table-wrap { max-height: none !important; }
+      .pos-settlement-page .psp-cards-below { grid-template-columns: 1fr !important; }
+    }
+  </style>
+
+  <div class="psp-shell">
+    <div class="psp-action-bar">
+      <footer class="psp-action-footer" role="toolbar" aria-label="Settlement actions">
+        <button type="button" class="psp-footer-btn psp-footer-btn--green" id="pspBtnGenerate"><i class="bi bi-calculator"></i> Generate Settlement</button>
+        <button type="button" class="psp-footer-btn psp-footer-btn--blue" id="pspBtnVerify"><i class="bi bi-shield-check"></i> Verify Settlement</button>
+        <button type="button" class="psp-footer-btn psp-footer-btn--navy" id="pspBtnPost"><i class="bi bi-journal-text"></i> Post to Accounts</button>
+        <button type="button" class="psp-footer-btn psp-footer-btn--red" id="pspBtnReverse"><i class="bi bi-arrow-counterclockwise"></i> Reverse Posting</button>
+        <button type="button" class="psp-footer-btn psp-footer-btn--teal" id="pspBtnPrint"><i class="bi bi-printer"></i> Print Settlement</button>
+        <button type="button" class="psp-footer-btn psp-footer-btn--orange" id="pspBtnExcel"><i class="bi bi-file-earmark-spreadsheet"></i> Export Excel</button>
+      </footer>
+      <p class="psp-workflow-alert" role="note">
+        <i class="bi bi-info-circle" aria-hidden="true"></i>
+        Select or generate a draft, verify it, then post.
+      </p>
+    </div>
+
+    <div id="pspBusyOverlay" class="psp-busy-overlay" hidden aria-hidden="true">
+      <div class="psp-busy-overlay__panel" role="status" aria-live="polite">
+        <div class="psp-busy-overlay__spinner" aria-hidden="true"></div>
+        <p class="psp-busy-overlay__text">Please wait…</p>
+      </div>
+    </div>
+
+    <div class="psp-page-head">
+      <div>
+        <h1>POS Settlement</h1>
+        <p class="psp-lead">Review cashier-wise POS sales, reconcile cash and card collections, and prepare accounts posting.</p>
+      </div>
+      <nav class="psp-breadcrumb" aria-label="Breadcrumb">
+        <span>Accounts Posting</span> <span>›</span>
+        <a href="{{ settlement_list_url }}" style="color:#64748b;text-decoration:none;font-weight:600;">POS Settlement Posting</a>
+        <span>›</span> <strong>New settlement</strong>
+      </nav>
+    </div>
+
+    <section class="psp-kpi-strip" aria-label="Summary KPIs">
+      <article class="psp-kpi-card">
+        <div class="psp-kpi-card__icon psp-kpi-card__icon--blue" aria-hidden="true"><i class="bi bi-graph-up-arrow"></i></div>
+        <div class="psp-kpi-card__body">
+          <p class="psp-kpi-card__label">Total POS Sales</p>
+          <p class="psp-kpi-card__value" id="pspSumTotal">0.00</p>
+          <p class="psp-kpi-card__sub" id="pspKpiTotalSub">Today</p>
+        </div>
+      </article>
+      <article class="psp-kpi-card">
+        <div class="psp-kpi-card__icon psp-kpi-card__icon--green" aria-hidden="true"><i class="bi bi-cash-stack"></i></div>
+        <div class="psp-kpi-card__body">
+          <p class="psp-kpi-card__label">Cash Sales</p>
+          <p class="psp-kpi-card__value" id="pspSumCash">0.00</p>
+          <p class="psp-kpi-card__sub" id="pspKpiCashPct">0%</p>
+        </div>
+      </article>
+      <article class="psp-kpi-card">
+        <div class="psp-kpi-card__icon psp-kpi-card__icon--purple" aria-hidden="true"><i class="bi bi-credit-card"></i></div>
+        <div class="psp-kpi-card__body">
+          <p class="psp-kpi-card__label">Card Sales</p>
+          <p class="psp-kpi-card__value" id="pspSumCard">0.00</p>
+          <p class="psp-kpi-card__sub" id="pspKpiCardPct">0%</p>
+        </div>
+      </article>
+      <article class="psp-kpi-card">
+        <div class="psp-kpi-card__icon psp-kpi-card__icon--orange" aria-hidden="true"><i class="bi bi-wallet2"></i></div>
+        <div class="psp-kpi-card__body">
+          <p class="psp-kpi-card__label">Credit Sales</p>
+          <p class="psp-kpi-card__value" id="pspSumCredit">0.00</p>
+          <p class="psp-kpi-card__sub" id="pspKpiCreditPct">0%</p>
+        </div>
+      </article>
+      <article class="psp-kpi-card">
+        <div class="psp-kpi-card__icon psp-kpi-card__icon--red" aria-hidden="true"><i class="bi bi-hourglass-split"></i></div>
+        <div class="psp-kpi-card__body">
+          <p class="psp-kpi-card__label">Pending Settlement</p>
+          <p class="psp-kpi-card__value" id="pspSumPending">0.00</p>
+          <p class="psp-kpi-card__sub" id="pspKpiPendingPct">0%</p>
+        </div>
+      </article>
+      <article class="psp-kpi-card">
+        <div class="psp-kpi-card__icon psp-kpi-card__icon--teal" aria-hidden="true"><i class="bi bi-check2-circle"></i></div>
+        <div class="psp-kpi-card__body">
+          <p class="psp-kpi-card__label">Posted Amount</p>
+          <p class="psp-kpi-card__value" id="pspSumPosted">0.00</p>
+          <p class="psp-kpi-card__sub" id="pspKpiPostedPct">0%</p>
+        </div>
+      </article>
+    </section>
+
+    <details class="psp-nav-general" open aria-label="Statement header">
+      <summary>General</summary>
+      <div class="psp-nav-general__body">
+        <div class="psp-nav-general__grid">
+          <div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Branch code</span>
+              <span class="psp-nav-kv__val" id="pspGenBranchCode">—</span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Branch name</span>
+              <span class="psp-nav-kv__val" id="pspGenBranchName">—</span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Period</span>
+              <span class="psp-nav-kv__val" id="pspGenPeriod">—</span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Settlement status</span>
+              <span class="psp-nav-kv__val" id="pspGenStatusFilter">—</span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">POS counters</span>
+              <span class="psp-nav-kv__val" id="pspGenCounterFilter">—</span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Cashier filter</span>
+              <span class="psp-nav-kv__val" id="pspGenCashierFilter">—</span>
+            </div>
+          </div>
+          <div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Shift</span>
+              <span class="psp-nav-kv__val" id="pspGenShift">—</span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Bills in list</span>
+              <span class="psp-nav-kv__val"><button type="button" class="psp-nav-link" id="pspGenScrollList" title="Scroll to cashier lines"><span id="pspGenBillCount">0</span></button></span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Pending (in view)</span>
+              <span class="psp-nav-kv__val"><button type="button" class="psp-nav-link" id="pspGenScrollPending" title="Scroll to cashier lines"><span id="pspGenPendingCount">0</span></button></span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Posted (in view)</span>
+              <span class="psp-nav-kv__val"><span id="pspGenPostedCount">0</span></span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Cashiers (lines)</span>
+              <span class="psp-nav-kv__val"><button type="button" class="psp-nav-link" id="pspGenScrollCashierGrid"><span id="pspGenCashierCount">0</span></button></span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Selected for posting</span>
+              <span class="psp-nav-kv__val" id="pspGenSelectedCount">0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <details class="psp-nav-general psp-nav-filters" open aria-label="Settlement filters">
+      <summary>Filters</summary>
+      <div class="psp-nav-general__body">
+        <div class="psp-nav-general__grid psp-nav-general__grid--filters">
+          <div class="psp-nav-kv psp-nav-kv--control">
+            <span class="psp-nav-kv__label"><label for="pspFrom">From Date</label></span>
+            <div class="psp-nav-kv__control"><input type="date" id="pspFrom" class="input" autocomplete="off" /></div>
+          </div>
+          <div class="psp-nav-kv psp-nav-kv--control">
+            <span class="psp-nav-kv__label"><label for="pspTo">To Date</label></span>
+            <div class="psp-nav-kv__control"><input type="date" id="pspTo" class="input" autocomplete="off" /></div>
+          </div>
+          <div class="psp-nav-kv psp-nav-kv--control">
+            <span class="psp-nav-kv__label"><label for="pspBranchDisplay">Branch</label></span>
+            <div class="psp-nav-kv__control">
+              <input type="text" id="pspBranchDisplay" class="input" readonly autocomplete="off" value="{{ branch_display }}" title="Current branch for this session" />
+              <input type="hidden" id="pspBranch" value="{{ location_code }}" />
+            </div>
+          </div>
+          <div class="psp-nav-kv psp-nav-kv--control">
+            <span class="psp-nav-kv__label"><label for="pspCounterDisplay">POS Counter</label></span>
+            <div class="psp-nav-kv__control">
+              <div class="psp-counter-pick">
+                <input type="text" id="pspCounterDisplay" class="input" readonly autocomplete="off" value="All counters" placeholder="All counters" title="Choose counter from list" />
+                <input type="hidden" id="pspCounter" value="" />
+                <button type="button" class="psp-btn-outline psp-counter-pick__btn" id="pspBtnPickCounter" aria-haspopup="dialog" aria-controls="pspCounterModal"><i class="bi bi-shop-window"></i> Pick…</button>
+              </div>
+            </div>
+          </div>
+          <div class="psp-nav-kv psp-nav-kv--control">
+            <span class="psp-nav-kv__label"><label for="pspCashier">Cashier / User</label></span>
+            <div class="psp-nav-kv__control"><input type="text" id="pspCashier" class="input" placeholder="Filter cashier" autocomplete="off" /></div>
+          </div>
+          <div class="psp-nav-kv psp-nav-kv--control">
+            <span class="psp-nav-kv__label"><label for="pspShift">Shift</label></span>
+            <div class="psp-nav-kv__control">
+              <select id="pspShift" class="input">
+                <option value="">All shifts</option>
+                <option value="1">Shift 1</option>
+                <option value="2">Shift 2</option>
+                <option value="3">Shift 3</option>
+              </select>
+            </div>
+          </div>
+          <div class="psp-nav-kv psp-nav-kv--control">
+            <span class="psp-nav-kv__label"><label for="pspStatus">Settlement status</label></span>
+            <div class="psp-nav-kv__control">
+              <select id="pspStatus" class="input">
+                <option value="">All (pending + posted + cancelled)</option>
+                <option value="Pending" selected>Pending — not yet settled</option>
+                <option value="Posted">Posted — already settled</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+            </div>
+          </div>
+          <div class="psp-nav-kv psp-nav-kv--control">
+            <span class="psp-nav-kv__label"><label for="pspQuickSearch">Search</label></span>
+            <div class="psp-nav-kv__control"><input type="search" id="pspQuickSearch" class="input" placeholder="Bill No / Customer / Remarks" autocomplete="off" /></div>
+          </div>
+        </div>
+      </div>
+      <div class="psp-nav-filters__toolbar" role="toolbar" aria-label="Filter actions">
+        <button type="button" class="psp-btn-load" id="pspBtnLoad"><i class="bi bi-arrow-repeat"></i> Load POS Sales</button>
+        <button type="button" class="psp-btn-outline" id="pspBtnReset">Reset</button>
+        <span class="psp-nav-filters__toolbar-sep" aria-hidden="true">|</span>
+        <button type="button" class="psp-btn-outline" id="pspBtnShowSummary">Show Summary</button>
+        <span class="psp-nav-filters__toolbar-sep" aria-hidden="true">|</span>
+        <button type="button" class="psp-btn-outline" id="pspBtnSearch">Apply filters</button>
+      </div>
+    </details>
+
+    <p class="psp-status-line" id="pspStatusLine" aria-live="polite"></p>
+
+    <div class="psp-main-layout">
+      <section class="psp-table-panel psp-cashier-settle-panel psp-nav-lines-card" aria-label="Cash tender lines">
+        <h2 class="psp-table-panel__title">Lines <span>Cash drawer count · plus Card / Wallet / Credit totals per cashier</span></h2>
+        <div class="psp-lines-toolbar" role="toolbar" aria-label="Line actions">
+          <button type="button" id="pspLineBtnLine">Line</button>
+          <span class="psp-lines-toolbar__sep">|</span>
+          <button type="button" id="pspLineBtnFunction">Function</button>
+          <span class="psp-lines-toolbar__sep">|</span>
+          <button type="button" id="pspLineBtnFind">Find</button>
+          <span class="psp-lines-toolbar__sep">|</span>
+          <button type="button" id="pspLineBtnFilter">Filter</button>
+        </div>
+        <div class="co-table-wrap psp-cashier-grid-wrap psp-cashier-grid-wrap--nav">
+          <table class="co-table psp-cashier-grid psp-cashier-grid--nav">
+            <thead>
+              <tr>
+                <th class="psp-cs-sortable" data-cs-sort="tender" scope="col" aria-sort="none">Tender type<span class="psp-cs-sort-icon" aria-hidden="true"></span></th>
+                <th class="psp-cs-sortable" data-cs-sort="cashier" scope="col" aria-sort="ascending">Cashier / Staff<span class="psp-cs-sort-icon" aria-hidden="true"></span></th>
+                <th class="psp-cs-sortable" data-cs-sort="terminal" scope="col" aria-sort="none">POS terminal<span class="psp-cs-sort-icon" aria-hidden="true"></span></th>
+                <th class="num psp-cs-sortable" data-cs-sort="opening" scope="col" aria-sort="none">Opening float<span class="psp-cs-sort-icon" aria-hidden="true"></span></th>
+                <th class="num psp-cs-sortable" data-cs-sort="transCash" scope="col" aria-sort="none">Trans. amount<span class="psp-cs-sort-icon" aria-hidden="true"></span></th>
+                <th class="num psp-cs-sortable" data-cs-sort="expenses" scope="col" aria-sort="none">Expenses<span class="psp-cs-sort-icon" aria-hidden="true"></span></th>
+                <th class="num psp-cs-sortable" data-cs-sort="expectedClose" scope="col" aria-sort="none">Expected close<span class="psp-cs-sort-icon" aria-hidden="true"></span></th>
+                <th class="num psp-cs-sortable" data-cs-sort="counted" scope="col" aria-sort="none">Counted amount<span class="psp-cs-sort-icon" aria-hidden="true"></span></th>
+                <th class="num psp-cs-sortable" data-cs-sort="difference" scope="col" aria-sort="none">Difference<span class="psp-cs-sort-icon" aria-hidden="true"></span></th>
+                <th class="num psp-cs-sortable" data-cs-sort="stmtBal" scope="col" aria-sort="none">Stmt balance<span class="psp-cs-sort-icon" aria-hidden="true"></span></th>
+              </tr>
+            </thead>
+            <tbody id="pspCashierSettleTbody"></tbody>
+            <tfoot>
+              <tr class="psp-cashier-grid-total">
+                <td colspan="3">Total</td>
+                <td class="num" id="pspLineTotalOpening">0.00</td>
+                <td class="num" id="pspLineTotalTrans">0.00</td>
+                <td class="num" id="pspLineTotalExpenses">0.00</td>
+                <td class="num" id="pspLineTotalExpected">0.00</td>
+                <td class="num" id="pspLineTotalCounted">0.00</td>
+                <td class="num" id="pspLineTotalDifference">0.00</td>
+                <td class="num" id="pspLineTotalStmtBal">0.00</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <div class="psp-cashier-settle-footer">
+          <div class="psp-field">
+            <label for="pspApproved">Approved By</label>
+            <select id="pspApproved" class="input">
+              <option value="">Select…</option>
+              <option value="manager">Store Manager</option>
+              <option value="finance">Finance</option>
+            </select>
+          </div>
+          <div class="psp-field psp-field--remarks-line">
+            <label for="pspSettleRemarks">Settlement remarks</label>
+            <input type="text" id="pspSettleRemarks" class="input" placeholder="Notes for this settlement batch…" maxlength="500" autocomplete="off" />
+          </div>
+        </div>
+      </section>
+
+      <div class="psp-cards-below">
+        <section class="psp-nav-lines-card" aria-label="Payment mode summary">
+          <h3 class="psp-table-panel__title">Payment Mode Summary <span id="pspPaySummaryCashier">—</span></h3>
+          <div class="psp-nav-panel-body">
+            <div class="psp-pay-rows">
+              <div id="pspPayModeSummaryRows"></div>
+              <div class="psp-pay-row"><span>Difference (cash vs expected)</span><strong id="pspBdDiff">0.00</strong></div>
+            </div>
+            <div class="psp-pay-total">
+              <span>Total Collection</span>
+              <span id="pspSettleBalance">0.00</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="psp-nav-lines-card" aria-label="Accounts posting">
+          <h3 class="psp-table-panel__title">Accounts posting <span>GL accounts · amounts from selected bills</span></h3>
+          <div class="psp-nav-panel-body">
+            <p class="psp-nav-panel-hint">Cash, Card clearing, and Wallet come from Tender Types. Expense uses sub accounts under the parent selected in POS Accounts Configuration. Short, Excess, Sales, and Tax are read-only from POS Accounts Configuration.</p>
+            <div class="psp-posting-section">
+              <h4 class="psp-posting-title">2. GL Posting Preview</h4>
+              <div class="psp-posting-table-wrap">
+                <table class="psp-posting-table" aria-label="GL posting preview">
+                  <thead>
+                    <tr>
+                      <th>Bucket / Account Type</th>
+                      <th class="num">Amount</th>
+                      <th>GL Account</th>
+                      <th>Account Name</th>
+                      <th>Dr / Cr</th>
+                      <th>Read Only</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr data-posting-bucket="cash">
+                      <td>Cash</td>
+                      <td class="num" id="pspAmtCash">0.00</td>
+                      <td><input type="hidden" id="pspCashAcc" value="" /><input type="text" id="pspCashAccDisplay" class="input psp-clearing-ro" readonly tabindex="-1" value="—" aria-readonly="true" /></td>
+                      <td id="pspCashAccName">—</td>
+                      <td id="pspCashDrCr">Dr</td>
+                      <td class="psp-posting-check"><input type="checkbox" checked disabled aria-label="Cash account read only" /></td>
+                    </tr>
+                    <tr data-posting-bucket="card">
+                      <td>Card Clearing</td>
+                      <td class="num" id="pspAmtCard">0.00</td>
+                      <td><input type="hidden" id="pspCardAcc" value="" /><input type="text" id="pspCardAccDisplay" class="input psp-clearing-ro" readonly tabindex="-1" value="—" aria-readonly="true" /></td>
+                      <td id="pspCardAccName">—</td>
+                      <td id="pspCardDrCr">Dr</td>
+                      <td class="psp-posting-check"><input type="checkbox" checked disabled aria-label="Card account read only" /></td>
+                    </tr>
+                    <tr data-posting-bucket="expense">
+                      <td>Expense</td>
+                      <td class="num" id="pspAmtExpense">0.00</td>
+                      <td><select id="pspExpenseAcc" class="input"><option value="">Select sub account…</option></select></td>
+                      <td id="pspExpenseAccName">—</td>
+                      <td id="pspExpenseDrCr">Dr</td>
+                      <td class="psp-posting-check"><input type="checkbox" disabled aria-label="Expense sub account selectable" /></td>
+                    </tr>
+                    <tr data-posting-bucket="short">
+                      <td>Short</td>
+                      <td class="num" id="pspAmtShort">0.00</td>
+                      <td><input type="hidden" id="pspShortAcc" value="" /><input type="text" id="pspShortAccDisplay" class="input psp-clearing-ro" readonly tabindex="-1" value="—" aria-readonly="true" /></td>
+                      <td id="pspShortAccName">—</td>
+                      <td id="pspShortDrCr">Dr</td>
+                      <td class="psp-posting-check"><input type="checkbox" checked disabled aria-label="Short account read only" /></td>
+                    </tr>
+                    <tr data-posting-bucket="excess">
+                      <td>Excess</td>
+                      <td class="num" id="pspAmtExcess">0.00</td>
+                      <td><input type="hidden" id="pspExcessAcc" value="" /><input type="text" id="pspExcessAccDisplay" class="input psp-clearing-ro" readonly tabindex="-1" value="—" aria-readonly="true" /></td>
+                      <td id="pspExcessAccName">—</td>
+                      <td id="pspExcessDrCr">Cr</td>
+                      <td class="psp-posting-check"><input type="checkbox" checked disabled aria-label="Excess account read only" /></td>
+                    </tr>
+                    <tr data-posting-bucket="wallet" style="display:none;">
+                      <td>Wallet / UPI clearing</td>
+                      <td class="num" id="pspAmtWallet">0.00</td>
+                      <td><input type="hidden" id="pspWalletAcc" value="" /><input type="text" id="pspWalletAccDisplay" class="input psp-clearing-ro" readonly tabindex="-1" value="—" aria-readonly="true" /></td>
+                      <td id="pspWalletAccName">—</td>
+                      <td id="pspWalletDrCr">Dr</td>
+                      <td class="psp-posting-check"><input type="checkbox" checked disabled aria-label="Wallet account read only" /></td>
+                    </tr>
+                    <tr data-posting-bucket="sales">
+                      <td>Sales Revenue</td>
+                      <td class="num" id="pspAmtSales">0.00</td>
+                      <td><input type="hidden" id="pspSalesAcc" value="" /><input type="text" id="pspSalesAccDisplay" class="input psp-clearing-ro" readonly tabindex="-1" value="—" aria-readonly="true" /></td>
+                      <td id="pspSalesAccName">—</td>
+                      <td id="pspSalesDrCr">Cr</td>
+                      <td class="psp-posting-check"><input type="checkbox" checked disabled aria-label="Sales account read only" /></td>
+                    </tr>
+                    <tr data-posting-bucket="tax">
+                      <td>Tax</td>
+                      <td class="num" id="pspAmtTax">0.00</td>
+                      <td><input type="hidden" id="pspTaxAcc" value="" /><input type="text" id="pspTaxAccDisplay" class="input psp-clearing-ro" readonly tabindex="-1" value="—" aria-readonly="true" /></td>
+                      <td id="pspTaxAccName">—</td>
+                      <td id="pspTaxDrCr">Cr</td>
+                      <td class="psp-posting-check"><input type="checkbox" checked disabled aria-label="Tax account read only" /></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="psp-posting-section">
+              <h4 class="psp-posting-title">3. Additional Details</h4>
+              <div class="psp-additional-grid">
+                <div class="psp-field">
+                  <label for="pspCostCenter">Cost Center <span style="font-weight:600;color:#94a3b8;">(optional)</span></label>
+                  <input type="text" id="pspCostCenter" class="input" placeholder="Dimension code for GL lines" maxlength="40" autocomplete="off" />
+                </div>
+                <div class="psp-field">
+                  <label for="pspDimensionCode">Dimension Code</label>
+                  <input type="text" id="pspDimensionCode" class="input psp-clearing-ro" readonly tabindex="-1" value="{{ branch_display or location_code }}" aria-readonly="true" />
+                </div>
+                <div class="psp-field">
+                  <label for="pspNarration">Narration</label>
+                  <input type="text" id="pspNarration" class="input" placeholder="POS Settlement narration" maxlength="500" autocomplete="off" />
+                </div>
+                <div class="psp-field">
+                  <label for="pspAutoJournalNo">Auto Journal No</label>
+                  <input type="text" id="pspAutoJournalNo" class="input psp-clearing-ro" readonly tabindex="-1" value="—" aria-readonly="true" />
+                </div>
+                <div class="psp-field">
+                  <label for="pspPostDate">Posting date</label>
+                  <input type="date" id="pspPostDate" class="input" />
+                  <p class="muted" id="pspPostDateHint" style="margin:6px 0 0;font-size:0.85rem;">
+                    Closed accounting periods cannot be selected (Period Closing).
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div class="psp-posting-section">
+              <h4 class="psp-posting-title">4. Journal Entry Preview</h4>
+              <div class="psp-posting-table-wrap">
+                <table class="psp-posting-table" aria-label="Journal entry preview">
+                  <thead>
+                    <tr>
+                      <th style="width:52px;">#</th>
+                      <th style="width:78px;">Dr / Cr</th>
+                      <th>Account Code</th>
+                      <th>Account Name</th>
+                      <th class="num">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pspJournalPreviewBody">
+                    <tr><td colspan="5" style="text-align:center;color:#64748b;">Select bills and click Preview Journal.</td></tr>
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colspan="2">Total Debit</td>
+                      <td class="num" id="pspJournalTotalDebit">0.00</td>
+                      <td>Total Credit</td>
+                      <td class="num" id="pspJournalTotalCredit">0.00</td>
+                    </tr>
+                    <tr>
+                      <td colspan="4">Difference</td>
+                      <td class="num" id="pspJournalDifference">0.00</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+            <div class="psp-nav-panel-toolbar">
+              <button type="button" class="psp-btn-outline" id="pspBtnPreviewJournal">Preview Journal</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div id="pspCounterModal" class="psp-counter-modal" hidden aria-hidden="true">
+      <div class="psp-counter-modal__backdrop" id="pspCounterModalBackdrop"></div>
+      <div class="psp-counter-modal__card" role="dialog" aria-modal="true" aria-labelledby="pspCounterModalTitle">
+        <div class="psp-counter-modal__head">
+          <h2 id="pspCounterModalTitle">POS Counter</h2>
+          <button type="button" class="psp-counter-modal__close" id="pspCounterModalClose" aria-label="Close">&times;</button>
+        </div>
+        <input type="search" id="pspCounterModalSearch" class="input" placeholder="Search name or code…" autocomplete="off" />
+        <div class="psp-counter-modal__list" id="pspCounterModalList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="application/json" id="pspClosedPeriodsJson">{{ (closed_periods or [])|tojson }}</script>
+<script src="{{ url_for('static', filename='js/period_date_guard.js') }}?v=1"></script>
+<script>
+  (function () {
+    var posNonce = {{ pos_save_nonce | default('') | tojson }};
+    if (posNonce) window.__POS_SAVE_NONCE = posNonce;
+  })();
+</script>
+<script>
+(function () {
+  var apiUrl = {{ api_bills_url|tojson }};
+  var apiCountersUrl = {{ api_counters_url|tojson }};
+  var apiDraftsUrl = {{ api_settlement_drafts_url|tojson }};
+  var apiCoaUrl = {{ api_settlement_coa_url|tojson }};
+  var apiTenderDefaultsUrl = {{ api_settlement_tender_defaults_url|default('', true)|tojson }};
+  var apiPaymentModeSummaryUrl = {{ api_settlement_payment_mode_summary_url|default('', true)|tojson }};
+  var apiDraftGenerateUrl = {{ api_settlement_draft_generate_url|tojson }};
+  var apiDraftMutationUrl = {{ api_settlement_draft_mutation_url|tojson }};
+  var apiReverseGlUrl = {{ api_settlement_reverse_gl_url|tojson }};
+  var settlementListUrl = {{ settlement_list_url|tojson }};
+  var apiValidatePosClosedUrl = {{ api_validate_pos_closed_url|tojson }};
+  var defaultSettlementDate = {{ default_settlement_date|tojson }};
+  var pspPeriodGuard = null;
+  var statusEl = document.getElementById('pspStatusLine');
+  var cashierSettleByUser = {};
+  var lastCashierScopeSig = '';
+  var cashierGridSort = { key: 'cashier', dir: 'asc' };
+  var rows = [];
+  var counterPickRows = [];
+  var counterModalEl = document.getElementById('pspCounterModal');
+  var counterModalSearch = document.getElementById('pspCounterModalSearch');
+  var counterModalList = document.getElementById('pspCounterModalList');
+  var currentDraftId = null;
+  var coaAccounts = [];
+  var configuredExpenseParentAcc = '';
+  var initialDraftId = {{ initial_draft_id|default(None)|tojson }};
+  var initialFromDate = {{ initial_from_date|default(None)|tojson }};
+  var initialToDate = {{ initial_to_date|default(None)|tojson }};
+  var appliedInitialDraftPick = false;
+  var _paySummaryTimer = null;
+  var _paySummaryFetchSeq = 0;
+  var _billsLoadAbort = null;
+  var PAY_SUMMARY_MAX_BILLS = 150;
+  window._pspPayModeLabelMap = window._pspPayModeLabelMap || {};
+  window._pspTenderGlMap = window._pspTenderGlMap || {};
+
+  function inr(n) {
+    var x = Number(n);
+    if (!isFinite(x)) x = 0;
+    return x.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function pct(part, whole) {
+    if (!whole || whole <= 0) return '0%';
+    return (100 * part / whole).toFixed(2) + '%';
+  }
+
+  function setStatus(msg, kind) {
+    statusEl.textContent = msg || '';
+    statusEl.className = 'psp-status-line' + (kind === 'ok' ? ' psp-ok' : kind === 'warn' ? ' psp-warn' : '');
+  }
+
+  function setBusy(on, msg) {
+    var el = document.getElementById('pspBusyOverlay');
+    if (!el) return;
+    var label = el.querySelector('.psp-busy-overlay__text');
+    if (label) label.textContent = msg || 'Please wait…';
+    el.hidden = !on;
+    el.setAttribute('aria-hidden', on ? 'false' : 'true');
+  }
+
+  function withBranch(url) {
+    var br = (document.getElementById('pspBranch') && document.getElementById('pspBranch').value || '').trim();
+    if (!br) return url;
+    return url + (url.indexOf('?') >= 0 ? '&' : '?') + 'location_code=' + encodeURIComponent(br);
+  }
+
+  function fillCoaSelect(selId, preferredCodes) {
+    var sel = document.getElementById(selId);
+    if (!sel) return;
+    if (sel.tagName !== 'SELECT') return;
+    sel.innerHTML = '<option value="">Select…</option>';
+    coaAccounts.forEach(function (a) {
+      var o = document.createElement('option');
+      o.value = a.code;
+      o.textContent = (a.code + ' — ' + (a.name || '')).trim();
+      sel.appendChild(o);
+    });
+    var prefs = preferredCodes || [];
+    for (var p = 0; p < prefs.length; p++) {
+      var want = String(prefs[p] || '').trim();
+      if (!want) continue;
+      for (var i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === want) {
+          sel.selectedIndex = i;
+          return;
+        }
+      }
+    }
+  }
+
+  function setClearingReadonlyField(hiddenId, displayId, code, meta) {
+    var h = document.getElementById(hiddenId);
+    var d = document.getElementById(displayId);
+    if (!h || !d) return;
+    var c = String(code || '').trim();
+    h.value = c;
+    if (!c) {
+      d.value = '—';
+      d.title = '';
+      return;
+    }
+    var coaName = '';
+    for (var i = 0; i < coaAccounts.length; i++) {
+      if (String(coaAccounts[i].code || '').trim() === c) {
+        coaName = String(coaAccounts[i].name || '').trim();
+        break;
+      }
+    }
+    var m = meta && typeof meta === 'object' ? meta : null;
+    var tenderNm = m && m.tender_name ? String(m.tender_name).trim() : '';
+    var label = coaName || tenderNm;
+    d.value = c;
+    var tc = m && m.tender_code ? String(m.tender_code).trim() : '';
+    var cat = m && m.category ? String(m.category).trim() : '';
+    d.title = tc ? 'Active tender ' + tc + (cat ? ' · ' + cat : '') : '';
+  }
+
+  function fetchAndApplyTenderClearingAccounts() {
+    function clearClearingFields() {
+      setClearingReadonlyField('pspCashAcc', 'pspCashAccDisplay', '', null);
+      setClearingReadonlyField('pspCardAcc', 'pspCardAccDisplay', '', null);
+      setClearingReadonlyField('pspWalletAcc', 'pspWalletAccDisplay', '', null);
+    }
+    function setConfiguredReadonlyAccount(hiddenId, code) {
+      setClearingReadonlyField(hiddenId, hiddenId + 'Display', code, null);
+      var d = document.getElementById(hiddenId + 'Display');
+      if (d) d.title = 'Read-only POS settlement account from POS Accounts Configuration';
+    }
+    function fillExpenseSubAccountSelect(parentCode) {
+      configuredExpenseParentAcc = String(parentCode || '').trim();
+      var sel = document.getElementById('pspExpenseAcc');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">Select sub account…</option>';
+      if (!configuredExpenseParentAcc) {
+        sel.innerHTML = '<option value="">Configure expense parent first…</option>';
+        return;
+      }
+      var n = 0;
+      coaAccounts.forEach(function (a) {
+        var parent = String(a.parent_code || '').trim();
+        var code = String(a.code || '').trim();
+        var active = String(a.status || 'ACTIVE').trim().toUpperCase() === 'ACTIVE';
+        if (parent !== configuredExpenseParentAcc || !code || !active || !a.is_postable) return;
+        var o = document.createElement('option');
+        o.value = code;
+        o.textContent = (code + ' — ' + (a.name || '')).trim();
+        sel.appendChild(o);
+        n += 1;
+      });
+      if (!n) {
+        sel.innerHTML = '<option value="">No postable sub accounts found…</option>';
+      }
+    }
+    function applyConfiguredSettlementAccounts(a) {
+      a = a || {};
+      fillExpenseSubAccountSelect(a.expense_acc || '');
+      setConfiguredReadonlyAccount('pspShortAcc', a.short_acc || '');
+      setConfiguredReadonlyAccount('pspExcessAcc', a.excess_acc || '');
+      setConfiguredReadonlyAccount('pspTaxAcc', a.tax_acc || '');
+    }
+    function applySalesFromPayload(a) {
+      var code = a && a.sales_acc ? String(a.sales_acc).trim() : '';
+      if (!code) code = '4100';
+      setClearingReadonlyField('pspSalesAcc', 'pspSalesAccDisplay', code, null);
+      var sd = document.getElementById('pspSalesAccDisplay');
+      if (sd && code) {
+        sd.value = code;
+        sd.title = 'Read-only POS revenue account from POS Accounts Configuration';
+      }
+    }
+    if (!apiTenderDefaultsUrl) {
+      clearClearingFields();
+      applySalesFromPayload({ sales_acc: '4100' });
+      applyConfiguredSettlementAccounts({});
+      return Promise.resolve();
+    }
+    return fetch(withBranch(apiTenderDefaultsUrl), { credentials: 'same-origin' })
+      .then(function (res) {
+        return res.json();
+      })
+      .then(function (td) {
+        if (!td.success || !td.accounts) {
+          clearClearingFields();
+          applySalesFromPayload({ sales_acc: '4100' });
+          applyConfiguredSettlementAccounts({});
+          return;
+        }
+        var a = td.accounts;
+        window._pspTenderGlMap = a.tender_gl_by_code || {};
+        window._pspActiveTenders = Array.isArray(a.tender_types) ? a.tender_types : [];
+        (window._pspActiveTenders || []).forEach(function (t) {
+          if (!t || !t.code) return;
+          window._pspPayModeLabelMap = window._pspPayModeLabelMap || {};
+          window._pspPayModeLabelMap[String(t.code).toLowerCase()] = t.name || t.code;
+        });
+        setClearingReadonlyField('pspCashAcc', 'pspCashAccDisplay', a.cash_acc || '', a.cash_clearing);
+        setClearingReadonlyField('pspCardAcc', 'pspCardAccDisplay', a.card_acc || '', a.card_clearing);
+        setClearingReadonlyField('pspWalletAcc', 'pspWalletAccDisplay', a.wallet_acc || '', a.wallet_clearing);
+        applySalesFromPayload(a);
+        applyConfiguredSettlementAccounts(a);
+      })
+      .catch(function () {
+        clearClearingFields();
+        applySalesFromPayload({ sales_acc: '4100' });
+        applyConfiguredSettlementAccounts({});
+      });
+  }
+
+  function loadCoaOptions(done) {
+    fetch(withBranch(apiCoaUrl), { credentials: 'same-origin' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) {
+          setStatus(data.error || 'Could not load chart of accounts', 'warn');
+          coaAccounts = [];
+        } else {
+          coaAccounts = data.accounts || [];
+          fillCoaSelect('pspShortAcc', []);
+          fillCoaSelect('pspExcessAcc', []);
+          fillCoaSelect('pspTaxAcc', []);
+        }
+        return fetchAndApplyTenderClearingAccounts();
+      })
+      .catch(function (e) {
+        setStatus(e.message || 'COA network error', 'warn');
+      })
+      .finally(function () {
+        renderGlPostingPreview();
+        if (done) done();
+      });
+  }
+
+  function renderDraftJournal(detail) {
+    renderJournalPreviewRows((detail && detail.journal_lines) || []);
+    var auto = document.getElementById('pspAutoJournalNo');
+    if (auto && detail) auto.value = detail.voucher_no || detail.draft_id || currentDraftId || '—';
+  }
+
+  function applyCashierMetaFromDraft(meta) {
+    cashierSettleByUser = {};
+    var csRows = (meta && meta.cashier_settlement_rows) || [];
+    if (!Array.isArray(csRows)) return;
+    csRows.forEach(function (row) {
+      if (!row || typeof row !== 'object') return;
+      var ck = normCashierKey(row.cashier);
+      if (!ck) return;
+      var tender = String(row.tender_code || 'cash').trim().toLowerCase() || 'cash';
+      var st = getCashierRowState(ck);
+      var actual = Number(row.actual_cash) || 0;
+      if (tender === 'cash') {
+        st.opening = Number(row.opening_cash) || 0;
+        st.expenses = Number(row.expenses) || 0;
+        st.actual = actual;
+      } else {
+        if (!st.countedTenders) st.countedTenders = {};
+        st.countedTenders[tender] = actual;
+      }
+    });
+  }
+
+  /** Open a draft from the batch list (?draft=id) — load bills, counts, and journal. */
+  function openDraftWorkflow(draftId) {
+    var id = Number(draftId);
+    if (!isFinite(id) || id <= 0) return;
+    setBusy(true, 'Opening settlement…');
+    setStatus('Opening draft #' + id + '…', '');
+    fetch(withBranch(apiDraftMutationUrl), {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ action: 'get', draft_id: id }),
+    })
+      .then(function (res) {
+        return res.json().then(function (d) {
+          return { ok: res.ok, d: d };
+        });
+      })
+      .then(function (r) {
+        if (!r.ok || !r.d || !r.d.success) {
+          setStatus((r.d && r.d.error) || 'Could not open settlement draft.', 'warn');
+          return;
+        }
+        var detail = r.d.detail || {};
+        currentDraftId = id;
+        appliedInitialDraftPick = true;
+        setActiveDraftLabel();
+        renderDraftJournal(detail);
+        var meta = detail.meta && typeof detail.meta === 'object' ? detail.meta : {};
+        var rem = String(meta.remarks_panel || detail.narration || '').trim();
+        var narrEl = document.getElementById('pspNarration');
+        var settleRemEl = document.getElementById('pspSettleRemarks');
+        if (narrEl && rem) narrEl.value = rem;
+        if (settleRemEl && rem) settleRemEl.value = rem;
+
+        rows = (r.d.bills || []).map(function (b) {
+          return Object.assign({ selected: true }, b);
+        });
+
+        // Clear filters so draft bills are not hidden from the Lines grid.
+        var stEl = document.getElementById('pspStatus');
+        var cshEl = document.getElementById('pspCashier');
+        var qsEl = document.getElementById('pspQuickSearch');
+        var ctrEl = document.getElementById('pspCounter');
+        var ctrDisp = document.getElementById('pspCounterDisplay');
+        if (stEl) stEl.value = '';
+        if (cshEl) cshEl.value = '';
+        if (qsEl) qsEl.value = '';
+        if (ctrEl) ctrEl.value = '';
+        if (ctrDisp) ctrDisp.value = 'All counters';
+
+        var billDates = rows
+          .map(function (b) { return String(b.billDate || '').trim(); })
+          .filter(function (d) { return d.length === 10; })
+          .sort();
+        if (billDates.length) {
+          var fromEl = document.getElementById('pspFrom');
+          var toEl = document.getElementById('pspTo');
+          var postEl = document.getElementById('pspPostDate');
+          if (fromEl) fromEl.value = billDates[0];
+          if (toEl) toEl.value = billDates[billDates.length - 1];
+          if (postEl) postEl.value = billDates[billDates.length - 1];
+        }
+        applyCashierMetaFromDraft(meta);
+        lastCashierScopeSig = null;
+        cashierGridSort = { key: 'cashier', dir: 'asc' };
+        rebuildCashierSettleGridStructure();
+        updateCashierSettleRowComputeds();
+        window.requestAnimationFrame(function () {
+          refreshSummaries();
+          renderGlPostingPreview();
+          var expected = Array.isArray(r.d.bill_nos) ? r.d.bill_nos.length : rows.length;
+          var msg =
+            'Opened draft #' +
+            id +
+            ' (' +
+            String(detail.status || 'DRAFT') +
+            ') · ' +
+            rows.length +
+            ' bill(s)';
+          if (expected > rows.length) {
+            msg += ' (draft lists ' + expected + ' — some bills missing in BILLHDR)';
+          }
+          setStatus(msg + '.', rows.length ? 'ok' : 'warn');
+        });
+      })
+      .catch(function (e) {
+        setStatus(e.message || 'Network error opening draft', 'warn');
+      })
+      .finally(function () {
+        setBusy(false);
+      });
+  }
+
+  function setActiveDraftLabel() {
+    var el = document.getElementById('pspDraftIdLabel');
+    if (!el) return;
+    if (!currentDraftId) {
+      el.textContent = 'Active draft: —';
+      var auto0 = document.getElementById('pspAutoJournalNo');
+      if (auto0) auto0.value = '—';
+      return;
+    }
+    el.textContent = 'Active draft: #' + currentDraftId;
+    var auto = document.getElementById('pspAutoJournalNo');
+    if (auto) auto.value = '#' + currentDraftId;
+  }
+
+  function loadDrafts() {
+    var tbOpen = document.getElementById('pspDraftsOpenTbody');
+    var tbPosted = document.getElementById('pspDraftsPostedTbody');
+    var hasTables = !!(tbOpen && tbPosted);
+
+    function showError(msg) {
+      var esc = escapeHtml(msg || 'Draft list failed');
+      if (hasTables) {
+        tbOpen.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:12px;color:#b91c1c;">' + esc + '</td></tr>';
+        tbPosted.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:12px;color:#b91c1c;">' + esc + '</td></tr>';
+      } else {
+        setStatus(msg || 'Draft list failed', 'warn');
+      }
+    }
+
+    function renderEmptyOpen() {
+      if (!hasTables) return;
+      var tr0 = document.createElement('tr');
+      tr0.innerHTML =
+        '<td colspan="5" style="text-align:center;padding:12px;color:#64748b;">No open drafts — select pending bills and use <strong>Generate Settlement</strong>.</td>';
+      tbOpen.appendChild(tr0);
+    }
+
+    function renderEmptyPosted() {
+      if (!hasTables) return;
+      var tr1 = document.createElement('tr');
+      tr1.innerHTML =
+        '<td colspan="5" style="text-align:center;padding:12px;color:#64748b;">No posted settlement batches for this branch yet.</td>';
+      tbPosted.appendChild(tr1);
+    }
+
+    var draftUrl = withBranch(apiDraftsUrl);
+    draftUrl += (draftUrl.indexOf('?') >= 0 ? '&' : '?') + 'limit=80';
+    fetch(draftUrl, { credentials: 'same-origin' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (hasTables) {
+          tbOpen.innerHTML = '';
+          tbPosted.innerHTML = '';
+        }
+        if (!data.success) {
+          showError(data.error || 'Draft list failed');
+          setActiveDraftLabel();
+          return;
+        }
+        var list = data.drafts || [];
+
+        if (!appliedInitialDraftPick && initialDraftId != null) {
+          var want = Number(initialDraftId);
+          if (isFinite(want) && want > 0) {
+            var found = list.some(function (d) { return Number(d.draft_id) === want; });
+            if (found) {
+              currentDraftId = want;
+              appliedInitialDraftPick = true;
+              setStatus('Draft #' + currentDraftId + ' (from batch list). Use Verify / Post as needed.', 'ok');
+            }
+          }
+        }
+
+        var openList = list.filter(function (d) {
+          var s = String(d.status || '').trim().toUpperCase();
+          return s === 'DRAFT' || s === 'VERIFIED';
+        });
+        var postedList = list.filter(function (d) {
+          return String(d.status || '').trim().toUpperCase() === 'POSTED';
+        });
+        postedList.sort(function (a, b) {
+          return String(b.posted_at || '').localeCompare(String(a.posted_at || ''));
+        });
+
+        if (!hasTables) {
+          setActiveDraftLabel();
+          return;
+        }
+
+        if (!openList.length) {
+          renderEmptyOpen();
+        } else {
+          openList.forEach(function (d) {
+            var tr = document.createElement('tr');
+            tr.style.cursor = 'pointer';
+            tr.dataset.draftId = String(d.draft_id);
+            tr.dataset.mode = 'open';
+            var st = String(d.status || '');
+            var chip = '<span class="nexa-badge nexa-badge--pending">' + escapeHtml(st) + '</span>';
+            if (st === 'VERIFIED') {
+              chip = '<span class="nexa-badge nexa-badge--posted">' + escapeHtml(st) + '</span>';
+            }
+            tr.innerHTML =
+              '<td class="sl-no">' + escapeHtml(String(d.draft_id)) + '</td>' +
+              '<td>' + chip + '</td>' +
+              '<td class="num">' + escapeHtml(String(d.bill_count || 0)) + '</td>' +
+              '<td>' + escapeHtml(String(d.verified_at || '—')) + '</td>' +
+              '<td>' + escapeHtml(String(d.created_at || '')) + '</td>';
+            tr.addEventListener('click', function () {
+              currentDraftId = parseInt(tr.dataset.draftId, 10) || null;
+              setActiveDraftLabel();
+              setStatus('Selected draft #' + currentDraftId + '. Use Verify then Post.', 'ok');
+            });
+            tbOpen.appendChild(tr);
+          });
+        }
+
+        if (!postedList.length) {
+          renderEmptyPosted();
+        } else {
+          postedList.forEach(function (d) {
+            var tr = document.createElement('tr');
+            tr.style.cursor = 'pointer';
+            tr.dataset.draftId = String(d.draft_id);
+            tr.dataset.mode = 'posted';
+            tr.innerHTML =
+              '<td class="sl-no">' + escapeHtml(String(d.draft_id)) + '</td>' +
+              '<td class="num">' + escapeHtml(String(d.bill_count || 0)) + '</td>' +
+              '<td>' + escapeHtml(String(d.voucher_no || '—')) + '</td>' +
+              '<td>' + escapeHtml(String(d.posted_at || '—')) + '</td>' +
+              '<td>' + escapeHtml(String(d.created_at || '')) + '</td>';
+            tr.addEventListener('click', function () {
+              currentDraftId = parseInt(tr.dataset.draftId, 10) || null;
+              setActiveDraftLabel();
+              var vn = String(d.voucher_no || '—');
+              setStatus('Posted batch #' + currentDraftId + ' · GL voucher ' + vn + '.', '');
+            });
+            tbPosted.appendChild(tr);
+          });
+        }
+        setActiveDraftLabel();
+      })
+      .catch(function (e) {
+        showError(e.message || 'Network error');
+        setActiveDraftLabel();
+      });
+  }
+
+  function selectedRows() {
+    return rows.filter(function (r) { return r.selected; });
+  }
+
+  function rowMatchesFilters(r) {
+    var csh = (document.getElementById('pspCashier').value || '').trim().toLowerCase();
+    var ctr = (document.getElementById('pspCounter').value || '').trim();
+    var st = (document.getElementById('pspStatus').value || '').trim();
+    if (csh && String(r.cashier).toLowerCase().indexOf(csh) < 0) return false;
+    if (ctr) {
+      var billCtr = String(r.counter != null && r.counter !== undefined ? r.counter : '').trim();
+      if (billCtr !== String(ctr).trim()) return false;
+    }
+    if (st && String(r.settlementStatus || 'Pending') !== st) return false;
+    var q = (document.getElementById('pspQuickSearch').value || '').trim().toLowerCase();
+    if (q) {
+      var blob = [r.billNo, r.customer, r.remarks, r.paymentType].join(' ').toLowerCase();
+      if (blob.indexOf(q) < 0) return false;
+    }
+    return true;
+  }
+
+  function visibleRows() {
+    return rows.filter(rowMatchesFilters);
+  }
+
+  function aggregate(list) {
+    var total = 0, cash = 0, card = 0, wallet = 0, credit = 0, pending = 0, posted = 0;
+    list.forEach(function (r) {
+      var net = Number(r.netAmount) || 0;
+      total += net;
+      var ca = Number(r.cashAmount) || 0;
+      var cd = Number(r.cardAmount) || 0;
+      var wa = Number(r.walletAmount) || 0;
+      var crAmt = Number(r.creditAmount) || 0;
+      if (ca || cd || wa || crAmt) {
+        cash += ca;
+        card += cd;
+        wallet += wa;
+        credit += crAmt;
+      } else {
+        var pt = (r.paymentType || '').toLowerCase();
+        if (pt.indexOf('card') >= 0) card += net;
+        else if (pt.indexOf('wallet') >= 0 || pt.indexOf('online') >= 0) wallet += net;
+        else if (pt.indexOf('credit') >= 0) credit += net;
+        else if (pt.indexOf('mixed') >= 0) {
+          cash += net * 0.5;
+          card += net * 0.5;
+        } else cash += net;
+      }
+      var st = (r.settlementStatus || 'Pending').trim();
+      if (st === 'Posted') posted += net;
+      else if (st === 'Pending') pending += net;
+    });
+    return { total: total, cash: cash, card: card, wallet: wallet, credit: credit, pending: pending, posted: posted };
+  }
+
+  function normCashierKey(ck) {
+    return String(ck || '—');
+  }
+
+  function cashiersInScope() {
+    var map = {};
+    visibleRows().forEach(function (r) {
+      map[normCashierKey(r.cashier)] = true;
+    });
+    return Object.keys(map).sort(function (a, b) {
+      return a.localeCompare(b);
+    });
+  }
+
+  function cashierScopeSig() {
+    return cashiersInScope()
+      .map(function (ck) {
+        return ck + '\x1f' + tendersForCashierLine(ck).join(',');
+      })
+      .join('\x1e');
+  }
+
+  function getCashierRowState(ck) {
+    var k = normCashierKey(ck);
+    if (!cashierSettleByUser[k]) {
+      cashierSettleByUser[k] = {
+        opening: 0,
+        expenses: 0,
+        actual: 0,
+        countedCard: 0,
+        countedWallet: 0,
+        countedCredit: 0,
+        countedTenders: {},
+      };
+    }
+    var o = cashierSettleByUser[k];
+    if (o.countedCard == null) o.countedCard = 0;
+    if (o.countedWallet == null) o.countedWallet = 0;
+    if (o.countedCredit == null) o.countedCredit = 0;
+    if (!o.countedTenders) o.countedTenders = {};
+    return o;
+  }
+
+  function getCountedForTender(st, tender) {
+    if (tender === 'cash') return Number(st.actual) || 0;
+    if (st.countedTenders && st.countedTenders[tender] != null) return Number(st.countedTenders[tender]) || 0;
+    if (tender === 'card') return Number(st.countedCard) || 0;
+    if (tender === 'wallet') return Number(st.countedWallet) || 0;
+    if (tender === 'credit') return Number(st.countedCredit) || 0;
+    return 0;
+  }
+
+  function normalizeTenderKey(code) {
+    var c = String(code || '').trim().toUpperCase();
+    if (!c) return 'generic';
+    if (c === 'VISA' || c === 'MC' || c === 'AMEX' || c === 'MAESTRO' || c === 'RUPAY') return 'card';
+    return c.toLowerCase();
+  }
+
+  function aggregateBillTenderAmounts(bills) {
+    var out = {};
+    (bills || []).forEach(function (r) {
+      var ta = r.tenderAmounts;
+      if (ta && typeof ta === 'object' && Object.keys(ta).length) {
+        Object.keys(ta).forEach(function (code) {
+          var k = normalizeTenderKey(code);
+          out[k] = (out[k] || 0) + (Number(ta[code]) || 0);
+        });
+        return;
+      }
+      var a = aggregate([r]);
+      if (Math.abs(a.cash) > 0.005) out.cash = (out.cash || 0) + a.cash;
+      if (Math.abs(a.card) > 0.005) out.card = (out.card || 0) + a.card;
+      if (Math.abs(a.wallet) > 0.005) out.wallet = (out.wallet || 0) + a.wallet;
+      if (Math.abs(a.credit) > 0.005) out.credit = (out.credit || 0) + a.credit;
+    });
+    return out;
+  }
+
+  function pruneCashierSettleState() {
+    var allowed = {};
+    cashiersInScope().forEach(function (k) {
+      allowed[k] = true;
+    });
+    Object.keys(cashierSettleByUser).forEach(function (k) {
+      if (!allowed[k]) delete cashierSettleByUser[k];
+    });
+  }
+
+  function syncCashierInputsFromDom() {
+    var tb = document.getElementById('pspCashierSettleTbody');
+    if (!tb) return;
+    Array.prototype.forEach.call(tb.querySelectorAll('tr[data-cashier]'), function (tr) {
+      var ck = tr.getAttribute('data-cashier');
+      if (!ck) return;
+      var ten = tr.getAttribute('data-tender') || 'cash';
+      var st = getCashierRowState(ck);
+      if (ten === 'cash') {
+        var o = tr.querySelector('[data-cs-field="opening"]');
+        var ex = tr.querySelector('[data-cs-field="expenses"]');
+        var ac = tr.querySelector('[data-cs-field="actual"]');
+        if (o) st.opening = Number(o.value) || 0;
+        if (ex) st.expenses = Number(ex.value) || 0;
+        if (ac) st.actual = Number(ac.value) || 0;
+        return;
+      }
+      var inp = tr.querySelector('[data-cs-field="countedTender"]');
+      if (!st.countedTenders) st.countedTenders = {};
+      if (inp) st.countedTenders[ten] = Number(inp.value) || 0;
+    });
+  }
+
+  function tenderLabel(code) {
+    var lc = String(code || '').trim().toLowerCase();
+    if (window._pspPayModeLabelMap && window._pspPayModeLabelMap[lc]) return window._pspPayModeLabelMap[lc];
+    if (lc === 'cash') return 'Cash';
+    if (lc === 'card') return 'Card';
+    if (lc === 'wallet') return 'Wallet';
+    if (lc === 'credit') return 'Credit';
+    if (lc === 'voucher') return 'Voucher';
+    return String(code || '—').replace(/_/g, ' ').replace(/\b\w/g, function (ch) { return ch.toUpperCase(); });
+  }
+
+  function tenderSortRank(code) {
+    var lc = String(code || '').trim().toLowerCase();
+    var active = window._pspActiveTenders || [];
+    for (var i = 0; i < active.length; i++) {
+      if (String(active[i].code || '').toLowerCase() === lc) {
+        return Number(active[i].sort_order) || 0;
+      }
+    }
+    var o = { cash: 0, card: 1, voucher: 2, wallet: 3, credit: 4 };
+    return o.hasOwnProperty(lc) ? o[lc] : 999;
+  }
+
+  function tendersForCashierLine(ck) {
+    var bills = visibleRows().filter(function (r) {
+      return normCashierKey(r.cashier) === ck && r.selected;
+    });
+    var amts = aggregateBillTenderAmounts(bills);
+    var list = [];
+    var active = window._pspActiveTenders || [];
+    if (active.length) {
+      active.forEach(function (t) {
+        var k = String((t && t.code) || '').trim().toLowerCase();
+        if (k && list.indexOf(k) < 0) list.push(k);
+      });
+    } else {
+      list = ['cash'];
+    }
+    // Keep any unknown paymodes that have activity on selected bills
+    Object.keys(amts || {}).forEach(function (k) {
+      if (list.indexOf(k) < 0) list.push(k);
+    });
+    list.sort(function (a, b) {
+      var ra = tenderSortRank(a);
+      var rb = tenderSortRank(b);
+      if (ra !== rb) return ra - rb;
+      return String(a).localeCompare(String(b));
+    });
+    return list;
+  }
+
+  function transForTender(tenderAmts, tender) {
+    return Number((tenderAmts || {})[tender]) || 0;
+  }
+
+  function deriveCashierBase(ck) {
+    var st = getCashierRowState(ck);
+    var bills = visibleRows().filter(function (r) {
+      return normCashierKey(r.cashier) === ck && r.selected;
+    });
+    var agg = aggregate(bills);
+    var tenderAmts = aggregateBillTenderAmounts(bills);
+    var termMap = {};
+    bills.forEach(function (r) {
+      var c = String(r.counter != null && r.counter !== undefined ? r.counter : '').trim() || '—';
+      termMap[c] = true;
+    });
+    var termStr =
+      Object.keys(termMap)
+        .sort(function (a, b) {
+          return a.localeCompare(b);
+        })
+        .join(', ') || '—';
+    return { st: st, bills: bills, agg: agg, tenderAmts: tenderAmts, termStr: termStr };
+  }
+
+  function deriveCashierTenderLine(ck, tender) {
+    var base = deriveCashierBase(ck);
+    var tenderAmts = base.tenderAmts || {};
+    var trans = transForTender(tenderAmts, tender);
+    var settleBal = 0;
+    Object.keys(tenderAmts).forEach(function (k) {
+      settleBal += Number(tenderAmts[k]) || 0;
+    });
+    var out = {
+      st: base.st,
+      bills: base.bills,
+      agg: base.agg,
+      termStr: base.termStr,
+      tender: tender,
+      tenderLabel: tenderLabel(tender),
+      trans: trans,
+      settleBal: settleBal,
+    };
+    if (tender === 'cash') {
+      var expectedClose = Number(base.st.opening) + trans - Number(base.st.expenses);
+      var actual = Number(base.st.actual) || 0;
+      out.expectedClose = expectedClose;
+      out.actual = actual;
+      out.diff = actual - expectedClose;
+    } else {
+      var cnt = getCountedForTender(base.st, tender);
+      out.expectedClose = trans;
+      out.actual = cnt;
+      out.diff = cnt - trans;
+    }
+    return out;
+  }
+
+  function lineSortMetricRow(row, sortKey) {
+    var ck = row.cashier;
+    var tender = row.tender;
+    var d = deriveCashierTenderLine(ck, tender);
+    switch (sortKey) {
+      case 'tender':
+        return { type: 's', v: d.tenderLabel };
+      case 'cashier':
+        return { type: 's', v: ck };
+      case 'terminal':
+        return { type: 's', v: d.termStr };
+      case 'opening':
+        return { type: 'n', v: tender === 'cash' ? Number(d.st.opening) || 0 : 0 };
+      case 'transCash':
+        return { type: 'n', v: d.trans };
+      case 'expenses':
+        return { type: 'n', v: tender === 'cash' ? Number(d.st.expenses) || 0 : 0 };
+      case 'expectedClose':
+        return { type: 'n', v: d.expectedClose };
+      case 'counted':
+        return { type: 'n', v: d.actual != null ? d.actual : 0 };
+      case 'difference':
+        return { type: 'n', v: d.diff != null ? d.diff : 0 };
+      case 'stmtBal':
+        return { type: 'n', v: tender === 'cash' ? d.settleBal : d.trans };
+      default:
+        return { type: 's', v: ck };
+    }
+  }
+
+  function sortedLineRowsForGrid() {
+    var cashiers = cashiersInScope().slice();
+    var sk = cashierGridSort.key;
+    var dir = cashierGridSort.dir;
+    var flat = [];
+    cashiers.forEach(function (ck) {
+      tendersForCashierLine(ck).forEach(function (t) {
+        flat.push({ cashier: ck, tender: t });
+      });
+    });
+    flat.sort(function (a, b) {
+      var ma = lineSortMetricRow(a, sk);
+      var mb = lineSortMetricRow(b, sk);
+      var c = 0;
+      if (ma.type === 'n' && mb.type === 'n') {
+        if (ma.v < mb.v) c = -1;
+        else if (ma.v > mb.v) c = 1;
+      } else {
+        c = String(ma.v).localeCompare(String(mb.v), undefined, { numeric: true, sensitivity: 'base' });
+      }
+      if (c !== 0) return dir === 'desc' ? -c : c;
+      var c0 = normCashierKey(a.cashier).localeCompare(normCashierKey(b.cashier));
+      if (c0 !== 0) return c0;
+      return tenderSortRank(a.tender) - tenderSortRank(b.tender);
+    });
+    return flat;
+  }
+
+  function updateCashierGridSortIndicators() {
+    var thead = document.querySelector('.psp-cashier-grid--nav thead');
+    if (!thead) return;
+    Array.prototype.forEach.call(thead.querySelectorAll('th[data-cs-sort]'), function (th) {
+      var key = th.getAttribute('data-cs-sort');
+      var icon = th.querySelector('.psp-cs-sort-icon');
+      var active = key === cashierGridSort.key;
+      th.classList.toggle('psp-cs-sort-active', active);
+      if (active) {
+        th.setAttribute('aria-sort', cashierGridSort.dir === 'asc' ? 'ascending' : 'descending');
+        if (icon) icon.textContent = cashierGridSort.dir === 'asc' ? ' ▲' : ' ▼';
+      } else {
+        th.setAttribute('aria-sort', 'none');
+        if (icon) icon.textContent = '';
+      }
+    });
+  }
+
+  function rebuildCashierSettleGridStructure() {
+    var tb = document.getElementById('pspCashierSettleTbody');
+    if (!tb) return;
+    pruneCashierSettleState();
+    var list = sortedLineRowsForGrid();
+    if (!list.length) {
+      tb.innerHTML =
+        '<tr><td colspan="10" style="text-align:center;padding:18px;color:#64748b;">No cashiers in view — use filters and <strong>Load POS Sales</strong>.</td></tr>';
+      updateCashierGridSortIndicators();
+      return;
+    }
+    tb.innerHTML = '';
+    list.forEach(function (row) {
+      var ck = row.cashier;
+      var tender = row.tender;
+      var st = getCashierRowState(ck);
+      var isCash = tender === 'cash';
+      var tr = document.createElement('tr');
+      tr.setAttribute('data-cashier', ck);
+      tr.setAttribute('data-tender', tender);
+      var openingCell = isCash
+        ? '<td class="num"><input type="number" step="any" class="input psp-cs-input" data-cs-field="opening" value="' +
+          escapeHtml(String(st.opening)) +
+          '" /></td>'
+        : '<td class="num psp-cs-na">—</td>';
+      var expCell = isCash
+        ? '<td class="num"><input type="number" step="any" class="input psp-cs-input" data-cs-field="expenses" value="' +
+          escapeHtml(String(st.expenses)) +
+          '" /></td>'
+        : '<td class="num psp-cs-na">—</td>';
+      var countedVal = getCountedForTender(st, tender);
+      var actualCell = isCash
+        ? '<td class="num"><input type="number" step="any" class="input psp-cs-input" data-cs-field="actual" value="' +
+          escapeHtml(String(st.actual)) +
+          '" /></td>'
+        : '<td class="num"><input type="number" step="any" class="input psp-cs-input" data-cs-field="countedTender" data-cs-tender="' +
+          escapeHtml(tender) +
+          '" value="' +
+          escapeHtml(String(countedVal)) +
+          '" /></td>';
+      tr.innerHTML =
+        '<td class="psp-cs-tender">' +
+        escapeHtml(tenderLabel(tender)) +
+        '</td>' +
+        '<td class="psp-cashier-name">' +
+        escapeHtml(ck) +
+        '</td>' +
+        '<td class="psp-cs-terminal"></td>' +
+        openingCell +
+        '<td class="num psp-cs-cash-sales">0.00</td>' +
+        expCell +
+        '<td class="num psp-cs-closing">0.00</td>' +
+        actualCell +
+        '<td class="num psp-cs-short">0.00</td>' +
+        '<td class="num psp-cs-settle-bal">0.00</td>';
+      tb.appendChild(tr);
+    });
+    updateCashierGridSortIndicators();
+  }
+
+  function updateCashierSettleRowComputeds() {
+    var tb = document.getElementById('pspCashierSettleTbody');
+    if (!tb) return;
+    Array.prototype.forEach.call(tb.querySelectorAll('tr[data-cashier]'), function (tr) {
+      var ck = tr.getAttribute('data-cashier');
+      var tender = tr.getAttribute('data-tender') || 'cash';
+      if (!ck) return;
+      var line = deriveCashierTenderLine(ck, tender);
+      var elTerm = tr.querySelector('.psp-cs-terminal');
+      if (elTerm) elTerm.textContent = line.termStr;
+      var elCs = tr.querySelector('.psp-cs-cash-sales');
+      var elCl = tr.querySelector('.psp-cs-closing');
+      var elSh = tr.querySelector('.psp-cs-short');
+      var elSb = tr.querySelector('.psp-cs-settle-bal');
+      if (elCs) elCs.textContent = line.trans.toFixed(2);
+      if (elCl) elCl.textContent = line.expectedClose.toFixed(2);
+      if (elSh) {
+        if (line.diff != null && !isNaN(line.diff)) {
+          elSh.textContent = inr(line.diff);
+          elSh.classList.toggle('psp-cs-cell--danger', line.diff < -0.005);
+        } else {
+          elSh.textContent = '—';
+          elSh.classList.remove('psp-cs-cell--danger');
+        }
+      }
+      if (elSb) {
+        if (tender === 'cash') {
+          elSb.textContent = line.settleBal.toFixed(2);
+          elSb.classList.toggle('psp-cs-cell--danger', line.settleBal < -0.005);
+        } else {
+          elSb.textContent = '—';
+          elSb.classList.remove('psp-cs-cell--danger');
+        }
+      }
+    });
+  }
+
+  function aggregateCashierSettlementTotals() {
+    var sumOpen = 0;
+    var sumTrans = 0;
+    var sumExp = 0;
+    var sumExpected = 0;
+    var sumAct = 0;
+    var sumDiff = 0;
+    var sumSettleBal = 0;
+    var rowsMeta = [];
+    cashiersInScope().forEach(function (ck) {
+      tendersForCashierLine(ck).forEach(function (tender) {
+        var line = deriveCashierTenderLine(ck, tender);
+        var st = line.st;
+        sumTrans += Number(line.trans) || 0;
+        if (tender === 'cash') {
+          sumOpen += Number(st.opening) || 0;
+          sumExp += Number(st.expenses) || 0;
+        }
+        sumExpected += line.expectedClose != null ? Number(line.expectedClose) || 0 : 0;
+        sumAct += line.actual != null ? line.actual : 0;
+        sumDiff += line.diff != null ? line.diff : 0;
+        sumSettleBal += tender === 'cash' ? Number(line.settleBal) || 0 : 0;
+        rowsMeta.push({
+          cashier: ck,
+          tender_type: line.tenderLabel,
+          tender_code: tender,
+          pos_terminals: line.termStr,
+          trans_amount: line.trans,
+          opening_cash: tender === 'cash' ? Number(st.opening) || 0 : 0,
+          cash_sales: tender === 'cash' ? line.trans : 0,
+          cash_return: 0,
+          expenses: tender === 'cash' ? Number(st.expenses) || 0 : 0,
+          closing_system: line.expectedClose,
+          actual_cash: line.actual != null ? line.actual : 0,
+          short_excess: line.diff != null ? line.diff : 0,
+          settlement_balance: tender === 'cash' ? line.settleBal : line.trans,
+        });
+      });
+    });
+    return {
+      sumOpen: sumOpen,
+      sumTrans: sumTrans,
+      sumExp: sumExp,
+      sumExpected: sumExpected,
+      sumAct: sumAct,
+      sumDiff: sumDiff,
+      sumSettleBal: sumSettleBal,
+      rows: rowsMeta,
+    };
+  }
+
+  /** Physical / counted amounts from cashier settlement grid (sync DOM first in callers when needed). */
+  function aggregateCountedTotalsByTender() {
+    var out = {};
+    cashiersInScope().forEach(function (ck) {
+      tendersForCashierLine(ck).forEach(function (tender) {
+        var line = deriveCashierTenderLine(ck, tender);
+        var v = line.actual != null ? Number(line.actual) : 0;
+        if (!isFinite(v)) v = 0;
+        out[tender] = (out[tender] || 0) + v;
+      });
+    });
+    return out;
+  }
+
+  function updateCashierLabels() {
+    var list = cashiersInScope();
+    var n = list.length;
+    window._pspCashierSubtitle = n ? '(' + n + ' cashier' + (n === 1 ? '' : 's') + ')' : '(—)';
+  }
+
+  function refreshPaymentSummarySubtitle(tenderMeta) {
+    var em = document.getElementById('pspPaySummaryCashier');
+    if (!em) return;
+    if (
+      tenderMeta &&
+      tenderMeta.billCount > 0 &&
+      tenderMeta.source &&
+      tenderMeta.source !== 'bill_mismatch'
+    ) {
+      var tag =
+        tenderMeta.source === 'paymode_tender_map'
+          ? 'POS tender · paymode lines'
+          : tenderMeta.source === 'paymode_merged_tender_map'
+            ? 'POS tender · paymode + bill fallback'
+          : tenderMeta.source === 'billhdr_buckets_tender_map'
+            ? 'POS tender · bill totals'
+            : tenderMeta.source;
+      em.textContent =
+        '(' +
+        tenderMeta.billCount +
+        ' bill' +
+        (tenderMeta.billCount === 1 ? '' : 's') +
+        ' · ' +
+        tag +
+        ')';
+      return;
+    }
+    em.textContent = window._pspCashierSubtitle != null ? window._pspCashierSubtitle : '(—)';
+  }
+
+  function renderLegacyPaymentModeSummaryRows(aggSel) {
+    var box = document.getElementById('pspPayModeSummaryRows');
+    if (!box) return;
+    var rows = [
+      ['Cash Collection', aggSel.cash],
+      ['Card Collection', aggSel.card],
+      ['Wallet / UPI clearing', aggSel.wallet],
+      ['Credit Sales', aggSel.credit],
+    ].filter(function (pair) {
+      var a = Number(pair[1]);
+      if (!isFinite(a)) a = 0;
+      return Math.abs(a) > 0.0005;
+    });
+    box.innerHTML = rows
+      .map(function (pair) {
+        return (
+          '<div class="psp-pay-row"><span>' +
+          escapeHtml(pair[0]) +
+          '</span><strong>' +
+          inr(pair[1]) +
+          '</strong></div>'
+        );
+      })
+      .join('');
+  }
+
+  function schedulePaymentModeSummaryRefresh(aggSel) {
+    var seq = ++_paySummaryFetchSeq;
+    renderLegacyPaymentModeSummaryRows(aggSel);
+    var sysTotal = aggSel.cash + aggSel.card + aggSel.wallet + aggSel.credit;
+    var sb = document.getElementById('pspSettleBalance');
+    if (sb) sb.textContent = inr(sysTotal);
+    var totRow = sb && sb.closest('.psp-pay-total');
+    if (totRow) totRow.classList.toggle('psp-pay-total--danger', sysTotal < -0.005);
+
+    var sel = selectedRows().filter(rowMatchesFilters);
+    var nos = sel
+      .map(function (r) {
+        return parseInt(String(r.billNo), 10);
+      })
+      .filter(function (n) {
+        return n > 0;
+      });
+    refreshPaymentSummarySubtitle(null);
+
+    if (!apiPaymentModeSummaryUrl || nos.length < 1) {
+      return;
+    }
+    if (nos.length > PAY_SUMMARY_MAX_BILLS) {
+      refreshPaymentSummarySubtitle({
+        billCount: nos.length,
+        source: 'client_aggregate',
+      });
+      return;
+    }
+    window.clearTimeout(_paySummaryTimer);
+    _paySummaryTimer = window.setTimeout(function () {
+      fetch(withBranch(apiPaymentModeSummaryUrl), {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ bill_nos: nos }),
+      })
+        .then(function (res) {
+          return res.json();
+        })
+        .then(function (data) {
+          if (seq !== _paySummaryFetchSeq) return;
+          if (!data.success || data.source === 'bill_mismatch') {
+            refreshPaymentSummarySubtitle(null);
+            return;
+          }
+          if (!data.lines || !data.lines.length) {
+            renderLegacyPaymentModeSummaryRows(aggSel);
+            var sbE = document.getElementById('pspSettleBalance');
+            if (sbE) sbE.textContent = inr(sysTotal);
+            var totE = sbE && sbE.closest('.psp-pay-total');
+            if (totE) totE.classList.toggle('psp-pay-total--danger', sysTotal < -0.005);
+            refreshPaymentSummarySubtitle(null);
+            return;
+          }
+          var box = document.getElementById('pspPayModeSummaryRows');
+          if (!box) return;
+          box.innerHTML = data.lines
+            .map(function (ln) {
+              return (
+                '<div class="psp-pay-row"><span>' +
+                escapeHtml(ln.label) +
+                ' <span style="font-weight:500;color:#94a3b8;font-size:0.92em;">(' +
+                escapeHtml(String(ln.code)) +
+                ')</span></span><strong>' +
+                inr(ln.amount) +
+                '</strong></div>'
+              );
+            })
+            .join('');
+          var tsum = data.lines.reduce(function (s, x) {
+            return s + (Number(x.amount) || 0);
+          }, 0);
+          var sb2 = document.getElementById('pspSettleBalance');
+          if (sb2) sb2.textContent = inr(tsum);
+          var totRow2 = sb2 && sb2.closest('.psp-pay-total');
+          if (totRow2) totRow2.classList.toggle('psp-pay-total--danger', tsum < -0.005);
+          refreshPaymentSummarySubtitle({
+            billCount: data.bill_count || nos.length,
+            source: data.source || '',
+          });
+          (data.lines || []).forEach(function (ln) {
+            if (ln && ln.code) {
+              window._pspPayModeLabelMap[String(ln.code).toLowerCase()] = ln.label || ln.code;
+            }
+          });
+          if (Array.isArray(data.tender_types) && data.tender_types.length) {
+            var hadTenders = (window._pspActiveTenders || []).length > 0;
+            window._pspActiveTenders = data.tender_types;
+            if (!hadTenders && typeof rebuildCashierSettleGridStructure === 'function') {
+              rebuildCashierSettleGridStructure();
+            }
+          }
+        })
+        .catch(function () {
+          if (seq !== _paySummaryFetchSeq) return;
+          renderLegacyPaymentModeSummaryRows(aggSel);
+          var sb3 = document.getElementById('pspSettleBalance');
+          if (sb3) sb3.textContent = inr(sysTotal);
+          var totRow3 = sb3 && sb3.closest('.psp-pay-total');
+          if (totRow3) totRow3.classList.toggle('psp-pay-total--danger', sysTotal < -0.005);
+          refreshPaymentSummarySubtitle(null);
+        });
+    }, 200);
+  }
+
+  function updateGeneralStatementHeader() {
+    function setText(id, text) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = text;
+    }
+    var brCodeEl = document.getElementById('pspBranch');
+    var brDispEl = document.getElementById('pspBranchDisplay');
+    setText('pspGenBranchCode', (brCodeEl && String(brCodeEl.value || '').trim()) ? String(brCodeEl.value).trim() : '—');
+    setText('pspGenBranchName', (brDispEl && String(brDispEl.value || '').trim()) ? String(brDispEl.value).trim() : '—');
+    var fromEl = document.getElementById('pspFrom');
+    var toEl = document.getElementById('pspTo');
+    var fd = (fromEl && fromEl.value) ? fromEl.value : '';
+    var td = (toEl && toEl.value) ? toEl.value : '';
+    setText('pspGenPeriod', (!fd && !td) ? 'Open / all dates in scope' : (fd || '…') + '  →  ' + (td || '…'));
+    var statusSel = document.getElementById('pspStatus');
+    var statusTxt = '—';
+    if (statusSel && statusSel.selectedIndex >= 0) {
+      statusTxt = statusSel.options[statusSel.selectedIndex].textContent || statusTxt;
+    }
+    setText('pspGenStatusFilter', statusTxt);
+    var ctrDisp = document.getElementById('pspCounterDisplay');
+    setText('pspGenCounterFilter', (ctrDisp && String(ctrDisp.value || '').trim()) ? String(ctrDisp.value).trim() : 'All counters');
+    var cashF = document.getElementById('pspCashier');
+    var cf = (cashF && String(cashF.value || '').trim()) ? String(cashF.value).trim() : '';
+    setText('pspGenCashierFilter', cf || '—');
+    var shiftSel = document.getElementById('pspShift');
+    var shiftTxt = 'All shifts';
+    if (shiftSel && shiftSel.selectedIndex >= 0) {
+      shiftTxt = shiftSel.options[shiftSel.selectedIndex].textContent || shiftTxt;
+    }
+    setText('pspGenShift', shiftTxt);
+    var vr = visibleRows();
+    var pendingN = 0;
+    var postedN = 0;
+    vr.forEach(function (r) {
+      var st = String(r.settlementStatus || 'Pending').trim();
+      if (st === 'Posted') postedN++;
+      else if (st === 'Pending') pendingN++;
+    });
+    setText('pspGenBillCount', String(vr.length));
+    setText('pspGenPendingCount', String(pendingN));
+    setText('pspGenPostedCount', String(postedN));
+    setText('pspGenCashierCount', String(cashiersInScope().length));
+    var sel = selectedRows().filter(rowMatchesFilters);
+    setText('pspGenSelectedCount', String(sel.length));
+  }
+
+  function refreshSummaries() {
+    syncCashierInputsFromDom();
+    var sig = cashierScopeSig();
+    if (sig !== lastCashierScopeSig) {
+      lastCashierScopeSig = sig;
+      rebuildCashierSettleGridStructure();
+    }
+    updateCashierSettleRowComputeds();
+
+    var aggAll = aggregate(rows);
+    var sel = selectedRows().filter(rowMatchesFilters);
+    var aggSel = aggregate(sel.length ? sel : visibleRows());
+
+    document.getElementById('pspSumTotal').textContent = inr(aggAll.total);
+    document.getElementById('pspSumCash').textContent = inr(aggAll.cash);
+    document.getElementById('pspSumCard').textContent = inr(aggAll.card);
+    document.getElementById('pspSumCredit').textContent = inr(aggAll.credit);
+    document.getElementById('pspSumPending').textContent = inr(aggAll.pending);
+    document.getElementById('pspSumPosted').textContent = inr(aggAll.posted);
+
+    var t = aggAll.total || 1;
+    document.getElementById('pspKpiTotalSub').textContent = rows.length ? 'Selected period' : 'Today';
+    document.getElementById('pspKpiCashPct').textContent = pct(aggAll.cash, t);
+    document.getElementById('pspKpiCardPct').textContent = pct(aggAll.card, t);
+    document.getElementById('pspKpiCreditPct').textContent = pct(aggAll.credit, t);
+    document.getElementById('pspKpiPendingPct').textContent = pct(aggAll.pending, t);
+    document.getElementById('pspKpiPostedPct').textContent = pct(aggAll.posted, t);
+
+    var ct = aggregateCashierSettlementTotals();
+    var cashDiff = aggregateCashierCashVariance();
+    document.getElementById('pspBdDiff').textContent = inr(cashDiff);
+    setText('pspLineTotalOpening', inr(ct.sumOpen));
+    setText('pspLineTotalTrans', inr(ct.sumTrans));
+    setText('pspLineTotalExpenses', inr(ct.sumExp));
+    setText('pspLineTotalExpected', inr(ct.sumExpected));
+    setText('pspLineTotalCounted', inr(ct.sumAct));
+    setText('pspLineTotalDifference', inr(ct.sumDiff));
+    setText('pspLineTotalStmtBal', inr(ct.sumSettleBal));
+    var diffRow = document.getElementById('pspBdDiff') && document.getElementById('pspBdDiff').closest('.psp-pay-row');
+    if (diffRow) diffRow.classList.toggle('psp-pay-row--danger', cashDiff < -0.005);
+
+    updateGeneralStatementHeader();
+    updateCashierLabels();
+    refreshPaymentSummarySubtitle(null);
+    schedulePaymentModeSummaryRefresh(aggSel);
+    updateCashierGridSortIndicators();
+    renderGlPostingPreview();
+  }
+
+  /** Update cashier grid totals after counted/opening/expense edits — do not rebuild rows or refetch paymode summary. */
+  function refreshCashierTotalsFromGrid() {
+    syncCashierInputsFromDom();
+    updateCashierSettleRowComputeds();
+    var ct = aggregateCashierSettlementTotals();
+    var cashDiff = aggregateCashierCashVariance();
+    setText('pspBdDiff', inr(cashDiff));
+    setText('pspLineTotalOpening', inr(ct.sumOpen));
+    setText('pspLineTotalTrans', inr(ct.sumTrans));
+    setText('pspLineTotalExpenses', inr(ct.sumExp));
+    setText('pspLineTotalExpected', inr(ct.sumExpected));
+    setText('pspLineTotalCounted', inr(ct.sumAct));
+    setText('pspLineTotalDifference', inr(ct.sumDiff));
+    setText('pspLineTotalStmtBal', inr(ct.sumSettleBal));
+    var diffRow = document.getElementById('pspBdDiff') && document.getElementById('pspBdDiff').closest('.psp-pay-row');
+    if (diffRow) diffRow.classList.toggle('psp-pay-row--danger', cashDiff < -0.005);
+    renderGlPostingPreview();
+  }
+
+  function renderTable() {
+    refreshSummaries();
+  }
+
+  function setText(id, value) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = value == null ? '' : String(value);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  }
+
+  function closeCounterModal() {
+    if (!counterModalEl) return;
+    counterModalEl.hidden = true;
+    counterModalEl.setAttribute('aria-hidden', 'true');
+  }
+
+  function applyCounterSelection(code, label) {
+    document.getElementById('pspCounter').value = code === '' || code === null ? '' : String(code);
+    var disp = document.getElementById('pspCounterDisplay');
+    if (disp) disp.value = label || 'All counters';
+    closeCounterModal();
+    applyFilters();
+  }
+
+  function renderCounterModalList() {
+    if (!counterModalList) return;
+    var q = (counterModalSearch && counterModalSearch.value || '').trim().toLowerCase();
+    var chunks = ['<button type="button" class="psp-counter-opt psp-counter-opt--all" data-code="" data-label="All counters">All counters</button>'];
+    var n = 0;
+    counterPickRows.forEach(function (row) {
+      var cc = row.countercode;
+      var nm = String(row.countername || '').trim();
+      var blob = (nm + ' ' + String(cc)).toLowerCase();
+      if (q && blob.indexOf(q) < 0) return;
+      n++;
+      var label = (nm ? nm + ' — ' : '') + String(cc);
+      chunks.push(
+        '<button type="button" class="psp-counter-opt" data-code="' + escapeHtml(String(cc)) + '" data-label="' + escapeHtml(label) + '">' +
+        '<strong>' + escapeHtml(nm || 'Counter') + '</strong><code>' + escapeHtml(String(cc)) + '</code></button>'
+      );
+    });
+    var hint = '';
+    if (q && n === 0 && counterPickRows.length) hint = '<p class="psp-counter-modal__hint">No counters match search.</p>';
+    if (!counterPickRows.length && !q) hint = '<p class="psp-counter-modal__hint">No counters registered for this branch.</p>';
+    counterModalList.innerHTML = chunks.join('') + hint;
+  }
+
+  function openCounterModal() {
+    if (!counterModalEl || !counterModalList) return;
+    counterModalEl.hidden = false;
+    counterModalEl.setAttribute('aria-hidden', 'false');
+    if (counterModalSearch) counterModalSearch.value = '';
+    counterModalList.innerHTML = '<p class="psp-counter-modal__hint">Loading counters…</p>';
+    var br = (document.getElementById('pspBranch') && document.getElementById('pspBranch').value || '').trim();
+    var url = apiCountersUrl + (apiCountersUrl.indexOf('?') >= 0 ? '&' : '?') + 'location_code=' + encodeURIComponent(br);
+    fetch(url, { credentials: 'same-origin' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) {
+          counterModalList.innerHTML = '<p class="psp-counter-modal__hint">' + escapeHtml(data.error || 'Could not load counters') + '</p>';
+          return;
+        }
+        counterPickRows = data.counters || [];
+        renderCounterModalList();
+        if (counterModalSearch) counterModalSearch.focus();
+      })
+      .catch(function (e) {
+        counterModalList.innerHTML = '<p class="psp-counter-modal__hint">' + escapeHtml(e.message || 'Network error') + '</p>';
+      });
+  }
+
+  function applyFilters() {
+    renderTable();
+    setStatus('Filters applied.', 'ok');
+  }
+
+  function resetFilters() {
+    document.getElementById('pspFrom').value = defaultSettlementDate;
+    document.getElementById('pspTo').value = defaultSettlementDate;
+    document.getElementById('pspCounter').value = '';
+    var ctrDisp = document.getElementById('pspCounterDisplay');
+    if (ctrDisp) ctrDisp.value = 'All counters';
+    document.getElementById('pspCashier').value = '';
+    document.getElementById('pspShift').value = '';
+    document.getElementById('pspStatus').value = '';
+    document.getElementById('pspQuickSearch').value = '';
+    rows.forEach(function (r) { r.selected = true; });
+    cashierSettleByUser = {};
+    lastCashierScopeSig = '';
+    cashierGridSort = { key: 'cashier', dir: 'asc' };
+    renderTable();
+    setStatus('Reset.', '');
+  }
+
+  function posClosedValidateParams() {
+    var params = new URLSearchParams();
+    var from = document.getElementById('pspFrom').value;
+    var to = document.getElementById('pspTo').value;
+    var br = document.getElementById('pspBranch').value;
+    var ctr = (document.getElementById('pspCounter').value || '').trim();
+    var shift = (document.getElementById('pspShift').value || '').trim();
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    if (br) params.set('location_code', br);
+    if (ctr) params.set('counter_code', ctr);
+    if (shift) params.set('shift_code', shift);
+    return params;
+  }
+
+  function validatePosDateClosedBeforeLoad() {
+    return fetch(apiValidatePosClosedUrl + '?' + posClosedValidateParams().toString(), {
+      credentials: 'same-origin',
+      headers: { 'Accept': 'application/json' }
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) {
+          setStatus(data.error || 'Could not validate POS date.', 'warn');
+          return false;
+        }
+        if (!data.valid) {
+          window.alert(data.message || 'POS date is not closed.');
+          setStatus(data.message || 'POS date not closed.', 'warn');
+          return false;
+        }
+        return true;
+      })
+      .catch(function (e) {
+        setStatus(e.message || 'Validation request failed', 'warn');
+        return false;
+      });
+  }
+
+  function loadBills(showBusy) {
+    if (_billsLoadAbort) {
+      try { _billsLoadAbort.abort(); } catch (e) { /* ignore */ }
+    }
+    _billsLoadAbort = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    if (showBusy) setBusy(true, 'Loading POS sales…');
+    setStatus('Loading…', '');
+    var params = new URLSearchParams();
+    var from = document.getElementById('pspFrom').value;
+    var to = document.getElementById('pspTo').value;
+    var br = document.getElementById('pspBranch').value;
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    if (br) params.set('location_code', br);
+    var st = (document.getElementById('pspStatus').value || '').trim();
+    var scope = 'all';
+    if (st === 'Pending') scope = 'pending';
+    else if (st === 'Posted') scope = 'settled';
+    else if (st === 'Cancelled') scope = 'cancelled';
+    params.set('settlement_scope', scope);
+    params.set('fast', '1');
+    params.set('limit', '300');
+    var url = apiUrl + (params.toString() ? '?' + params.toString() : '');
+    var fetchOpts = { credentials: 'same-origin' };
+    if (_billsLoadAbort) fetchOpts.signal = _billsLoadAbort.signal;
+    fetch(url, fetchOpts)
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) {
+          setStatus(data.error || 'Load failed', 'warn');
+          return;
+        }
+        rows = (data.bills || []).map(function (b) {
+          return Object.assign({ selected: true }, b);
+        });
+        cashierSettleByUser = {};
+        lastCashierScopeSig = '';
+        cashierGridSort = { key: 'cashier', dir: 'asc' };
+        var ms = data.elapsed_ms != null ? ' · ' + data.elapsed_ms + ' ms' : '';
+        var statusMsg = 'Loaded ' + rows.length + ' bill(s).' + ms;
+        if (rows.length === 0 && (from || to)) {
+          var rangeTxt = from && to && from !== to ? from + ' → ' + to : (from || to);
+          statusMsg += ' No bills for ' + rangeTxt + '. Set From/To to the closed POS day and click Load POS Sales.';
+        }
+        window.requestAnimationFrame(function () {
+          applyFilters();
+          setStatus(statusMsg, rows.length ? 'ok' : 'warn');
+        });
+      })
+      .catch(function (e) {
+        if (e && e.name === 'AbortError') return;
+        setStatus(e.message || 'Network error', 'warn');
+      })
+      .finally(function () {
+        if (showBusy) setBusy(false);
+        _billsLoadAbort = null;
+      });
+  }
+
+  document.getElementById('pspQuickSearch').addEventListener('input', function () {
+    renderTable();
+  });
+
+  document.getElementById('pspBtnLoad').addEventListener('click', function () {
+    validatePosDateClosedBeforeLoad().then(function (ok) {
+      if (ok) loadBills(true);
+    });
+  });
+  document.getElementById('pspBtnSearch').addEventListener('click', applyFilters);
+  document.getElementById('pspBtnReset').addEventListener('click', resetFilters);
+  if (counterModalList) {
+    counterModalList.addEventListener('click', function (e) {
+      var btn = e.target.closest('.psp-counter-opt');
+      if (!btn) return;
+      var code = btn.getAttribute('data-code');
+      if (code === null) code = '';
+      var label = btn.getAttribute('data-label') || 'All counters';
+      applyCounterSelection(code, label);
+    });
+  }
+  var pspBtnPickCounter = document.getElementById('pspBtnPickCounter');
+  var pspCounterDisplayEl = document.getElementById('pspCounterDisplay');
+  if (pspBtnPickCounter) pspBtnPickCounter.addEventListener('click', openCounterModal);
+  if (pspCounterDisplayEl) pspCounterDisplayEl.addEventListener('click', openCounterModal);
+  var pspCounterModalBackdrop = document.getElementById('pspCounterModalBackdrop');
+  var pspCounterModalClose = document.getElementById('pspCounterModalClose');
+  if (pspCounterModalBackdrop) pspCounterModalBackdrop.addEventListener('click', closeCounterModal);
+  if (pspCounterModalClose) pspCounterModalClose.addEventListener('click', closeCounterModal);
+  if (counterModalSearch) counterModalSearch.addEventListener('input', renderCounterModalList);
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (!counterModalEl || counterModalEl.hidden) return;
+    closeCounterModal();
+  });
+  document.getElementById('pspBtnShowSummary').addEventListener('click', function () {
+    document.querySelector('.psp-kpi-strip').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  var cgWrap = document.querySelector('.psp-cashier-grid-wrap');
+  if (cgWrap) {
+    cgWrap.addEventListener('input', function (e) {
+      if (!e.target || !e.target.classList || !e.target.classList.contains('psp-cs-input')) return;
+      refreshCashierTotalsFromGrid();
+    });
+    cgWrap.addEventListener('change', function (e) {
+      if (!e.target || !e.target.classList || !e.target.classList.contains('psp-cs-input')) return;
+      refreshCashierTotalsFromGrid();
+    });
+  }
+
+  var cashierGridTable = document.querySelector('.psp-cashier-grid--nav');
+  if (cashierGridTable) {
+    var cgThead = cashierGridTable.querySelector('thead');
+    if (cgThead) {
+      cgThead.addEventListener('click', function (e) {
+        var th = e.target.closest('th[data-cs-sort]');
+        if (!th) return;
+        e.preventDefault();
+        syncCashierInputsFromDom();
+        var key = th.getAttribute('data-cs-sort');
+        if (!key) return;
+        if (cashierGridSort.key === key) {
+          cashierGridSort.dir = cashierGridSort.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+          cashierGridSort.key = key;
+          cashierGridSort.dir = 'asc';
+        }
+        rebuildCashierSettleGridStructure();
+        updateCashierSettleRowComputeds();
+      });
+    }
+  }
+
+  function pspScrollTo(sel) {
+    var el = document.querySelector(sel);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  var pspLineBtnLine = document.getElementById('pspLineBtnLine');
+  if (pspLineBtnLine) pspLineBtnLine.addEventListener('click', function () { pspScrollTo('.psp-nav-lines-card'); });
+  var pspLineBtnFunction = document.getElementById('pspLineBtnFunction');
+  if (pspLineBtnFunction) pspLineBtnFunction.addEventListener('click', function () { pspScrollTo('.psp-cards-below'); });
+  var pspLineBtnFind = document.getElementById('pspLineBtnFind');
+  if (pspLineBtnFind) {
+    pspLineBtnFind.addEventListener('click', function () {
+      pspScrollTo('.psp-nav-filters');
+      var q = document.getElementById('pspQuickSearch');
+      if (q) {
+        q.focus();
+        try {
+          q.select();
+        } catch (e) {}
+      }
+    });
+  }
+  var pspLineBtnFilter = document.getElementById('pspLineBtnFilter');
+  if (pspLineBtnFilter) pspLineBtnFilter.addEventListener('click', function () { pspScrollTo('.psp-nav-filters'); });
+  var pspGenScrollList = document.getElementById('pspGenScrollList');
+  if (pspGenScrollList) pspGenScrollList.addEventListener('click', function () { pspScrollTo('.psp-cashier-settle-panel'); });
+  var pspGenScrollPending = document.getElementById('pspGenScrollPending');
+  if (pspGenScrollPending) pspGenScrollPending.addEventListener('click', function () { pspScrollTo('.psp-cashier-settle-panel'); });
+  var pspGenScrollCashierGrid = document.getElementById('pspGenScrollCashierGrid');
+  if (pspGenScrollCashierGrid) pspGenScrollCashierGrid.addEventListener('click', function () { pspScrollTo('.psp-nav-lines-card'); });
+
+  function optDisplay(selId) {
+    var sel = document.getElementById(selId);
+    if (!sel) return '';
+    if (sel.tagName === 'INPUT' && sel.type === 'hidden') {
+      var d = document.getElementById(selId + 'Display');
+      if (d && (d.value || '').trim()) return String(d.value).trim();
+      return String(sel.value || '').trim();
+    }
+    if (sel.tagName === 'SELECT') {
+      if (sel.selectedIndex <= 0) return '';
+      return sel.options[sel.selectedIndex].textContent || sel.value || '';
+    }
+    return String(sel.value || '').trim();
+  }
+
+  function accountNameByCode(code) {
+    var c = String(code || '').trim();
+    if (!c) return '—';
+    for (var i = 0; i < coaAccounts.length; i++) {
+      if (String(coaAccounts[i].code || '').trim() === c) {
+        return String(coaAccounts[i].name || '').trim() || '—';
+      }
+    }
+    if (c === '4100') return 'Sales Revenue';
+    return '—';
+  }
+
+  function setElText(id, text) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = text == null ? '' : String(text);
+  }
+
+  function posSettlementRevenueTotal(net, tax, discount, tenderTotal) {
+    var n = Number(net) || 0;
+    var tx = Number(tax) || 0;
+    var disc = Number(discount) || 0;
+    var tender = Number(tenderTotal) || 0;
+    var revenueTotal = n;
+    if (Math.abs((n - tender) - disc) <= 0.01) {
+      revenueTotal = tender;
+    }
+    return { total: revenueTotal, base: revenueTotal - tx, tax: tx };
+  }
+
+  function resolveTenderGlAccount(tenderKey) {
+    var map = window._pspTenderGlMap || {};
+    var k = String(tenderKey || '').trim().toUpperCase();
+    if (k && map[k]) return String(map[k]).trim();
+    if (k === 'CARD') return (document.getElementById('pspCardAcc') && document.getElementById('pspCardAcc').value || '').trim();
+    if (k === 'CASH') return (document.getElementById('pspCashAcc') && document.getElementById('pspCashAcc').value || '').trim();
+    if (k === 'WALLET') return (document.getElementById('pspWalletAcc') && document.getElementById('pspWalletAcc').value || '').trim();
+    return '';
+  }
+
+  /** Cash drawer variance only — short/excess GL applies to physical cash, not card/voucher. */
+  function aggregateCashierCashVariance() {
+    var v = 0;
+    cashiersInScope().forEach(function (ck) {
+      var line = deriveCashierTenderLine(ck, 'cash');
+      if (line.diff != null && !isNaN(line.diff)) v += Number(line.diff) || 0;
+    });
+    return v;
+  }
+
+  function selectedPostingRows() {
+    var sel = selectedRows().filter(rowMatchesFilters);
+    if (!sel.length) return [];
+    syncCashierInputsFromDom();
+    var net = 0, tax = 0, disc = 0;
+    sel.forEach(function (r) {
+      net += Number(r.netAmount) || 0;
+      tax += Number(r.tax) || 0;
+      disc += Number(r.discount) || 0;
+    });
+    var tenderAmts = aggregateBillTenderAmounts(sel);
+    var countedAmts = aggregateCountedTotalsByTender();
+    var ct = aggregateCashierSettlementTotals();
+    /** Clearing amounts come from Counted Amount on the cashier grid (not bill paymode). */
+    var cardAmt = (Number(countedAmts.card) || 0) + (Number(countedAmts.credit) || 0);
+    var walletAmt = Number(countedAmts.wallet) || 0;
+    var billTenderTotal = 0;
+    Object.keys(tenderAmts).forEach(function (k) {
+      billTenderTotal += Number(tenderAmts[k]) || 0;
+    });
+    var revenue = posSettlementRevenueTotal(net, tax, disc, billTenderTotal);
+    var expenseAmt = Math.max(0, Number(ct.sumExp) || 0);
+    /** Cash clearing = counted cash − opening float left in drawer (expenses posted separately). */
+    var cashPostingAmt = (Number(countedAmts.cash) || 0) - (Number(ct.sumOpen) || 0);
+    var otherTenderKeys = {};
+    Object.keys(tenderAmts || {}).forEach(function (k) { otherTenderKeys[k] = 1; });
+    Object.keys(countedAmts || {}).forEach(function (k) { otherTenderKeys[k] = 1; });
+    var otherCountedSum = 0;
+    Object.keys(otherTenderKeys).forEach(function (k) {
+      if (k === 'cash' || k === 'card' || k === 'wallet' || k === 'credit') return;
+      otherCountedSum += Number(countedAmts[k]) || 0;
+    });
+    /** Short/excess plugs any gap so Dr/Cr stay balanced when counts differ from bill mix. */
+    var netDebit = cashPostingAmt + cardAmt + walletAmt + otherCountedSum + expenseAmt;
+    var revenueCredit = Math.abs(tax) > 0.005 ? (Number(revenue.base) || 0) + (Number(tax) || 0) : Number(revenue.total) || 0;
+    var plug = revenueCredit - netDebit;
+    var shortAmt = plug > 0.005 ? plug : 0;
+    var excessAmt = plug < -0.005 ? -plug : 0;
+    var out = [];
+    var coreBuckets = { cash: 1, card: 1, wallet: 1, credit: 1, expense: 1, short: 1, excess: 1, sales: 1, tax: 1 };
+    function pushLine(bucket, label, accCode, amount, normalDrCr, opts) {
+      opts = opts || {};
+      var amt = Number(amount) || 0;
+      if (Math.abs(amt) <= 0.005) return;
+      var drcr = amt >= 0 ? normalDrCr : (normalDrCr === 'Dr' ? 'Cr' : 'Dr');
+      var acc = String(accCode || '').trim();
+      if (opts.requireAccount && !acc) return;
+      out.push({ bucket: bucket, label: label, account_code: acc, account_name: accountNameByCode(acc), amount: Math.abs(amt), drcr: drcr, core: !!coreBuckets[bucket] });
+    }
+    pushLine('cash', 'Cash', resolveTenderGlAccount('CASH'), cashPostingAmt, 'Dr', { requireAccount: true });
+    pushLine('card', 'Card Clearing', resolveTenderGlAccount('CARD'), cardAmt, 'Dr', { requireAccount: true });
+    pushLine('expense', 'Expense', (document.getElementById('pspExpenseAcc') && document.getElementById('pspExpenseAcc').value || '').trim(), expenseAmt, 'Dr', { requireAccount: true });
+    pushLine('short', 'Short', (document.getElementById('pspShortAcc') && document.getElementById('pspShortAcc').value || '').trim(), shortAmt, 'Dr', { requireAccount: true });
+    pushLine('excess', 'Excess', (document.getElementById('pspExcessAcc') && document.getElementById('pspExcessAcc').value || '').trim(), excessAmt, 'Cr', { requireAccount: true });
+    pushLine('wallet', 'Wallet / UPI clearing', resolveTenderGlAccount('WALLET'), walletAmt, 'Dr', { requireAccount: true });
+    Object.keys(otherTenderKeys).forEach(function (k) {
+      if (k === 'cash' || k === 'card' || k === 'wallet' || k === 'credit') return;
+      var amt = Number(countedAmts[k]) || 0;
+      if (Math.abs(amt) <= 0.005) return;
+      var glCode = resolveTenderGlAccount(k.toUpperCase());
+      pushLine(k, tenderLabel(k) + ' clearing', glCode, amt, 'Dr', { requireAccount: true });
+    });
+    if (Math.abs(tax) > 0.005) {
+      pushLine('sales', 'Sales Revenue', (document.getElementById('pspSalesAcc') && document.getElementById('pspSalesAcc').value || '').trim(), revenue.base, 'Cr');
+      pushLine('tax', 'Tax', (document.getElementById('pspTaxAcc') && document.getElementById('pspTaxAcc').value || '').trim(), tax, 'Cr');
+    } else {
+      pushLine('sales', 'Sales Revenue', (document.getElementById('pspSalesAcc') && document.getElementById('pspSalesAcc').value || '').trim(), revenue.total, 'Cr');
+    }
+    return out;
+  }
+
+  function renderGlPostingPreview() {
+    var postingRows = selectedPostingRows();
+    var rowsByBucket = {};
+    postingRows.forEach(function (r) { rowsByBucket[r.bucket] = r; });
+    document.querySelectorAll('.psp-posting-extra-tender').forEach(function (tr) {
+      tr.parentNode.removeChild(tr);
+    });
+    var anchor = document.querySelector('[data-posting-bucket="expense"]');
+    postingRows.forEach(function (r) {
+      if (r.core) return;
+      if (!anchor || !anchor.parentNode) return;
+      var tr = document.createElement('tr');
+      tr.className = 'psp-posting-extra-tender';
+      tr.setAttribute('data-posting-bucket', r.bucket);
+      tr.innerHTML =
+        '<td>' + escapeHtml(r.label) + '</td>' +
+        '<td class="num">' + inr(r.amount) + '</td>' +
+        '<td><input type="text" class="input psp-clearing-ro" readonly tabindex="-1" value="' + escapeHtml(r.account_code || '—') + '" aria-readonly="true" /></td>' +
+        '<td>' + escapeHtml(r.account_name || accountNameByCode(r.account_code)) + '</td>' +
+        '<td>' + escapeHtml(r.drcr) + '</td>' +
+        '<td class="psp-posting-check"><input type="checkbox" checked disabled aria-label="Tender account read only" /></td>';
+      anchor.parentNode.insertBefore(tr, anchor);
+    });
+    [
+      ['cash', 'pspAmtCash', 'pspCashAcc', 'pspCashAccName', 'pspCashDrCr'],
+      ['card', 'pspAmtCard', 'pspCardAcc', 'pspCardAccName', 'pspCardDrCr'],
+      ['expense', 'pspAmtExpense', 'pspExpenseAcc', 'pspExpenseAccName', 'pspExpenseDrCr'],
+      ['short', 'pspAmtShort', 'pspShortAcc', 'pspShortAccName', 'pspShortDrCr'],
+      ['excess', 'pspAmtExcess', 'pspExcessAcc', 'pspExcessAccName', 'pspExcessDrCr'],
+      ['wallet', 'pspAmtWallet', 'pspWalletAcc', 'pspWalletAccName', 'pspWalletDrCr'],
+      ['sales', 'pspAmtSales', 'pspSalesAcc', 'pspSalesAccName', 'pspSalesDrCr'],
+      ['tax', 'pspAmtTax', 'pspTaxAcc', 'pspTaxAccName', 'pspTaxDrCr'],
+    ].forEach(function (cfg) {
+      var row = rowsByBucket[cfg[0]];
+      var tr = document.querySelector('[data-posting-bucket="' + cfg[0] + '"]');
+      if (tr && cfg[0] === 'wallet') {
+        tr.style.display = row ? '' : 'none';
+      }
+      var acc = (document.getElementById(cfg[2]) && document.getElementById(cfg[2]).value || '').trim();
+      setElText(cfg[1], inr(row ? row.amount : 0));
+      setElText(cfg[3], accountNameByCode(acc));
+      setElText(cfg[4], row ? row.drcr : (cfg[0] === 'sales' || cfg[0] === 'tax' ? 'Cr' : 'Dr'));
+    });
+  }
+
+  function renderJournalPreviewRows(lines) {
+    var body = document.getElementById('pspJournalPreviewBody');
+    if (!body) return;
+    var rows = Array.isArray(lines) ? lines : [];
+    var totalDr = 0;
+    var totalCr = 0;
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#64748b;">Select bills and click Preview Journal.</td></tr>';
+      setElText('pspJournalTotalDebit', '0.00');
+      setElText('pspJournalTotalCredit', '0.00');
+      setElText('pspJournalDifference', '0.00');
+      return;
+    }
+    body.innerHTML = rows.map(function (ln, idx) {
+      var dr = Number(ln.debit) || 0;
+      var cr = Number(ln.credit) || 0;
+      var amt = dr > 0.005 ? dr : cr;
+      var code = String(ln.account_code || '').trim();
+      totalDr += dr;
+      totalCr += cr;
+      return '<tr>' +
+        '<td>' + (idx + 1) + '</td>' +
+        '<td>' + (dr > 0.005 ? 'Dr' : 'Cr') + '</td>' +
+        '<td>' + escapeHtml(code) + '</td>' +
+        '<td>' + escapeHtml(ln.account_name || accountNameByCode(code)) + '</td>' +
+        '<td class="num">' + inr(amt) + '</td>' +
+        '</tr>';
+    }).join('');
+    setElText('pspJournalTotalDebit', inr(totalDr));
+    setElText('pspJournalTotalCredit', inr(totalCr));
+    setElText('pspJournalDifference', inr(Math.abs(totalDr - totalCr) < 0.005 ? 0 : totalDr - totalCr));
+  }
+
+  function buildJournalLinesForPreview() {
+    return selectedPostingRows()
+      .filter(function (r) {
+        return String(r.account_code || '').trim().length > 0;
+      })
+      .map(function (r) {
+      return {
+        account_code: r.account_code,
+        account_name: r.account_name,
+        debit: r.drcr === 'Dr' ? r.amount : 0,
+        credit: r.drcr === 'Cr' ? r.amount : 0,
+      };
+    });
+  }
+
+  document.getElementById('pspBtnGenerate').addEventListener('click', function () {
+    var sel = selectedRows().filter(rowMatchesFilters);
+    if (!sel.length) {
+      setStatus('Select at least one bill.', 'warn');
+      return;
+    }
+    var nonPending = sel.filter(function (r) { return String(r.settlementStatus || 'Pending').trim() !== 'Pending'; });
+    if (nonPending.length) {
+      setStatus('Only bills with settlement status Pending can be drafted.', 'warn');
+      return;
+    }
+    var cashEl = document.getElementById('pspCashAcc');
+    var cardEl = document.getElementById('pspCardAcc');
+    if (!cashEl || !cashEl.value || !cardEl || !cardEl.value) {
+      setStatus('Cash or Card clearing not set — add active tender types with GL accounts.', 'warn');
+      return;
+    }
+    if (!(document.getElementById('pspSalesAcc').value || '').trim()) {
+      setStatus('Sales revenue account not available — check POS settlement configuration.', 'warn');
+      return;
+    }
+    var taxTot = 0;
+    sel.forEach(function (r) { taxTot += Number(r.tax) || 0; });
+    if (Math.abs(taxTot) > 0.005 && !(document.getElementById('pspTaxAcc').value || '').trim()) {
+      setStatus('Select tax account — selected bills include non-zero tax.', 'warn');
+      return;
+    }
+    var aggPre = aggregate(sel);
+    if (Math.abs(aggPre.wallet) > 0.005 && !(document.getElementById('pspWalletAcc').value || '').trim()) {
+      setStatus('Select wallet / UPI clearing account.', 'warn');
+      return;
+    }
+    var ct = aggregateCashierSettlementTotals();
+    var cashVar = aggregateCashierCashVariance();
+    var previewRows = selectedPostingRows();
+    var needsShort = previewRows.some(function (r) { return r.bucket === 'short'; });
+    var needsExcess = previewRows.some(function (r) { return r.bucket === 'excess'; });
+    if (Math.abs(ct.sumExp) > 0.005 && !(document.getElementById('pspExpenseAcc').value || '').trim()) {
+      setStatus('Select expense account — cashier settlement includes expenses.', 'warn');
+      return;
+    }
+    if (needsShort && !(document.getElementById('pspShortAcc').value || '').trim()) {
+      setStatus('Select short account — counted totals are less than sales.', 'warn');
+      return;
+    }
+    if (needsExcess && !(document.getElementById('pspExcessAcc').value || '').trim()) {
+      setStatus('Select excess account — counted totals exceed sales.', 'warn');
+      return;
+    }
+    var meta = {
+      opening_cash: ct.sumOpen,
+      cash_return: 0,
+      expenses: ct.sumExp,
+      actual_cash: ct.sumAct,
+      cash_variance_sum: cashVar,
+      settlement_amount_source: 'counted',
+      cashier_settlement_rows: ct.rows,
+      remarks_panel: ((document.getElementById('pspNarration') && document.getElementById('pspNarration').value) || (document.getElementById('pspSettleRemarks').value || '')).trim(),
+      approved_by: (document.getElementById('pspApproved').value || '').trim(),
+    };
+    var payload = {
+      bill_nos: sel.map(function (r) { return r.billNo; }),
+      accounts: {
+        cash_acc: (document.getElementById('pspCashAcc').value || '').trim(),
+        card_acc: (document.getElementById('pspCardAcc').value || '').trim(),
+        wallet_acc: (document.getElementById('pspWalletAcc').value || '').trim(),
+        credit_acc: '',
+        expense_acc: (document.getElementById('pspExpenseAcc').value || '').trim(),
+        short_acc: (document.getElementById('pspShortAcc').value || '').trim(),
+        excess_acc: (document.getElementById('pspExcessAcc').value || '').trim(),
+        sales_acc: (document.getElementById('pspSalesAcc').value || '').trim(),
+        tax_acc: (document.getElementById('pspTaxAcc').value || '').trim(),
+      },
+      meta: meta,
+    };
+    setBusy(true, 'Saving settlement draft…');
+    setStatus('Saving draft…', '');
+    fetch(withBranch(apiDraftGenerateUrl), {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) {
+          setStatus(data.error || 'Draft save failed', 'warn');
+          return;
+        }
+        currentDraftId = data.draft_id || null;
+        setActiveDraftLabel();
+        renderDraftJournal(data.detail);
+        loadDrafts();
+        setStatus('Draft #' + currentDraftId + ' saved (DRAFT). Review journal then Verify.', 'ok');
+      })
+      .catch(function (e) {
+        setStatus(e.message || 'Network error', 'warn');
+      })
+      .finally(function () {
+        setBusy(false);
+      });
+  });
+
+  document.getElementById('pspBtnPreviewJournal').addEventListener('click', function () {
+    renderGlPostingPreview();
+    renderJournalPreviewRows(buildJournalLinesForPreview());
+  });
+  var pspTaxAccEl = document.getElementById('pspTaxAcc');
+  if (pspTaxAccEl) {
+    pspTaxAccEl.addEventListener('change', function () {
+      renderGlPostingPreview();
+      renderJournalPreviewRows(buildJournalLinesForPreview());
+    });
+  }
+  ['pspExpenseAcc', 'pspShortAcc', 'pspExcessAcc'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('change', function () {
+      renderGlPostingPreview();
+      renderJournalPreviewRows(buildJournalLinesForPreview());
+    });
+  });
+
+  document.getElementById('pspBtnVerify').addEventListener('click', function () {
+    if (!currentDraftId) {
+      setStatus('Generate a settlement draft first (or click a draft in the list).', 'warn');
+      return;
+    }
+    setBusy(true, 'Verifying settlement…');
+    setStatus('Verifying draft…', '');
+    fetch(withBranch(apiDraftMutationUrl), {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ action: 'verify', draft_id: currentDraftId }),
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) {
+          setStatus(data.error || 'Verify failed', 'warn');
+          return;
+        }
+        renderDraftJournal(data.detail);
+        refreshSummaries();
+        loadDrafts();
+        setStatus('Draft #' + currentDraftId + ' verified. Post to GL when ready.', 'ok');
+      })
+      .catch(function (e) {
+        setStatus(e.message || 'Network error', 'warn');
+      })
+      .finally(function () {
+        setBusy(false);
+      });
+  });
+
+  document.getElementById('pspBtnPost').addEventListener('click', function () {
+    if (!currentDraftId) {
+      setStatus('Select or generate a draft, verify it, then post.', 'warn');
+      return;
+    }
+    var pd = (document.getElementById('pspPostDate').value || '').trim();
+    if (pspPeriodGuard) {
+      var closedMsg = pspPeriodGuard.message(pd);
+      if (closedMsg) {
+        pspPeriodGuard.refresh();
+        setStatus(closedMsg, 'warn');
+        return;
+      }
+    }
+    var remarks = ((document.getElementById('pspNarration') && document.getElementById('pspNarration').value) || (document.getElementById('pspSettleRemarks').value || '')).trim();
+    var cc = (document.getElementById('pspCostCenter').value || '').trim();
+    var redirectAfterPost = false;
+    setBusy(true, 'Posting to GL…');
+    setStatus('Posting to GL…', '');
+    fetch(withBranch(apiDraftMutationUrl), {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({
+        action: 'post',
+        draft_id: currentDraftId,
+        voucher_date: pd || null,
+        narration_extra: remarks ? ('Settlement: ' + remarks).slice(0, 500) : '',
+        remarks: remarks,
+        cost_center: cc || undefined,
+      }),
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) {
+          var msg = data.error || 'Post failed';
+          if (data.voucher_no) msg += ' (GL voucher ' + data.voucher_no + ')';
+          setStatus(msg, 'warn');
+          loadDrafts();
+          loadBills();
+          return;
+        }
+        redirectAfterPost = true;
+        setStatus('Posted GL voucher ' + (data.voucher_no || '') + '. Returning to batch list…', 'ok');
+        var listUrl = settlementListUrl + (settlementListUrl.indexOf('?') >= 0 ? '&' : '?') + 'open_pos_settlement_pdf=' + encodeURIComponent(String(currentDraftId));
+        window.location.href = listUrl;
+      })
+      .catch(function (e) {
+        setStatus(e.message || 'Network error', 'warn');
+      })
+      .finally(function () {
+        if (!redirectAfterPost) setBusy(false);
+      });
+  });
+  document.getElementById('pspBtnReverse').addEventListener('click', function () {
+    var sel = selectedRows().filter(rowMatchesFilters);
+    var posted = sel.filter(function (r) { return String(r.settlementStatus || '').trim() === 'Posted'; });
+    if (!posted.length) {
+      setStatus('Select at least one bill with settlement status Posted.', 'warn');
+      return;
+    }
+    if (!confirm('Reverse GL settlement for ' + posted.length + ' bill(s) and reset to Pending?')) return;
+    var remarks = (document.getElementById('pspSettleRemarks').value || '').trim();
+    var cc = (document.getElementById('pspCostCenter').value || '').trim();
+    setBusy(true, 'Reversing GL posting…');
+    setStatus('Posting reversal journals…', '');
+    fetch(withBranch(apiReverseGlUrl), {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ bill_nos: posted.map(function (r) { return r.billNo; }), remarks: remarks, cost_center: cc || undefined }),
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) {
+          setStatus(data.error || 'Reverse failed', 'warn');
+          return;
+        }
+        var rv = (data.reversal_vouchers || []).join(', ');
+        setStatus('Reversed (' + (rv || 'no GL match — bills reset only') + '). Reloading…', 'ok');
+        loadBills();
+        loadDrafts();
+      })
+      .catch(function (e) {
+        setStatus(e.message || 'Network error', 'warn');
+      })
+      .finally(function () {
+        setBusy(false);
+      });
+  });
+  document.getElementById('pspBtnPrint').addEventListener('click', function () { window.print(); });
+  document.getElementById('pspBtnExcel').addEventListener('click', function () {
+    var sel = selectedRows().filter(rowMatchesFilters);
+    var src = sel.length ? sel : visibleRows();
+    var hdr = ['BillNo', 'BillDate', 'Cashier', 'Counter', 'Customer', 'Payment', 'Gross', 'Discount', 'Tax', 'Net', 'Status', 'Voucher', 'Remarks'];
+    var csv = [hdr.join(',')];
+    src.forEach(function (r) {
+      csv.push([r.billNo, r.billDate, r.cashier, r.counter, '"' + String(r.customer).replace(/"/g, '""') + '"', r.paymentType, r.grossAmount, r.discount, r.tax, r.netAmount, r.settlementStatus, r.postedVoucher, '"' + String(r.remarks || '').replace(/"/g, '""') + '"'].join(','));
+    });
+    var blob = new Blob([csv.join('\n')], { type: 'text/csv;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'pos_settlement_export.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setStatus('Exported CSV.', 'ok');
+  });
+
+  function localIsoDate(d) {
+    var y = d.getFullYear();
+    var m = d.getMonth() + 1;
+    var day = d.getDate();
+    return y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+  }
+
+  /* Use POS settlement / closed day, not browser "today", as the GL posting date default. */
+  var startFrom = (initialFromDate && String(initialFromDate).length === 10) ? String(initialFromDate) : defaultSettlementDate;
+  var startTo = (initialToDate && String(initialToDate).length === 10) ? String(initialToDate) : startFrom || defaultSettlementDate;
+  document.getElementById('pspPostDate').value = startFrom || defaultSettlementDate || localIsoDate(new Date());
+  document.getElementById('pspFrom').value = startFrom || defaultSettlementDate;
+  document.getElementById('pspTo').value = startTo || defaultSettlementDate;
+  if (window.PeriodDateGuard && window.PeriodDateGuard.bind) {
+    pspPeriodGuard = window.PeriodDateGuard.bind(
+      document.getElementById('pspPostDate'),
+      window.PeriodDateGuard.fromJsonScript('pspClosedPeriodsJson'),
+      { hintEl: document.getElementById('pspPostDateHint') }
+    );
+  }
+  var statusFilter = document.getElementById('pspStatus');
+  if (statusFilter && initialFromDate) statusFilter.value = 'Pending';
+
+  rows = [];
+  renderTable();
+  loadCoaOptions(function () {
+    /* Open draft from list, or Settle a pending day (from/to) and auto-load bills. */
+    if (initialDraftId != null && Number(initialDraftId) > 0) {
+      openDraftWorkflow(initialDraftId);
+    } else if (initialFromDate) {
+      validatePosDateClosedBeforeLoad().then(function (ok) {
+        if (ok) loadBills(true);
+      });
+    }
+  });
+})();
+</script>
+{% endblock %}

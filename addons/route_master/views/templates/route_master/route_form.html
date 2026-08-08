@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Route{% else %}New Route{% endif %}{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .setup-im-page.rt-setup .customer-details.sm-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; row-gap: 4px; }
+  @media (max-width: 1024px) {
+    .setup-im-page.rt-setup .customer-details.sm-grid { grid-template-columns: 1fr; }
+  }
+  .setup-im-page .rt-setup-actions { display: none; }
+</style>
+
+<div class="im-page setup-im-page rt-setup">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>Route / <span class="im-ref">{{ next_routeno }}</span> {% if not is_edit %}<span class="status-badge status-badge--new">New</span>{% endif %}</h1>
+      <div class="im-actions">
+        <button type="submit" form="routeForm" class="im-btn-save">{% if is_edit %}Save{% else %}Create{% endif %}</button>
+        <a href="{{ url_for('route_master.route_list') }}" class="im-btn-secondary">List</a>
+      </div>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, msg in messages %}
+        <p class="flash flash--{{ category }}" style="margin-bottom:12px;">{{ msg }}</p>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <section class="setup-im-shell customer-form-shell itemmaster-container">
+    <div class="cf-form-stack">
+      <div class="cf-form-panel">
+        <h2 class="cf-section-title">Route details</h2>
+  <form id="routeForm" method="post" autocomplete="off" class="form-enter-focus-only" action="
+    {%- if is_edit -%}
+      {{ url_for('route_master.route_edit', location_code=location_code, routeno=next_routeno) }}
+    {%- else -%}
+      {{ url_for('route_master.route_create') }}
+    {%- endif -%}
+  ">
+    <input type="hidden" name="locationcode" id="locHidden" value="{{ location_code }}" />
+    <div class="customer-details sm-grid">
+    {% if not is_edit %}
+    <input type="hidden" name="route_create_once" value="{{ route_create_once }}" />
+    <div class="form-group" style="grid-column: 1 / -1;">
+      <label for="location_pick"><span>Branch</span></label>
+      <select class="input" id="location_pick" aria-label="Branch">
+        {% for loc in locations %}
+          <option value="{{ loc.code }}" {% if loc.code|string == location_code|string %}selected{% endif %}>
+            {{ loc.code }} — {{ loc.name or loc.code }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    {% else %}
+    <input type="hidden" name="route_edit_once" value="{{ route_edit_once }}" />
+    <div class="form-group" style="grid-column: 1 / -1;">
+      <label><span>Branch</span></label>
+      <span class="muted" style="flex:1;font-size:13px;">{{ location_code }}{% if location_name %} — {{ location_name }}{% endif %} · Route <strong>{{ next_routeno }}</strong></span>
+    </div>
+    {% endif %}
+
+      <div class="form-group">
+        <label for="routeno_disp">Route no.</label>
+        <input class="input" id="routeno_disp" type="text" readonly value="{{ next_routeno }}" />
+      </div>
+      <div></div>
+
+      <div class="form-group" style="grid-column: 1 / -1;">
+        <label for="routename"><span>Name</span> <span style="color:#b45309">*</span></label>
+        <input class="input" id="routename" name="routename" type="text" maxlength="250" required
+          value="{{ (row_norm.routename or '')|default('', true)|trim }}" />
+      </div>
+
+      <div class="form-group">
+        <label for="morning">Morning</label>
+        <input class="input" id="morning" name="morning" type="text" maxlength="50"
+          value="{{ (row_norm.morning or '')|default('', true)|trim }}" />
+      </div>
+      <div class="form-group">
+        <label for="evening">Evening</label>
+        <input class="input" id="evening" name="evening" type="text" maxlength="50"
+          value="{{ (row_norm.evening or '')|default('', true)|trim }}" />
+      </div>
+
+      <div class="form-group">
+        <label for="mainroute">Main route</label>
+        <input class="input" id="mainroute" name="mainroute" type="number"
+          value="{{ row_norm.mainroute if row_norm.mainroute is not none else '' }}" />
+      </div>
+    </div>
+
+    <div class="rt-setup-actions sm-actions">
+      <button type="submit" class="page-po__btn-primary">{% if is_edit %}Save{% else %}Create{% endif %}</button>
+    </div>
+  </form>
+
+  {% if is_edit %}
+  <form method="post" class="sm-actions form-enter-focus-only" style="border-top:none;padding-top:12px;margin-top:0;"
+        action="{{ url_for('route_master.route_delete', location_code=location_code, routeno=next_routeno) }}"
+        onsubmit="return confirm('Delete this route?');">
+    <input type="hidden" name="route_delete_once" value="{{ route_delete_once }}" />
+    <button type="submit" class="page-po__btn-secondary" style="background:#fecaca;color:#991b1b;border-color:#f87171;">Delete</button>
+  </form>
+  {% endif %}
+      </div>
+    </div>
+  </section>
+</div>
+
+{% if not is_edit %}
+<script>
+(function() {
+  var pick = document.getElementById('location_pick');
+  var hidden = document.getElementById('locHidden');
+  if (!pick || !hidden) return;
+  pick.addEventListener('change', function() {
+    hidden.value = pick.value;
+    window.location = '{{ url_for("route_master.route_create") }}'.split('?')[0] + '?pref_loc=' + encodeURIComponent(pick.value);
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

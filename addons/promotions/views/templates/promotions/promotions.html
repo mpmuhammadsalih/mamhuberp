@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+  body { overflow-x: hidden; min-height: 100vh; }
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+    border: none;
+    padding: 12px 16px;
+  }
+  .page-header {
+    background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+    padding: 12px 16px;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    box-shadow: 0 6px 20px rgba(124, 58, 237, 0.35);
+  }
+  .page-header h2 { color: #fff !important; font-weight: 700; font-size: 22px; margin: 0; }
+  .promo-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .promo-tab {
+    padding: 10px 18px;
+    border: 2px solid #c4b5fd;
+    border-radius: 10px;
+    background: #f5f3ff;
+    color: #5b21b6;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .promo-tab:hover { background: #ede9fe; border-color: #7c3aed; }
+  .promo-tab.promo-tab--active {
+    background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+    color: #fff;
+    border-color: transparent;
+  }
+  .promo-content { display: none; }
+  .promo-content.promo-content--active { display: block; }
+  .promo-section {
+    background: #faf5ff;
+    border: 1px solid #e9d5ff;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+  }
+  .promo-section h3 { color: #5b21b6; font-weight: 700; font-size: 16px; margin: 0 0 6px 0; }
+  .promo-section p { color: #6b7280; font-size: 13px; margin: 0 0 12px 0; line-height: 1.4; }
+  .promo-actions { margin-bottom: 10px; }
+  .promo-table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid #e9d5ff; }
+  .promo-table { width: 100%; border-collapse: collapse; background: #fff; }
+  .promo-table thead { background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%); color: #fff; }
+  .promo-table thead th { padding: 10px 12px; text-align: left; font-weight: 700; font-size: 13px; }
+  .promo-table tbody td { padding: 8px 12px; font-size: 13px; border-bottom: 1px solid #f3e8ff; }
+  .promo-table tbody tr:hover { background: #faf5ff; }
+  .promo-empty { padding: 24px; text-align: center; color: #9ca3af; font-size: 14px; }
+  .button--primary {
+    background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-weight: 600;
+    padding: 8px 16px;
+    cursor: pointer;
+  }
+  .button--primary:hover { opacity: 0.95; transform: translateY(-1px); }
+  .button--secondary {
+    background: #f5f3ff;
+    border: 2px solid #c4b5fd;
+    color: #5b21b6;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .button--secondary:hover { background: #ede9fe; }
+</style>
+
+<div class="card" style="max-width: 1200px; margin: 0 auto;">
+  <div class="page-header">
+    <h2>🏷️ Promotions</h2>
+    <p style="color: rgba(255,255,255,0.9); margin: 4px 0 0 0; font-size: 14px;">Configure discount, mix & match, retail, and voucher promotions.</p>
+  </div>
+
+  <div class="promo-tabs" role="tablist">
+    <button type="button" class="promo-tab promo-tab--active" data-tab="discount" role="tab">Discount Promotions</button>
+    <button type="button" class="promo-tab" data-tab="mixmatch" role="tab">Mix & Match</button>
+    <button type="button" class="promo-tab" data-tab="retail" role="tab">Retail Promotions</button>
+    <button type="button" class="promo-tab" data-tab="voucher" role="tab">Voucher Promotions</button>
+  </div>
+
+  <!-- Discount Promotions -->
+  <div id="content-discount" class="promo-content promo-content--active" role="tabpanel">
+    <div class="promo-section">
+      <h3>Discount Promotions</h3>
+      <p>Set percentage or fixed discounts by item, category, or basket. Apply time windows and min/max rules.</p>
+      <div class="promo-actions">
+        <button type="button" class="button button--primary" id="btnAddDiscount">+ Add Discount Promotion</button>
+      </div>
+      <div class="promo-table-wrap">
+        <table class="promo-table" id="tableDiscount">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Value</th>
+              <th>Valid From</th>
+              <th>Valid To</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyDiscount">
+            <tr><td colspan="7" class="promo-empty">No discount promotions. Click "Add Discount Promotion" to create one.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mix & Match -->
+  <div id="content-mixmatch" class="promo-content" role="tabpanel">
+    <div class="promo-section">
+      <h3>Mix & Match Promotions</h3>
+      <p>Buy X get Y free, or buy multiple units at a bundle price. Define product groups and trigger rules.</p>
+      <div class="promo-actions">
+        <button type="button" class="button button--primary" id="btnAddMixMatch">+ Add Mix & Match</button>
+      </div>
+      <div class="promo-table-wrap">
+        <table class="promo-table" id="tableMixMatch">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Rule (e.g. Buy X Get Y)</th>
+              <th>Products / Group</th>
+              <th>Valid From</th>
+              <th>Valid To</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyMixMatch">
+            <tr><td colspan="7" class="promo-empty">No mix & match promotions. Click "Add Mix & Match" to create one.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Retail Promotions -->
+  <div id="content-retail" class="promo-content" role="tabpanel">
+    <div class="promo-section">
+      <h3>Retail Promotions</h3>
+      <p>All promotions available in retail: combine discount, mix & match, and voucher rules. Assign to locations or channels.</p>
+      <div class="promo-actions">
+        <button type="button" class="button button--primary" id="btnAddRetail">+ Add Retail Promotion</button>
+      </div>
+      <div class="promo-table-wrap">
+        <table class="promo-table" id="tableRetail">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Description</th>
+              <th>Valid From</th>
+              <th>Valid To</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyRetail">
+            <tr><td colspan="7" class="promo-empty">No retail promotions. Click "Add Retail Promotion" to create one.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Voucher Promotions -->
+  <div id="content-voucher" class="promo-content" role="tabpanel">
+    <div class="promo-section">
+      <h3>Voucher Promotions</h3>
+      <p>Voucher / coupon codes: fixed or percentage off, min spend, single or multiple use. Set expiry and usage limits.</p>
+      <div class="promo-actions">
+        <button type="button" class="button button--primary" id="btnAddVoucher">+ Add Voucher</button>
+      </div>
+      <div class="promo-table-wrap">
+        <table class="promo-table" id="tableVoucher">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Description</th>
+              <th>Type</th>
+              <th>Value</th>
+              <th>Valid From</th>
+              <th>Valid To</th>
+              <th>Usage</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyVoucher">
+            <tr><td colspan="8" class="promo-empty">No voucher promotions. Click "Add Voucher" to create one.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const tabs = document.querySelectorAll('.promo-tab');
+  const contents = document.querySelectorAll('.promo-content');
+
+  function setActive(tabId) {
+    tabs.forEach(t => {
+      t.classList.toggle('promo-tab--active', t.getAttribute('data-tab') === tabId);
+    });
+    contents.forEach(c => {
+      const id = c.getAttribute('id');
+      c.classList.toggle('promo-content--active', id === 'content-' + tabId);
+    });
+  }
+
+  tabs.forEach(t => {
+    t.addEventListener('click', () => setActive(t.getAttribute('data-tab')));
+  });
+
+  function addRowPlaceholder(tbodyId, cols, message) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    const existingEmpty = tbody.querySelector('.promo-empty');
+    if (existingEmpty) existingEmpty.remove();
+    const tr = document.createElement('tr');
+    tr.innerHTML = cols.map((c, i) => '<td>' + (c || '-') + '</td>').join('') + '<td><button type="button" class="button button--secondary">Edit</button> <button type="button" class="button button--secondary">Delete</button></td>';
+    tbody.appendChild(tr);
+  }
+
+  document.getElementById('btnAddDiscount')?.addEventListener('click', function() {
+    addRowPlaceholder('tbodyDiscount', ['New Discount', '%', '10%', '-', '-', 'Active']);
+  });
+  document.getElementById('btnAddMixMatch')?.addEventListener('click', function() {
+    addRowPlaceholder('tbodyMixMatch', ['New Mix & Match', 'Buy 2 Get 1', '-', '-', '-', 'Active']);
+  });
+  document.getElementById('btnAddRetail')?.addEventListener('click', function() {
+    addRowPlaceholder('tbodyRetail', ['New Retail Promo', 'Discount', '-', '-', '-', 'Active']);
+  });
+  document.getElementById('btnAddVoucher')?.addEventListener('click', function() {
+    addRowPlaceholder('tbodyVoucher', ['SAVE10', '10% off', '%', '10%', '-', '-', '0']);
+  });
+})();
+</script>
+{% endblock %}

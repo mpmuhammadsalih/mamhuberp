@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body {
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+  
+  /* Modern colorful card */
+  .card {
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.5);
+    border: none !important;
+    padding: 12px 16px;
+  }
+  
+  /* Colorful page header */
+  .page-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    padding: 10px 16px !important;
+    border-radius: 12px;
+    margin-bottom: 10px !important;
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+  }
+  .page-header h1 {
+    color: #ffffff !important;
+    font-weight: 700;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    font-size: 22px !important;
+    margin: 0;
+  }
+  .page-header .muted {
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  
+  /* Colorful buttons */
+  .button {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border: none !important;
+    border-radius: 10px;
+    box-shadow: 0 4px 14px rgba(102, 126, 234, 0.4);
+    transition: all 0.3s;
+    font-weight: 600;
+    color: #ffffff !important;
+    padding: 6px 14px !important;
+    font-size: 13px !important;
+  }
+  .button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+  }
+  
+  /* Table headers */
+  .table thead {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  }
+  .table thead th {
+    background: transparent !important;
+    color: #ffffff !important;
+    font-weight: 700;
+    padding: 8px 10px !important;
+  }
+  
+  /* Scroll table */
+  .scroll-table {
+    border-radius: 12px;
+    border: 2px solid #e2e8f0;
+    background: #ffffff;
+  }
+  
+  /* Search field */
+  .search-field {
+    border: 2px solid #e2e8f0;
+    border-radius: 10px;
+    transition: all 0.3s;
+  }
+  .search-field:focus-within {
+    border-color: #667eea;
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+  }
+  
+  h2 {
+    color: #4c51bf;
+    font-weight: 700;
+    font-size: 18px;
+    margin: 0 0 10px 0;
+  }
+</style>
+  <section class="card" style="max-width: 1400px; margin: 0 auto;">
+    <div class="page-header">
+      <div>
+        <h1>💳 Receivables</h1>
+        <p class="muted">Select a customer with outstanding balance, filter by bill date, and apply receivables.</p>
+      </div>
+    </div>
+    <form method="get" class="form form--inline payments-filters">
+      <label class="payments-customer">
+        Customer Code
+        <span class="search-field search-field--wide">
+          <input
+            type="text"
+            id="receivablesCustomerInput"
+            name="customercode"
+            value="{{ customer_code }}"
+            placeholder="Enter customer code..."
+          />
+          <button type="button" class="search-clear" id="receivablesCustomerClear" aria-label="Clear customer">×</button>
+        </span>
+      </label>
+      <button type="submit" class="button">Load</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Settlements</h2>
+    {% if has_filter and settlements.columns and settlements.rows %}
+      <div class="scroll-table">
+        <table class="table table-fixed">
+          <thead>
+            <tr>
+              {% for col in settlements.columns %}
+                <th>{{ col }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in settlements.rows %}
+              <tr>
+                {% for col in settlements.columns %}
+                  <td>{{ row[col] }}</td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      {% if has_filter %}
+        <p class="muted">No settlements found.</p>
+      {% else %}
+        <p class="muted">Enter a customer code to load settlements.</p>
+      {% endif %}
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Temp Settlements</h2>
+    {% if has_filter and temp_settlements.columns and temp_settlements.rows %}
+      <div class="scroll-table">
+        <table class="table table-fixed">
+          <thead>
+            <tr>
+              {% for col in temp_settlements.columns %}
+                <th>{{ col }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in temp_settlements.rows %}
+              <tr>
+                {% for col in temp_settlements.columns %}
+                  <td>{{ row[col] }}</td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      {% if has_filter %}
+        <p class="muted">No temp settlements found.</p>
+      {% else %}
+        <p class="muted">Enter a customer code to load temp settlements.</p>
+      {% endif %}
+    {% endif %}
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/receivables.js') }}"></script>
+{% endblock %}

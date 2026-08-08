@@ -1,0 +1,1161 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/im_form_shell.css') }}?v=2" />
+<style>
+  main.container:has(> .im-page.im-form-shell-page.si-form-page) { padding-top: 0; }
+  /* Sales Invoice — Item Master shell + line grid */
+  .im-form-shell-page.si-form-page .im-topbar-main .im-actions > .si-ai-head--topbar {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: auto;
+    min-width: 6.5rem;
+    max-width: none;
+    flex-shrink: 0;
+    margin: 0;
+    padding: 5px 14px;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+  }
+  .im-form-shell-page.si-form-page .im-topbar-main .im-actions > .si-print-head--topbar {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    flex-shrink: 0;
+    margin: 0;
+    padding: 5px 14px;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+  }
+  .im-form-shell-page.si-form-page .si-print-head--topbar .si-print-switch-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #334155;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .im-form-shell-page.si-form-page .si-print-head--topbar .si-ai-switch {
+    position: relative;
+    display: inline-block;
+    width: 52px;
+    height: 30px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .im-form-shell-page.si-form-page .si-print-head--topbar .si-ai-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+    margin: 0;
+  }
+  .im-form-shell-page.si-form-page .si-print-head--topbar .si-ai-switch-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    border-radius: 999px;
+    background: #cbd5e1;
+    border: 1px solid #94a3b8;
+    transition: background 0.2s ease, border-color 0.2s ease;
+  }
+  .im-form-shell-page.si-form-page .si-print-head--topbar .si-ai-switch-slider::before {
+    content: '';
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    left: 3px;
+    top: 50%;
+    transform: translateY(-50%);
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.2s ease;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  }
+  .im-form-shell-page.si-form-page .si-print-head--topbar .si-ai-switch input:checked + .si-ai-switch-slider {
+    background: linear-gradient(180deg, #0d9488 0%, #0f766e 100%);
+    border-color: #14b8a6;
+  }
+  .im-form-shell-page.si-form-page .si-print-head--topbar .si-ai-switch input:checked + .si-ai-switch-slider::before {
+    transform: translateY(-50%) translateX(22px);
+  }
+  .im-form-shell-page.si-form-page .si-ai-head--topbar .si-ai-switch {
+    width: 52px;
+    height: 30px;
+  }
+  .im-form-shell-page.si-form-page .si-ai-head--topbar .si-ai-switch-slider::before {
+    width: 24px;
+    height: 24px;
+  }
+  .im-form-shell-page.si-form-page .si-ai-head--topbar .si-ai-switch input:checked + .si-ai-switch-slider::before {
+    transform: translateY(-50%) translateX(22px);
+  }
+
+  /* Save / Discard / History / Details — more space than default 3px itemmaster toolbar gap */
+  .im-form-shell-page.si-form-page.im-page:has(.itemmaster-container) .im-topbar-main .im-actions {
+    gap: 8px 14px;
+  }
+  .im-form-shell-page.si-form-page .im-topbar-main .im-actions > #btnDiscard,
+  .im-form-shell-page.si-form-page .im-topbar-main .im-actions > #btnHistory {
+    padding: 8px 12px !important;
+    border-radius: 4px;
+  }
+  .im-form-shell-page.si-form-page .im-topbar-main .im-actions > #btnDiscard:hover,
+  .im-form-shell-page.si-form-page .im-topbar-main .im-actions > #btnHistory:hover {
+    background: #f1f5f9;
+    text-decoration: none;
+  }
+
+  .im-form-shell-page.si-form-page .im-topbar-main .im-actions > #btnConvertToInvoice,
+  .im-form-shell-page.si-form-page .im-topbar-main .im-actions > a.si-btn-convert-invoice {
+    width: auto !important;
+    min-width: 9.75rem !important;
+    max-width: none !important;
+    padding: 8px 18px !important;
+    border-radius: 999px !important;
+    background: #2563eb !important;
+    border: 1px solid #1d4ed8 !important;
+    color: #fff !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    text-decoration: none !important;
+    flex-shrink: 0;
+  }
+  .im-form-shell-page.si-form-page .im-topbar-main .im-actions > #btnConvertToInvoice:hover,
+  .im-form-shell-page.si-form-page .im-topbar-main .im-actions > a.si-btn-convert-invoice:hover {
+    background: #1d4ed8 !important;
+    color: #fff !important;
+    text-decoration: none !important;
+  }
+
+  /* ── summary strip ── */
+  .si-summary-strip { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; justify-content: center;
+    padding: 6px 0; background: #f8fafc; border: 1px solid #e5e7eb;
+    border-radius: 4px; margin-bottom: 0; }
+  .si-summary-strip .sf { display: flex; align-items: center; gap: 6px; min-height: 36px; }
+  .si-summary-strip .sf label { font-size: 12px; color: #000; font-weight: 600;
+    white-space: nowrap; }
+  .si-summary-strip .sf input { border: none; border-bottom: 1px solid #dee2e6;
+    background: transparent; font-size: 14px; font-weight: 700; color: #000;
+    padding: 4px 0; min-height: 26px; width: 100px; text-align: right; outline: none; }
+  .si-summary-strip .sf input:focus { border-bottom-color: #1a56a4; }
+
+  .si-txn-date-block {
+    margin: 0 0 10px;
+    padding: 12px 14px;
+    border: 1px solid #f5c6cb;
+    border-radius: 6px;
+    background: #fff5f5;
+    color: #842029;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .si-txn-date-block a { color: #0d6efd; font-weight: 600; }
+
+  /* ── products section (PO style) ── */
+  .si-products { border: 1px solid #dee2e6; border-radius: 4px; overflow: hidden; background: #fff; }
+  .scroll-table { overflow: auto; max-height: 50vh; background: #fff; -webkit-overflow-scrolling: touch; }
+  .si-form-page #salesTable { width: 100%; min-width: 1080px; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+  #salesTable { --col-text-pad: 6px; }
+  #salesTable col.si-col-sl { width: 52px; }
+  #salesTable col.si-col-barcode { width: 128px; }
+  #salesTable col.si-col-itemcode { width: 96px; }
+  #salesTable col.si-col-itemname { width: 24%; }
+  #salesTable col.si-col-uom { width: 70px; }
+  #salesTable col.si-col-rate { width: 88px; }
+  #salesTable col.si-col-qty { width: 88px; }
+  #salesTable col.si-col-store { width: 120px; }
+  #salesTable col.si-col-warehouse { width: 190px; }
+  #salesTable col.si-col-bin { width: 150px; }
+  #salesTable col.si-col-lot { width: 110px; }
+  #salesTable col.si-col-disc { width: 88px; }
+  #salesTable col.si-col-amount { width: 112px; }
+  #salesTable col.si-col-action { width: 88px; }
+  #salesTable thead { position: sticky; top: 0; z-index: 2; background: #f8f9fa !important; }
+  #salesTable thead th {
+    background: #f8f9fa !important; color: #000 !important; padding: 5px 8px !important;
+    font-weight: 600; font-size: 12px; text-align: left; white-space: nowrap; border-bottom: 1px solid #dee2e6;
+  }
+  #salesTable thead th:not(:first-child),
+  #salesTable tbody td:not(:first-child),
+  .po-line-form-row .po-line-form-cell:not(:first-child) { padding-left: var(--col-text-pad) !important; }
+  #salesTable tbody td.si-col-barcode { overflow: visible; text-overflow: clip; }
+  #salesTable tbody td {
+    padding: 7px 12px !important; border: none; border-bottom: 1px solid #dee2e6; vertical-align: middle;
+    font-size: 12px; color: #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #salesTable tbody tr[data-line]:hover td { background: #f8f9fa !important; }
+  #salesTable tbody tr[data-line] td.si-col-barcode,
+  #salesTable tbody tr[data-line] td.si-col-itemcode,
+  #salesTable tbody tr[data-line] td.si-col-uom,
+  #salesTable tbody tr[data-line] td.si-col-qty,
+  #salesTable tbody tr[data-line] td.si-col-rate,
+  #salesTable tbody tr[data-line] td.si-col-disc,
+  #salesTable tbody tr[data-line] td.si-col-amount { cursor: cell; }
+  #salesTable .si-inline-input {
+    width: 100%; box-sizing: border-box; border: 1px solid #2563eb; border-radius: 3px;
+    padding: 1px 3px; font-size: 12px; line-height: 1.3; min-height: 22px; background: #fff;
+  }
+  #salesTable td.si-col-qty .si-inline-input,
+  #salesTable td.si-col-rate .si-inline-input,
+  #salesTable td.si-col-disc .si-inline-input,
+  #salesTable td.si-col-amount .si-inline-input { text-align: right; }
+  #salesTable tbody td.si-cell-invalid,
+  #salesTable tbody tr.line-entry td.si-cell-invalid {
+    background: #fee2e2 !important; color: #991b1b; font-weight: 600;
+    box-shadow: inset 0 0 0 1px #ef4444;
+  }
+  #salesTable tbody td.si-cell-checking,
+  #salesTable tbody tr.line-entry td.si-cell-checking { background: #fef9c3 !important; opacity: 1; }
+  #salesTable tbody tr.line-entry td.si-cell-invalid .input { color: #991b1b; }
+  #salesTable tbody td.si-col-itemname {
+    color: #000; font-weight: 500; overflow: visible; text-overflow: clip; white-space: normal;
+  }
+  .po-line-form-row .po-line-form-cell.si-col-itemname .input {
+    width: 100%; min-width: 0; box-sizing: border-box; white-space: normal; color: #000;
+  }
+  #salesTable tbody td.si-col-rate,
+  #salesTable tbody td.si-col-qty,
+  #salesTable tbody td.si-col-disc,
+  #salesTable tbody td.si-col-amount { text-align: right; }
+
+  #salesTable tbody tr.line-entry { background: #fff; }
+  .po-line-form-head .po-line-form-cell { background: #fff !important; font-weight: 400; }
+  .po-line-form-cell { padding: 6px 12px !important; border: none; border-bottom: 1px solid #dee2e6; vertical-align: top; }
+  .po-line-form-row .po-line-form-cell { padding-top: 2px !important; padding-bottom: 4px !important; }
+  .po-line-form-cell .input { width: 100%; min-width: 0; box-sizing: border-box; margin: 0; border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; padding: 3px 0; font-size: 12px; background: transparent; }
+  .po-line-form-cell .input:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .po-line-form-cell .search-field { display: flex; align-items: center; border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; overflow: visible; }
+  .po-line-form-cell .search-field:focus-within { border-bottom-color: var(--nexa-focus-color); }
+  .po-line-form-cell .search-field .input { border: none; padding: 3px 0; }
+  .po-line-form-cell .search-field .search-picker,
+  .po-line-form-cell .search-field .search-clear { background: transparent; border: none; padding: 0 4px; font-size: 11px; color: #000; }
+  .po-line-form-cell.si-col-rate .input,
+  .po-line-form-cell.si-col-qty .input,
+  .po-line-form-cell.si-col-disc .input,
+  .po-line-form-cell.si-col-amount .input { text-align: left; }
+  .po-line-form-cell.si-col-action {
+    white-space: nowrap; text-align: center;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+  }
+  .po-add-line-icon {
+    display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0;
+    border: 1px solid #dee2e6; border-radius: 4px; background: #fff; color: #000; font-size: 18px; line-height: 1; cursor: pointer; flex-shrink: 0;
+  }
+  .po-add-line-icon:focus { outline: 2px solid var(--nexa-focus-color, #1a56a4); outline-offset: 1px; }
+  .si-line-status { margin: 6px 12px 0; padding: 8px 12px; border-radius: 4px; font-size: 13px; font-weight: 600; }
+  .si-line-status--hidden { display: none; }
+  .si-line-status--error { display: block; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+  .po-clear-line-icon {
+    display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0;
+    border: 1px solid #dee2e6; border-radius: 4px; background: #fff; color: #000; font-size: 16px; line-height: 1; cursor: pointer; margin: 2px auto 0;
+  }
+  .po-clear-line-icon:hover { background: #fee2e2; border-color: #fca5a5; color: #dc2626; }
+
+  .btn-edit, .btn-remove {
+    min-width: 22px; height: 22px; padding: 0 5px; line-height: 20px; font-size: 12px;
+    border: 1px solid #dee2e6; border-radius: 3px; color: #000; background: transparent; cursor: pointer;
+  }
+  .btn-edit:hover { background: #eef6ff; border-color: var(--nexa-focus-color); color: #1d4ed8; }
+  .btn-remove:hover { background: #fee2e2; border-color: #fca5a5; color: #dc2626; }
+
+  /* totals row */
+  .si-totals-row { display: flex; justify-content: center; gap: 24px; flex-wrap: wrap;
+    padding: 6px 0; background: #f8fafc; border: 1px solid #e5e7eb;
+    border-top: none; border-radius: 0 0 4px 4px; }
+  .si-totals-row .tf { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+  .si-totals-row .tf label { font-size: 13px; color: #000; font-weight: 600;
+    text-transform: none; white-space: nowrap; }
+  .si-totals-row .tf input { border: none; border-bottom: 1px solid #dee2e6;
+    background: transparent; font-size: 15px; font-weight: 700; color: #000;
+    padding: 4px 0; min-height: 26px; width: 120px; text-align: right; outline: none; }
+  .si-totals-row .tf input:focus { border-bottom-color: #1a56a4; }
+
+  /* modal overrides */
+  #customerModal .modal__content,
+  #warehouseModal .modal__content,
+  #uomModal .modal__content,
+  #inventoryModal .modal__content,
+  #binModal .modal__content,
+  #lotPickModal .modal__content,
+  #historyModal .modal__content { max-width: 90vw; }
+  /* Item modal – compact list (match GRN) */
+  #itemModal .modal__content { width: 520px; max-width: 95vw; box-sizing: border-box; }
+  #itemModal .modal__header { padding: 6px 12px; }
+  #itemModal .modal__header h4 { margin: 0; padding: 0; font-size: 15px; font-weight: 600; line-height: 1.25; }
+  #itemModal .modal__body { padding: 6px 12px 10px; max-height: 65vh; overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box; }
+  #itemModal .modal__filters { flex-shrink: 0; margin: 0 0 6px; gap: 6px; }
+  #itemModal #itemSearch {
+    box-sizing: border-box; width: 100%; margin: 0 0 6px; flex-shrink: 0;
+    border: 1px solid #dee2e6; border-radius: 4px; padding: 0 10px; line-height: 26px; min-height: 26px;
+  }
+  #itemModal #itemBody { overflow-y: auto; overflow-x: hidden; flex: 1; min-height: 120px; }
+  #itemModal .item-row { display: block; padding: 6px 10px; border-bottom: 1px solid #e2e8f0; cursor: pointer; outline: none; }
+  #itemModal .item-row:hover, #itemModal .item-row:focus { background: #f0f9ff; }
+  #itemModal .item-row.item-row--own { background: #fffbeb; }
+  #itemModal .item-row.item-row--own:hover, #itemModal .item-row.item-row--own:focus { background: #fef3c7; }
+  #itemModal .item-row .item-line1 { font-weight: 600; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #itemModal .item-row .item-line2 { font-size: 12px; color: #64748b; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #itemModal .item-row.item-empty { color: #94a3b8; font-style: italic; padding: 8px 10px; text-align: center; cursor: default; }
+  #customerDetailsModal .modal__content { max-width: 720px; }
+  .customer-details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
+  .customer-details-grid .cd-field { display: flex; flex-direction: column; gap: 4px; }
+  .customer-details-grid .cd-field label { font-size: 12px; color: #6b7280; margin: 0; }
+  .customer-details-grid .cd-value {
+    min-height: 30px; border: 1px solid #e5e7eb; border-radius: 4px; background: #f8fafc;
+    padding: 6px 8px; font-size: 13px; color: #111827; word-break: break-word;
+  }
+  .customer-details-grid .cd-field.span-2 { grid-column: span 2; }
+  .si-modal-thead th { background: #f8f9fa !important; color: #495057 !important;
+    padding: 8px 12px; border-bottom: 1px solid #dee2e6; font-weight: 600; font-size: 12px; }
+
+  .si-col-warehouse { display: none; }
+  .si-col-bin { display: none; }
+  .si-form-page.si-warehouse-mode .si-col-warehouse { display: table-cell; }
+  .si-form-page.si-bin-mode .si-col-bin { display: table-cell; }
+  .si-form-page.si-warehouse-mode .si-col-warehouse,
+  .si-form-page.si-warehouse-mode th.po-line-form-cell.si-col-warehouse {
+    min-width: 190px;
+    width: 190px;
+  }
+  .si-form-page.si-warehouse-mode #line_warehouse_display,
+  .si-form-page.si-warehouse-mode .si-col-warehouse .search-field {
+    min-width: 170px;
+    width: 100%;
+  }
+  .si-form-page.si-bin-mode .si-col-bin,
+  .si-form-page.si-bin-mode th.po-line-form-cell.si-col-bin {
+    min-width: 150px;
+    width: 150px;
+  }
+  .si-form-page.si-bin-mode #line_bin_display,
+  .si-form-page.si-bin-mode .si-col-bin .search-field {
+    min-width: 130px;
+    width: 100%;
+  }
+  .im-form-shell-page.si-form-page .si-summary-strip {
+    margin-top: 8px;
+    border-radius: 4px;
+  }
+  .im-form-shell-page.si-form-page .si-products {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+  }
+  .im-form-shell-page.si-form-page .si-lines-panel .scroll-table {
+    max-height: 50vh;
+    -webkit-overflow-scrolling: touch;
+  }
+  .im-form-shell-page.si-form-page .search-picker {
+    background: #334155;
+    color: #fff;
+    border: none;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 12px;
+    border-radius: 0 2px 2px 0;
+  }
+  #customerModalTable thead,
+  #loyaltyCustomerModalTable thead,
+  #priceModeModalTable thead,
+  #warehouseModalTable thead,
+  #itemModalTable thead,
+  #uomModalTable thead,
+  #inventoryModalTable thead,
+  #binModalTable thead,
+  #lotPickModalTable thead,
+  #historyModalTable thead {
+    background: #334155 !important;
+  }
+  #customerModalTable thead th,
+  #loyaltyCustomerModalTable thead th,
+  #priceModeModalTable thead th,
+  #warehouseModalTable thead th,
+  #itemModalTable thead th,
+  #uomModalTable thead th,
+  #inventoryModalTable thead th,
+  #binModalTable thead th,
+  #lotPickModalTable thead th,
+  #historyModalTable thead th {
+    background: #334155 !important;
+    color: #fff !important;
+  }
+</style>
+
+<div class="im-page im-form-shell-page si-page si-form-page{% if warehouse_enabled %} si-warehouse-mode{% endif %}{% if bin_tracking_enabled %} si-bin-mode{% endif %}{% if batch_tracking_enabled %} si-batch-mode{% endif %}"
+     data-transaction-audit="Sales"
+     data-transaction-no-selector="#bill_no"
+     data-save-button="#btnSave"
+     data-track-root=".im-page"
+     data-save-url-pattern="/save">
+  {% if openai_configured|default(false) %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/sales_invoice_ai.css') }}?v=1" />
+  {% endif %}
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>{{ page_title or 'Sales Invoice' }} / <span class="im-ref" id="siTitleRef">New</span></h1>
+      <div class="im-actions">
+        {% if openai_configured|default(false) %}
+        <div class="si-ai-head si-ai-head--topbar">
+          <span class="si-ai-switch-label" id="siAiSwitchLabel">AI</span>
+          <label class="si-ai-switch" for="siAiCaptureToggle">
+            <input type="checkbox" id="siAiCaptureToggle" autocomplete="off" role="switch" aria-labelledby="siAiSwitchLabel" />
+            <span class="si-ai-switch-slider"></span>
+          </label>
+          <button type="button" class="si-ai-review-btn hidden" id="siAiReviewCartBtn" title="Reopen AI line preview">Review AI lines</button>
+        </div>
+        {% endif %}
+        {% if (enable_print if enable_print is defined else '1') != '0' %}
+        <div class="si-print-head si-print-head--topbar" title="When enabled, save opens the invoice PDF in a new tab">
+          <span class="si-print-switch-label" id="siPrintSwitchLabel">Print PDF</span>
+          <label class="si-ai-switch" for="siPrintPdfOnSave">
+            <input type="checkbox" id="siPrintPdfOnSave" autocomplete="off" role="switch" aria-labelledby="siPrintSwitchLabel" checked />
+            <span class="si-ai-switch-slider"></span>
+          </label>
+        </div>
+        {% endif %}
+        {% if save_base|default('') == '/sales-order' %}
+        <a href="#" class="si-btn-convert-invoice" id="btnConvertToInvoice" style="display:none;">Convert to Invoice</a>
+        <button type="button" class="im-link" id="btnCancelOrder" style="display:none; color:#b91c1c;">Cancel Order</button>
+        {% endif %}
+        <button type="button" class="im-btn-save" id="btnSave">Save</button>
+        <button type="button" class="im-link" id="btnDiscard">Discard</button>
+        <button type="button" class="im-link" id="btnHistory">History</button>
+        <button type="button" class="im-btn-secondary" id="btnCustomerDetails">Details</button>
+        <button type="button" class="im-btn-secondary" id="btnNew">New</button>
+        {% if list_url is defined and list_url %}
+        <a href="{{ list_url }}" class="im-btn-secondary">List</a>
+        {% elif save_base|default('/sales') == '/sales' %}
+        <a href="{{ url_for('sales.sales_invoice_list') }}" class="im-btn-secondary">List</a>
+        {% elif save_base|default('') == '/sales-order' %}
+        <a href="{{ url_for('sales.sales_order_list') }}" class="im-btn-secondary">List</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if openai_configured|default(false) %}
+  <div class="si-ai-capture-expand hidden" id="siAiCapturePanel">
+    <div class="si-ai-unified-card">
+      <textarea id="siAiCapturePaste" class="si-ai-unified-field" placeholder="Paste text (Ctrl+V), or use Image… / PDF for AI line extraction." rows="4" autocomplete="off" aria-label="Paste text or tables for AI"></textarea>
+      <div class="si-ai-unified-footer">
+        <input type="file" id="siAiCaptureFile" accept="image/*,.pdf,application/pdf" hidden aria-hidden="true" />
+        <button type="button" class="si-ai-capture-btn" id="siAiCapturePick" title="Image or PDF (first page)">Image…</button>
+        <button type="button" class="si-ai-capture-btn" id="siAiAnalyzeTextBtn">Analyze</button>
+      </div>
+    </div>
+    <span class="si-ai-capture-status" id="siAiCaptureStatus"></span>
+  </div>
+  {% endif %}
+
+  <section class="itemmaster-container si-form-body">
+  {% if transaction_date_blocked|default(false) %}
+  <div class="si-txn-date-block" id="siTxnDateBlock">
+    {{ transaction_date_error or 'No open transaction date. Set it in Transaction Date Setup before posting.' }}
+    {% if transaction_date_setup_url %}
+    <a href="{{ transaction_date_setup_url }}">Open Transaction Date Setup</a>
+    {% endif %}
+  </div>
+  {% endif %}
+  <div class="si-txn-date-block" id="soCancelledBanner" style="display:none; background:#fef2f2; border-color:#fecaca; color:#991b1b;">
+    This sales order is cancelled. You can view or print it, but changes are not allowed.
+  </div>
+  {% if convert_error|default('') %}
+  <div class="si-txn-date-block" style="background:#fef2f2; border-color:#fecaca; color:#991b1b;">
+    {{ convert_error }}
+  </div>
+  {% elif convert_from_orders|default(none) %}
+  <div class="si-txn-date-block" id="soConvertBanner" style="background:#eff6ff; border-color:#bfdbfe; color:#1e40af;">
+    {% if convert_from_orders|length > 1 %}
+    Converting sales orders {{ convert_from_orders|join(', ') }} into one new sales invoice. Review merged lines and save to post the invoice.
+    {% else %}
+    Converting sales order {{ convert_from_orders[0] }} to a new sales invoice. Review lines and save to post the invoice.
+    {% endif %}
+  </div>
+  {% endif %}
+  <form
+    id="salesForm"
+    class="form"
+    autocomplete="off"
+    data-next-bill-base="{{ next_bill_base or '/sales' }}"
+    data-save-base="{{ save_base or '/sales' }}"
+    data-print-base="{{ print_base or '/sales' }}"
+    data-enable-print="{{ enable_print if enable_print is defined else '1' }}"
+    data-draft-key="{{ draft_key or 'sales_draft' }}"
+    data-minus-billing="{{ '1' if minus_billing_enabled else '0' }}"
+    data-order-no-mandatory="{{ '1' if order_no_mandatory|default(true) else '0' }}"
+  >
+
+    <h2 class="im-section-title">{% if save_base|default('') == '/sales-order' %}Order details{% else %}Invoice details{% endif %}</h2>
+    <div class="tab-content tab-content--active form-section im-panel-body" id="tab-header">
+    <div class="form-grid--2cols po-details">
+      <div class="form-group">
+        <label for="bill_no">Bill No</label>
+        <input type="text" id="bill_no" name="bill_no" class="input" readonly value="{{ initial_bill_no or '' }}" />
+      </div>
+      <div class="form-group">
+        <label for="bill_date">Bill Date</label>
+        <input type="date" id="bill_date" name="bill_date" value="{{ bill_date }}" class="input"
+               {% if bill_date_from %}min="{{ bill_date_from }}"{% endif %}
+               {% if bill_date_to %}max="{{ bill_date_to }}"{% endif %}
+               {% if not bill_date_from or bill_date_from == bill_date_to %}readonly{% endif %}
+               title="Date must be within the open range from Transaction Date Setup" />
+      </div>
+      <div class="form-group">
+        <label for="bill_time">Bill Time</label>
+        <input type="text" id="bill_time" name="bill_time" class="input" readonly />
+      </div>
+      <div class="form-group">
+        <label for="delivery_date">Delivery Date</label>
+        <input type="date" id="delivery_date" name="delivery_date" class="input" />
+      </div>
+      <div class="form-group">
+        <label>Price Mode</label>
+        <span class="search-field search-field--popup">
+          <input type="text" id="price_mode_display" name="price_mode_display" class="input"
+                 placeholder="Select price mode..." readonly />
+          <button type="button" class="search-clear" id="priceModeClear" style="display:none;">×</button>
+          <button type="button" class="search-picker" id="priceModePicker">▾</button>
+        </span>
+        <input type="hidden" id="price_mode" name="price_mode" value="" />
+      </div>
+      <div class="form-group">
+        <label for="remarks">Remarks</label>
+        <input type="text" id="remarks" name="remarks" class="input" />
+      </div>
+      <div class="form-group">
+        <label>Customer</label>
+        <span class="search-field search-field--popup">
+          <input type="text" id="customer_display" name="customer_display" class="input"
+                 placeholder="Select customer..." readonly />
+          <button type="button" class="search-clear" id="customerClear" style="display:none;">×</button>
+          <button type="button" class="search-picker" id="customerPicker">▾</button>
+        </span>
+        <input type="hidden" id="customer_name" name="customer_name" value="" />
+        <input type="hidden" id="customer_code" name="customer_code" value="" />
+      </div>
+      <input type="hidden" id="customer_phone" name="customer_phone" value="" />
+      <input type="hidden" id="bill_type" name="bill_type" value="" />
+      <input type="hidden" id="credit_limit" name="credit_limit" value="" />
+      <input type="hidden" id="customer_category" name="customer_category" value="" />
+      <input type="hidden" id="outstanding_amount" name="outstanding_amount" value="" />
+      <input type="hidden" id="total_points" name="total_points" value="" />
+      <input type="hidden" id="customer_address" name="customer_address" value="" />
+      <input type="hidden" id="source_order_billno" name="source_order_billno" value="" />
+      <input type="hidden" id="source_order_billnos" name="source_order_billnos" value="" />
+      <div class="form-group">
+        <label for="order_no">Order No <span id="orderNoRequiredMark" style="color:#dc2626;{% if not order_no_mandatory|default(true) %} display:none;{% endif %}">*</span></label>
+        <input type="text" id="order_no" name="order_no" class="input" maxlength="80" {% if order_no_mandatory|default(true) %}required{% endif %} placeholder="Enter order reference" />
+      </div>
+      <div class="form-group">
+        <label>Loyalty Customer</label>
+        <span class="search-field search-field--popup">
+          <input type="text" id="loyalty_customer_display" name="loyalty_customer_display" class="input"
+                 placeholder="Select loyalty customer..." readonly />
+          <button type="button" class="search-clear" id="loyaltyCustomerClear" style="display:none;">×</button>
+          <button type="button" class="search-picker" id="loyaltyCustomerPicker">▾</button>
+        </span>
+        <input type="hidden" id="loyalty_customer_code" name="loyalty_customer_code" value="" />
+      </div>
+      {% if warehouse_enabled %}
+      <div class="form-group">
+        <label>Default Warehouse</label>
+        <span class="search-field search-field--popup">
+          <input type="text" id="warehouseDisplay" name="warehouse_display" class="input"
+                 placeholder="Select warehouse..." readonly />
+          <button type="button" class="search-clear" id="warehouseClear" style="display:none;">×</button>
+          <button type="button" class="search-picker" id="warehousePicker">▾</button>
+        </span>
+        <input type="hidden" id="warehouse_id" name="warehouse_id" value="" />
+        <input type="hidden" id="warehouse_code" name="warehouse_code" value="" />
+        <input type="hidden" id="warehouse_name" name="warehouse_name" value="" />
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- summary strip -->
+    <div class="si-summary-strip">
+      <div class="sf">
+        <label>Total Items</label>
+        <input type="number" id="total_items" name="total_items" readonly />
+      </div>
+      <div class="sf">
+        <label>Loyalty Pts</label>
+        <input type="number" id="loyalty_points" name="loyalty_points" readonly />
+      </div>
+      <div class="sf">
+        <label>Total Amount</label>
+        <input type="number" id="total_amount" name="total_amount" readonly />
+      </div>
+      <div class="sf">
+        <label>Addl. Discount</label>
+        <input type="number" id="additional_discount" name="additional_discount" step="0.01" min="0" />
+      </div>
+      <div class="sf">
+        <label>Promo Discount</label>
+        <input type="number" id="promotion_discount" name="promotion_discount" step="0.01" value="0" readonly />
+      </div>
+    </div>
+    </div><!-- /tab-header -->
+
+    <h2 class="im-section-title">Line items</h2>
+    <div class="tab-content tab-content--active form-section im-panel-body si-lines-panel" id="tab-items">
+    <div class="si-products">
+      <div class="scroll-table">
+        <table id="salesTable">
+          <colgroup>
+            <col class="si-col-sl" />
+            <col class="si-col-barcode" />
+            <col class="si-col-itemcode" />
+            <col class="si-col-itemname" />
+            <col class="si-col-uom" />
+            <col class="si-col-rate" />
+            <col class="si-col-qty" />
+            {% if not warehouse_enabled %}<col class="si-col-store" />{% endif %}
+            {% if warehouse_enabled %}<col class="si-col-warehouse" />{% endif %}
+            {% if bin_tracking_enabled %}<col class="si-col-bin" />{% endif %}
+            {% if batch_tracking_enabled %}<col class="si-col-lot" />{% endif %}
+            <col class="si-col-disc" />
+            <col class="si-col-amount" />
+            <col class="si-col-action" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="si-col-sl">Sl</th>
+              <th class="si-col-barcode">Barcode</th>
+              <th class="si-col-itemcode">Item Code</th>
+              <th class="si-col-itemname">Item Name</th>
+              <th class="si-col-uom">UOM</th>
+              <th class="si-col-rate">Rate</th>
+              <th class="si-col-qty">Qty</th>
+              {% if not warehouse_enabled %}
+              <th class="si-col-store">Store</th>
+              {% endif %}
+              {% if warehouse_enabled %}
+              <th class="si-col-warehouse">Warehouse</th>
+              {% endif %}
+              {% if bin_tracking_enabled %}
+              <th class="si-col-bin">Bin</th>
+              {% endif %}
+              {% if batch_tracking_enabled %}
+              <th class="si-col-lot">Lot</th>
+              {% endif %}
+              <th class="si-col-disc">Disc</th>
+              <th class="si-col-amount">Amount</th>
+              <th class="si-col-action">Action</th>
+            </tr>
+          </thead>
+          <tbody id="salesTableBody">
+            <tr class="table-empty">
+              <td colspan="{{ si_table_colspan }}" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">
+                No items added.
+              </td>
+            </tr>
+            <tr class="po-line-form-row po-line-form-head line-entry">
+              <td class="po-line-form-cell si-col-sl"></td>
+              <td class="po-line-form-cell si-col-barcode">
+                <input type="text" id="barcode_input" name="barcode_input" class="input" placeholder="Scan or enter barcode" autocomplete="off" />
+              </td>
+              <td class="po-line-form-cell si-col-itemcode">
+                <span class="search-field search-field--popup">
+                  <input type="text" id="item_code" name="item_code_display" class="input" placeholder="Code..." />
+                  <button type="button" class="search-clear" id="itemClear" style="display:none;">×</button>
+                  <button type="button" class="search-picker" id="itemPicker" style="display:none;">▾</button>
+                </span>
+                <input type="hidden" id="item_code_hidden" name="item_code" value="" />
+              </td>
+              <td class="po-line-form-cell si-col-itemname">
+                <input type="text" id="item_name" name="item_name" class="input" placeholder="Item Name" readonly />
+              </td>
+              <td class="po-line-form-cell si-col-uom">
+                <span class="search-field search-field--popup">
+                  <input type="text" id="uom_display" name="uom_display" class="input" placeholder="F1 UOM list" title="F1: pick UOM from list (after item is selected)" readonly tabindex="0" autocomplete="off" />
+                  <button type="button" class="search-clear" id="uomClear" style="display:none;">×</button>
+                  <button type="button" class="search-picker" id="uomPicker" style="display:none;">▾</button>
+                </span>
+                <input type="hidden" id="uom_code" name="uom_code" value="" />
+              </td>
+              <td class="po-line-form-cell si-col-rate">
+                <input type="number" id="rate" name="rate" class="input" step="0.001" min="0" placeholder="0.000" />
+              </td>
+              <td class="po-line-form-cell si-col-qty">
+                <input type="number" id="quantity" name="quantity" class="input" step="0.001" min="0" placeholder="0" />
+              </td>
+              {% if not warehouse_enabled %}
+              <td class="po-line-form-cell si-col-store">
+                <span class="search-field search-field--popup">
+                  <input type="text" id="inventory_location" name="inventory_location" class="input" placeholder="Store..." />
+                  <button type="button" class="search-clear" id="inventoryClear" style="display:none;">×</button>
+                  <button type="button" class="search-picker" id="inventoryPicker" style="display:none;">▾</button>
+                </span>
+              </td>
+              {% endif %}
+              {% if warehouse_enabled %}
+              <td class="po-line-form-cell si-col-warehouse">
+                <span class="search-field search-field--popup">
+                  <input type="text" id="line_warehouse_display" name="line_warehouse_display" class="input" placeholder="Warehouse..." readonly />
+                  <button type="button" class="search-clear" id="lineWarehouseClear" style="display:none;">×</button>
+                  <button type="button" class="search-picker" id="lineWarehousePicker">▾</button>
+                </span>
+                <input type="hidden" id="line_warehouse_id" value="" />
+                <input type="hidden" id="line_warehouse_code" value="" />
+                <input type="hidden" id="line_warehouse_name" value="" />
+              </td>
+              {% endif %}
+              {% if bin_tracking_enabled %}
+              <td class="po-line-form-cell si-col-bin">
+                <span class="search-field search-field--popup">
+                  <input type="text" id="line_bin_display" name="line_bin_display" class="input" placeholder="Bin..." readonly />
+                  <button type="button" class="search-clear" id="lineBinClear" style="display:none;">×</button>
+                  <button type="button" class="search-picker" id="lineBinPicker">▾</button>
+                </span>
+                <input type="hidden" id="line_bin_id" value="" />
+                <input type="hidden" id="line_bin_code" value="" />
+                <input type="hidden" id="line_bin_name" value="" />
+              </td>
+              {% endif %}
+              {% if batch_tracking_enabled %}
+              <td class="po-line-form-cell si-col-lot si-line-lot-cell">
+                <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+                  <input type="text" id="sales_lot_display" readonly class="input" placeholder="Auto" title="Pick a lot or leave Auto for FEFO" style="min-width:56px;max-width:100px;font-size:11px;" />
+                  <input type="hidden" id="sales_lot_id" value="" />
+                  <button type="button" class="button button--link" id="btnPickLot" style="font-size:11px;padding:2px 4px;">Pick</button>
+                  <button type="button" class="button button--link" id="btnClearLot" style="font-size:11px;padding:2px 4px;">×</button>
+                </div>
+              </td>
+              {% endif %}
+              <td class="po-line-form-cell si-col-disc">
+                <input type="number" id="discount" name="discount" class="input" step="0.01" min="0" placeholder="0.00" />
+              </td>
+              <td class="po-line-form-cell si-col-amount">
+                <input type="number" id="line_amount" name="line_amount" class="input" step="0.01" min="0" placeholder="0.00" />
+              </td>
+              <td class="po-line-form-cell si-col-action">
+                <button type="button" id="btnAddLine" class="po-add-line-icon" title="Add a line (Enter)" aria-label="Add a line" tabindex="0">+</button>
+                <button type="button" id="btnClearLine" class="po-clear-line-icon" title="Clear line" aria-label="Clear line">×</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="siLineStatus" class="si-line-status si-line-status--hidden" role="status" aria-live="polite"></div>
+    </div>
+
+    <!-- totals -->
+    <div class="si-totals-row">
+      <div class="tf">
+        <label>Total Discount</label>
+        <input type="number" id="total_discount" name="total_discount" readonly />
+      </div>
+      <div class="tf">
+        <label>Net Total</label>
+        <input type="number" id="net_total" name="net_total" readonly />
+      </div>
+    </div>
+    </div><!-- /tab-items -->
+
+    <!-- hidden elements required by sales.js -->
+    <input type="hidden" id="total_items_items" />
+    <input type="hidden" id="loyalty_points_items" />
+    <input type="hidden" id="total_amount_items" />
+    <input type="hidden" id="additional_discount_items" />
+    <input type="hidden" id="total_discount_items" />
+    <input type="hidden" id="net_total_items" />
+    <input type="hidden" id="promotion_discount_items" />
+    <input type="hidden" id="voucher_code" />
+    <input type="hidden" id="applied_promotions" />
+    <button type="button" id="btnApplyVoucher" style="display:none;"></button>
+
+  </form>
+  </section>
+</div><!-- /si-form-page -->
+
+
+<!-- ══ Modals ══ -->
+<div class="modal hidden" id="customerModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="customerModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>Select Customer</h4>
+      <button type="button" class="modal__close" data-close="customerModal">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__search">
+        <span class="search-field search-field--wide">
+          <input type="text" id="customerModalSearch" placeholder="Search customer..." />
+          <button type="button" class="search-clear" id="customerModalClear">×</button>
+        </span>
+      </div>
+      <div class="scroll-table modal__table">
+        <table class="table" id="customerModalTable">
+          <thead class="si-modal-thead">
+            <tr>
+              <th>Code</th><th>Name</th><th>Phone</th><th>Bill Type</th>
+            </tr>
+          </thead>
+          <tbody id="customerModalTableBody">
+            <tr class="customer-picker-placeholder"><td colspan="4">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="loyaltyCustomerModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="loyaltyCustomerModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>Select Loyalty Customer</h4>
+      <button type="button" class="modal__close" data-close="loyaltyCustomerModal">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__search">
+        <span class="search-field search-field--wide">
+          <input type="text" id="loyaltyCustomerModalSearch" placeholder="Search loyalty customer..." />
+          <button type="button" class="search-clear" id="loyaltyCustomerModalClear">×</button>
+        </span>
+      </div>
+      <div class="scroll-table modal__table">
+        <table class="table" id="loyaltyCustomerModalTable">
+          <thead class="si-modal-thead">
+            <tr>
+              <th>Code</th><th>Name</th><th>Phone</th><th>Points</th>
+            </tr>
+          </thead>
+          <tbody id="loyaltyCustomerModalTableBody">
+            <tr class="loyalty-picker-placeholder"><td colspan="4">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="customerDetailsModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="customerDetailsModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>Customer Details</h4>
+      <button type="button" class="modal__close" data-close="customerDetailsModal">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="customer-details-grid">
+        <div class="cd-field">
+          <label>Phone</label>
+          <div class="cd-value" id="customerDetailsPhone">-</div>
+        </div>
+        <div class="cd-field">
+          <label>Bill Type</label>
+          <div class="cd-value" id="customerDetailsBillType">-</div>
+        </div>
+        <div class="cd-field">
+          <label>Credit Limit</label>
+          <div class="cd-value" id="customerDetailsCreditLimit">-</div>
+        </div>
+        <div class="cd-field">
+          <label>Category</label>
+          <div class="cd-value" id="customerDetailsCategory">-</div>
+        </div>
+        <div class="cd-field">
+          <label>Outstanding</label>
+          <div class="cd-value" id="customerDetailsOutstanding">-</div>
+        </div>
+        <div class="cd-field">
+          <label>Total Points</label>
+          <div class="cd-value" id="customerDetailsTotalPoints">-</div>
+        </div>
+        <div class="cd-field span-2">
+          <label>Address</label>
+          <div class="cd-value" id="customerDetailsAddress">-</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="priceModeModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="priceModeModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>Select Price Mode</h4>
+      <button type="button" class="modal__close" data-close="priceModeModal">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__search">
+        <span class="search-field search-field--wide">
+          <input type="text" id="priceModeModalSearch" placeholder="Search price mode..." />
+          <button type="button" class="search-clear" id="priceModeModalClear">×</button>
+        </span>
+      </div>
+      <div class="scroll-table modal__table">
+        <table class="table" id="priceModeModalTable">
+          <thead class="si-modal-thead"><tr><th>Mode</th></tr></thead>
+          <tbody>
+            <tr data-code="retail"    data-name="Retail">    <td>Retail</td></tr>
+            <tr data-code="wholesale" data-name="Wholesale"> <td>Wholesale</td></tr>
+            <tr data-code="third"     data-name="Third">     <td>Third</td></tr>
+            <tr data-code="branch"    data-name="Branch">    <td>Branch</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if warehouse_enabled %}
+<div class="modal hidden" id="warehouseModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="warehouseModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>Select Warehouse</h4>
+      <button type="button" class="modal__close" data-close="warehouseModal">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__search">
+        <span class="search-field search-field--wide">
+          <input type="text" id="warehouseModalSearch" placeholder="Search warehouse..." autocomplete="off" />
+          <button type="button" class="search-clear" id="warehouseModalClear">×</button>
+        </span>
+      </div>
+      <div class="scroll-table modal__table">
+        <table class="table" id="warehouseModalTable">
+          <thead class="si-modal-thead">
+            <tr><th>Code</th><th>Name</th></tr>
+          </thead>
+          <tbody id="warehouseModalTableBody">
+            <tr class="warehouse-picker-placeholder"><td colspan="2">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="modal hidden" id="itemModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="itemModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>Select Item</h4>
+      <button type="button" class="modal__close" data-close="itemModal">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__filters" id="itemModalFilters">
+        <label class="filter-pill"><input type="radio" name="item_filter" value="all" checked /> All</label>
+        <label class="filter-pill"><input type="radio" name="item_filter" value="customer_item" /> Customer Item</label>
+      </div>
+      <input type="text" id="itemSearch" class="input" placeholder="Search by code, barcode or name..." autocomplete="off" />
+      <div id="itemBody" class="item-list"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="uomModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="uomModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>Select UOM</h4>
+      <button type="button" class="modal__close" data-close="uomModal">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__search">
+        <span class="search-field search-field--wide">
+          <input type="text" id="uomModalSearch" placeholder="Search UOM..." />
+          <button type="button" class="search-clear" id="uomModalClear">×</button>
+        </span>
+      </div>
+      <div class="scroll-table modal__table">
+        <table class="table" id="uomModalTable">
+          <thead class="si-modal-thead"><tr><th>Code</th><th>Name</th></tr></thead>
+          <tbody id="uomModalBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="inventoryModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="inventoryModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>{% if warehouse_enabled %}Select Warehouse{% else %}Select Inventory Location{% endif %}</h4>
+      <button type="button" class="modal__close" data-close="inventoryModal">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__search">
+        <span class="search-field search-field--wide">
+          <input type="text" id="inventoryModalSearch" placeholder="{% if warehouse_enabled %}Search warehouse...{% else %}Search store...{% endif %}" />
+          <button type="button" class="search-clear" id="inventoryModalClear">×</button>
+        </span>
+      </div>
+      <div class="scroll-table modal__table">
+        <table class="table" id="inventoryModalTable">
+          <thead class="si-modal-thead"><tr>{% if warehouse_enabled %}<th>Code</th><th>Name</th><th>Stock</th>{% else %}<th>Store</th><th>Stock</th>{% endif %}</tr></thead>
+          <tbody id="inventoryModalBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="binModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="binModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>Select Bin</h4>
+      <button type="button" class="modal__close" data-close="binModal">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__search">
+        <span class="search-field search-field--wide">
+          <input type="text" id="binModalSearch" placeholder="Search bin..." />
+          <button type="button" class="search-clear" id="binModalClear">×</button>
+        </span>
+      </div>
+      <div class="scroll-table modal__table">
+        <table class="table" id="binModalTable">
+          <thead class="si-modal-thead"><tr><th>Code</th><th>Name</th><th>Stock</th></tr></thead>
+          <tbody id="binModalBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="lotPickModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="lotPickModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>Pick batch / lot</h4>
+      <button type="button" class="modal__close" data-close="lotPickModal">×</button>
+    </div>
+    <div class="modal__body">
+      <p id="lotPickHint" style="font-size:12px;color:#64748b;margin:0 0 8px;">Loading…</p>
+      <div class="scroll-table modal__table">
+        <table class="table" id="lotPickModalTable">
+          <thead class="si-modal-thead">
+            <tr>
+              <th>Lot #</th>
+              <th>Batch</th>
+              <th>Expiry</th>
+              <th style="text-align:right;">Qty</th>
+            </tr>
+          </thead>
+          <tbody id="lotPickModalBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="historyModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="historyModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>History</h4>
+      <button type="button" class="modal__close" data-close="historyModal">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__filters">
+        <label class="filter-pill">
+          <input type="radio" name="history_filter" value="customer_item" checked />
+          Customer Item History
+        </label>
+        <label class="filter-pill">
+          <input type="radio" name="history_filter" value="item" />
+          Item History
+        </label>
+      </div>
+      <div class="scroll-table modal__table">
+        <table class="table" id="historyModalTable">
+          <thead id="historyModalHead"></thead>
+          <tbody id="historyModalBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if openai_configured|default(false) %}
+<div id="siAiScreenshotDrawer" class="si-ai-drawer hidden" aria-hidden="true">
+  <div class="si-ai-drawer__backdrop" id="siAiDrawerBackdrop"></div>
+  <aside class="si-ai-drawer__panel" role="dialog" aria-modal="true" aria-labelledby="siAiDrawerTitle">
+    <div class="si-ai-drawer__head">
+      <h2 id="siAiDrawerTitle" class="si-ai-drawer__title">AI lines</h2>
+      <button type="button" class="si-ai-drawer__close" id="siAiDrawerClose" aria-label="Close">×</button>
+    </div>
+    <p class="si-ai-drawer__summary" id="siAiDrawerSummary"></p>
+    <div class="si-ai-drawer__toolbar">
+      <label class="si-ai-drawer__select-all">
+        <input type="checkbox" id="siAiDrawerSelectAll" title="Include all matched lines" />
+        <span>Select all matched</span>
+      </label>
+    </div>
+    <div class="si-ai-drawer__grand" id="siAiDrawerGrandTotal" aria-live="polite"></div>
+    <div class="si-ai-drawer__scroll">
+      <div id="siAiDrawerBody" class="si-ai-cart-list"></div>
+    </div>
+    <div class="si-ai-drawer__foot">
+      <div class="si-ai-drawer__foot-actions">
+        <button type="button" class="button button--secondary" id="siAiDrawerCancel">Cancel</button>
+        <button type="button" class="button button--primary" id="siAiDrawerConfirm">Add to invoice</button>
+      </div>
+    </div>
+  </aside>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    window.__SALES_OPEN_BILL_DATE__ = {{ (bill_date or '')|tojson }};
+    window.__SALES_OPEN_BILL_DATE_FROM__ = {{ (bill_date_from or bill_date or '')|tojson }};
+    window.__SALES_OPEN_BILL_DATE_TO__ = {{ (bill_date_to or bill_date_from or bill_date or '')|tojson }};
+    window.__SALES_TXN_DATE_BLOCKED__ = {{ transaction_date_blocked|default(false)|tojson }};
+    window.__SALES_TXN_DATE_ERROR__ = {{ (transaction_date_error or '')|tojson }};
+    window.__SALES_TXN_DATE_SETUP_URL__ = {{ (transaction_date_setup_url or '')|tojson }};
+    window.__SALES_CUSTOMERS_PICKER__ = {{ url_for('sales.sales_customers_picker')|tojson }};
+    window.__SALES_LOYALTY_CUSTOMERS_PICKER__ = {{ url_for('sales.sales_loyalty_customers_picker')|tojson }};
+  </script>
+  <script>
+    window.__SALES_WAREHOUSE__ = {
+      enabled: {{ warehouse_enabled|default(false)|tojson }},
+      apiUrl: {{ (sales_warehouses_picker or sales_warehouses_api or '')|tojson }},
+      docKind: {{ (warehouse_doc_kind|default('sales'))|tojson }},
+      defaultId: {{ (default_warehouse_id|default(none))|tojson }},
+      defaultCode: {{ (default_warehouse_code|default(''))|tojson }},
+      defaultName: {{ (default_warehouse_name|default(''))|tojson }},
+      defaultLabel: {{ (default_warehouse_label|default(''))|tojson }}
+    };
+    window.__SALES_BIN__ = {
+      enabled: {{ bin_tracking_enabled|default(false)|tojson }},
+      warehouseBinsApi: {{ (sales_warehouse_bins_api or '')|tojson }},
+      itemBinInventoryApi: {{ (sales_item_bin_inventory_api or '')|tojson }}
+    };
+    window.__SALES_BATCH__ = {
+      enabled: {{ batch_tracking_enabled|default(false)|tojson }}
+    };
+    window.__SALES_WAREHOUSES_PICKER__ = {{ (sales_warehouses_picker or '')|tojson }};
+    window.__SALES_TABLE_COLSPAN__ = {{ (si_table_colspan|default(10))|tojson }};
+    window.__INITIAL_ORDER__ = {{ (initial_order_json|default('null'))|safe }};
+    window.__CONVERT_FROM_ORDERS__ = {{ (convert_from_orders_json|default('[]'))|safe }};
+    window.__LOAD_FROM_ORDER_API__ = '/sales/load-from-order/';
+    window.__SALES_AI_SCREENSHOT_URL__ = {% if openai_configured|default(false) %}{{ url_for('sales.sales_ai_screenshot_lines')|tojson }}{% else %}null{% endif %};
+  </script>
+  <script src="{{ url_for('static', filename='js/customer_billing_type.js') }}?v=1"></script>
+  <script src="{{ url_for('static', filename='js/si_item_picker.js') }}?v=15"></script>
+  <script src="{{ url_for('static', filename='js/sales.js') }}?v=94"></script>
+  <script src="{{ url_for('static', filename='js/transaction_recording_client.js') }}?v=7"></script>
+  {% if openai_configured|default(false) %}
+  <script src="{{ url_for('static', filename='js/sales_invoice_ai.js') }}?v=1"></script>
+  {% endif %}
+{% endblock %}

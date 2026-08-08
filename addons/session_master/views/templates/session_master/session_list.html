@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Sessions{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+
+{% set ns = namespace(n=(sessions or [])|length) %}
+
+<div class="page-po nexa-list-page nexa-setup-list-page">
+  <section class="nexa-stat-grid" aria-label="Session summary">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-clock-history" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Sessions</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.n) }}</p>
+        <p class="nexa-stat-sub">TBLSESSION</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-calendar-week" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Branch</p>
+        <p class="nexa-stat-value" style="font-size:clamp(14px,1.2vw,18px);">{{ location_code }}</p>
+        <p class="nexa-stat-sub">{{ location_name or '' }}</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-key" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Codes</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.n) }}</p>
+        <p class="nexa-stat-sub">Session codes</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-pencil-square" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Maintain</p>
+        <p class="nexa-stat-value">Edit</p>
+        <p class="nexa-stat-sub">Per row</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--cyan"><i class="bi bi-plus-lg" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">New</p>
+        <p class="nexa-stat-value">Session</p>
+        <p class="nexa-stat-sub">Toolbar</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Session</h1>
+      <p class="page-po__muted">Sessions per branch (<strong>TBLSESSION</strong>).</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% include 'includes/list_refresh_bar.html' %}
+      <a href="{{ url_for('session_master.session_create') }}" class="page-po__btn-primary">+ New session</a>
+    </div>
+  </div>
+
+  <form class="nexa-list-filter-panel" method="get" action="{{ url_for('session_master.session_list') }}">
+    <div class="form-group" style="margin-bottom:0;">
+      <label for="sessSearch" style="font-size:11px;font-weight:700;color:#64748b;">Search</label>
+      <input id="sessSearch" type="text" name="search" class="input" placeholder="Code or name…" value="{{ search_term or '' }}" style="min-width:220px;" />
+    </div>
+    <button type="submit" class="page-po__btn-secondary">Filter</button>
+  </form>
+
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th style="text-align:center;width:52px;">Sl.No</th>
+          <th>Loc</th>
+          <th>Code</th>
+          <th>Name</th>
+          <th style="text-align:center;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if sessions %}
+          {% for s in sessions %}
+            <tr>
+              <td style="text-align:center;">{{ loop.index }}</td>
+              <td>{{ s.locationcode or '-' }}</td>
+              <td>{{ s.sessioncode if s.sessioncode is not none else '-' }}</td>
+              <td>{{ s.sessionname or '-' }}</td>
+              <td style="text-align:center;">
+                <a href="{{ url_for('session_master.session_edit', location_code=s.locationcode, session_code=s.sessioncode) }}" class="btn-view">Edit</a>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="5" style="text-align:center;padding:18px;color:#64748b;">No sessions for this branch or table missing.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

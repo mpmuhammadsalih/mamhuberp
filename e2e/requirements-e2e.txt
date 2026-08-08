@@ -1,0 +1,2 @@
+# Browser E2E for POS (install browsers: playwright install chromium)
+playwright>=1.49.0,<2

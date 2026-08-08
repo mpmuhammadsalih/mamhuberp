@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block title %}Property &amp; Origin{% endblock %}
+{% block content %}
+<style>
+  .pio-badge-p { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 700; background: #dcfce7; color: #166534; }
+  .pio-badge-o { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 700; background: #fef9c3; color: #854d0e; }
+  .pio-panel { display: none; }
+  .pio-panel.is-active { display: block; }
+</style>
+
+<div class="page-po nexa-list-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Property &amp; Origin</h1>
+      <p class="page-po__muted">Data from <code>TBLITEMPROPERTY</code> and <code>TBLITEMORIGIN</code> (or equivalent names in your schema).</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div class="nexa-list-toolbar" style="align-items:center;">
+    <div class="po-tabs" id="poTabs" role="tablist" aria-label="Table">
+      <button type="button" role="tab" class="po-tab active" id="poTabP" aria-selected="true" data-po-panel="poPanelP" data-po-kind="property">Property</button>
+      <button type="button" role="tab" class="po-tab" id="poTabO" aria-selected="false" data-po-panel="poPanelO" data-po-kind="origin">Origin</button>
+    </div>
+    <button type="button" class="page-po__btn-primary" id="poBtnNew" style="margin-left:auto;">+ New property</button>
+  </div>
+
+  <div id="poPanelP" class="pio-panel is-active" role="tabpanel" aria-labelledby="poTabP">
+    <div class="co-table-wrap">
+      <table class="co-table">
+        <thead>
+          <tr>
+            <th data-col="0" style="width:120px;">Type<span class="sort-arrow"></span></th>
+            <th data-col="1" style="width:120px;">Code<span class="sort-arrow"></span></th>
+            <th data-col="2">Name<span class="sort-arrow"></span></th>
+            <th style="text-align:center; width:120px;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows_property %}
+          <tr>
+            <td><span class="pio-badge-p">Property</span></td>
+            <td style="font-family:monospace;">{{ r.code }}</td>
+            <td>{{ r.name }}</td>
+            <td style="text-align:center;">
+              <button type="button" class="btn-view" data-po-action="edit" data-kind="property" data-code="{{ r.code }}" data-name="{{ r.name|e }}">Edit</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">No property rows found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="poPanelO" class="pio-panel" role="tabpanel" aria-labelledby="poTabO">
+    <div class="co-table-wrap">
+      <table class="co-table">
+        <thead>
+          <tr>
+            <th data-col="0" style="width:120px;">Type<span class="sort-arrow"></span></th>
+            <th data-col="1" style="width:120px;">Code<span class="sort-arrow"></span></th>
+            <th data-col="2">Name<span class="sort-arrow"></span></th>
+            <th style="text-align:center; width:120px;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows_origin %}
+          <tr>
+            <td><span class="pio-badge-o">Origin</span></td>
+            <td style="font-family:monospace;">{{ r.code }}</td>
+            <td>{{ r.name }}</td>
+            <td style="text-align:center;">
+              <button type="button" class="btn-view" data-po-action="edit" data-kind="origin" data-code="{{ r.code }}" data-name="{{ r.name|e }}">Edit</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">No origin rows found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="poModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="poModal"></div>
+  <div class="modal__content" style="max-width: 420px;">
+    <div class="modal__header">
+      <h3 id="poModalTitle">Property</h3>
+      <button type="button" class="modal__close" data-close="poModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <p class="page-po__muted" id="poModalHint" style="margin-bottom:12px;"></p>
+      <input type="hidden" id="po-mode" />
+      <input type="hidden" id="po-kind" value="property" />
+      <div class="mb-3" id="po-code-row" style="display:none;">
+        <label class="form-label" for="po-code-readonly">Code</label>
+        <input type="text" class="form-control" id="po-code-readonly" readonly tabindex="-1" style="background:#f8fafc;" />
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="po-name">Name *</label>
+        <input type="text" class="form-control" id="po-name" maxlength="200" autocomplete="off" />
+      </div>
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:8px; padding:12px 20px; border-top:1px solid #e2e8f0;">
+      <button type="button" class="btn btn-secondary" data-close="poModal">Cancel</button>
+      <button type="button" class="btn btn-primary" id="po-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var PO_SAVE_URL = {{ url_for('itemmaster.item_property_origin_save')|tojson }};
+var PO_TITLES = { property: 'Property', origin: 'Origin' };
+
+function poClose() { var m = document.getElementById('poModal'); if (m) m.classList.add('hidden'); }
+function poOpen() { var m = document.getElementById('poModal'); if (m) { m.classList.remove('hidden'); document.getElementById('po-name').focus(); } }
+function poReset() {
+  document.getElementById('po-mode').value = '';
+  document.getElementById('po-name').value = '';
+  document.getElementById('po-code-row').style.display = 'none';
+  document.getElementById('poModalHint').textContent = '';
+}
+function getActiveKind() {
+  var b = document.querySelector('#poTabs button.po-tab.active');
+  return b ? (b.getAttribute('data-po-kind') || 'property') : 'property';
+}
+function syncNewBtn() {
+  var k = getActiveKind();
+  var t = PO_TITLES[k] || 'Item';
+  var btn = document.getElementById('poBtnNew');
+  if (btn) btn.textContent = '+ New ' + t.toLowerCase();
+}
+
+document.getElementById('poTabs').addEventListener('click', function(e) {
+  var tab = e.target.closest('button.po-tab');
+  if (!tab) return;
+  var panelId = tab.getAttribute('data-po-panel');
+  if (!panelId) return;
+  document.querySelectorAll('#poTabs button.po-tab').forEach(function(b) {
+    b.classList.remove('active');
+    b.setAttribute('aria-selected', 'false');
+  });
+  tab.classList.add('active');
+  tab.setAttribute('aria-selected', 'true');
+  document.querySelectorAll('.pio-panel').forEach(function(p) { p.classList.remove('is-active'); });
+  var p = document.getElementById(panelId);
+  if (p) p.classList.add('is-active');
+  syncNewBtn();
+});
+document.getElementById('poModal').addEventListener('click', function(e) {
+  if (e.target.getAttribute('data-close') === 'poModal' || e.target.classList.contains('modal__overlay') || e.target.classList.contains('modal__close')) poClose();
+});
+document.getElementById('poBtnNew').addEventListener('click', function() {
+  poReset();
+  var k = getActiveKind();
+  document.getElementById('po-mode').value = 'create';
+  document.getElementById('po-kind').value = k;
+  var title = PO_TITLES[k] || 'Row';
+  document.getElementById('poModalTitle').textContent = 'New ' + title.toLowerCase();
+  document.getElementById('poModalHint').textContent = 'Code is assigned automatically.';
+  poOpen();
+});
+function poEditHandler(e) {
+  var t = e.target.closest('[data-po-action="edit"]');
+  if (!t) return;
+  poReset();
+  var k = t.getAttribute('data-kind') || 'property';
+  document.getElementById('po-mode').value = 'update';
+  document.getElementById('po-kind').value = k;
+  document.getElementById('po-name').value = t.getAttribute('data-name') || '';
+  document.getElementById('po-code-readonly').value = t.getAttribute('data-code') || '';
+  document.getElementById('po-code-row').style.display = '';
+  var title = PO_TITLES[k] || 'Row';
+  document.getElementById('poModalTitle').textContent = 'Edit ' + title.toLowerCase();
+  document.getElementById('poModalHint').textContent = 'Change the name (code is fixed).';
+  poOpen();
+}
+document.getElementById('poPanelP').addEventListener('click', poEditHandler);
+document.getElementById('poPanelO').addEventListener('click', poEditHandler);
+document.getElementById('po-save').addEventListener('click', function() {
+  var mode = document.getElementById('po-mode').value;
+  var name = (document.getElementById('po-name').value || '').trim();
+  if (!name) { alert('Name is required'); return; }
+  var k = (document.getElementById('po-kind').value || 'property');
+  var payload = { mode: mode, name: name, kind: k };
+  if (mode === 'update') {
+    var cr = (document.getElementById('po-code-readonly').value || '').trim();
+    if (/^-?\d+(\.\d+)?$/.test(cr)) payload.code = parseFloat(cr);
+    else payload.code = cr;
+  }
+  var btn = document.getElementById('po-save');
+  btn.disabled = true;
+  fetch(PO_SAVE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, data: j }; }); })
+    .then(function(res) {
+      btn.disabled = false;
+      if (res.ok && res.data && res.data.ok) { poClose(); window.location.reload(); return; }
+      alert((res.data && res.data.error) ? res.data.error : 'Save failed');
+    })
+    .catch(function() { btn.disabled = false; alert('Network error'); });
+});
+syncNewBtn();
+</script>
+{% endblock %}

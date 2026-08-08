@@ -1,0 +1,1476 @@
+{% extends "base.html" %}
+{% block title %}Chart of Accounts{% endblock %}
+
+{% block content %}
+<style>
+  .account-tree { font-size: 13px; }
+  .account-tree ul { list-style: none; padding-left: 20px; margin: 0; }
+  .account-tree li { margin: 3px 0; position: relative; }
+  .account-tree li::before { content: ''; position: absolute; left: -20px; top: 15px; width: 15px; height: 1px; border-top: 1px solid #ddd; }
+  .account-tree li::after  { content: ''; position: absolute; left: -20px; top: 0; bottom: 15px; width: 1px; border-left: 1px solid #ddd; }
+  .account-tree li:last-child::after { display: none; }
+  .account-item {
+    display: flex; align-items: center; padding: 7px 10px;
+    border: 1px solid #e2e8f0; border-radius: 4px; margin: 2px 0;
+    background: #fff; transition: background .15s; cursor: pointer;
+  }
+  .account-item:hover { background: #f0f5ff; }
+  .account-item.expanded { background: #eef2f7; }
+  .account-code { font-weight: 600; color: #1a56a4; min-width: 90px; font-family: monospace; font-size: 13px; }
+  .account-name { flex: 1; margin-left: 10px; font-size: 13px; }
+  .account-type-badge { margin-left: 10px; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .type-asset     { background: #d1fae5; color: #065f46; }
+  .type-liability { background: #fee2e2; color: #991b1b; }
+  .type-equity    { background: #dbeafe; color: #1e40af; }
+  .type-revenue   { background: #fef3c7; color: #92400e; }
+  .type-expense   { background: #f3e8ff; color: #6b21a8; }
+  .account-toggle { margin-right: 6px; cursor: pointer; font-size: 11px; color: #6b7280; width: 14px; flex-shrink: 0; }
+  .account-actions { margin-left: auto; display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+  .nexa-list-page .coa-tree-panel.table-wrap { max-height: 76vh; padding: 6px 8px 10px; box-sizing: border-box; }
+  a.coa-ledger-link { text-decoration: none; color: inherit; display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+  a.coa-ledger-link .account-code { color: #1a56a4; }
+  a.coa-ledger-link:hover .account-name { text-decoration: underline; }
+  a.coa-ledger-link:hover .account-code { text-decoration: underline; }
+  #coaListTable a.coa-ledger-list-code { color: #1a56a4; font-weight: 600; text-decoration: none; font-family: monospace; }
+  #coaListTable a.coa-ledger-list-code:hover { text-decoration: underline; }
+
+  /* ── Toast ── */
+  .coa-toast-wrap { position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+  .coa-toast { padding: 10px 18px; border-radius: 4px; font-size: 13px; color: #fff; min-width: 200px; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+  .coa-toast--success { background: #16a34a; }
+  .coa-toast--danger  { background: #dc2626; }
+
+  /* ── Create / Edit account modal (scoped) ── */
+  #accountModal .coa-account-dialog {
+    width: min(580px, 96vw);
+    max-height: 90vh;
+    padding: 0;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25);
+    overflow: hidden;
+  }
+  .coa-account-dialog__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 22px 24px 20px;
+    background: linear-gradient(135deg, #0f3d7a 0%, #1a56a4 50%, #2563b8 100%);
+    color: #fff;
+  }
+  .coa-account-dialog__title {
+    margin: 0 0 6px 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #fff;
+  }
+  .coa-account-dialog__subtitle {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.85);
+    max-width: 36em;
+  }
+  .coa-account-dialog__close {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .coa-account-dialog__close:hover {
+    background: rgba(255, 255, 255, 0.22);
+  }
+  .coa-account-dialog__body {
+    padding: 0 24px 8px;
+    gap: 0;
+  }
+  .coa-account-dialog__section {
+    padding: 18px 0 16px;
+    border-bottom: 1px solid #eef2f7;
+  }
+  .coa-account-dialog__section:last-of-type {
+    border-bottom: none;
+  }
+  .coa-account-dialog__section-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748b;
+    margin-bottom: 12px;
+  }
+  .coa-account-dialog__field { margin-bottom: 14px; }
+  .coa-account-dialog__field:last-child { margin-bottom: 0; }
+  .coa-account-dialog__field > label,
+  .coa-account-dialog__body .form-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #334155;
+    margin-bottom: 6px;
+  }
+  .coa-account-dialog__field > label .coa-field-hint {
+    font-weight: 500;
+    color: #94a3b8;
+    font-size: 12px;
+  }
+  .coa-account-dialog__picker-wrap { display: block; width: 100%; }
+  .coa-account-dialog__picker-wrap.search-field--popup { width: 100%; }
+  .coa-account-dialog__picker-row {
+    display: flex;
+    width: 100%;
+    min-height: 42px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #f8fafc;
+    overflow: hidden;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .coa-account-dialog__picker-row:focus-within {
+    border-color: #1a56a4;
+    box-shadow: 0 0 0 3px rgba(26, 86, 164, 0.12);
+    background: #fff;
+  }
+  .coa-account-dialog__picker-row input[readonly] {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    border-radius: 0;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+  .coa-account-dialog__picker-row .search-clear {
+    position: static;
+    transform: none;
+    border-radius: 0;
+    align-self: stretch;
+    width: 40px;
+    background: #f1f5f9;
+    border-left: 1px solid #e2e8f0;
+  }
+  .coa-account-dialog__picker-row .search-picker {
+    border: none;
+    border-left: 1px solid #e2e8f0;
+    border-radius: 0;
+    background: #1a56a4;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    min-width: 44px;
+    padding: 0 12px;
+  }
+  .coa-account-dialog__picker-row .search-picker:hover {
+    background: #144a8a;
+  }
+  .coa-account-dialog__grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1.2fr;
+    gap: 14px 16px;
+  }
+  @media (max-width: 520px) {
+    .coa-account-dialog__grid-2 { grid-template-columns: 1fr; }
+  }
+  .coa-account-dialog__body .form-control,
+  .coa-account-dialog__body .form-select {
+    border-radius: 10px;
+    border: 1px solid #cbd5e1;
+    font-size: 14px;
+    padding: 10px 12px;
+  }
+  .coa-account-dialog__body .form-control:focus,
+  .coa-account-dialog__body .form-select:focus {
+    border-color: #1a56a4;
+    box-shadow: 0 0 0 3px rgba(26, 86, 164, 0.12);
+  }
+  .coa-account-dialog__code-hint {
+    font-size: 12px;
+    line-height: 1.4;
+    color: #64748b;
+    margin: 8px 0 0 0;
+    padding: 8px 10px;
+    background: #f1f5f9;
+    border-radius: 8px;
+    border-left: 3px solid #1a56a4;
+  }
+  .coa-account-dialog__settings {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px 14px;
+    align-items: end;
+  }
+  .coa-account-dialog__settings .coa-account-dialog__field { margin-bottom: 0; }
+  @media (max-width: 520px) {
+    .coa-account-dialog__settings { grid-template-columns: 1fr; }
+  }
+  .coa-account-dialog__switch {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 42px;
+    padding: 0 4px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+  }
+  .coa-account-dialog__switch .form-check-input {
+    width: 1.15em;
+    height: 1.15em;
+    margin: 0;
+    cursor: pointer;
+  }
+  .coa-account-dialog__switch .form-check-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #334155;
+    margin: 0;
+    cursor: pointer;
+  }
+  .coa-account-dialog__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 24px 22px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+  }
+  .coa-account-dialog__footer .coa-ad-btn {
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 10px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .coa-account-dialog__footer .coa-ad-btn--ghost {
+    background: #fff;
+    border-color: #cbd5e1;
+    color: #475569;
+  }
+  .coa-account-dialog__footer .coa-ad-btn--ghost:hover { background: #f1f5f9; }
+  .coa-account-dialog__footer .coa-ad-btn--primary {
+    background: #1a56a4;
+    border-color: #1a56a4;
+    color: #fff;
+  }
+  .coa-account-dialog__footer .coa-ad-btn--primary:hover { background: #144a8a; }
+  #accountModal .modal__content > form { display: flex; flex-direction: column; min-height: 0; }
+  #accountModal .coa-account-dialog__body {
+    max-height: min(60vh, 480px);
+    overflow-y: auto;
+  }
+
+  /* Full-dialog blocking overlay while save runs (single submit) */
+  .coa-account-save-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 12px;
+    padding: 24px;
+    background: rgba(248, 250, 252, 0.88);
+    backdrop-filter: blur(3px);
+    border-radius: inherit;
+    pointer-events: auto;
+  }
+  .coa-account-save-overlay.hidden {
+    display: none !important;
+  }
+  .coa-account-save-overlay__spinner {
+    width: 38px;
+    height: 38px;
+    border: 3px solid #e2e8f0;
+    border-top-color: #1a56a4;
+    border-radius: 50%;
+    animation: coa-save-spin 0.7s linear infinite;
+  }
+  @keyframes coa-save-spin {
+    to { transform: rotate(360deg); }
+  }
+  .coa-account-save-overlay__text {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: #1e293b;
+  }
+  .coa-account-save-overlay__hint {
+    margin: 0;
+    font-size: 12px;
+    color: #64748b;
+    text-align: center;
+    max-width: 14rem;
+    line-height: 1.35;
+  }
+</style>
+<div class="page-po nexa-list-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Chart of Accounts</h1>
+      <p class="page-po__muted">Build the GL hierarchy like <strong>Category Master</strong>: add a <em>top-level</em> account here, or use <strong>+ Sub-account</strong> on a row to create a child under that account (same account type as parent).</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('accounts.chart_of_accounts_excel') }}" class="page-po__btn-secondary" id="btnExportCoaExcel" title="Download all accounts as Excel">Export Excel</a>
+      <button class="page-po__btn-primary" type="button" id="btnCreateAccount" title="New account with no parent (pick type in the form)">+ Top-level account</button>
+      {% include 'includes/list_refresh_bar.html' %}
+      <a href="{{ url_for('accounts.journal_entry') }}" class="po-nav-link">Journal entry</a>
+    </div>
+  </div>
+
+  <div class="po-tabs">
+    <button type="button" class="po-tab active" id="btnTreeView" onclick="switchView('tree')">Tree view</button>
+    <button type="button" class="po-tab" id="btnListView" onclick="switchView('list')">List view</button>
+  </div>
+
+  <div class="nexa-list-toolbar">
+    <span id="coaTreeExpandBar" style="display:inline-flex; gap:6px; align-items:center;">
+      <button type="button" class="page-po__btn-secondary" id="coaExpandAll" style="padding:4px 10px; font-size:11px;" title="Open all nodes">Expand all</button>
+      <button type="button" class="page-po__btn-secondary" id="coaCollapseAll" style="padding:4px 10px; font-size:11px;" title="Close all nodes">Collapse all</button>
+    </span>
+    <input type="text" class="input" id="searchAccounts" placeholder="Search code, name, or type…"
+           style="min-width:220px; max-width:320px;" oninput="filterAccounts()" onkeyup="filterAccounts()">
+    <button type="button" class="page-po__btn-secondary" onclick="clearCoaSearch()" style="padding:4px 10px; font-size:11px;">Clear</button>
+    <span id="coaCount" class="nexa-num" style="margin-left:4px;"></span>
+  </div>
+
+  <!-- Tree View -->
+  <div id="treeViewCard">
+    <div class="page-po__section-title">Account hierarchy</div>
+    <div class="table-wrap coa-tree-panel">
+      <div id="treeViewContainer" class="account-tree">
+        <span class="muted">Loading accounts…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- List View -->
+  <div id="listViewCard" style="display:none;">
+    <div class="co-table-wrap">
+      <table class="co-table" id="coaListTable">
+        <thead>
+          <tr>
+            <th style="text-align:center; width:52px;">Sl.No</th>
+            <th>Code</th>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Parent</th>
+            <th style="text-align:center;">Postable</th>
+            <th style="text-align:center;">Currency</th>
+            <th>Status</th>
+            <th style="text-align:center; cursor:default;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="accounts-table">
+          <tr><td colspan="9" style="text-align:center; padding:20px; color:#6b7280;">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="coa-toast-wrap" id="toastContainer"></div>
+
+<!-- Account Modal (app custom modal; .hidden = closed) -->
+<div class="modal hidden" id="accountModal" role="dialog" aria-modal="true" aria-labelledby="accountModalTitle">
+  <div class="modal__overlay" data-close="accountModal"></div>
+  <div class="modal__content coa-account-dialog">
+    <div id="coaAccountSaveOverlay" class="coa-account-save-overlay hidden" aria-hidden="true" role="status">
+      <div class="coa-account-save-overlay__spinner" aria-hidden="true"></div>
+      <p class="coa-account-save-overlay__text" id="coaAccountSaveOverlayText">Saving…</p>
+      <p class="coa-account-save-overlay__hint">Please wait — do not close this window.</p>
+    </div>
+    <form id="accountForm">
+      <div class="coa-account-dialog__head">
+        <div class="coa-account-dialog__head-text">
+          <h3 class="coa-account-dialog__title" id="accountModalTitle">Create account</h3>
+          <p class="coa-account-dialog__subtitle" id="accountModalSubtitle">Choose category and parent, then confirm code and name.</p>
+        </div>
+        <button type="button" class="coa-account-dialog__close" data-close="accountModal" aria-label="Close">×</button>
+      </div>
+      <div class="modal__body coa-account-dialog__body">
+        <input type="hidden" id="account-id-edit" name="account_id_edit">
+
+        <div class="coa-account-dialog__section">
+          <div class="coa-account-dialog__section-label">Classification</div>
+          <div class="coa-account-dialog__field">
+            <label class="form-label" for="account-type-display">Account type <span class="text-danger">*</span></label>
+            <span class="search-field search-field--popup coa-account-dialog__picker-wrap">
+              <span class="coa-account-dialog__picker-row">
+                <input type="text" id="account-type-display" class="form-control" placeholder="Select a type (e.g. ASSET)…" readonly />
+                <input type="hidden" id="account-type" name="account_type" />
+                <button type="button" class="search-clear" id="accountTypeClear" aria-label="Clear type" style="display: none;">×</button>
+                <button type="button" class="search-picker" id="accountTypePicker" aria-label="Select type">▾</button>
+              </span>
+            </span>
+          </div>
+          <div class="coa-account-dialog__field">
+            <label class="form-label" for="account-parent-display">Parent account <span class="coa-field-hint">— same type only</span></label>
+            <span class="search-field search-field--popup coa-account-dialog__picker-wrap">
+              <span class="coa-account-dialog__picker-row">
+                <input type="text" id="account-parent-display" class="form-control" placeholder="Optional: roll up under another account" readonly />
+                <input type="hidden" id="account-parent" name="parent_id" />
+                <button type="button" class="search-clear" id="accountParentClear" aria-label="Clear parent" style="display: none;">×</button>
+                <button type="button" class="search-picker" id="accountParentPicker" aria-label="Select parent">▾</button>
+              </span>
+            </span>
+          </div>
+        </div>
+
+        <div class="coa-account-dialog__section">
+          <div class="coa-account-dialog__section-label">Account details</div>
+          <div class="coa-account-dialog__grid-2">
+            <div class="coa-account-dialog__field">
+              <label class="form-label" for="account-code">Code <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="account-code" required maxlength="50" placeholder="Auto or custom" inputmode="text" autocomplete="off" />
+            </div>
+            <div class="coa-account-dialog__field">
+              <label class="form-label" for="account-name">Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="account-name" required maxlength="200" placeholder="e.g. Cash in hand" />
+            </div>
+          </div>
+          <p class="coa-account-dialog__code-hint" id="account-code-hint">After you pick a type, a suggested next code appears. You can edit it before saving.</p>
+        </div>
+
+        <div class="coa-account-dialog__section">
+          <div class="coa-account-dialog__section-label">Options</div>
+          <div class="coa-account-dialog__settings">
+            <div class="coa-account-dialog__field">
+              <label class="form-label" for="account-currency">Currency</label>
+              <input type="text" class="form-control" id="account-currency" maxlength="3" value="QAR" placeholder="QAR" />
+            </div>
+            <div class="coa-account-dialog__field">
+              <label class="form-label" for="account-status">Status</label>
+              <select class="form-select" id="account-status">
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+                <option value="SUSPENDED">Suspended</option>
+              </select>
+            </div>
+            <div class="coa-account-dialog__field">
+              <label class="form-label" for="account-postable">Posting</label>
+              <div class="coa-account-dialog__switch">
+                <input class="form-check-input" type="checkbox" id="account-postable" checked>
+                <label class="form-check-label" for="account-postable">Postable in journals</label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="coa-account-dialog__footer">
+        <button type="button" class="coa-ad-btn coa-ad-btn--ghost" data-close="accountModal">Cancel</button>
+        <button type="submit" class="coa-ad-btn coa-ad-btn--primary">Save account</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Parent Account Selection Popup -->
+<div class="modal hidden" id="parentAccountModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="parentAccountModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3>Select Parent Account</h3>
+      <button type="button" class="modal__close" data-close="parentAccountModal">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__search">
+        <div class="search-field">
+          <input type="text" id="parentAccountModalSearch" placeholder="Search code or name..." />
+          <button type="button" class="search-clear" id="parentAccountModalClear">×</button>
+        </div>
+      </div>
+      <div class="scroll-table modal__table">
+        <table class="table" id="parentAccountModalTable">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Type</th>
+            </tr>
+          </thead>
+          <tbody id="parentAccountModalBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Account Type Selection Popup -->
+<div class="modal hidden" id="accountTypeModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="accountTypeModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3>Select Account Type</h3>
+      <button type="button" class="modal__close" data-close="accountTypeModal">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__search">
+        <div class="search-field">
+          <input type="text" id="accountTypeModalSearch" placeholder="Search type..." />
+          <button type="button" class="search-clear" id="accountTypeModalClear">×</button>
+        </div>
+      </div>
+      <div class="scroll-table modal__table">
+        <table class="table" id="accountTypeModalTable">
+          <thead>
+            <tr>
+              <th>Type</th>
+            </tr>
+          </thead>
+          <tbody id="accountTypeModalBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const API_CHART_LIST = {{ url_for("accounts.api_chart_list")|tojson }};
+const API_CHART_CREATE_ONCE = {{ url_for("accounts.api_chart_create_once")|tojson }};
+const API_CHART_SUGGEST_CODE = {{ url_for("accounts.api_chart_suggest_code")|tojson }};
+const COA_LEDGER_PAGE = {{ url_for("accounts.account_ledger_page")|tojson }};
+const ACCOUNT_TYPES_LIST = {{ account_types|tojson }};
+/** Server-issued nonce for Chart of Accounts create (JSON POST); rotated by GET /accounts/api/chart responses. */
+let coaCreateOnce = '';
+let coaFormSetupGen = 0;
+let accountsListData = [];
+/** parent key: 'root' or account_id string → sorted child rows (built once per render). */
+let coaChildrenByParent = null;
+var parentAccountModalList = [];
+let currentView = 'tree';
+let searchTerm = '';
+
+const DEFAULT_ROOT_CODE_BY_TYPE = { ASSET: 1000, LIABILITY: 2000, EQUITY: 3000, REVENUE: 4000, EXPENSE: 5000 };
+
+function normCoaCode(v) {
+  var s = String(v == null ? '' : v).trim();
+  if (!s) return '';
+  if (/^\d+\.0$/.test(s)) s = s.slice(0, -2);
+  var n = Number(s);
+  if (!isNaN(n) && isFinite(n) && Math.floor(n) === n) return String(Math.trunc(n));
+  return s;
+}
+
+function isCodeTakenGlobally(code) {
+  var c = normCoaCode(code);
+  if (!c) return true;
+  return (accountsListData || []).some(function(a) { return normCoaCode(a.code) === c; });
+}
+
+function firstFreeIntegerCode(start) {
+  let n = start;
+  for (var i = 0; i < 10000; i++) {
+    if (!isCodeTakenGlobally(String(n))) return String(n);
+    n += 1;
+  }
+  return String(start) + '_n';
+}
+
+function getSelectedParentIdNum() {
+  const v = (document.getElementById('account-parent').value || '').trim();
+  if (!v) return null;
+  const n = parseInt(v, 10);
+  return isNaN(n) ? null : n;
+}
+
+function suggestNextAccountCode() {
+  const type = (document.getElementById('account-type').value || '').trim().toUpperCase();
+  if (!type) return '';
+  const parentId = getSelectedParentIdNum();
+  const sameType = (accountsListData || []).filter(function(a) { return (a.type || '').toUpperCase() === type; });
+  const siblings = sameType.filter(function(a) {
+    const p = a.parent_id;
+    const pnum = p === undefined || p === null || p === '' ? null : parseInt(String(p), 10);
+    if (parentId == null) return pnum == null || isNaN(pnum);
+    return !isNaN(pnum) && pnum === parentId;
+  });
+
+  function maxNumericCode(list) {
+    var max = 0;
+    (list || []).forEach(function(a) {
+      var s = normCoaCode((a && a.code) || '');
+      if (/^\d+$/.test(s)) {
+        var n = parseInt(s, 10);
+        if (n > max) max = n;
+      }
+    });
+    return max;
+  }
+
+  if (siblings.length > 0) {
+    var m = maxNumericCode(siblings);
+    if (m > 0) return firstFreeIntegerCode(m + 1);
+    var s0 = normCoaCode((siblings[0] && siblings[0].code) || '') || 'ACC';
+    for (var k = 2; k < 1000; k++) {
+      var ctry = s0 + '-' + k;
+      if (!isCodeTakenGlobally(ctry)) return ctry;
+    }
+    return s0 + '-new';
+  }
+  if (parentId != null) {
+    var p = (accountsListData || []).find(function(x) { return Number(x.account_id) === parentId; });
+    var pc = p ? normCoaCode(p.code) : '';
+    if (/^\d+$/.test(pc)) return firstFreeIntegerCode(parseInt(pc, 10) + 1);
+    for (var b = 1; b < 1000; b++) {
+      var cand = pc + '-' + b;
+      if (!isCodeTakenGlobally(cand)) return cand;
+    }
+    return pc + '-1';
+  }
+  var defStart = DEFAULT_ROOT_CODE_BY_TYPE[type] != null ? DEFAULT_ROOT_CODE_BY_TYPE[type] : 1000;
+  var roots = sameType.filter(function(a) {
+    var p = a.parent_id;
+    return p === undefined || p === null || p === '';
+  });
+  if (roots.length === 0) return firstFreeIntegerCode(defStart);
+  return firstFreeIntegerCode(Math.max(maxNumericCode(roots) + 1, defStart));
+}
+
+async function onAccountTypeOrParentChangedForCreate() {
+  var editId = (document.getElementById('account-id-edit') || {}).value || '';
+  if (editId) return;
+  var codeInput = document.getElementById('account-code');
+  if (!codeInput) return;
+  var t = (document.getElementById('account-type').value || '').trim();
+  if (!t) { codeInput.value = ''; return; }
+  var next = await fetchSuggestedAccountCodeFromServer();
+  if (!next) next = suggestNextAccountCode();
+  if (next) codeInput.value = next;
+}
+
+async function fetchSuggestedAccountCodeFromServer() {
+  var t = (document.getElementById('account-type').value || '').trim().toUpperCase();
+  if (!t) return '';
+  var parentVal = document.getElementById('account-parent').value;
+  var qs = 'type=' + encodeURIComponent(t);
+  if (parentVal) qs += '&parent_id=' + encodeURIComponent(parentVal);
+  try {
+    const r = await fetch(API_CHART_SUGGEST_CODE + '?' + qs, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+    const d = await r.json();
+    if (r.ok && d.success && d.code) return String(d.code).trim();
+  } catch (err) {
+    console.warn('fetchSuggestedAccountCodeFromServer', err);
+  }
+  return '';
+}
+
+function coaLedgerUrl(accountId) {
+  var base = String(COA_LEDGER_PAGE);
+  return base + (base.indexOf('?') >= 0 ? '&' : '?') + 'account_id=' + encodeURIComponent(String(accountId));
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  const div = document.createElement('div');
+  div.textContent = String(s);
+  return div.innerHTML;
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadAccounts();
+  const accountModal = document.getElementById('accountModal');
+  const btnCreate = document.getElementById('btnCreateAccount');
+  if (btnCreate) {
+    btnCreate.addEventListener('click', async function() {
+      await newAccount();
+      if (accountModal) accountModal.classList.remove('hidden');
+    });
+  }
+  var coaEx = document.getElementById('coaExpandAll');
+  var coaCol = document.getElementById('coaCollapseAll');
+  if (coaEx) coaEx.addEventListener('click', function() { setCoaTreeExpanded(true); });
+  if (coaCol) coaCol.addEventListener('click', function() { setCoaTreeExpanded(false); });
+  if (accountModal) {
+    accountModal.addEventListener('click', function(e) {
+      var saveOv = document.getElementById('coaAccountSaveOverlay');
+      if (saveOv && !saveOv.classList.contains('hidden')) return;
+      if (e.target.classList.contains('modal__overlay') || e.target.classList.contains('modal__close') || (e.target.dataset && e.target.dataset.close === 'accountModal')) {
+        accountModal.classList.add('hidden');
+      }
+    });
+  }
+  document.getElementById('accountForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await saveAccount();
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    if (!isCoaAccountSaveLocked()) return;
+    e.preventDefault();
+    e.stopPropagation();
+  }, true);
+
+  var accountTypePicker = document.getElementById('accountTypePicker');
+  var accountTypeClear = document.getElementById('accountTypeClear');
+  var accountTypeDisplay = document.getElementById('account-type-display');
+  var accountParentPicker = document.getElementById('accountParentPicker');
+  var accountParentClear = document.getElementById('accountParentClear');
+  var accountParentDisplay = document.getElementById('account-parent-display');
+  var parentAccountModal = document.getElementById('parentAccountModal');
+  var accountTypeModal = document.getElementById('accountTypeModal');
+
+  if (accountTypePicker) accountTypePicker.addEventListener('click', function(e) { e.preventDefault(); openAccountTypeModal(); });
+  if (accountTypeDisplay) accountTypeDisplay.addEventListener('click', function(e) { e.preventDefault(); openAccountTypeModal(); });
+  if (accountTypeClear) accountTypeClear.addEventListener('click', function(e) {
+    e.preventDefault();
+    document.getElementById('account-type').value = '';
+    document.getElementById('account-type-display').value = '';
+    accountTypeClear.style.display = 'none';
+    document.getElementById('account-parent').value = '';
+    document.getElementById('account-parent-display').value = '';
+    if (accountParentClear) accountParentClear.style.display = 'none';
+    onAccountTypeOrParentChangedForCreate();
+  });
+  if (accountParentPicker) accountParentPicker.addEventListener('click', function(e) { e.preventDefault(); openParentAccountModal(); });
+  if (accountParentDisplay) accountParentDisplay.addEventListener('click', function(e) { e.preventDefault(); openParentAccountModal(); });
+  if (accountParentClear) accountParentClear.addEventListener('click', function(e) {
+    e.preventDefault();
+    document.getElementById('account-parent').value = '';
+    document.getElementById('account-parent-display').value = '';
+    accountParentClear.style.display = 'none';
+    onAccountTypeOrParentChangedForCreate();
+  });
+
+  if (parentAccountModal) {
+    parentAccountModal.addEventListener('click', function(e) {
+      if (e.target.classList.contains('modal__overlay') || e.target.classList.contains('modal__close') || (e.target.dataset && e.target.dataset.close === 'parentAccountModal')) {
+        closeParentAccountModal();
+      }
+    });
+  }
+  var parentAccountModalBody = document.getElementById('parentAccountModalBody');
+  if (parentAccountModalBody) {
+    parentAccountModalBody.addEventListener('click', function(e) {
+      var row = e.target.closest('tr');
+      if (!row) return;
+      var id = row.getAttribute('data-id');
+      var code = row.getAttribute('data-code') || '';
+      var name = row.getAttribute('data-name') || '';
+      document.getElementById('account-parent').value = (id != null) ? id : '';
+      document.getElementById('account-parent-display').value = (!id || id === '') ? '' : (code + ' – ' + name).trim();
+      if (accountParentClear) accountParentClear.style.display = (id && id !== '') ? 'block' : 'none';
+      closeParentAccountModal();
+      onAccountTypeOrParentChangedForCreate();
+    });
+  }
+  var parentAccountModalSearch = document.getElementById('parentAccountModalSearch');
+  var parentAccountModalClear = document.getElementById('parentAccountModalClear');
+  if (parentAccountModalSearch) parentAccountModalSearch.addEventListener('input', function() {
+    filterParentAccountRows(parentAccountModalSearch.value);
+    if (parentAccountModalClear) parentAccountModalClear.style.display = parentAccountModalSearch.value ? 'block' : 'none';
+  });
+  if (parentAccountModalClear) parentAccountModalClear.addEventListener('click', function() {
+    if (parentAccountModalSearch) { parentAccountModalSearch.value = ''; parentAccountModalSearch.focus(); }
+    filterParentAccountRows('');
+    parentAccountModalClear.style.display = 'none';
+  });
+
+  if (accountTypeModal) {
+    accountTypeModal.addEventListener('click', function(e) {
+      if (e.target.classList.contains('modal__overlay') || e.target.classList.contains('modal__close') || (e.target.dataset && e.target.dataset.close === 'accountTypeModal')) {
+        closeAccountTypeModal();
+      }
+    });
+  }
+  var accountTypeModalBody = document.getElementById('accountTypeModalBody');
+  if (accountTypeModalBody) {
+    accountTypeModalBody.addEventListener('click', function(e) {
+      var row = e.target.closest('tr');
+      if (!row) return;
+      var type = (row.getAttribute('data-type') || '').trim();
+      document.getElementById('account-type').value = type;
+      document.getElementById('account-type-display').value = type;
+      if (accountTypeClear) accountTypeClear.style.display = type ? 'block' : 'none';
+      var pid = (document.getElementById('account-parent').value || '').trim();
+      if (pid) {
+        var pacc = accountsListData.find(function(x) { return String(x.account_id) === String(pid); });
+        if (pacc && (pacc.type || '').toUpperCase() !== type.toUpperCase()) {
+          document.getElementById('account-parent').value = '';
+          document.getElementById('account-parent-display').value = '';
+          if (accountParentClear) accountParentClear.style.display = 'none';
+        }
+      }
+      closeAccountTypeModal();
+      onAccountTypeOrParentChangedForCreate();
+    });
+  }
+  var accountTypeModalSearch = document.getElementById('accountTypeModalSearch');
+  var accountTypeModalClear = document.getElementById('accountTypeModalClear');
+  if (accountTypeModalSearch) accountTypeModalSearch.addEventListener('input', function() {
+    filterAccountTypeRows(accountTypeModalSearch.value);
+    if (accountTypeModalClear) accountTypeModalClear.style.display = accountTypeModalSearch.value ? 'block' : 'none';
+  });
+  if (accountTypeModalClear) accountTypeModalClear.addEventListener('click', function() {
+    if (accountTypeModalSearch) { accountTypeModalSearch.value = ''; accountTypeModalSearch.focus(); }
+    filterAccountTypeRows('');
+    accountTypeModalClear.style.display = 'none';
+  });
+});
+
+/** @returns {Promise<boolean>} true if accountsListData was refreshed */
+async function loadAccounts() {
+  const container = document.getElementById('treeViewContainer');
+  const tbody = document.getElementById('accounts-table');
+  try {
+    const r = await fetch(API_CHART_LIST, { credentials: 'same-origin' });
+    let d;
+    try {
+      d = await r.json();
+    } catch (_) {
+      d = { success: false, error: r.statusText || 'Invalid response' };
+    }
+    if (!r.ok) {
+      const msg = d.error || r.statusText || 'Failed to load accounts';
+      if (container) container.innerHTML = '<div class="text-center text-danger py-5"><strong>Error:</strong> ' + escapeHtml(msg) + '</div>';
+      if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="text-center text-danger">' + escapeHtml(msg) + '</td></tr>';
+      showToast(msg, 'danger');
+      return false;
+    }
+    if (!d.success) {
+      showToast(d.error || 'Failed to load', 'danger');
+      return false;
+    }
+    accountsListData = d.accounts || [];
+    if (currentView === 'tree') renderTreeView();
+    else renderListView();
+    updateCoaToolbarCount();
+    return true;
+  } catch (err) {
+    console.error(err);
+    const msg = err && err.message ? err.message : 'Error loading accounts';
+    if (container) container.innerHTML = '<div class="text-center text-danger py-5"><strong>Error:</strong> ' + escapeHtml(msg) + '</div>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="text-center text-danger">' + escapeHtml(msg) + '</td></tr>';
+    showToast(msg, 'danger');
+    return false;
+  }
+}
+
+function coaNormParentId(parentId) {
+  const p = parentId;
+  const pnum = p === undefined || p === null || p === '' ? null : Number(p);
+  return pnum != null && !isNaN(pnum) ? pnum : null;
+}
+
+/** O(n) index: parent key → sorted children. Guards circular links when walking the tree. */
+function buildCoaChildrenIndex(accounts) {
+  const byParent = new Map();
+  const idSet = new Set();
+  for (const a of accounts || []) {
+    const rawId = a.account_id;
+    const id = rawId === undefined || rawId === null || rawId === '' ? null : Number(rawId);
+    if (id != null && !isNaN(id)) idSet.add(id);
+  }
+  for (const a of accounts || []) {
+    let pid = coaNormParentId(a.parent_id);
+    if (pid != null && !idSet.has(pid)) pid = null;
+    const key = pid == null ? 'root' : String(pid);
+    if (!byParent.has(key)) byParent.set(key, []);
+    byParent.get(key).push(a);
+  }
+  for (const arr of byParent.values()) {
+    arr.sort((x, y) => String(x.code || '').localeCompare(String(y.code || '')));
+  }
+  return byParent;
+}
+
+function filterBySearch(accounts, term) {
+  if (!term) return accounts;
+  const t = term.toLowerCase();
+  return accounts.filter(a =>
+    (a.code || '').toLowerCase().includes(t) ||
+    (a.name || '').toLowerCase().includes(t) ||
+    (a.type || '').toLowerCase().includes(t)
+  );
+}
+
+function renderTreeView() {
+  const container = document.getElementById('treeViewContainer');
+  const filtered = filterBySearch(accountsListData, searchTerm);
+  coaChildrenByParent = buildCoaChildrenIndex(filtered);
+  const roots = coaChildrenByParent.get('root') || [];
+  if (roots.length === 0) {
+    container.innerHTML = '<div class="text-center text-muted py-5">No accounts found. Create your first account!</div>';
+    return;
+  }
+  let html = '<ul>';
+  roots.forEach(function(acc) { html += renderTreeNode(acc); });
+  html += '</ul>';
+  container.innerHTML = html;
+}
+
+function coaTreeChildCount(accountId) {
+  if (!coaChildrenByParent || accountId == null) return 0;
+  return (coaChildrenByParent.get(String(accountId)) || []).length;
+}
+
+function renderTreeNode(account) {
+  const aid = account.account_id;
+  const hasChildren = coaTreeChildCount(aid) > 0;
+  const typeClass = (account.type || '').toLowerCase();
+  let html = '<li><div class="account-item" data-account-id="' + aid + '">';
+  if (hasChildren) {
+    html += '<span class="account-toggle" onclick="toggleNode(this)" data-expanded="false" title="Expand or collapse">▶</span>';
+  } else {
+    html += '<span class="account-toggle" aria-hidden="true"></span>';
+  }
+  html += '<a class="coa-ledger-link" href="' + coaLedgerUrl(aid) + '" title="Open account ledger"><span class="account-code">' + escapeHtml(account.code || '') + '</span>';
+  html += '<span class="account-name">' + escapeHtml(account.name || '') + '</span></a>';
+  html += '<span class="account-type-badge type-' + typeClass + '">' + escapeHtml(account.type || '') + '</span>';
+  html += '<div class="account-actions">';
+  html += '<button type="button" class="btn-view" onclick="event.preventDefault(); newAccountUnderParent(' + aid + ');">+ Sub-account</button>';
+  html += '<button type="button" class="btn-view" style="margin-left:6px;" onclick="event.preventDefault(); editAccount(' + aid + ');">Edit</button>';
+  html += '<button type="button" class="btn-view" style="margin-left:6px;border-color:#fecaca;color:#b91c1c;" onclick="event.preventDefault(); deleteAccount(' + aid + ');">Delete</button>';
+  html += '</div></div>';
+  if (hasChildren) {
+    html += '<ul class="tree-children" style="display:none;" data-loaded="false"></ul>';
+  }
+  html += '</li>';
+  return html;
+}
+
+function coaRenderTreeChildren(ul, parentId, ancestorIds) {
+  const anc = ancestorIds || new Set();
+  const pid = Number(parentId);
+  if (isNaN(pid) || anc.has(pid)) {
+    ul.setAttribute('data-loaded', 'true');
+    return;
+  }
+  const nextAnc = new Set(anc);
+  nextAnc.add(pid);
+  const kids = (coaChildrenByParent && coaChildrenByParent.get(String(pid))) || [];
+  let html = '';
+  kids.forEach(function(c) {
+    const rawId = c.account_id;
+    const id = rawId === undefined || rawId === null || rawId === '' ? null : Number(rawId);
+    if (id != null && !isNaN(id) && nextAnc.has(id)) return;
+    html += renderTreeNode(c);
+  });
+  ul.innerHTML = html;
+  ul.setAttribute('data-loaded', 'true');
+}
+
+function toggleNode(el) {
+  const li = el.closest('li');
+  const item = el.closest('.account-item');
+  if (!li || !item) return;
+  const ul = li.querySelector(':scope > ul.tree-children');
+  if (!ul) return;
+  const isExpanded = el.getAttribute('data-expanded') === 'true';
+  if (!isExpanded && ul.getAttribute('data-loaded') !== 'true') {
+    const aid = item.getAttribute('data-account-id');
+    coaRenderTreeChildren(ul, aid, new Set());
+  }
+  ul.style.display = isExpanded ? 'none' : 'block';
+  el.textContent = isExpanded ? '▶' : '▼';
+  el.setAttribute('data-expanded', isExpanded ? 'false' : 'true');
+  item.classList.toggle('expanded', !isExpanded);
+}
+
+function renderListView() {
+  const tbody = document.getElementById('accounts-table');
+  const filtered = filterBySearch(accountsListData, searchTerm);
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="muted" style="text-align:center;padding:20px;">No accounts found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = filtered.map((a, idx) => {
+    const typeClass = (a.type || '').toLowerCase();
+    const status = (a.status || 'ACTIVE').toUpperCase();
+    const postable = a.is_postable ? '<span style="color:#16a34a;font-weight:600;">✓</span>' : '<span style="color:#9ca3af;">–</span>';
+    const statusStyle = status === 'ACTIVE'
+      ? 'background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;'
+      : 'background:#f3f4f6;color:#6b7280;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;';
+    return '<tr>' +
+      '<td class="sl-no" style="text-align:center;">' + (idx + 1) + '</td>' +
+      '<td><a class="grn-link coa-ledger-list-code" href="' + coaLedgerUrl(a.account_id) + '" title="Open ledger">'+ escapeHtml(a.code || '') + '</a></td>' +
+      '<td>' + escapeHtml(a.name || '') + '</td>' +
+      '<td><span class="account-type-badge type-' + typeClass + '">' + escapeHtml(a.type || '') + '</span></td>' +
+      '<td style="color:#6b7280;">' + escapeHtml(a.parent_code || '–') + '</td>' +
+      '<td style="text-align:center;">' + postable + '</td>' +
+      '<td style="text-align:center;">' + escapeHtml(a.currency || 'QAR') + '</td>' +
+      '<td><span style="' + statusStyle + '">' + escapeHtml(a.status || 'ACTIVE') + '</span></td>' +
+      '<td style="text-align:center; white-space:nowrap;">' +
+        '<button type="button" class="btn-view" onclick="newAccountUnderParent(' + a.account_id + ')">+ Sub</button>' +
+        '<button type="button" class="btn-view" style="margin-left:6px;" onclick="editAccount(' + a.account_id + ')">Edit</button>' +
+        '<button type="button" class="btn-view" style="margin-left:6px;border-color:#fecaca;color:#b91c1c;" onclick="deleteAccount(' + a.account_id + ')">Delete</button>' +
+      '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+function switchView(viewType) {
+  currentView = viewType;
+  document.getElementById('treeViewCard').style.display = viewType === 'tree' ? 'block' : 'none';
+  document.getElementById('listViewCard').style.display = viewType === 'list' ? 'block' : 'none';
+  const btnTree = document.getElementById('btnTreeView');
+  const btnList = document.getElementById('btnListView');
+  if (btnTree) btnTree.classList.toggle('active', viewType === 'tree');
+  if (btnList) btnList.classList.toggle('active', viewType === 'list');
+  const bar = document.getElementById('coaTreeExpandBar');
+  if (bar) bar.style.display = viewType === 'tree' ? 'inline-flex' : 'none';
+  if (viewType === 'tree') renderTreeView();
+  else renderListView();
+  updateCoaToolbarCount();
+}
+
+function filterAccounts() {
+  searchTerm = (document.getElementById('searchAccounts').value || '').trim();
+  if (currentView === 'tree') renderTreeView();
+  else renderListView();
+  updateCoaToolbarCount();
+}
+
+function clearCoaSearch() {
+  var inp = document.getElementById('searchAccounts');
+  if (inp) inp.value = '';
+  searchTerm = '';
+  if (currentView === 'tree') renderTreeView();
+  else renderListView();
+  updateCoaToolbarCount();
+}
+
+function updateCoaToolbarCount() {
+  var el = document.getElementById('coaCount');
+  if (!el) return;
+  var total = (accountsListData || []).length;
+  var filtered = filterBySearch(accountsListData || [], searchTerm);
+  var n = filtered.length;
+  var q = (searchTerm || '').trim();
+  el.textContent = q ? (n + ' of ' + total + ' shown') : (total + ' accounts');
+}
+
+function openParentAccountModal() {
+  const modal = document.getElementById('parentAccountModal');
+  const searchEl = document.getElementById('parentAccountModalSearch');
+  const tbody = document.getElementById('parentAccountModalBody');
+  if (!modal || !tbody) return;
+  const selType = (document.getElementById('account-type').value || '').trim().toUpperCase();
+  if (!selType) {
+    showToast('Select account type first.', 'danger');
+    return;
+  }
+  const editId = (document.getElementById('account-id-edit') || {}).value || '';
+  let list = accountsListData.filter(function(a) {
+    if (String(a.account_id) === editId) return false;
+    return (a.type || '').toUpperCase() === selType;
+  });
+  parentAccountModalList = list;
+  renderParentAccountRows(list);
+  if (searchEl) { searchEl.value = ''; searchEl.focus(); }
+  modal.classList.remove('hidden');
+}
+
+function closeParentAccountModal() {
+  const modal = document.getElementById('parentAccountModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function renderParentAccountRows(list) {
+  const tbody = document.getElementById('parentAccountModalBody');
+  if (!tbody) return;
+  let html = '<tr data-id="" data-code="" data-name="" style="cursor: pointer;"><td colspan="3"><em>-- None --</em></td></tr>';
+  (list || []).forEach(function(a) {
+    const id = (a.account_id != null) ? String(a.account_id) : '';
+    const code = (a.code || '').replace(/"/g, '&quot;');
+    const name = (a.name || '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const type = (a.type || '').replace(/</g, '&lt;');
+    html += '<tr data-id="' + id + '" data-code="' + code + '" data-name="' + name + '" style="cursor: pointer;"><td><strong>' + (a.code || '') + '</strong></td><td>' + (a.name || '') + '</td><td>' + (a.type || '') + '</td></tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+function filterParentAccountRows(q) {
+  const term = (q || '').trim().toLowerCase();
+  const base = parentAccountModalList || [];
+  if (!term) {
+    renderParentAccountRows(base);
+    return;
+  }
+  const filtered = base.filter(function(a) {
+    const code = (a.code || '').toLowerCase();
+    const name = (a.name || '').toLowerCase();
+    const type = (a.type || '').toLowerCase();
+    return code.indexOf(term) !== -1 || name.indexOf(term) !== -1 || type.indexOf(term) !== -1;
+  });
+  renderParentAccountRows(filtered);
+}
+
+function openAccountTypeModal() {
+  const modal = document.getElementById('accountTypeModal');
+  const tbody = document.getElementById('accountTypeModalBody');
+  const searchEl = document.getElementById('accountTypeModalSearch');
+  if (!modal || !tbody) return;
+  accountTypeModalList = ACCOUNT_TYPES_LIST || ['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE'];
+  renderAccountTypeRows(accountTypeModalList);
+  if (searchEl) { searchEl.value = ''; searchEl.focus(); }
+  modal.classList.remove('hidden');
+}
+
+var accountTypeModalList = [];
+
+function closeAccountTypeModal() {
+  const modal = document.getElementById('accountTypeModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function renderAccountTypeRows(list) {
+  const tbody = document.getElementById('accountTypeModalBody');
+  if (!tbody) return;
+  const types = list || [];
+  tbody.innerHTML = types.map(function(t) {
+    const v = (t || '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    return '<tr data-type="' + v + '" style="cursor: pointer;"><td><strong>' + v + '</strong></td></tr>';
+  }).join('');
+}
+
+function filterAccountTypeRows(q) {
+  const term = (q || '').trim().toLowerCase();
+  const all = ACCOUNT_TYPES_LIST || ['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE'];
+  if (!term) {
+    renderAccountTypeRows(all);
+    return;
+  }
+  const filtered = all.filter(function(t) { return (t || '').toLowerCase().indexOf(term) !== -1; });
+  renderAccountTypeRows(filtered);
+}
+
+function setCoaSaveOverlay(show, message) {
+  var el = document.getElementById('coaAccountSaveOverlay');
+  var txt = document.getElementById('coaAccountSaveOverlayText');
+  if (!el) return;
+  if (message && txt) txt.textContent = message;
+  else if (!show && txt) txt.textContent = 'Saving…';
+  if (show) {
+    el.classList.remove('hidden');
+    el.setAttribute('aria-hidden', 'false');
+  } else {
+    el.classList.add('hidden');
+    el.setAttribute('aria-hidden', 'true');
+  }
+}
+
+function isCoaAccountSaveLocked() {
+  var el = document.getElementById('coaAccountSaveOverlay');
+  return !!(el && !el.classList.contains('hidden'));
+}
+
+function enableCoaSaveButton() {
+  coaSaveInFlight = false;
+  var btn = document.querySelector('#accountForm button[type="submit"]');
+  if (!btn) return;
+  btn.removeAttribute('aria-busy');
+  btn.disabled = false;
+  btn.style.pointerEvents = '';
+  btn.style.opacity = '';
+  setCoaSaveOverlay(false);
+}
+
+/** Fresh server token before each new-account / sub-account save (avoids stale create_once after prior create). */
+async function refreshCoaCreateOnce() {
+  try {
+    const r = await fetch(API_CHART_CREATE_ONCE, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+    const d = await r.json();
+    if (r.ok && d.success && typeof d.create_once === 'string' && d.create_once.trim()) {
+      coaCreateOnce = d.create_once.trim();
+      return true;
+    }
+  } catch (err) {
+    console.warn('refreshCoaCreateOnce', err);
+  }
+  return false;
+}
+
+var coaSaveInFlight = false;
+
+function setCoaSaveButtonBusy(busy) {
+  var btn = document.querySelector('#accountForm button[type="submit"]');
+  if (!btn) return;
+  if (busy) {
+    coaSaveInFlight = true;
+    btn.setAttribute('aria-busy', 'true');
+    btn.disabled = true;
+    btn.style.pointerEvents = 'none';
+    btn.style.opacity = '0.65';
+  } else {
+    coaSaveInFlight = false;
+    enableCoaSaveButton();
+  }
+}
+
+async function newAccount() {
+  var gen = ++coaFormSetupGen;
+  setCoaSaveOverlay(false);
+  enableCoaSaveButton();
+  await refreshCoaCreateOnce();
+  if (gen !== coaFormSetupGen) return;
+  document.getElementById('accountForm').reset();
+  document.getElementById('account-id-edit').value = '';
+  document.getElementById('account-code').readOnly = false;
+  document.getElementById('account-currency').value = 'QAR';
+  document.getElementById('account-postable').checked = true;
+  document.getElementById('account-status').value = 'ACTIVE';
+  document.getElementById('accountModalTitle').textContent = 'New top-level account';
+  document.getElementById('account-type').value = '';
+  document.getElementById('account-type-display').value = '';
+  document.getElementById('account-parent').value = '';
+  document.getElementById('account-parent-display').value = '';
+  var tc = document.getElementById('accountTypeClear');
+  var pc = document.getElementById('accountParentClear');
+  if (tc) tc.style.display = 'none';
+  if (pc) pc.style.display = 'none';
+  var hint = document.getElementById('account-code-hint');
+  if (hint) { hint.style.display = ''; }
+  var sub = document.getElementById('accountModalSubtitle');
+  if (sub) {
+    sub.textContent = 'Pick account type (and optional parent), then confirm code and name — or use + Sub-account on a row to create under that account.';
+    sub.style.display = '';
+  }
+  await onAccountTypeOrParentChangedForCreate();
+  if (gen !== coaFormSetupGen) return;
+}
+
+async function newAccountUnderParent(parentAccountId) {
+  var pid = parseInt(String(parentAccountId), 10);
+  if (isNaN(pid)) return;
+  var parent = (accountsListData || []).find(function(x) { return Number(x.account_id) === pid; });
+  if (!parent) { showToast('Parent account not found', 'danger'); return; }
+  await newAccount();
+  var typeVal = (parent.type || '').toUpperCase();
+  document.getElementById('account-type').value = typeVal;
+  document.getElementById('account-type-display').value = typeVal;
+  var typeClear = document.getElementById('accountTypeClear');
+  if (typeClear) typeClear.style.display = typeVal ? 'block' : 'none';
+  document.getElementById('account-parent').value = String(pid);
+  var pc0 = (parent.code || '').trim();
+  var nm0 = (parent.name || '').trim();
+  document.getElementById('account-parent-display').value = (pc0 + ' – ' + nm0).trim();
+  var parentClear = document.getElementById('accountParentClear');
+  if (parentClear) parentClear.style.display = 'block';
+  document.getElementById('accountModalTitle').textContent = 'New sub-account';
+  var sub = document.getElementById('accountModalSubtitle');
+  if (sub) {
+    sub.textContent = 'Under ' + pc0 + ' – ' + nm0 + ' (type ' + typeVal + '). Suggested code updates from siblings under this parent.';
+  }
+  await onAccountTypeOrParentChangedForCreate();
+  var accountModal = document.getElementById('accountModal');
+  if (accountModal) accountModal.classList.remove('hidden');
+  var nmin = document.getElementById('account-name');
+  if (nmin) setTimeout(function() { nmin.focus(); }, 50);
+}
+
+function setCoaTreeExpanded(expand) {
+  var root = document.getElementById('treeViewContainer');
+  if (!root) return;
+  if (expand) {
+    var pending = root.querySelectorAll('ul.tree-children[data-loaded="false"]');
+    var j;
+    for (j = 0; j < pending.length; j++) {
+      var ul0 = pending[j];
+      var li0 = ul0.parentElement;
+      var item0 = li0 && li0.querySelector(':scope > .account-item');
+      if (item0) coaRenderTreeChildren(ul0, item0.getAttribute('data-account-id'), new Set());
+    }
+  }
+  var uls = root.querySelectorAll('ul.tree-children');
+  var i;
+  for (i = 0; i < uls.length; i++) {
+    uls[i].style.display = expand ? 'block' : 'none';
+  }
+  var toggles = root.querySelectorAll('.account-toggle[onclick]');
+  for (i = 0; i < toggles.length; i++) {
+    var t = toggles[i];
+    t.setAttribute('data-expanded', expand ? 'true' : 'false');
+    t.textContent = expand ? '▼' : '▶';
+    var item = t.closest('.account-item');
+    if (item) item.classList.toggle('expanded', expand);
+  }
+}
+
+async function editAccount(accountId) {
+  try {
+    const r = await fetch(API_CHART_LIST + '/' + accountId);
+    const d = await r.json();
+    if (!d.success || !d.account) { showToast('Account not found', 'danger'); return; }
+    const a = d.account;
+    document.getElementById('account-id-edit').value = a.account_id || '';
+    document.getElementById('account-code').value = a.code || '';
+    document.getElementById('account-code').readOnly = true;
+    document.getElementById('account-name').value = a.name || '';
+    var typeVal = (a.type || '').toUpperCase();
+    document.getElementById('account-type').value = typeVal;
+    document.getElementById('account-type-display').value = typeVal;
+    var typeClear = document.getElementById('accountTypeClear');
+    if (typeClear) typeClear.style.display = typeVal ? 'block' : 'none';
+    var parentId = a.parent_id != null ? a.parent_id : '';
+    document.getElementById('account-parent').value = parentId;
+    var parentDisplay = '';
+    if (parentId !== '' && parentId != null) {
+      var parentAcc = accountsListData.find(function(x) { return x.account_id == parentId; });
+      parentDisplay = parentAcc ? (parentAcc.code || '') + ' – ' + (parentAcc.name || '') : '';
+    }
+    document.getElementById('account-parent-display').value = parentDisplay;
+    var parentClear = document.getElementById('accountParentClear');
+    if (parentClear) parentClear.style.display = parentId ? 'block' : 'none';
+    document.getElementById('account-currency').value = a.currency || 'QAR';
+    document.getElementById('account-postable').checked = a.is_postable !== false;
+    document.getElementById('account-status').value = (a.status || 'ACTIVE').toUpperCase();
+    document.getElementById('accountModalTitle').textContent = 'Edit account';
+    var subed = document.getElementById('accountModalSubtitle');
+    if (subed) { subed.textContent = 'Account code is fixed. You can change name, parent, and options below.'; subed.style.display = ''; }
+    var ch = document.getElementById('account-code-hint');
+    if (ch) { ch.style.display = 'none'; }
+    enableCoaSaveButton();
+    document.getElementById('accountModal').classList.remove('hidden');
+  } catch (err) {
+    showToast('Error loading account', 'danger');
+  }
+}
+
+function mergeCreatedAccountIntoList(accountId, code, name, type, parentId, isPostable, currency, status) {
+  var idNum = parseInt(String(accountId), 10);
+  if (isNaN(idNum)) return;
+  var codeTrim = String(code || '').trim();
+  if (!codeTrim) return;
+  if ((accountsListData || []).some(function(a) { return String(a.account_id) === String(idNum) || String((a.code || '').trim()) === codeTrim; })) return;
+  var parentRow = parentId != null ? (accountsListData || []).find(function(x) { return Number(x.account_id) === Number(parentId); }) : null;
+  accountsListData.push({
+    account_id: idNum,
+    code: codeTrim,
+    name: String(name || '').trim(),
+    type: String(type || '').toUpperCase(),
+    parent_id: parentId == null || isNaN(Number(parentId)) ? null : Number(parentId),
+    parent_code: parentRow ? (parentRow.code || '') : '',
+    is_postable: !!isPostable,
+    currency: String(currency || 'QAR').trim().substring(0, 3) || 'QAR',
+    status: String(status || 'ACTIVE').toUpperCase(),
+  });
+  if (currentView === 'tree') renderTreeView();
+  else renderListView();
+}
+
+async function saveAccount() {
+  var busyBtn = document.querySelector('#accountForm button[type="submit"]');
+  if (coaSaveInFlight || (busyBtn && busyBtn.getAttribute('aria-busy') === 'true')) return;
+  if (isCoaAccountSaveLocked()) {
+    showToast('Please wait — chart is still refreshing…', 'danger');
+    return;
+  }
+
+  const editIdRaw = (document.getElementById('account-id-edit').value || '').trim();
+  const editId = editIdRaw ? editIdRaw : '';
+  const code = (document.getElementById('account-code').value || '').trim();
+  const name = (document.getElementById('account-name').value || '').trim();
+  const type = (document.getElementById('account-type').value || '').trim().toUpperCase();
+  if (!type) { showToast('Please select account type', 'danger'); return; }
+  const parentVal = document.getElementById('account-parent').value;
+  const parentId = parentVal ? parseInt(parentVal, 10) : null;
+  const isPostable = document.getElementById('account-postable').checked;
+  const currency = (document.getElementById('account-currency').value || 'USD').trim().substring(0, 3);
+  const status = (document.getElementById('account-status').value || 'ACTIVE').trim().toUpperCase();
+  const payload = { code: code, name: name, type: type, parent_id: parentId, is_postable: isPostable, currency: currency, status: status };
+  if (!editId) {
+    if (!coaCreateOnce) await refreshCoaCreateOnce();
+    if (!coaCreateOnce) {
+      showToast('Could not start a new account save. Close the dialog and open New account or + Sub-account again.', 'danger');
+      return;
+    }
+    payload.coa_once = coaCreateOnce;
+  }
+  try {
+    let url = API_CHART_LIST;
+    let method = 'POST';
+    if (editId) {
+      url = API_CHART_LIST + '/' + editId;
+      method = 'PUT';
+      delete payload.code;
+    }
+    setCoaSaveOverlay(true, 'Saving…');
+    setCoaSaveButtonBusy(true);
+    const r = await fetch(url, {
+      method: method,
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    let d = {};
+    try {
+      d = await r.json();
+    } catch (_) {
+      showToast(r.ok ? 'Save failed: invalid server response' : ('Save failed (' + r.status + ')'), 'danger');
+      return;
+    }
+    if (!d.success) {
+      if (typeof d.create_once === 'string' && d.create_once.trim()) coaCreateOnce = d.create_once.trim();
+      if (d.suggested_code) {
+        var codeIn = document.getElementById('account-code');
+        if (codeIn) codeIn.value = String(d.suggested_code).trim();
+        showToast((d.error || 'Duplicate code') + ' Suggested: ' + d.suggested_code, 'danger');
+      } else {
+        showToast(d.error || ('Save failed (' + r.status + ')'), 'danger');
+      }
+      return;
+    }
+    if (!editId && typeof d.create_once === 'string' && d.create_once.trim()) {
+      coaCreateOnce = d.create_once.trim();
+    }
+    var savedCode = (d.code && String(d.code).trim()) ? String(d.code).trim() : code;
+    if (d.message) showToast(d.message, 'success');
+    else showToast(editId ? 'Account updated.' : 'Account created.', 'success');
+    closeParentAccountModal();
+    closeAccountTypeModal();
+    setCoaSaveOverlay(true, 'Refreshing chart…');
+    var reloaded = await loadAccounts();
+    if (!editId && d.account_id != null) {
+      mergeCreatedAccountIntoList(d.account_id, savedCode, name, type, parentId, isPostable, currency, status);
+    }
+    document.getElementById('accountModal').classList.add('hidden');
+    document.getElementById('account-id-edit').value = '';
+    document.getElementById('account-code').readOnly = false;
+    if (!editId && !coaCreateOnce) await refreshCoaCreateOnce();
+  } catch (err) {
+    console.error(err);
+    showToast('Save failed', 'danger');
+  } finally {
+    setCoaSaveButtonBusy(false);
+  }
+}
+
+async function deleteAccount(accountId) {
+  if (!confirm('Delete this account?')) return;
+  try {
+    const r = await fetch(API_CHART_LIST + '/' + accountId + '/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+    const d = await r.json();
+    if (!d.success) { showToast(d.error || 'Delete failed', 'danger'); return; }
+    showToast('Account deleted.', 'success');
+    await loadAccounts();
+  } catch (err) {
+    showToast('Delete failed', 'danger');
+  }
+}
+
+function showToast(message, type) {
+  const container = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = 'coa-toast coa-toast--' + (type === 'success' ? 'success' : 'danger');
+  el.textContent = message;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+</script>
+{% endblock %}

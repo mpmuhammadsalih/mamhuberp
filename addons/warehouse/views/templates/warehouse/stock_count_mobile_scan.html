@@ -1,0 +1,144 @@
+{% extends "warehouse/stock_count_mobile_layout.html" %}
+{% block scm_title %}Count #{{ count_no }}{% endblock %}
+{% block scm_body %}
+{% set st = (hdr.status or '')|upper %}
+{% set readonly = st in ('POSTED', 'CANCELLED') %}
+<header class="scm-appbar">
+  <a href="{{ url_for('warehouse.warehouse_stock_counting_mobile_home') }}" class="scm-appbar__back" aria-label="Back"><i class="bi bi-arrow-left"></i></a>
+  <div class="scm-appbar__title-wrap">
+    <h1 class="scm-appbar__title">Count #{{ count_no }}</h1>
+    <p class="scm-appbar__subtitle">
+      <span id="scmStatusLabel">{{ hdr.status }}</span>
+      {% if hdr_wh_label %} · {{ hdr_wh_label }}{% elif hdr.warehouse_id %} · WH {{ hdr.warehouse_id }}{% endif %}
+      {% if hdr.storage_id %} · Bin {{ hdr.storage_id }}{% endif %}
+    </p>
+  </div>
+  <button type="button" class="scm-appbar__action" id="scmBtnMenu" aria-label="Menu"><i class="bi bi-three-dots-vertical"></i></button>
+</header>
+
+<main class="scm-main scm-scan-page" id="scmScanPage"
+  data-count-no="{{ count_no }}"
+  data-location="{{ location_code }}"
+  data-status="{{ st }}"
+  data-readonly="{{ '1' if readonly else '0' }}"
+  data-default-bin="{{ hdr.storage_id or '' }}"
+  data-api-line="{{ url_for('warehouse.api_stock_count_add_line') }}"
+  data-api-get="{{ url_for('warehouse.api_stock_count_get', count_no=count_no) }}"
+  data-api-post="{{ url_for('warehouse.api_stock_count_post') }}"
+  data-api-cancel="{{ url_for('warehouse.api_stock_count_cancel') }}"
+  data-api-delete="{{ url_for('warehouse.api_stock_count_delete') }}"
+  data-home-url="{{ url_for('warehouse.warehouse_stock_counting_mobile_home') }}">
+
+  <div class="scm-stat-row">
+    <div class="scm-stat">
+      <span class="scm-stat__val" id="scmStatLines">{{ lines|length }}</span>
+      <span class="scm-stat__label">Lines</span>
+    </div>
+    <div class="scm-stat">
+      <span class="scm-stat__val scm-stat__val--warn" id="scmStatVar">{{ variance_count }}</span>
+      <span class="scm-stat__label">Variance</span>
+    </div>
+    <div class="scm-stat">
+      <span class="scm-stat__val" id="scmStatQty">{{ '%.0f'|format(total_counted) if total_counted else '0' }}</span>
+      <span class="scm-stat__label">Counted</span>
+    </div>
+  </div>
+
+  {% if not readonly %}
+  <section class="scm-scan-panel">
+    <label class="scm-scan-panel__label" for="scmScanInput">Scan barcode</label>
+    <div class="scm-scan-input-wrap">
+      <i class="bi bi-upc-scan"></i>
+      <input type="text" id="scmScanInput" class="scm-scan-input" placeholder="Barcode or item code" autocomplete="off" autocapitalize="off" enterkeyhint="done" />
+      <button type="button" class="scm-scan-camera-btn" id="scmBtnCamera" aria-label="Open camera scanner" title="Scan with camera">
+        <i class="bi bi-camera-fill"></i>
+      </button>
+    </div>
+    <button type="button" class="scm-btn-camera-full" id="scmBtnCameraFull">
+      <i class="bi bi-camera-video-fill"></i> Scan with camera
+    </button>
+    <div class="scm-last-scan" id="scmLastScan">
+      <div class="scm-last-scan__label">Last saved</div>
+      <p class="scm-last-scan__text" id="scmLastScanText">—</p>
+    </div>
+    <div class="scm-qty-row">
+      <div>
+        <span class="scm-scan-panel__label">Quantity</span>
+        <div class="scm-qty-stepper">
+          <button type="button" class="scm-qty-btn" id="scmQtyMinus" aria-label="Decrease">−</button>
+          <input type="number" id="scmQtyInput" class="scm-qty-val" value="1" min="0" step="1" inputmode="decimal" />
+          <button type="button" class="scm-qty-btn" id="scmQtyPlus" aria-label="Increase">+</button>
+        </div>
+      </div>
+      <button type="button" class="scm-btn-primary" id="scmBtnAdd">
+        <i class="bi bi-check2-circle"></i> Add
+      </button>
+    </div>
+    <div class="scm-field" style="margin-top:12px;margin-bottom:0;">
+      <label for="scmWhInput">Warehouse</label>
+      <select id="scmWhInput" class="scm-scan-input" style="width:100%;">
+        <option value="">— Default from header —</option>
+        {% for s in sites %}
+        <option value="{{ s.warehouse_id or s.key }}"{% if hdr.warehouse_id and (s.warehouse_id or s.key)|string == hdr.warehouse_id|string %} selected{% endif %}>{{ s.name or s.key }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="scm-field" style="margin-top:12px;margin-bottom:0;">
+      <label for="scmBinInput">Bin ID (optional)</label>
+      <input type="number" id="scmBinInput" min="0" placeholder="{{ hdr.storage_id or 'Same as header' }}" inputmode="numeric" />
+    </div>
+  </section>
+  {% endif %}
+
+  <h2 class="scm-scan-panel__label" style="margin:0 0 8px 4px;">Counted items</h2>
+  <div class="scm-card" id="scmLinesCard">
+    <div id="scmLinesList">
+      {% include 'warehouse/_stock_count_mobile_lines.html' %}
+    </div>
+  </div>
+</main>
+
+{% if not readonly %}
+<footer class="scm-bottom-bar">
+  <div class="scm-bottom-bar__info">
+    <strong id="scmBottomLines">{{ lines|length }} items</strong>
+    <span id="scmBottomHint">Tap Post when finished</span>
+  </div>
+  <button type="button" class="scm-btn-primary" id="scmBtnPost"><i class="bi bi-cloud-upload"></i> Post</button>
+</footer>
+{% endif %}
+
+<div id="scmCameraModal" class="scm-camera-modal" hidden aria-hidden="true">
+  <div class="scm-camera-modal__header">
+    <button type="button" class="scm-appbar__back" id="scmCameraClose" aria-label="Close camera"><i class="bi bi-x-lg"></i></button>
+    <div class="scm-appbar__title-wrap">
+      <h2 class="scm-appbar__title" style="font-size:17px;">Scan barcode</h2>
+      <p class="scm-appbar__subtitle">Point at barcode · rear camera</p>
+    </div>
+  </div>
+  <div id="scmCameraReader" class="scm-camera-reader"></div>
+  <p class="scm-camera-hint" id="scmCameraHint">Allow camera access when prompted</p>
+  <div class="scm-camera-torch-row">
+    <button type="button" class="scm-btn-secondary-outline" id="scmCameraTorch" hidden>
+      <i class="bi bi-lightning-fill"></i> Torch
+    </button>
+  </div>
+</div>
+
+<div id="scmMenuSheet" class="scm-sheet" hidden>
+  <div class="scm-sheet__handle"></div>
+  <h2 class="scm-sheet__title">Actions</h2>
+  <ul class="scm-menu-list">
+    <li><button type="button" id="scmMenuPostVar"><i class="bi bi-sliders"></i> Post variances only</button></li>
+    <li><button type="button" id="scmMenuCancel"><i class="bi bi-x-circle"></i> Cancel count</button></li>
+    <li><button type="button" class="danger" id="scmMenuDelete"><i class="bi bi-trash"></i> Delete count</button></li>
+    {% if show_desktop_link %}
+    <li><button type="button" id="scmMenuDesktop"><i class="bi bi-display"></i> Open on desktop</button></li>
+    {% endif %}
+  </ul>
+</div>
+{% endblock %}
+{% block scm_scripts %}
+<script src="{{ url_for('static', filename='js/stock_count_mobile.js') }}?v=3"></script>
+<script>ScmMobile.initScan();</script>
+{% endblock %}

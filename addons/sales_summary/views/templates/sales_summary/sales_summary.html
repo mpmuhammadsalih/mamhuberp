@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+  body { background: #fff !important; }
+</style>
+<div class="page-po" style="max-width: 1200px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Sales Summary</h1>
+      <p class="page-po__muted">Summary of sales for the selected date range.</p>
+    </div>
+  </div>
+
+  <div class="page-po__filters">
+    <form method="get" action="{{ url_for('sales_summary.sales_summary') }}" id="salesSummaryForm">
+      <div style="display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="salesSummaryDateFrom">From Date</label>
+          <input type="date" id="salesSummaryDateFrom" name="date_from" class="input" style="width: 140px;" value="{{ date_from }}" />
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="salesSummaryDateTo">To Date</label>
+          <input type="date" id="salesSummaryDateTo" name="date_to" class="input" style="width: 140px;" value="{{ date_to }}" />
+        </div>
+        <div class="form-group" style="margin-bottom: 0; display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end;">
+          <label style="visibility: hidden; margin-bottom: 2px;">Actions</label>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="submit" class="page-po__btn-primary">Load</button>
+            <button type="button" class="page-po__btn-secondary" id="salesSummaryDetailed">Detailed</button>
+            <button type="button" class="page-po__btn-secondary" id="salesSummaryClear">Clear</button>
+            <button type="button" class="page-po__btn-secondary" id="salesSummaryExport">Export Summary</button>
+            <button type="button" class="page-po__btn-secondary" id="salesSummaryExportDetails">Export Details</button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <div class="page-po__section-title">Summary Details</div>
+  {% if summary_details and summary_details|length > 0 %}
+    <div class="table-responsive">
+      <div class="scroll-table" style="max-height: 280px;">
+        <table class="table" id="salesSummaryTable" style="width: 100%;">
+          <thead>
+            <tr>
+              <th style="width: 50px;">Sl.No</th>
+              <th>Description</th>
+              <th style="text-align: right; width: 120px;">Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in summary_details %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ row.description or '-' }}</td>
+                <td style="text-align: right;">{{ "%.2f"|format((row.amount or 0)|float) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% else %}
+    <p class="page-po__muted">No data available for the selected date range.</p>
+  {% endif %}
+
+  <div class="page-po__section-title" style="margin-top: 24px;">Calculated Totals</div>
+  <div class="page-po__filters" style="padding-top: 0; border-bottom: none;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px 24px; max-width: 600px;">
+      <div class="form-group" style="margin-bottom: 0;">
+        <label style="font-size: 12px; margin-bottom: 4px;">Total Sale</label>
+        <input class="input" readonly style="padding: 6px 10px; font-size: 13px; border: 1px solid #dee2e6;" value="{{ "%.2f"|format((totals.total_sale or 0)|float) if totals else '0.00' }}" />
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <label style="font-size: 12px; margin-bottom: 4px;">Deduction</label>
+        <input class="input" readonly style="padding: 6px 10px; font-size: 13px; border: 1px solid #dee2e6;" value="{{ "%.2f"|format((totals.deduction or 0)|float) if totals else '0.00' }}" />
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <label style="font-size: 12px; margin-bottom: 4px;">Net Sale</label>
+        <input class="input" readonly style="padding: 6px 10px; font-size: 13px; border: 1px solid #dee2e6;" value="{{ "%.2f"|format((totals.net_sale or 0)|float) if totals else '0.00' }}" />
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <label style="font-size: 12px; margin-bottom: 4px;">Target</label>
+        <input class="input" readonly style="padding: 6px 10px; font-size: 13px; border: 1px solid #dee2e6;" value="{{ "%.2f"|format((totals.target or 0)|float) if totals else '0.00' }}" />
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <label style="font-size: 12px; margin-bottom: 4px;">Percentage</label>
+        <input class="input" readonly style="padding: 6px 10px; font-size: 13px; border: 1px solid #dee2e6;" value="{{ "%.2f"|format((totals.percentage or 0)|float) if totals else '0.00' }}%" />
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <label style="font-size: 12px; margin-bottom: 4px;">Margin</label>
+        <input class="input" readonly style="padding: 6px 10px; font-size: 13px; border: 1px solid #dee2e6;" value="{{ "%.2f"|format((totals.margin or 0)|float) if totals else '0.00' }}%" />
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/sales_summary.js') }}"></script>
+{% endblock %}

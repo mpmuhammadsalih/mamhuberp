@@ -1,0 +1,363 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body { background: #fff !important; }
+
+  /* ── Filter bar — same as customer_list ─────────────────────── */
+  .cl-filters { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; padding: 14px 0 12px; border-bottom: 1px solid #dee2e6; margin-bottom: 14px; }
+  .cl-fg { display: flex; flex-direction: column; gap: 4px; }
+  .cl-fg label { font-size: 11px; font-weight: 600; color: #6c757d; text-transform: uppercase; letter-spacing: .4px; }
+  .cl-pick-wrap { display: inline-flex; align-items: center; border: 1px solid #ced4da; border-radius: 4px; background: #fff; min-width: 150px; overflow: hidden; }
+  .cl-pick-display { flex: 1; font-size: 13px; padding: 6px 10px; background: transparent; border: none; cursor: pointer; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #495057; }
+  .cl-pick-display.placeholder { color: #adb5bd; }
+  .cl-pick-btn { background: transparent; border: none; border-left: 1px solid #ced4da; padding: 6px 9px; cursor: pointer; color: #007bff; font-size: 13px; }
+  .cl-pick-clear { background: transparent; border: none; padding: 6px 7px; cursor: pointer; color: #adb5bd; font-size: 13px; display: none; }
+  .cl-pick-clear:hover { color: #dc3545; }
+  .cl-fg input[type="date"] { font-size: 13px; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; min-width: 138px; background: #fff; }
+  .cl-fg .cl-text-input { font-size: 13px; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; min-width: 200px; background: #fff; }
+  .cl-btn-row { display: flex; gap: 8px; align-items: flex-end; padding-bottom: 1px; }
+
+  /* ── Filter popup modals — same as customer_list ────────────── */
+  .cl-modal-bg { display: none; position: fixed; inset: 0; z-index: 1050; background: rgba(0,0,0,.35); }
+  .cl-modal-bg.open { display: flex; align-items: flex-start; justify-content: center; padding-top: 80px; }
+  .cl-modal-box { background: #fff; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,.18); width: 380px; max-width: 96vw; display: flex; flex-direction: column; max-height: 480px; }
+  .cl-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 10px; border-bottom: 1px solid #dee2e6; }
+  .cl-modal-head h4 { margin: 0; font-size: 14px; font-weight: 700; color: #212529; }
+  .cl-modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: #6c757d; line-height: 1; padding: 0 4px; }
+  .cl-modal-search { padding: 10px 12px 6px; }
+  .cl-modal-search input { width: 100%; padding: 7px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 13px; box-sizing: border-box; }
+  .cl-modal-list { overflow-y: auto; flex: 1; }
+  .cl-modal-item { padding: 9px 16px; font-size: 13px; cursor: pointer; border-bottom: 1px solid #f0f0f0; color: #212529; display: flex; align-items: center; gap: 8px; }
+  .cl-modal-item:hover, .cl-modal-item:focus { background: #e9f0ff; outline: none; }
+  .cl-modal-item.selected { background: #dbeafe; font-weight: 600; color: #1a56db; }
+  .cl-modal-item .cl-item-code { font-size: 11px; color: #6c757d; min-width: 44px; }
+  .cl-modal-footer { padding: 10px 12px; border-top: 1px solid #dee2e6; display: flex; gap: 8px; }
+  .cl-modal-all { flex: 1; padding: 7px; font-size: 13px; border: 1px solid #ced4da; border-radius: 4px; background: #f8f9fa; cursor: pointer; color: #495057; }
+  .cl-modal-all:hover { background: #e9ecef; }
+
+  /* ── Table — same as ho_itemmaster_central ──────────────────── */
+  .ho-table-wrap { border: 1px solid #dee2e6; border-radius: 6px; overflow: auto; max-height: 64vh; }
+  #hccTable { width: 100%; min-width: 1080px; border-collapse: collapse; font-size: 13px; }
+  #hccTable th, #hccTable td { border-bottom: 1px solid #dee2e6; padding: 8px 10px; text-align: center; vertical-align: middle; }
+  #hccTable td:nth-child(4) { text-align: left; }
+  #hccTable thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; font-weight: 600; }
+  .ho-pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 12px; color: #6c757d; }
+
+  /* ── Status / type badges ───────────────────────────────────── */
+  .badge-cash   { background:#d1e7dd; color:#0a3622; border-radius:4px; padding:2px 8px; font-size:11px; font-weight:600; }
+  .badge-credit { background:#cfe2ff; color:#084298; border-radius:4px; padding:2px 8px; font-size:11px; font-weight:600; }
+</style>
+
+<div class="page-po" style="max-width:1550px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Customer Creation</h1>
+      <p class="page-po__muted">View customers across all branch databases.</p>
+    </div>
+    <a href="{{ url_for('ho.customer_central_form') }}" class="page-po__btn-primary">+ New Customer</a>
+  </div>
+
+  <!-- ── Filter bar ─────────────────────────────────────────── -->
+  <div class="cl-filters">
+
+    <div class="cl-fg">
+      <label>Search</label>
+      <input type="text" id="clSearch" class="cl-text-input" placeholder="Code or name…" value="{{ search or '' }}" />
+    </div>
+
+    <!-- Branch popup -->
+    <div class="cl-fg">
+      <label>Branch</label>
+      <div class="cl-pick-wrap" style="min-width:180px;">
+        <button type="button" class="cl-pick-display {% if not tenant_filter %}placeholder{% endif %}" id="clBranchDisplay"
+                onclick="clOpenModal('branch')">
+          {%- if tenant_filter -%}
+            {%- for t in all_tenants if t.tenant_id == tenant_filter -%}{{ t.display_name or t.tenant_id }}{%- endfor -%}
+          {%- else -%}All Branches{%- endif -%}
+        </button>
+        <button type="button" class="cl-pick-clear" id="clBranchClear" title="Clear"
+                style="{{ '' if tenant_filter else 'display:none' }}" onclick="clClearPick('branch')">×</button>
+        <button type="button" class="cl-pick-btn" onclick="clOpenModal('branch')">▾</button>
+        <input type="hidden" id="clBranchVal" value="{{ tenant_filter or '' }}" />
+      </div>
+    </div>
+
+    <!-- Invoice Type popup -->
+    <div class="cl-fg">
+      <label>Invoice Type</label>
+      <div class="cl-pick-wrap">
+        <button type="button" class="cl-pick-display {% if not invoice_filter %}placeholder{% endif %}" id="clInvoiceDisplay"
+                onclick="clOpenModal('invoice')">
+          {{ 'Cash' if invoice_filter=='1' else ('Credit' if invoice_filter=='2' else 'All') }}
+        </button>
+        <button type="button" class="cl-pick-clear" id="clInvoiceClear" title="Clear"
+                style="{{ '' if invoice_filter else 'display:none' }}" onclick="clClearPick('invoice')">×</button>
+        <button type="button" class="cl-pick-btn" onclick="clOpenModal('invoice')">▾</button>
+        <input type="hidden" id="clInvoiceVal" value="{{ invoice_filter or '' }}" />
+      </div>
+    </div>
+
+    <!-- Status popup -->
+    <div class="cl-fg">
+      <label>Status</label>
+      <div class="cl-pick-wrap">
+        <button type="button" class="cl-pick-display {% if not status_filter %}placeholder{% endif %}" id="clStatusDisplay"
+                onclick="clOpenModal('status')">
+          {{ 'Active' if status_filter=='Y' else ('Locked' if status_filter=='N' else 'All') }}
+        </button>
+        <button type="button" class="cl-pick-clear" id="clStatusClear" title="Clear"
+                style="{{ '' if status_filter else 'display:none' }}" onclick="clClearPick('status')">×</button>
+        <button type="button" class="cl-pick-btn" onclick="clOpenModal('status')">▾</button>
+        <input type="hidden" id="clStatusVal" value="{{ status_filter or '' }}" />
+      </div>
+    </div>
+
+    <div class="cl-btn-row">
+      <button type="button" id="clBtnFilter" class="page-po__btn-primary">Filter</button>
+      <button type="button" id="clBtnClear"  class="page-po__btn-secondary">Clear</button>
+    </div>
+  </div>
+
+  <p class="page-po__muted" style="margin:0 0 12px;font-size:12px;">
+    Showing <strong>{{ total_count }}</strong> customer(s)
+    {% if current_page > 1 or total_pages > 1 %} — Page {{ current_page }} / {{ total_pages }}{% endif %}
+  </p>
+
+  <div class="ho-table-wrap">
+    <table id="hccTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Code</th>
+          <th>C Code</th>
+          <th>Customer Name</th>
+          <th>Branch</th>
+          <th>Mobile</th>
+          <th>Telephone</th>
+          <th>Invoice Type</th>
+          <th>Status</th>
+          <th>Created Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>{{ loop.index + ((current_page - 1) * 100) }}</td>
+            <td><strong>{{ r.customercode or '' }}</strong></td>
+            <td style="font-family:monospace;font-size:12px;">{{ r.ccode or '—' }}</td>
+            <td>{{ r.customername or '' }}</td>
+            <td><span style="font-size:11px;background:#e9ecef;padding:2px 8px;border-radius:4px;font-weight:600;">{{ r.tenant_name or r.tenant_id }}</span></td>
+            <td>{{ r.mobile or '' }}</td>
+            <td>{{ r.telephone or '' }}</td>
+            <td>
+              {% if r.invoicecode == 1 or r.invoicecode == '1' %}<span class="badge-cash">Cash</span>
+              {% elif r.invoicecode == 2 or r.invoicecode == '2' %}<span class="badge-credit">Credit</span>
+              {% else %}-{% endif %}
+            </td>
+            <td>
+              {% if r.flag == 'Y' %}<span style="color:#198754;font-weight:600;">Active</span>
+              {% elif r.flag == 'N' %}<span style="color:#dc3545;font-weight:600;">Locked</span>
+              {% else %}-{% endif %}
+            </td>
+            <td>{{ r.createddate or '' }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="10" style="text-align:center;padding:24px;color:#6c757d;">No customers found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="ho-pagination">
+    <div>Total: {{ total_count }}</div>
+    <div style="display:flex;gap:6px;align-items:center;">
+      {% if current_page > 1 %}
+        <a href="javascript:void(0)" onclick="gotoPage({{ current_page - 1 }})" class="page-po__btn-secondary" style="padding:4px 10px;font-size:12px;">‹ Prev</a>
+      {% endif %}
+      <span>Page {{ current_page }} / {{ total_pages }}</span>
+      {% if current_page < total_pages %}
+        <a href="javascript:void(0)" onclick="gotoPage({{ current_page + 1 }})" class="page-po__btn-secondary" style="padding:4px 10px;font-size:12px;">Next ›</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- ── Branch modal ─────────────────────────────────────────────── -->
+<div class="cl-modal-bg" id="clModalBranch">
+  <div class="cl-modal-box">
+    <div class="cl-modal-head">
+      <h4>Select Branch</h4>
+      <button class="cl-modal-close" onclick="clCloseModal('branch')">×</button>
+    </div>
+    <div class="cl-modal-search">
+      <input type="text" id="clBranchSearch" placeholder="Search…" oninput="clSearchList('branch', this.value)" />
+    </div>
+    <div class="cl-modal-list" id="clBranchList">
+      {% for t in all_tenants %}
+        <div class="cl-modal-item {% if tenant_filter == t.tenant_id %}selected{% endif %}"
+             tabindex="0" data-val="{{ t.tenant_id }}" data-label="{{ t.display_name or t.tenant_id }}"
+             data-search="{{ ((t.tenant_id) ~ ' ' ~ (t.display_name or ''))|lower }}"
+             onclick="clPickItem('branch','{{ t.tenant_id }}','{{ t.display_name or t.tenant_id }}')">
+          <span class="cl-item-code">{{ t.tenant_id }}</span> {{ t.display_name or t.tenant_id }}
+        </div>
+      {% endfor %}
+    </div>
+    <div class="cl-modal-footer">
+      <button class="cl-modal-all" onclick="clPickItem('branch','','All Branches')">Show All</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Invoice Type modal ───────────────────────────────────────── -->
+<div class="cl-modal-bg" id="clModalInvoice">
+  <div class="cl-modal-box">
+    <div class="cl-modal-head">
+      <h4>Select Invoice Type</h4>
+      <button class="cl-modal-close" onclick="clCloseModal('invoice')">×</button>
+    </div>
+    <div class="cl-modal-list">
+      <div class="cl-modal-item" tabindex="0" data-val="1" onclick="clPickItem('invoice','1','Cash')"><span class="cl-item-code">1</span> Cash</div>
+      <div class="cl-modal-item" tabindex="0" data-val="2" onclick="clPickItem('invoice','2','Credit')"><span class="cl-item-code">2</span> Credit</div>
+    </div>
+    <div class="cl-modal-footer">
+      <button class="cl-modal-all" onclick="clPickItem('invoice','','All')">Show All</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Status modal ─────────────────────────────────────────────── -->
+<div class="cl-modal-bg" id="clModalStatus">
+  <div class="cl-modal-box">
+    <div class="cl-modal-head">
+      <h4>Select Status</h4>
+      <button class="cl-modal-close" onclick="clCloseModal('status')">×</button>
+    </div>
+    <div class="cl-modal-list">
+      <div class="cl-modal-item" tabindex="0" data-val="Y" onclick="clPickItem('status','Y','Active')"><span class="cl-item-code">Y</span> Active</div>
+      <div class="cl-modal-item" tabindex="0" data-val="N" onclick="clPickItem('status','N','Locked')"><span class="cl-item-code">N</span> Locked</div>
+    </div>
+    <div class="cl-modal-footer">
+      <button class="cl-modal-all" onclick="clPickItem('status','','All')">Show All</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+(function() {
+  var CL = {
+    branch:  { modal:'clModalBranch',  display:'clBranchDisplay',  hidden:'clBranchVal',  clear:'clBranchClear',  search:'clBranchSearch' },
+    invoice: { modal:'clModalInvoice', display:'clInvoiceDisplay', hidden:'clInvoiceVal', clear:'clInvoiceClear', search: null },
+    status:  { modal:'clModalStatus',  display:'clStatusDisplay',  hidden:'clStatusVal',  clear:'clStatusClear',  search: null }
+  };
+
+  window.clOpenModal = function(key) {
+    var cfg = CL[key]; if (!cfg) return;
+    var bg = document.getElementById(cfg.modal); if (!bg) return;
+    bg.classList.add('open');
+    var cur = (document.getElementById(cfg.hidden) || {}).value || '';
+    bg.querySelectorAll('.cl-modal-item').forEach(function(el) { el.classList.toggle('selected', el.dataset.val === cur); });
+    if (cfg.search) {
+      var s = document.getElementById(cfg.search);
+      if (s) { s.value = ''; clSearchList(key, ''); setTimeout(function(){ s.focus(); }, 60); }
+    } else {
+      var sel = bg.querySelector('.cl-modal-item.selected') || bg.querySelector('.cl-modal-item');
+      if (sel) setTimeout(function(){ sel.focus(); }, 60);
+    }
+  };
+
+  window.clCloseModal = function(key) {
+    var cfg = CL[key]; if (!cfg) return;
+    var bg = document.getElementById(cfg.modal); if (bg) bg.classList.remove('open');
+  };
+
+  window.clPickItem = function(key, val, label) {
+    var cfg = CL[key]; if (!cfg) return;
+    var h = document.getElementById(cfg.hidden);
+    var d = document.getElementById(cfg.display);
+    var c = document.getElementById(cfg.clear);
+    if (h) h.value = val;
+    if (d) { d.textContent = label || 'All'; d.classList.toggle('placeholder', !val); }
+    if (c) c.style.display = val ? '' : 'none';
+    clCloseModal(key);
+  };
+
+  window.clClearPick = function(key) { clPickItem(key, '', key === 'branch' ? 'All Branches' : 'All'); };
+
+  window.clSearchList = function(key, q) {
+    var listMap = { branch: 'clBranchList' };
+    var listId = listMap[key]; if (!listId) return;
+    var list = document.getElementById(listId); if (!list) return;
+    var term = (q || '').toLowerCase().trim();
+    list.querySelectorAll('.cl-modal-item[data-search]').forEach(function(el) {
+      el.style.display = (!term || el.dataset.search.indexOf(term) !== -1) ? '' : 'none';
+    });
+  };
+
+  ['clBranchSearch'].forEach(function(sid) {
+    var el = document.getElementById(sid); if (!el) return;
+    el.addEventListener('keydown', function(e) {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      var listEl = el.closest('.cl-modal-box').querySelector('.cl-modal-list');
+      var first = listEl && listEl.querySelector('.cl-modal-item[data-val]:not([style*="display: none"])');
+      if (first) first.focus();
+    });
+  });
+
+  document.querySelectorAll('.cl-modal-list').forEach(function(list) {
+    list.addEventListener('keydown', function(e) {
+      var items = Array.from(list.querySelectorAll('.cl-modal-item[tabindex="0"]:not([style*="display: none"])'));
+      var idx = items.indexOf(document.activeElement);
+      if (e.key === 'Enter') { e.preventDefault(); if (idx >= 0) items[idx].click(); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); if (idx < items.length-1) items[idx+1].focus(); }
+      else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (idx > 0) items[idx-1].focus();
+        else { var s = list.closest('.cl-modal-box') && list.closest('.cl-modal-box').querySelector('.cl-modal-search input'); if (s) s.focus(); }
+      }
+    });
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    Object.keys(CL).forEach(function(k) {
+      var bg = document.getElementById(CL[k].modal);
+      if (bg && bg.classList.contains('open')) bg.classList.remove('open');
+    });
+  });
+
+  document.querySelectorAll('.cl-modal-bg').forEach(function(bg) {
+    bg.addEventListener('click', function(e) { if (e.target === bg) bg.classList.remove('open'); });
+  });
+
+  /* ── Filter / Clear ─────────────────────────────────────────── */
+  var BASE = {{ url_for('ho.customer_central') | tojson }};
+
+  function buildUrl(page) {
+    var url = BASE + '?_=1';
+    var q  = (document.getElementById('clSearch')     || {}).value || '';
+    var br = (document.getElementById('clBranchVal')  || {}).value || '';
+    var ic = (document.getElementById('clInvoiceVal') || {}).value || '';
+    var st = (document.getElementById('clStatusVal')  || {}).value || '';
+    if (q.trim())  url += '&search='  + encodeURIComponent(q.trim());
+    if (br) url += '&tenant='   + encodeURIComponent(br);
+    if (ic) url += '&invoice='  + encodeURIComponent(ic);
+    if (st) url += '&status='   + encodeURIComponent(st);
+    if (page && page > 1) url += '&page=' + page;
+    window.location.href = url;
+  }
+
+  window.gotoPage = function(p) { buildUrl(p); };
+
+  var btnFilter = document.getElementById('clBtnFilter');
+  var btnClear  = document.getElementById('clBtnClear');
+  if (btnFilter) btnFilter.addEventListener('click', function() { buildUrl(1); });
+  if (btnClear)  btnClear.addEventListener('click', function() { window.location.href = BASE; });
+
+  var srch = document.getElementById('clSearch');
+  if (srch) srch.addEventListener('keydown', function(e) { if (e.key === 'Enter') buildUrl(1); });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,326 @@
+/* Approval Workflow — Setup */
+main.container:has(.awf-page) {
+  max-width: 100%;
+  padding: 12px 16px 32px;
+}
+
+.awf-page {
+  --awf-primary: #1e3a5f;
+  --awf-accent: #0d6efd;
+  --awf-ok: #198754;
+  --awf-warn: #fd7e14;
+  --awf-err: #dc3545;
+  --awf-muted: #6c757d;
+  --awf-border: #dee2e6;
+  --awf-card: #fff;
+  --awf-bg: #f4f6f9;
+  background: var(--awf-bg);
+  min-height: calc(100vh - 80px);
+  padding: 8px 4px 24px;
+}
+
+.awf-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.awf-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--awf-primary);
+}
+
+.awf-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--awf-border);
+  margin-bottom: 16px;
+  align-items: center;
+}
+
+.awf-tab {
+  border: none;
+  background: transparent;
+  padding: 10px 14px;
+  font-size: 0.82rem;
+  color: var(--awf-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.awf-tab--active {
+  color: var(--awf-accent);
+  border-bottom-color: var(--awf-accent);
+  font-weight: 600;
+}
+
+.awf-tab-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.awf-tab-badge--red { background: var(--awf-err); }
+.awf-tab-badge--orange { background: var(--awf-warn); }
+
+.awf-btn {
+  border: 1px solid var(--awf-border);
+  background: var(--awf-card);
+  padding: 8px 14px;
+  font-size: 0.78rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.awf-btn--primary {
+  background: var(--awf-accent);
+  border-color: var(--awf-accent);
+  color: #fff;
+}
+
+.awf-btn--ok { background: var(--awf-ok); border-color: var(--awf-ok); color: #fff; }
+.awf-btn--err { background: var(--awf-err); border-color: var(--awf-err); color: #fff; }
+
+.awf-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 1100px) {
+  .awf-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.awf-kpi {
+  background: var(--awf-card);
+  border: 1px solid var(--awf-border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.awf-kpi__val {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--awf-primary);
+}
+
+.awf-kpi__lbl {
+  font-size: 0.72rem;
+  color: var(--awf-muted);
+  margin-top: 4px;
+}
+
+.awf-main-grid {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 1100px) {
+  .awf-main-grid { grid-template-columns: 1fr; }
+}
+
+.awf-card {
+  background: var(--awf-card);
+  border: 1px solid var(--awf-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.awf-card__head {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--awf-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.awf-card__body { padding: 0; }
+
+.awf-table-wrap { overflow: auto; max-height: 380px; }
+
+.awf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.76rem;
+}
+
+.awf-table th,
+.awf-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+}
+
+.awf-table th {
+  background: #f8f9fa;
+  font-weight: 600;
+  color: var(--awf-muted);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+}
+
+.awf-table tbody tr { cursor: pointer; }
+.awf-table tbody tr:hover { background: #f8f9fa; }
+.awf-table tbody tr.awf-row--sel { background: #e7f1ff; }
+
+.awf-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+.awf-pill--active { background: #d1e7dd; color: #0f5132; }
+.awf-pill--inactive { background: #e9ecef; color: #495057; }
+.awf-pill--pending { background: #fff3cd; color: #664d03; }
+
+.awf-icon-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 4px;
+  font-size: 0.85rem;
+}
+
+.awf-icon-btn--edit { color: var(--awf-accent); }
+.awf-icon-btn--del { color: var(--awf-err); }
+
+.awf-flow {
+  padding: 14px;
+}
+
+.awf-flow-step {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  position: relative;
+}
+
+.awf-flow-step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 28px;
+  bottom: -8px;
+  width: 2px;
+  background: var(--awf-border);
+}
+
+.awf-flow-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--awf-accent);
+  color: #fff;
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  z-index: 1;
+}
+
+.awf-detail-list {
+  list-style: none;
+  margin: 0;
+  padding: 14px;
+  font-size: 0.78rem;
+}
+
+.awf-detail-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.awf-detail-list li span:first-child { color: var(--awf-muted); }
+
+.awf-panel-placeholder {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--awf-muted);
+  font-size: 0.85rem;
+}
+
+.awf-view { display: none; }
+.awf-view--active { display: block; }
+
+.awf-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.awf-modal.hidden { display: none; }
+
+.awf-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.awf-modal__dialog {
+  position: relative;
+  background: #fff;
+  border-radius: 10px;
+  width: min(520px, 96vw);
+  max-height: 90vh;
+  overflow: auto;
+  padding: 18px 20px;
+}
+
+.awf-modal__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.awf-field { margin-bottom: 12px; }
+.awf-field label {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--awf-muted);
+  margin-bottom: 4px;
+}
+
+.awf-field input,
+.awf-field select {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--awf-border);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  box-sizing: border-box;
+}
+
+.awf-level-row {
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}

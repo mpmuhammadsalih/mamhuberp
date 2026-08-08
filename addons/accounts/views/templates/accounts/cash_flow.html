@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Cash Flow{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  #cfTable.co-table thead th,
+  #cfSummaryTable.co-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  #cfTable tr.cf-total-row th,
+  #cfSummaryTable tr.cf-total-row th {
+    font-weight: 700;
+  }
+</style>
+
+{% set cf_n = rows|length %}
+
+<div class="page-po nexa-list-page nexa-setup-list-page">
+  <section class="nexa-stat-grid" aria-label="Cash flow summary">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-list-ul" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Transactions</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(cf_n) }}</p>
+        <p class="nexa-stat-sub">Lines in range</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--cyan"><i class="bi bi-wallet2" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Opening balance</p>
+        <p class="nexa-stat-value">{{ '%.2f'|format(opening_balance or 0) }}</p>
+        <p class="nexa-stat-sub">Before period</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-arrow-down-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Total inflow</p>
+        <p class="nexa-stat-value">{{ '%.2f'|format(total_inflow or 0) }}</p>
+        <p class="nexa-stat-sub">Cash &amp; bank</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-arrow-up-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Total outflow</p>
+        <p class="nexa-stat-value">{{ '%.2f'|format(total_outflow or 0) }}</p>
+        <p class="nexa-stat-sub">Cash &amp; bank</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-piggy-bank" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Closing balance</p>
+        <p class="nexa-stat-value">{{ '%.2f'|format(closing_balance or 0) }}</p>
+        <p class="nexa-stat-sub">Net {{ '%.2f'|format(net_change or 0) }}</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Cash Flow</h1>
+      <p class="page-po__muted">Cash and bank movement summary by standard sections.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <form method="get" class="nexa-list-filter-panel" style="margin-bottom: 12px; flex-wrap: wrap; align-items: end; gap: 10px;">
+    <div>
+      <label class="label" for="cf_date_from">From</label>
+      <input type="date" class="input" id="cf_date_from" name="date_from" value="{{ date_from or '' }}">
+    </div>
+    <div>
+      <label class="label" for="cf_date_to">To</label>
+      <input type="date" class="input" id="cf_date_to" name="date_to" value="{{ date_to or '' }}">
+    </div>
+    <div>
+      <label class="label" style="visibility:hidden;">.</label>
+      <button class="page-po__btn-primary" type="submit">Apply</button>
+    </div>
+    <div style="margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+      <span style="font-size: 12px; color: #64748b;">Export</span>
+      <a class="page-po__btn-primary" style="text-decoration: none; display: inline-flex; align-items: center;" href="{{ url_for('accounts.cash_flow_pdf', date_from=date_from or none, date_to=date_to or none) }}" target="_blank" rel="noopener">PDF</a>
+      <a class="page-po__btn-secondary" style="text-decoration: none; display: inline-flex; align-items: center;" href="{{ url_for('accounts.cash_flow_excel', date_from=date_from or none, date_to=date_to or none) }}">Excel</a>
+    </div>
+  </form>
+
+  {% if company_name %}
+  <p class="page-po__muted" style="margin: 0 0 12px; font-family: 'Times New Roman', Times, Georgia, serif;">
+    <strong>{{ company_name|e }}</strong>
+    {% if period_display %} — {{ period_display|e }}{% endif %}
+  </p>
+  {% endif %}
+
+  <div class="co-table-wrap" style="margin-bottom: 14px;">
+    <table class="co-table" id="cfSectionTable">
+      <thead>
+        <tr>
+          <th colspan="5">Period summary</th>
+          <th class="num">Opening</th>
+          <th class="num">Inflow</th>
+          <th class="num">Outflow</th>
+          <th class="num">Net</th>
+          <th class="num">Closing</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="cf-total-row">
+          <td colspan="5"><strong>Selected range</strong></td>
+          <td class="num">{{ '%.2f'|format(opening_balance or 0) }}</td>
+          <td class="num">{{ '%.2f'|format(total_inflow or 0) }}</td>
+          <td class="num">{{ '%.2f'|format(total_outflow or 0) }}</td>
+          <td class="num">{{ '%.2f'|format(net_change or 0) }}</td>
+          <td class="num">{{ '%.2f'|format(closing_balance or 0) }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="cf-section-heading" style="font-size:14px;font-weight:700;color:#14324a;margin:0 0 8px;">Standard cash flow sections</h2>
+  <div class="co-table-wrap" style="margin-bottom: 14px;">
+    <table class="co-table" id="cfSummaryTable">
+      <thead>
+        <tr>
+          <th>Section</th>
+          <th class="num">Inflow</th>
+          <th class="num">Outflow</th>
+          <th class="num">Net</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set op = section_totals.get('operating', {}) %}
+        {% set iv = section_totals.get('investing', {}) %}
+        {% set fn = section_totals.get('financing', {}) %}
+        <tr>
+          <td>Operating Activities</td>
+          <td class="num">{{ '%.2f'|format(op.get('inflow', 0) or 0) }}</td>
+          <td class="num">{{ '%.2f'|format(op.get('outflow', 0) or 0) }}</td>
+          <td class="num">{{ '%.2f'|format(op.get('net', 0) or 0) }}</td>
+        </tr>
+        <tr>
+          <td>Investing Activities</td>
+          <td class="num">{{ '%.2f'|format(iv.get('inflow', 0) or 0) }}</td>
+          <td class="num">{{ '%.2f'|format(iv.get('outflow', 0) or 0) }}</td>
+          <td class="num">{{ '%.2f'|format(iv.get('net', 0) or 0) }}</td>
+        </tr>
+        <tr>
+          <td>Financing Activities</td>
+          <td class="num">{{ '%.2f'|format(fn.get('inflow', 0) or 0) }}</td>
+          <td class="num">{{ '%.2f'|format(fn.get('outflow', 0) or 0) }}</td>
+          <td class="num">{{ '%.2f'|format(fn.get('net', 0) or 0) }}</td>
+        </tr>
+        <tr class="cf-total-row">
+          <th>Total</th>
+          <th class="num">{{ '%.2f'|format(total_inflow or 0) }}</th>
+          <th class="num">{{ '%.2f'|format(total_outflow or 0) }}</th>
+          <th class="num">{{ '%.2f'|format(net_change or 0) }}</th>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="cf-section-heading" style="font-size:14px;font-weight:700;color:#14324a;margin:0 0 8px;">Cash flow transactions</h2>
+  <div class="co-table-wrap">
+    <table class="co-table" id="cfTable">
+      <thead>
+        <tr>
+          <th style="text-align:center;width:52px;">Sl.No</th>
+          <th>Date</th>
+          <th>Voucher</th>
+          <th>Section</th>
+          <th>Account</th>
+          <th>Reference</th>
+          <th>Narration</th>
+          <th class="num">Inflow</th>
+          <th class="num">Outflow</th>
+          <th class="num">Net</th>
+          <th class="num">Running balance</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td style="text-align:center;">{{ loop.index }}</td>
+          <td>{{ row.voucher_date }}</td>
+          <td>{{ row.voucher_no }}</td>
+          <td>{{ (row.section or 'operating')|title }}</td>
+          <td>{{ row.account_code }} - {{ row.account_name }}</td>
+          <td>{{ row.reference_no or '' }}</td>
+          <td>{{ row.narration or '' }}</td>
+          <td class="num">{{ '%.2f'|format(row.inflow or 0) }}</td>
+          <td class="num">{{ '%.2f'|format(row.outflow or 0) }}</td>
+          <td class="num">{{ '%.2f'|format(row.net_movement or 0) }}</td>
+          <td class="num">{{ '%.2f'|format(row.running_balance or 0) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11" class="muted">No cash flow transactions found.</td></tr>
+        {% endfor %}
+        {% if rows %}
+        <tr class="cf-total-row">
+          <th colspan="7" style="text-align: right;">Totals</th>
+          <th class="num">{{ '%.2f'|format(total_inflow or 0) }}</th>
+          <th class="num">{{ '%.2f'|format(total_outflow or 0) }}</th>
+          <th class="num">{{ '%.2f'|format(net_change or 0) }}</th>
+          <th class="num">{{ '%.2f'|format(closing_balance or 0) }}</th>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "ai_forecast/_nav.html" import ai_nav %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('ai_forecast.static', filename='css/ai_forecast.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="ai-fc-page">
+  <div class="ai-fc-topbar">
+    <div><h1 class="ai-fc-title">Purchase Forecast</h1><p class="ai-fc-sub">Reorder point · safety stock · over/understock risk</p></div>
+    {{ ai_nav('purchase') }}
+  </div>
+  <div class="ai-fc-kpi-grid" id="aiFcKpis"></div>
+  <div class="ai-fc-card"><div class="ai-fc-card__head">Overstock risk</div><div class="ai-fc-card__body" id="aiFcOver"></div></div>
+</div>
+<script>
+fetch({{ url_for('ai_forecast.api_purchase_forecast')|tojson }}).then(r=>r.json()).then(d=>{
+  if(!d.success) return;
+  const x = d.data||{};
+  document.getElementById('aiFcKpis').innerHTML = `
+    <div class="ai-fc-kpi"><div class="ai-fc-kpi-label">Understock lines</div><div class="ai-fc-kpi-val ai-fc-kpi-val--warn">${x.understock_count||0}</div></div>
+    <div class="ai-fc-kpi"><div class="ai-fc-kpi-label">Suggested purchase qty</div><div class="ai-fc-kpi-val">${Number(x.suggested_purchase_qty_total||0).toFixed(2)}</div></div>`;
+  document.getElementById('aiFcOver').innerHTML = (x.overstock_items||[]).slice(0,20).map(r=>`<div>#${r.itemcode} ${r.itemname||''} — stock ${r.current_stock}</div>`).join('')||'No overstock warnings';
+});
+</script>
+{% endblock %}

@@ -1,0 +1,2 @@
+"""Addon manifest — Promotions."""
+MANIFEST = {'technical_name': 'promotions', 'name': 'Promotions', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Migrated from blueprints/promotions.py', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/promotions'}, 'flask': {'blueprint': 'promotions', 'blueprint_ref': 'addons.promotions:bp', 'models_package': 'addons.promotions.models', 'routes_module': 'addons.promotions.controllers.routes'}}

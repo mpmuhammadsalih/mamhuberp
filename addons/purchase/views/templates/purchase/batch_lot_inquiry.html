@@ -1,0 +1,642 @@
+{% extends "base.html" %}
+{% block title %}Lot inventory &amp; batch expiry{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page bl-lot-page" style="max-width:1320px;">
+<style>
+  /* Lot inventory — Item Master / product list parity */
+  body:has(.bl-lot-page) { background: #f5f6f8; }
+  .bl-lot-page {
+    --bl-fill: rgba(255, 255, 255, 0.52);
+    --bl-fill-strong: #eaf2fa;
+    --bl-border: #e5eaf2;
+    margin: 0 auto !important;
+    padding: 8px 0 24px !important;
+  }
+
+  .bl-lot-page .im-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .bl-lot-page .im-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 11px;
+    border: 1px solid var(--bl-border);
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, .06);
+  }
+  .bl-lot-page .im-stat-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    border-radius: 9px;
+    color: #fff;
+    font-size: 17px;
+  }
+  .bl-lot-page .im-stat-icon--teal { background: linear-gradient(135deg, #0d9488, #14b8a6); }
+  .bl-lot-page .im-stat-icon--blue { background: linear-gradient(135deg, #2563eb, #38bdf8); }
+  .bl-lot-page .im-stat-icon--amber { background: linear-gradient(135deg, #f59e0b, #facc15); }
+  .bl-lot-page .im-stat-icon--red { background: linear-gradient(135deg, #dc2626, #f87171); }
+  .bl-lot-page .im-stat-label { margin: 0 0 4px; color: #475569; font-size: 11px; font-weight: 700; }
+  .bl-lot-page .im-stat-value { margin: 0; color: #0f172a; font-size: clamp(16px, 1.45vw, 21px); font-weight: 850; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .bl-lot-page .im-stat-sub { margin: 3px 0 0; color: #64748b; font-size: 11px; }
+
+  .bl-lot-page .bl-shell {
+    background: var(--bl-fill-strong);
+    border: 1px solid var(--bl-border);
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, .06);
+    overflow: hidden;
+  }
+  .bl-lot-page .bl-section {
+    position: relative;
+    margin: 0;
+    padding: 36px 14px 14px;
+    border-bottom: 1px solid var(--bl-border);
+    background: var(--bl-fill-strong);
+  }
+  .bl-lot-page .bl-section:last-child { border-bottom: 0; }
+  .bl-lot-page .bl-section::before {
+    content: attr(data-section-title);
+    position: absolute;
+    top: 10px;
+    left: 14px;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 850;
+  }
+
+  .bl-lot-page .bl-form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 16px;
+    align-items: flex-end;
+  }
+  .bl-lot-page .bl-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+  .bl-lot-page .bl-field label {
+    color: #495057;
+    font-size: 13px;
+    font-weight: 400;
+    margin: 0;
+  }
+  .bl-lot-page .bl-field input[type="text"],
+  .bl-lot-page .bl-field input[type="number"],
+  .bl-lot-page .bl-field input[type="search"] {
+    border: none;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 0;
+    padding: 6px 0;
+    font-size: 13px;
+    background: var(--bl-fill);
+    min-width: 0;
+  }
+  .bl-lot-page .bl-field input:focus {
+    outline: none;
+    border-bottom-color: var(--nexa-focus-color);
+  }
+  .bl-lot-page .bl-field input[readonly] {
+    background: rgba(226, 236, 247, 0.92);
+    color: #6c757d;
+  }
+  .bl-lot-page .bl-wh-picker {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+    min-width: 220px;
+    max-width: 400px;
+    flex: 1;
+  }
+  .bl-lot-page .bl-wh-picker input { flex: 1; }
+  .bl-lot-page .bl-pick-btn {
+    flex-shrink: 0;
+    min-height: 32px;
+    padding: 6px 14px;
+    border: 1px solid rgba(13, 110, 253, 0.16);
+    border-radius: 6px;
+    background: var(--bl-fill-strong);
+    color: #0d6efd;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .bl-lot-page .bl-pick-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .bl-lot-page .bl-pick-btn:not(:disabled):hover { background: #dfe8f3; }
+
+  .bl-lot-page .page-po__btn-primary,
+  .bl-lot-page .page-po__btn-secondary {
+    min-height: 32px;
+    padding: 6px 14px !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    border-radius: 6px !important;
+  }
+
+  .bl-lot-page .bl-track-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+  .bl-lot-page .bl-track-row input[type="number"] {
+    width: 120px;
+    border: none;
+    border-bottom: 1px solid #dee2e6;
+    background: var(--bl-fill);
+    padding: 6px 0;
+    font-size: 13px;
+  }
+  .bl-lot-page .bl-track-row label.checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #495057;
+    margin: 0;
+  }
+  #btMsg { font-size: 12px; color: #64748b; }
+
+  .bl-lot-page .co-table-wrap {
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.55);
+    max-height: min(62vh, 720px);
+    overflow: auto;
+  }
+  .bl-lot-page .co-table {
+    width: 100%;
+    font-size: 13px;
+  }
+  .bl-lot-page .co-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--bl-fill-strong) !important;
+    color: #495057 !important;
+    padding: 8px 10px !important;
+    border-bottom: 1px solid #dee2e6 !important;
+    font-weight: 600 !important;
+    font-size: 12px !important;
+    white-space: nowrap;
+  }
+  .bl-lot-page .co-table tbody td {
+    padding: 8px 10px !important;
+    border-bottom: 1px solid #dee2e6 !important;
+    vertical-align: middle;
+  }
+  .bl-lot-page .co-table tbody tr:hover { background: #f8f9fa !important; }
+
+  .bl-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .bl-badge--none { background: #f1f5f9; color: #64748b; }
+  .bl-badge--ok { background: #d1fae5; color: #065f46; }
+  .bl-badge--soon { background: #fef3c7; color: #92400e; }
+  .bl-badge--expired { background: #fecaca; color: #991b1b; }
+
+  .bl-put-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; max-width: 300px; }
+  .bl-put-controls select.bl-bin { flex: 1; min-width: 90px; max-width: 130px; font-size: 12px; padding: 4px 6px; border: 1px solid #dee2e6; border-radius: 4px; background: #fff; }
+  .bl-put-controls .bl-pw-qty { width: 72px; font-size: 12px; padding: 4px 6px; border: none; border-bottom: 1px solid #dee2e6; background: var(--bl-fill); }
+  .bl-put-controls .bl-putaway {
+    padding: 5px 10px !important;
+    border-radius: 6px !important;
+    font-size: 11px !important;
+    min-height: 28px;
+  }
+  .bl-put-controls .bl-bins {
+    font-size: 11px !important;
+    padding: 5px 10px !important;
+    cursor: pointer;
+    border: 1px solid #dee2e6;
+    background: var(--bl-fill-strong);
+    border-radius: 6px;
+    color: #495057;
+    font-weight: 600;
+  }
+  .bl-lot-page .bl-mov {
+    padding: 5px 10px;
+    font-size: 11px;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+    background: var(--bl-fill-strong);
+    cursor: pointer;
+    font-weight: 600;
+    color: #495057;
+  }
+  .bl-lot-page .bl-meta-chip {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: #e2e8f0;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  #blWhPickerModal.hidden, #movModal.hidden, #binBrModal.hidden { display: none !important; }
+  body.bl-modal-open { overflow: hidden; }
+
+  @media (max-width: 900px) {
+    .bl-lot-page .im-stat-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+  }
+  @media (max-width: 520px) {
+    .bl-lot-page .im-stat-grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+  {% set bs = bl_summary or {} %}
+
+  <section class="im-stat-grid" aria-label="Lot inventory summary">
+    <div class="im-stat-card">
+      <span class="im-stat-icon im-stat-icon--teal" aria-hidden="true"><i class="bi bi-layers"></i></span>
+      <div>
+        <p class="im-stat-label">Lots on view</p>
+        <p class="im-stat-value">{{ bs.lot_count|default(0) }}</p>
+        <p class="im-stat-sub">Filtered result set</p>
+      </div>
+    </div>
+    <div class="im-stat-card">
+      <span class="im-stat-icon im-stat-icon--blue" aria-hidden="true"><i class="bi bi-box-seam"></i></span>
+      <div>
+        <p class="im-stat-label">Total on hand</p>
+        <p class="im-stat-value">{{ bs.total_qty|default(0)|round(4) }}</p>
+        <p class="im-stat-sub">Sum of lot qty</p>
+      </div>
+    </div>
+    <div class="im-stat-card">
+      <span class="im-stat-icon im-stat-icon--amber" aria-hidden="true"><i class="bi bi-hourglass-split"></i></span>
+      <div>
+        <p class="im-stat-label">Expiry ≤ 30 days</p>
+        <p class="im-stat-value">{{ bs.soon_count|default(0) }}</p>
+        <p class="im-stat-sub">Needs attention</p>
+      </div>
+    </div>
+    <div class="im-stat-card">
+      <span class="im-stat-icon im-stat-icon--red" aria-hidden="true"><i class="bi bi-exclamation-octagon"></i></span>
+      <div>
+        <p class="im-stat-label">Already expired</p>
+        <p class="im-stat-value">{{ bs.expired_count|default(0) }}</p>
+        <p class="im-stat-sub">Not for sale</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Lot inventory &amp; batch expiry</h1>
+      <p class="page-po__muted">
+        Lot balances for session branch <strong>{{ session_location }}</strong>.
+        {% if wh_site_label %}Warehouse site <strong>{{ wh_site_label }}</strong>.{% endif %}
+        Put away moves unallocated qty into bins; Mov shows GRN / issue history.
+      </p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a class="page-po__btn-secondary" href="{{ url_for('purchase.batch_stock_by_bin') }}">Stock by bin</a>
+      <a class="page-po__btn-secondary" href="{{ url_for('purchase.batch_lot_qc_hold') }}">QC hold</a>
+      <a class="page-po__btn-secondary" href="{{ url_for('purchase.batch_lot_operator_checklist') }}">Operator playbook</a>
+    </div>
+  </div>
+
+  <div class="bl-shell">
+    <section class="bl-section" data-section-title="Filters &amp; warehouse">
+      <form method="get" id="blFilterForm" action="{{ url_for('purchase.batch_lot_inquiry') }}">
+        <input type="hidden" name="wh_loc" id="blInpWhLoc" value="{{ default_wh_loc_key or '' }}" />
+        <div class="bl-form-row">
+          <div class="bl-field" style="flex:1; min-width:240px;">
+            <label for="blWhDisplay">Warehouse site (bins &amp; putaway)</label>
+            <div class="bl-wh-picker">
+              <input type="text" id="blWhDisplay" readonly placeholder="Pick warehouse site…" value="{{ wh_site_label or '' }}" />
+              <button type="button" class="bl-pick-btn" id="blWhPickBtn" {% if not warehouse_sites %}disabled title="No warehouse sites"{% endif %}>Pick…</button>
+            </div>
+          </div>
+          <div class="bl-field">
+            <label for="blItemCode">Item code</label>
+            <input type="number" name="itemcode" id="blItemCode" value="{{ filter_itemcode or '' }}" placeholder="All" style="width:120px;" />
+          </div>
+          <div class="bl-field">
+            <label for="blExpDays">Expiring ≤ (days)</label>
+            <input type="number" name="expiring_days" id="blExpDays" value="{{ filter_expiring_days or '' }}" min="0" placeholder="Any" style="width:100px;"
+              title="Server filter — leave blank for all lots with stock" />
+          </div>
+          <div class="bl-field">
+            <label>&nbsp;</label>
+            <button type="submit" class="page-po__btn-primary">Apply filters</button>
+          </div>
+        </div>
+      </form>
+      <div class="bl-form-row" style="margin-top:12px;">
+        <div class="bl-field" style="flex:1; max-width:360px;">
+          <label for="blLotSearch">Quick search (current page)</label>
+          <input type="search" id="blLotSearch" placeholder="Lot, item, batch, GRN…" autocomplete="off" />
+        </div>
+      </div>
+    </section>
+
+    <section class="bl-section" data-section-title="Item master · batch tracked">
+      <div class="bl-track-row">
+        <input type="number" id="btItem" placeholder="Item code" aria-label="Item code for batch tracking" />
+        <label class="checkbox-label">
+          <input type="checkbox" id="btOn" /> Require batch / FEFO
+        </label>
+        <button type="button" class="page-po__btn-secondary" id="btSave">Save to item</button>
+        <span id="btMsg"></span>
+      </div>
+      <p class="muted" style="margin:10px 0 0; font-size:11px;">Sets <code>ITEMMASTER.BATCH_TRACKED</code> for new GRN batch lines at this branch.</p>
+    </section>
+
+    <section class="bl-section" data-section-title="Lot stock" style="padding-top:36px;">
+      <div class="co-table-wrap" role="region" aria-label="Lot stock table">
+        <table class="co-table" id="blLotsTable">
+          <thead>
+            <tr>
+              <th>Lot #</th>
+              <th>Item</th>
+              <th>Batch</th>
+              <th>Status</th>
+              <th>Mfg</th>
+              <th>Expiry</th>
+              <th style="text-align:right;">Unalloc</th>
+              <th style="text-align:right;">Binned</th>
+              <th style="text-align:right;">Total</th>
+              <th>GRN</th>
+              <th>Putaway</th>
+              <th style="width:72px;"></th>
+            </tr>
+          </thead>
+          <tbody id="blLotsTbody">
+            {% for r in lots %}
+            <tr class="bl-lot-row" data-bl-search="{{ (r.lot_id ~ ' ' ~ r.itemcode ~ ' ' ~ (r.batch_no or '') ~ ' ' ~ (r.receipt_no or ''))|lower }}">
+              <td style="font-weight:700;">{{ r.lot_id }}</td>
+              <td style="font-family: ui-monospace, monospace; font-weight: 600;">{{ r.itemcode }}</td>
+              <td style="word-break:break-all; max-width:140px;">{{ r.batch_no }}</td>
+              <td>
+                {% if r.expiry_status == 'expired' %}<span class="bl-badge bl-badge--expired">Expired</span>
+                {% elif r.expiry_status == 'soon' %}<span class="bl-badge bl-badge--soon">≤30d</span>
+                {% elif r.expiry_status == 'ok' %}<span class="bl-badge bl-badge--ok">OK</span>
+                {% else %}<span class="bl-badge bl-badge--none">—</span>{% endif %}
+              </td>
+              <td>{% if r.mfg_date %}{{ r.mfg_date }}{% else %}—{% endif %}</td>
+              <td title="{{ r._exp_iso or '' }}">{% if r.expiry_date %}{{ r.expiry_date }}{% else %}—{% endif %}</td>
+              <td style="text-align:right; font-variant-numeric: tabular-nums;">{{ r.qty_unalloc|default(0) }}</td>
+              <td style="text-align:right; font-variant-numeric: tabular-nums;">{{ r.qty_binned|default(0) }}</td>
+              <td style="text-align:right; font-weight:700; font-variant-numeric: tabular-nums;">{{ r.qty }}</td>
+              <td>{% if r.receipt_no %}<span style="font-family:monospace">{{ r.receipt_no }}</span>{% else %}—{% endif %}</td>
+              <td>
+                <div class="bl-put-controls">
+                  <select class="bl-bin input" data-lot="{{ r.lot_id }}" aria-label="Bin for lot {{ r.lot_id }}">
+                    <option value="">Bin…</option>
+                    {% for b in bin_rows or [] %}
+                    <option value="{{ b.storage_id }}">{{ b.code or b.name }}</option>
+                    {% endfor %}
+                  </select>
+                  <input type="number" class="bl-pw-qty input" data-lot="{{ r.lot_id }}" step="0.001" min="0" placeholder="Qty" aria-label="Putaway qty" />
+                  <button type="button" class="bl-putaway page-po__btn-primary" data-lot="{{ r.lot_id }}">Put</button>
+                  <button type="button" class="bl-bins" data-lot="{{ r.lot_id }}">Bins</button>
+                </div>
+              </td>
+              <td><button type="button" class="bl-mov" data-lot="{{ r.lot_id }}">Mov</button></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="12" style="text-align:center;padding:40px;color:#64748b;">No lot balances. Post a GRN with batch/expiry on a tracked item — or enable batch tracking above.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="modal hidden" id="blWhPickerModal" role="dialog" aria-modal="true" aria-labelledby="blWhPickTitle" aria-hidden="true">
+  <div class="modal__overlay" data-close="blWhPickerModal"></div>
+  <div class="modal__content" style="max-width: 560px; width: 96vw;">
+    <div class="modal__header">
+      <h3 id="blWhPickTitle" style="margin:0;">Choose warehouse site</h3>
+      <button type="button" class="modal__close" data-close="blWhPickerModal" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal__body">
+      <p class="muted" style="margin:0 0 10px;font-size:13px;">Bins and putaway use this site. Selecting a row applies filters.</p>
+      <div class="scroll-table modal__table" style="max-height:52vh;">
+        <table class="table" style="width:100%;">
+          <thead><tr><th>Key</th><th>Name</th><th></th></tr></thead>
+          <tbody>
+            {% for s in warehouse_sites or [] %}
+            <tr>
+              <td style="font-family:monospace;font-weight:600;">{{ s.key }}</td>
+              <td>{{ s.name or '—' }}</td>
+              <td><button type="button" class="page-po__btn-primary" style="padding:6px 12px;font-size:12px;" data-bl-pick-wh="{{ s.key }}">Select</button></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" style="text-align:center;padding:20px;color:#94a3b8;">No warehouse sites configured.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="movModal" role="dialog" aria-hidden="true">
+  <div class="modal__overlay" data-close="movModal"></div>
+  <div class="modal__content" style="max-width: 640px; width: 96vw;">
+    <div class="modal__header">
+      <h4 id="movTitle" style="margin:0;">Movements</h4>
+      <button type="button" class="modal__close" data-close="movModal" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal__body" id="movBody" style="font-size:12px; max-height:50vh; overflow:auto;"></div>
+  </div>
+</div>
+<div class="modal hidden" id="binBrModal" role="dialog" aria-hidden="true">
+  <div class="modal__overlay" data-close="binBrModal"></div>
+  <div class="modal__content" style="max-width: 480px; width: 96vw;">
+    <div class="modal__header">
+      <h4 id="binBrTitle" style="margin:0;">Binned breakdown</h4>
+      <button type="button" class="modal__close" data-close="binBrModal" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal__body" id="binBrBody" style="font-size:12px; max-height:40vh; overflow:auto;"></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var base = {{ url_for('purchase.batch_lot_movements_json', lot_id=0)|tojson }};
+  var brUrl = {{ url_for('purchase.batch_lot_bin_breakdown_api', lot_id=0)|tojson }};
+  var putUrl = {{ url_for('purchase.batch_lot_putaway_api')|tojson }};
+  var whKey = {{ (default_wh_loc_key or '')|tojson }};
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function showBlModal(id, on) {
+    var m = document.getElementById(id);
+    if (!m) return;
+    document.body.classList.toggle('bl-modal-open', !!on);
+    if (on) {
+      m.classList.remove('hidden');
+      m.setAttribute('aria-hidden', 'false');
+    } else {
+      m.classList.add('hidden');
+      m.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  var bwp = document.getElementById('blWhPickBtn');
+  if (bwp) bwp.addEventListener('click', function() { showBlModal('blWhPickerModal', true); });
+
+  var mw = document.getElementById('blWhPickerModal');
+  if (mw) mw.addEventListener('click', function(ev) {
+    if (ev.target.getAttribute('data-close') === 'blWhPickerModal' || ev.target.classList.contains('modal__overlay') || ev.target.classList.contains('modal__close'))
+      showBlModal('blWhPickerModal', false);
+  });
+
+  document.querySelectorAll('[data-bl-pick-wh]').forEach(function(b) {
+    b.addEventListener('click', function() {
+      var key = b.getAttribute('data-bl-pick-wh');
+      var inp = document.getElementById('blInpWhLoc');
+      if (inp) inp.value = key;
+      whKey = key;
+      showBlModal('blWhPickerModal', false);
+      var f = document.getElementById('blFilterForm');
+      if (f) f.submit();
+    });
+  });
+
+  document.querySelectorAll('.bl-mov').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var lid = btn.getAttribute('data-lot');
+      if (!lid) return;
+      var u = base.replace(/\/movements\/0\b(?=[/?#]|$)/, '/movements/' + lid);
+      fetch(u).then(function(r) { return r.json(); }).then(function(d) {
+        var el = document.getElementById('movBody');
+        var t = document.getElementById('movTitle');
+        if (!d.ok) { if (el) el.textContent = d.error || 'Error'; if (t) t.textContent = 'Movements'; return; }
+        if (t) t.textContent = 'Lot ' + (d.lot && d.lot.lot_id) + ' — ' + ((d.lot && d.lot.batch_no) || '');
+        var rows = (d.movements || []).map(function(mov) {
+          return '<tr><td>' + esc(mov.at_ts) + '</td><td>' + esc(mov.kind) + '</td><td style="text-align:right">' + esc(mov.qty) + '</td><td>' + esc(mov.ref_type) + '</td><td>' + (mov.ref_no != null ? esc(mov.ref_no) : '') + '</td></tr>';
+        }).join('');
+        if (el) el.innerHTML = '<table class="table co-table" style="width:100%"><thead><tr><th>At</th><th>Kind</th><th style="text-align:right">Qty</th><th>Ref</th><th>No</th></tr></thead><tbody>' +
+          (rows || '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:16px">No movements</td></tr>') + '</tbody></table>';
+        showBlModal('movModal', true);
+      }).catch(function() {
+        var el = document.getElementById('movBody');
+        if (el) el.textContent = 'Request failed.';
+        showBlModal('movModal', true);
+      });
+    });
+  });
+
+  document.querySelectorAll('.bl-bins').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var lid = btn.getAttribute('data-lot');
+      if (!lid) return;
+      var u = brUrl.replace(/\/breakdown\/0\b(?=[/?#]|$)/, '/breakdown/' + lid);
+      fetch(u).then(function(r) { return r.json(); }).then(function(d) {
+        var el = document.getElementById('binBrBody');
+        var t = document.getElementById('binBrTitle');
+        if (t) t.textContent = 'Lot ' + lid + ' — bins';
+        if (!d.ok) { if (el) el.textContent = d.error || 'Error'; showBlModal('binBrModal', true); return; }
+        var rows = (d.rows || []).map(function(x) {
+          return '<tr><td>' + esc(x.storage_code) + '</td><td style="text-align:right">' + esc(x.qty) + '</td></tr>';
+        }).join('');
+        if (el) el.innerHTML = '<table class="table co-table" style="width:100%"><thead><tr><th>Bin</th><th style="text-align:right">Qty</th></tr></thead><tbody>' +
+          (rows || '<tr><td colspan="2" style="color:#94a3b8">No binned qty</td></tr>') + '</tbody></table>';
+        showBlModal('binBrModal', true);
+      });
+    });
+  });
+
+  document.querySelectorAll('.bl-putaway').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var lid = parseInt(btn.getAttribute('data-lot') || '0', 10);
+      var tr = btn.closest('tr');
+      if (!tr || !lid) return;
+      var sel = tr.querySelector('.bl-bin');
+      var qin = tr.querySelector('.bl-pw-qty');
+      var sid = parseInt((sel && sel.value) || '0', 10);
+      var q = parseFloat((qin && qin.value) || '0');
+      if (!whKey) { alert('Pick a warehouse site (Pick…) so bins load, then Apply filters.'); return; }
+      if (!sid) { alert('Choose a bin.'); return; }
+      if (!(q > 0)) { alert('Enter quantity (from unallocated balance).'); return; }
+      btn.disabled = true;
+      fetch(putUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lot_id: lid, storage_id: sid, qty: q, location_key: whKey }) })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (!d.ok) { alert(d.error || 'Putaway failed'); return; }
+          window.location.reload();
+        })
+        .catch(function() { alert('Network error'); })
+        .finally(function() { btn.disabled = false; });
+    });
+  });
+
+  document.getElementById('movModal') && document.getElementById('movModal').addEventListener('click', function(e) {
+    if (e.target.getAttribute('data-close') === 'movModal' || e.target.classList.contains('modal__overlay') || e.target.classList.contains('modal__close'))
+      showBlModal('movModal', false);
+  });
+  document.getElementById('binBrModal') && document.getElementById('binBrModal').addEventListener('click', function(e) {
+    if (e.target.getAttribute('data-close') === 'binBrModal' || e.target.classList.contains('modal__overlay') || e.target.classList.contains('modal__close'))
+      showBlModal('binBrModal', false);
+  });
+
+  document.getElementById('btSave') && document.getElementById('btSave').addEventListener('click', function() {
+    var ic = parseInt(document.getElementById('btItem').value, 10);
+    var on = document.getElementById('btOn').checked;
+    var msg = document.getElementById('btMsg');
+    if (!ic) { if (msg) msg.textContent = 'Enter item code.'; return; }
+    if (msg) msg.textContent = 'Saving…';
+    fetch({{ url_for('purchase.batch_lot_set_tracked')|tojson }}, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemcode: ic, batch_tracked: on })
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      if (msg) msg.textContent = d.ok ? 'Saved.' : (d.error || 'Failed');
+    }).catch(function() { if (msg) msg.textContent = 'Request failed.'; });
+  });
+
+  var searchEl = document.getElementById('blLotSearch');
+  var tbody = document.getElementById('blLotsTbody');
+  if (searchEl && tbody) {
+    var deb;
+    searchEl.addEventListener('input', function() {
+      clearTimeout(deb);
+      deb = setTimeout(function() {
+        var q = (searchEl.value || '').toLowerCase().trim();
+        tbody.querySelectorAll('tr.bl-lot-row').forEach(function(row) {
+          var hay = (row.getAttribute('data-bl-search') || '') + ' ' + (row.innerText || '');
+          row.style.display = !q || hay.toLowerCase().indexOf(q) !== -1 ? '' : 'none';
+        });
+      }, 120);
+    });
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      ['blWhPickerModal', 'movModal', 'binBrModal'].forEach(function(mid) {
+        var m = document.getElementById(mid);
+        if (m && !m.classList.contains('hidden')) showBlModal(mid, false);
+      });
+    }
+  });
+})();
+</script>
+{% endblock %}

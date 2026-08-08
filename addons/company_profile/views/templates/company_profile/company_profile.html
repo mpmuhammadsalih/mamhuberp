@@ -1,0 +1,519 @@
+{% extends "base.html" %}
+{% block title %}{% if is_new|default(false) %}New company{% elif company_id is defined and company_id %}Company #{{ company_id }}{% else %}Company profile{% endif %}{% endblock %}
+{% block content %}
+<style>
+  body:has(.cp-company-im-page) { background: #f5f6f8 !important; }
+
+  .cp-company-im-page {
+    max-width: 1680px;
+    margin: 0 auto;
+    padding: 8px 12px 10px !important;
+    padding-top: 50px !important;
+    box-sizing: border-box;
+    --im-toolbar-bg: linear-gradient(180deg, #f0f7fb 0%, #e3eef8 100%);
+    --im-toolbar-border: rgba(13, 110, 253, 0.14);
+    --im-field-fill: rgba(255, 255, 255, 0.52);
+    --im-field-fill-strong: #eaf2fa;
+    --im-field-readonly: rgba(226, 236, 247, 0.92);
+  }
+
+  .cp-company-im-page .im-topbar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 6px;
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+  .cp-company-im-page .im-topbar-main {
+    position: fixed !important;
+    top: 46px;
+    left: 260px;
+    right: var(--nexa-scrollbar-width, 0px);
+    z-index: 105;
+    margin: 0 !important;
+    padding: 6px 16px 8px 16px !important;
+    border-bottom: 1px solid var(--im-toolbar-border);
+    box-shadow:
+      0 1px 0 rgba(15, 23, 42, 0.04),
+      0 6px 18px rgba(15, 23, 42, 0.06);
+    background: var(--im-toolbar-bg);
+    box-sizing: border-box;
+    width: auto;
+    max-width: none;
+    display: flex !important;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    min-width: 0;
+  }
+  .layout.sidebar-collapsed:not(.layout--auth) .cp-company-im-page .im-topbar-main { left: 56px; }
+  .layout--auth .cp-company-im-page .im-topbar-main {
+    top: 0;
+    left: 0;
+    right: var(--nexa-scrollbar-width, 0px);
+    padding: 6px 16px 8px 16px !important;
+  }
+
+  .cp-company-im-page .im-topbar-main h1 {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    font-size: 13px !important;
+    font-weight: 400;
+    color: #212529;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cp-company-im-page .im-topbar-main h1 .im-ref { font-weight: 600; }
+
+  .cp-company-im-page .im-actions {
+    flex: 0 0 auto;
+    margin-left: auto;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .cp-company-im-page .im-actions::-webkit-scrollbar { display: none; height: 0; }
+
+  .cp-company-im-page .im-btn-save,
+  .cp-company-im-page .im-btn-secondary {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box !important;
+    min-height: 36px;
+    padding: 8px 14px !important;
+    border-radius: 6px !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    text-decoration: none !important;
+    white-space: nowrap;
+    cursor: pointer;
+    font-family: inherit;
+    flex-shrink: 0;
+    border: none;
+  }
+  .cp-company-im-page .im-btn-secondary {
+    background: var(--im-field-fill-strong) !important;
+    border: 1px solid rgba(13, 110, 253, 0.18) !important;
+    color: #495057 !important;
+    box-shadow: 0 3px 8px rgba(15, 23, 42, .04);
+  }
+  .cp-company-im-page .im-btn-save {
+    background: #0d6efd !important;
+    border: 1px solid #0d6efd !important;
+    color: #fff !important;
+    box-shadow: 0 8px 18px rgba(13, 110, 253, .22);
+  }
+
+  .cp-company-im-page .status-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .cp-company-im-page .status-badge--new { background: #cce5ff; color: #004085; border: 1px solid #b8daff; }
+
+  .cp-company-shell.customer-form-shell.itemmaster-container {
+    background: var(--im-field-fill-strong);
+    border: 1px solid #e5eaf2;
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, .06);
+    overflow: hidden;
+    padding: 0;
+    margin-top: 6px;
+    max-width: 960px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .cp-company-shell.customer-form-shell.itemmaster-container .cf-form-stack {
+    padding: 6px 10px 12px;
+    box-sizing: border-box;
+  }
+
+  .cp-company-im-page .cf-form-stack { display: flex; flex-direction: column; gap: 2px; margin-top: 0; }
+  .cp-company-im-page .cf-form-stack .cf-form-panel { display: block; padding: 0; margin: 0; background: transparent; flex-shrink: 0; }
+  .cp-company-im-page .cf-section-title {
+    margin: 0;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #14324a;
+    background: linear-gradient(180deg, #e4ecf4 0%, #d5e1ec 100%);
+    border: 1px solid #b8c8d4;
+    border-bottom: 1px solid #a9bac9;
+    border-radius: 2px 2px 0 0;
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    line-height: 1.25;
+  }
+  .cp-company-im-page .cf-form-stack .cf-form-panel:not(:first-child) .cf-section-title { margin-top: 10px; }
+  .cp-company-im-page .cf-form-stack .cf-form-panel .customer-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 18px;
+    row-gap: 4px;
+    margin-top: 0 !important;
+    margin-bottom: 6px !important;
+    padding: 8px 12px !important;
+    border: 1px solid #b8c8d4 !important;
+    border-top: none !important;
+    border-radius: 0 0 2px 2px !important;
+    background: #fff !important;
+    box-shadow: 0 1px 3px rgba(15, 35, 55, 0.08);
+  }
+
+  .cp-company-im-page .customer-details .form-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 0;
+    min-width: 0;
+  }
+  .cp-company-im-page .customer-details .form-group label {
+    margin: 0;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 400;
+    color: #495057;
+    flex-shrink: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+  }
+  .cp-company-im-page .customer-details .form-group label > span:first-child {
+    min-width: 168px;
+    flex-shrink: 0;
+  }
+  .cp-company-im-page .customer-details .form-group .input,
+  .cp-company-im-page .customer-details .form-group select {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    line-height: 1.25;
+    padding: 2px 0;
+    min-height: auto;
+    border: none;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 0;
+    background: var(--im-field-fill);
+    box-shadow: none !important;
+  }
+  .cp-company-im-page .customer-details .form-group .input:focus,
+  .cp-company-im-page .customer-details .form-group select:focus {
+    outline: none;
+    border-bottom-color: var(--nexa-focus-color);
+    box-shadow: none !important;
+  }
+  .cp-company-im-page .customer-details .form-group input[type="file"] {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 0;
+    font-size: 12px;
+    border: none;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 0;
+    background: var(--im-field-fill);
+  }
+
+  .cp-company-im-page .cp-muted {
+    margin: 0 0 6px;
+    font-size: 11px;
+    color: #64748b;
+    line-height: 1.35;
+    grid-column: 1 / -1;
+  }
+  .cp-company-im-page .cp-logo-radios {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+  }
+  .cp-company-im-page .cp-logo-radios label {
+    display: flex !important;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    flex-wrap: nowrap !important;
+    margin: 0 !important;
+    font-size: 13px;
+    color: #334155;
+  }
+  .cp-company-im-page .cp-logo-source-inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+  }
+  .cp-company-im-page .cp-logo-source-label {
+    min-width: 168px;
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: 400;
+    color: #495057;
+    padding-top: 2px;
+  }
+  .cp-company-im-page .cp-logo-radios input[type="radio"] {
+    flex-shrink: 0;
+    margin: 0;
+  }
+  .cp-company-im-page .cp-logo-preview {
+    grid-column: 1 / -1;
+    margin-top: 4px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    max-width: 320px;
+  }
+  .cp-company-im-page .cp-logo-preview img {
+    max-width: 240px;
+    max-height: 120px;
+    object-fit: contain;
+    display: block;
+  }
+
+  @media (max-width: 1024px) {
+    .cp-company-im-page .cf-form-stack .cf-form-panel .customer-details { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 900px) {
+    .cp-company-im-page {
+      max-width: 100% !important;
+      padding-left: 8px;
+      padding-right: 8px;
+    }
+    .cp-company-im-page .im-topbar-main {
+      flex-wrap: wrap !important;
+      left: 0 !important;
+      right: 0 !important;
+      padding-left: 10px !important;
+      padding-right: 10px !important;
+    }
+  }
+
+  @media (max-width: 1280px) {
+    .cp-company-im-page .customer-details {
+      grid-template-columns: 1fr !important;
+      row-gap: 4px !important;
+      column-gap: 0 !important;
+    }
+    .cp-company-im-page .customer-details .form-group {
+      display: block;
+      margin-bottom: 6px;
+    }
+    .cp-company-im-page .customer-details .form-group label {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 4px;
+      align-items: start;
+    }
+    .cp-company-im-page .customer-details .form-group label > span:first-child {
+      min-width: 0;
+      width: 100%;
+      font-size: 12px;
+      font-weight: 600;
+      color: #6c757d;
+    }
+    .cp-company-im-page .cp-logo-source-inner {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .cp-company-im-page .cp-logo-source-label {
+      min-width: 0;
+      width: 100%;
+      padding-top: 0;
+      font-size: 12px;
+      font-weight: 600;
+      color: #6c757d;
+    }
+  }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  select:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0 1000px #fff inset !important;
+    box-shadow: 0 0 0 1000px #fff inset !important;
+    -webkit-text-fill-color: inherit !important;
+  }
+</style>
+
+{% set p = profile or {} %}
+{% set list_url = url_for('company_profile.company_list') %}
+<div class="im-page cp-company-im-page">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>
+        Company /
+        {% if is_new|default(false) %}
+          <span class="im-ref">New</span>
+          <span class="status-badge status-badge--new">New</span>
+        {% elif company_id is defined and company_id %}
+          <span class="im-ref">{{ company_id }}</span>
+        {% else %}
+          <span class="im-ref">—</span>
+        {% endif %}
+      </h1>
+      <div class="im-actions">
+        <button type="submit" form="company-profile-form" class="im-btn-save">{% if is_new|default(false) %}Save company{% else %}Save{% endif %}</button>
+        <a href="{{ list_url }}" class="im-btn-secondary">Cancel</a>
+        <a href="{{ list_url }}" class="im-btn-secondary">List</a>
+      </div>
+    </div>
+  </div>
+
+  <section class="cp-company-shell customer-form-shell itemmaster-container">
+    <form method="post" enctype="multipart/form-data" id="company-profile-form">
+      {% if cp_new_nonce is defined and cp_new_nonce %}
+      <input type="hidden" name="cp_new_nonce" value="{{ cp_new_nonce|e }}" />
+      {% endif %}
+
+      <div class="cf-form-stack">
+        <div class="cf-form-panel" id="cp-panel-general">
+          <h2 class="cf-section-title">General</h2>
+          <div class="customer-details">
+            <div class="form-group">
+              <label for="company_name">
+                <span>Company name</span>
+                <input type="text" id="company_name" name="company_name" class="input" value="{{ p.get('company_name')|default('', true)|e }}" maxlength="200" autocomplete="organization" />
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="legal_name">
+                <span>Legal / registered name</span>
+                <input type="text" id="legal_name" name="legal_name" class="input" value="{{ p.get('legal_name')|default('', true)|e }}" maxlength="200" />
+              </label>
+            </div>
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <label for="address1">
+                <span>Address line 1</span>
+                <input type="text" id="address1" name="address1" class="input" value="{{ p.get('address1')|default('', true)|e }}" maxlength="300" />
+              </label>
+            </div>
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <label for="address2">
+                <span>Address line 2</span>
+                <input type="text" id="address2" name="address2" class="input" value="{{ p.get('address2')|default('', true)|e }}" maxlength="300" />
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="city">
+                <span>City</span>
+                <input type="text" id="city" name="city" class="input" value="{{ p.get('city')|default('', true)|e }}" maxlength="120" />
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="state_region">
+                <span>State / region</span>
+                <input type="text" id="state_region" name="state_region" class="input" value="{{ p.get('state_region')|default('', true)|e }}" maxlength="120" />
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="postal_code">
+                <span>Postal code</span>
+                <input type="text" id="postal_code" name="postal_code" class="input" value="{{ p.get('postal_code')|default('', true)|e }}" maxlength="40" />
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="country">
+                <span>Country</span>
+                <input type="text" id="country" name="country" class="input" value="{{ p.get('country')|default('', true)|e }}" maxlength="120" />
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="phone">
+                <span>Phone</span>
+                <input type="tel" id="phone" name="phone" class="input" value="{{ p.get('phone')|default('', true)|e }}" maxlength="60" />
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="email">
+                <span>Email <span style="font-weight:400;color:#94a3b8;">(optional)</span></span>
+                <input type="text" id="email" name="email" class="input" value="{{ p.get('email')|default('', true)|e }}" maxlength="150" inputmode="email" autocomplete="email" />
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="website">
+                <span>Website <span style="font-weight:400;color:#94a3b8;">(optional)</span></span>
+                <input type="text" id="website" name="website" class="input" value="{{ p.get('website')|default('', true)|e }}" maxlength="250" placeholder="https://example.com or www.example.com" />
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="tax_id">
+                <span>Tax / TRN / VAT no.</span>
+                <input type="text" id="tax_id" name="tax_id" class="input" value="{{ p.get('tax_id')|default('', true)|e }}" maxlength="80" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {% set lm = (p.get('logo_mode')|default('', true)) or 'none' %}
+        <div class="cf-form-panel" id="cp-panel-logo">
+          <h2 class="cf-section-title">Logo</h2>
+          <div class="customer-details">
+            <p class="cp-muted">PNG, JPG, JPEG, WEBP, or GIF (server limits apply). Choose one source below.</p>
+            <div class="form-group cp-logo-source-row" style="grid-column: 1 / -1;">
+              <div class="cp-logo-source-inner">
+                <span class="cp-logo-source-label">Logo source</span>
+                <div class="cp-logo-radios" role="radiogroup" aria-label="Logo source">
+                  <label><input type="radio" name="logo_mode" value="none" {% if lm == 'none' or not lm %}checked{% endif %} /> No logo</label>
+                  <label><input type="radio" name="logo_mode" value="upload" {% if lm == 'upload' %}checked{% endif %} /> Upload image file</label>
+                  <label><input type="radio" name="logo_mode" value="url" {% if lm == 'url' %}checked{% endif %} /> Image from URL</label>
+                </div>
+              </div>
+            </div>
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <label for="logo_file">
+                <span>Logo file</span>
+                <input type="file" id="logo_file" name="logo_file" accept=".png,.jpg,.jpeg,.webp,.gif,image/*" />
+              </label>
+            </div>
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <label for="logo_url">
+                <span>Image URL</span>
+                <input type="text" id="logo_url" name="logo_url" class="input" value="{{ p.get('logo_url')|default('', true)|e }}" maxlength="500" placeholder="https://example.com/logo.png" />
+              </label>
+            </div>
+            <div class="cp-logo-preview" id="cpLogoPreview">
+              {% if lm == 'url' and p.get('logo_url') %}
+                <p style="margin:0 0 6px; font-size:12px; color:#64748b;">Current (URL):</p>
+                <img src="{{ p.get('logo_url')|default('', true)|e }}" alt="Company logo" onerror="this.style.display='none'" />
+              {% elif lm == 'upload' and p.get('logo_path') %}
+                <p style="margin:0 0 6px; font-size:12px; color:#64748b;">Current (uploaded):</p>
+                <img src="{{ url_for('static', filename=p.get('logo_path')|default('', true)|e) }}" alt="Company logo" />
+              {% else %}
+                <p style="margin:0; font-size:12px; color:#94a3b8;">No logo selected.</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </form>
+  </section>
+</div>
+{% endblock %}

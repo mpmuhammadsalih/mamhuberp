@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% from 'includes/global_lookup_field.html' import global_lookup_field %}
+{% block title %}{{ 'Edit' if edit_mode else 'New' }} Fixed Asset Category{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/fixed_assets_pages.css') }}?v=2" />
+
+<div class="fa-form-page">
+  {% include 'fixed_assets/_fa_nav.html' %}
+
+  <div class="fa-topbar">
+    <div class="fa-topbar-main">
+      <h1>Fixed Assets / <span class="fa-ref">{% if edit_mode %}{{ row.code or 'Category' }}{% else %}New category{% endif %}</span></h1>
+      <div class="fa-actions">
+        <button type="submit" form="faCategoryForm" class="fa-btn-save">{% if edit_mode %}Update{% else %}Save{% endif %}</button>
+        <a href="{{ url_for('fixed_assets.fa_category_list') }}" class="fa-btn-secondary">List</a>
+        {% if not edit_mode %}
+        <a href="{{ url_for('fixed_assets.fa_category_form') }}" class="fa-btn-secondary">New</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <form id="faCategoryForm" method="post" action="{{ url_for('fixed_assets.fa_category_form') }}" class="fa-form-shell">
+    {% if row.category_id %}<input type="hidden" name="category_id" value="{{ row.category_id }}" />{% endif %}
+
+    <section class="form-section">
+      <h2 class="form-section-title">Category details</h2>
+      <div class="form-group">
+        <label for="code">Code</label>
+        <input id="code" name="code" class="input{% if edit_mode %} input-readonly{% endif %}" required maxlength="20" value="{{ row.code or '' }}" {% if edit_mode %}readonly{% endif %} />
+      </div>
+      <div class="form-group">
+        <label for="name">Name</label>
+        <input id="name" name="name" class="input" required maxlength="100" value="{{ row.name or '' }}" />
+      </div>
+      <div class="form-group">
+        <label class="checkbox-inline"><input type="checkbox" name="active" value="1" {% if (row.active or 'Y')|upper == 'Y' %}checked{% endif %} /> Active</label>
+      </div>
+    </section>
+
+    <section class="form-section">
+      <h2 class="form-section-title">GL mapping</h2>
+      <div class="form-group fa-credit-lookup-row">
+        <label for="faAssetAccountDisplay">Asset account</label>
+        <div class="fa-credit-lookup-wrap">
+          {{ global_lookup_field(
+            field_id='faAssetAccount',
+            label='',
+            name='asset_account',
+            kind='gl_account',
+            value_code=row.asset_account or '',
+            value_label=account_labels.asset_account or '',
+            placeholder='Search GL account…',
+            no_default=true,
+            inline=true,
+            field_class='fa-credit-lookup-field',
+            input_class='global-lookup__input odoo-lookup__input input',
+            dropdown_min_width='420',
+            hidden_extra_attrs='required',
+          ) }}
+        </div>
+      </div>
+      <p class="field-hint">Debited when an asset is capitalized (e.g. 1510 Machinery).</p>
+      <div class="form-group fa-credit-lookup-row">
+        <label for="faAccumDepAccountDisplay">Accumulated depreciation</label>
+        <div class="fa-credit-lookup-wrap">
+          {{ global_lookup_field(
+            field_id='faAccumDepAccount',
+            label='',
+            name='accum_dep_account',
+            kind='gl_account',
+            value_code=row.accum_dep_account or '',
+            value_label=account_labels.accum_dep_account or '',
+            placeholder='Search GL account…',
+            no_default=true,
+            inline=true,
+            field_class='fa-credit-lookup-field',
+            input_class='global-lookup__input odoo-lookup__input input',
+            dropdown_min_width='420',
+            hidden_extra_attrs='required',
+          ) }}
+        </div>
+      </div>
+      <p class="field-hint">Credited on monthly depreciation runs (typically 1600).</p>
+      <div class="form-group fa-credit-lookup-row">
+        <label for="faDepExpenseAccountDisplay">Depreciation expense</label>
+        <div class="fa-credit-lookup-wrap">
+          {{ global_lookup_field(
+            field_id='faDepExpenseAccount',
+            label='',
+            name='dep_expense_account',
+            kind='gl_account',
+            value_code=row.dep_expense_account or '',
+            value_label=account_labels.dep_expense_account or '',
+            placeholder='Search GL account…',
+            no_default=true,
+            inline=true,
+            field_class='fa-credit-lookup-field',
+            input_class='global-lookup__input odoo-lookup__input input',
+            dropdown_min_width='420',
+            hidden_extra_attrs='required',
+          ) }}
+        </div>
+      </div>
+      <p class="field-hint">Debited on depreciation posting (typically 5500).</p>
+      <div class="form-group fa-credit-lookup-row">
+        <label for="faGainDisposalAccountDisplay">Gain on disposal</label>
+        <div class="fa-credit-lookup-wrap">
+          {{ global_lookup_field(
+            field_id='faGainDisposalAccount',
+            label='',
+            name='gain_on_disposal_account',
+            kind='gl_account',
+            value_code=row.gain_on_disposal_account or '',
+            value_label=account_labels.gain_on_disposal_account or '',
+            placeholder='Search GL account (optional)…',
+            no_default=true,
+            inline=true,
+            field_class='fa-credit-lookup-field',
+            input_class='global-lookup__input odoo-lookup__input input',
+            dropdown_min_width='420',
+          ) }}
+        </div>
+      </div>
+      <div class="form-group fa-credit-lookup-row">
+        <label for="faLossDisposalAccountDisplay">Loss on disposal</label>
+        <div class="fa-credit-lookup-wrap">
+          {{ global_lookup_field(
+            field_id='faLossDisposalAccount',
+            label='',
+            name='loss_on_disposal_account',
+            kind='gl_account',
+            value_code=row.loss_on_disposal_account or '',
+            value_label=account_labels.loss_on_disposal_account or '',
+            placeholder='Search GL account (optional)…',
+            no_default=true,
+            inline=true,
+            field_class='fa-credit-lookup-field',
+            input_class='global-lookup__input odoo-lookup__input input',
+            dropdown_min_width='420',
+          ) }}
+        </div>
+      </div>
+      <p class="field-hint">Required on category before posting a disposal with gain or loss.</p>
+    </section>
+
+    <section class="form-section">
+      <h2 class="form-section-title">Depreciation</h2>
+      <div class="form-group">
+        <label for="useful_life_months">Useful life (months)</label>
+        <input id="useful_life_months" name="useful_life_months" type="number" min="1" class="input" required value="{{ row.useful_life_months or 60 }}" />
+      </div>
+      <p class="field-hint">Straight-line monthly amount = (cost − salvage) ÷ useful life months.</p>
+    </section>
+  </form>
+</div>
+{% endblock %}

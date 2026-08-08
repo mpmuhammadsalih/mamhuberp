@@ -1,0 +1,453 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+
+{% set uk = namespace(total=0, active=0, inactive=0, needc=0, transit=0, cc=0) %}
+{% for user in users %}
+  {% set uk.total = uk.total + 1 %}
+  {% if (user.active_flag or 'Y') == 'Y' %}{% set uk.active = uk.active + 1 %}{% else %}{% set uk.inactive = uk.inactive + 1 %}{% endif %}
+  {% if (user.needcounter or 'N') == 'Y' %}{% set uk.needc = uk.needc + 1 %}{% endif %}
+  {% if (user.transit_only or 'N') == 'Y' %}{% set uk.transit = uk.transit + 1 %}{% endif %}
+  {% if (user.customer_creation or 'N') == 'Y' %}{% set uk.cc = uk.cc + 1 %}{% endif %}
+{% endfor %}
+
+<style>
+  .ul-pick-wrap { display: inline-flex; align-items: center; border: 1px solid #ced4da; border-radius: 4px; background: #fff; min-width: 170px; overflow: hidden; }
+  .ul-pick-display { flex: 1; font-size: 13px; padding: 6px 10px; background: transparent; border: none; cursor: pointer; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #495057; }
+  .ul-pick-display.placeholder { color: #adb5bd; }
+  .ul-pick-btn { background: transparent; border: none; border-left: 1px solid #ced4da; padding: 6px 9px; cursor: pointer; color: #007bff; font-size: 13px; }
+  .ul-pick-clear { background: transparent; border: none; padding: 6px 7px; cursor: pointer; color: #adb5bd; font-size: 13px; }
+  .ul-pick-clear:hover { color: #dc3545; }
+  .ul-modal-bg { display: none; position: fixed; inset: 0; z-index: 1050; background: rgba(0,0,0,.35); }
+  .ul-modal-bg.open { display: flex; align-items: flex-start; justify-content: center; padding-top: 80px; }
+  .ul-modal-box { background: #fff; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,.18); width: 390px; max-width: 96vw; display: flex; flex-direction: column; max-height: 500px; }
+  .ul-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 10px; border-bottom: 1px solid #dee2e6; }
+  .ul-modal-head h4 { margin: 0; font-size: 14px; font-weight: 700; color: #212529; }
+  .ul-modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: #6c757d; line-height: 1; padding: 0 4px; }
+  .ul-modal-search { padding: 10px 12px 6px; }
+  .ul-modal-search input { width: 100%; padding: 7px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 13px; box-sizing: border-box; }
+  .ul-modal-list { overflow-y: auto; flex: 1; }
+  .ul-modal-item { padding: 9px 16px; font-size: 13px; cursor: pointer; border-bottom: 1px solid #f0f0f0; color: #212529; display: flex; align-items: center; gap: 8px; }
+  .ul-modal-item:hover, .ul-modal-item:focus { background: #e9f0ff; outline: none; }
+  .ul-modal-item.selected { background: #dbeafe; font-weight: 600; color: #1a56db; }
+  .ul-modal-footer { padding: 10px 12px; border-top: 1px solid #dee2e6; display: flex; gap: 8px; }
+  .ul-modal-all { flex: 1; padding: 7px; font-size: 13px; border: 1px solid #ced4da; border-radius: 4px; background: #f8f9fa; cursor: pointer; color: #495057; }
+  .ul-modal-all:hover { background: #e9ecef; }
+</style>
+<div class="page-po nexa-list-page nexa-setup-list-page" style="max-width: 1200px;">
+  <section class="nexa-stat-grid" aria-label="User summary">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-people-fill" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Total users</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(uk.total) }}</p>
+        <p class="nexa-stat-sub">Current filters</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-person-check" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Active</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(uk.active) }}</p>
+        <p class="nexa-stat-sub">Status Y</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-person-x" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Inactive</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(uk.inactive) }}</p>
+        <p class="nexa-stat-sub">Status N</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-shop-window" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Need counter</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(uk.needc) }}</p>
+        <p class="nexa-stat-sub">Login gate</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--cyan"><i class="bi bi-person-plus" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Cust. creation</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(uk.cc) }}</p>
+        <p class="nexa-stat-sub">HO permission</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">User Management</h1>
+      <p class="page-po__muted">Manage users and their role access.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% include 'includes/list_refresh_bar.html' %}
+      <a class="page-po__btn-primary" href="{{ url_for('users.user_create') }}" aria-label="New User" title="New User">+ New user</a>
+    </div>
+  </div>
+
+  <div class="nexa-list-filter-panel page-po__filters--embedded">
+    <div style="display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end;">
+      <div class="form-group" style="margin-bottom: 0;">
+        <label for="locationDisplay">Location</label>
+        <div class="ul-pick-wrap">
+          <button type="button" class="ul-pick-display {% if not location_filter %}placeholder{% endif %}" id="locationDisplay">
+            {{ location_filter or 'All' }}
+          </button>
+          <button type="button" class="ul-pick-clear" id="locationClear" title="Clear" style="{{ '' if location_filter else 'display:none' }}">×</button>
+          <button type="button" class="ul-pick-btn" id="locationOpen">▾</button>
+          <input type="hidden" id="locationFilter" value="{{ location_filter or '' }}" />
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <label for="tenantDisplay">Tenant</label>
+        {% set tenant_ns = namespace(label='All') %}
+        {% if tenant_filter %}
+          {% set tenant_ns.label = tenant_filter %}
+          {% for t in available_tenants %}
+            {% if t.tenant_id == tenant_filter %}
+              {% set tenant_ns.label = t.display_name or t.tenant_id %}
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+        <div class="ul-pick-wrap">
+          <button type="button" class="ul-pick-display {% if not tenant_filter %}placeholder{% endif %}" id="tenantDisplay">
+            {{ tenant_ns.label }}
+          </button>
+          <button type="button" class="ul-pick-clear" id="tenantClear" title="Clear" style="{{ '' if tenant_filter else 'display:none' }}">×</button>
+          <button type="button" class="ul-pick-btn" id="tenantOpen">▾</button>
+          <input type="hidden" id="tenantFilter" value="{{ tenant_filter or '' }}" />
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <label for="roleDisplay">Role</label>
+        {% set role_ns = namespace(label='All') %}
+        {% if role_filter == '__FULL_ACCESS__' %}
+          {% set role_ns.label = 'No role assigned' %}
+        {% elif role_filter %}
+          {% set role_ns.label = role_filter %}
+          {% for role in available_roles %}
+            {% if role.role_id|upper == (role_filter or '')|upper %}
+              {% set role_ns.label = role.role_name or role.role_id %}
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+        <div class="ul-pick-wrap">
+          <button type="button" class="ul-pick-display {% if not role_filter %}placeholder{% endif %}" id="roleDisplay">
+            {{ role_ns.label }}
+          </button>
+          <button type="button" class="ul-pick-clear" id="roleClear" title="Clear" style="{{ '' if role_filter else 'display:none' }}">×</button>
+          <button type="button" class="ul-pick-btn" id="roleOpen">▾</button>
+          <input type="hidden" id="roleFilter" value="{{ role_filter or '' }}" />
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <label for="searchFilter">Search</label>
+        <input
+          type="text"
+          id="searchFilter"
+          class="input"
+          style="min-width: 220px;"
+          placeholder="Employee Code or Name"
+          value="{{ search_filter or '' }}"
+        />
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <button type="button" class="page-po__btn-primary" id="btnFilter">Filter</button>
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <button type="button" class="page-po__btn-secondary" id="btnClearFilter">Clear</button>
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <a
+          href="{{ url_for('users.user_export', location=location_filter or None, tenant_id=tenant_filter or None, role_id=role_filter or None, search=search_filter or None) }}"
+          class="page-po__btn-secondary"
+          id="btnExportExcel"
+        >Export to Excel</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="nexa-list-toolbar" style="margin-bottom:6px;">
+    <span class="nexa-num"><strong>{{ users|length if users else 0 }}</strong> user row(s)</span>
+  </div>
+
+  {% if users %}
+    <div class="co-table-wrap">
+      <table class="co-table">
+        <thead>
+          <tr>
+            <th style="text-align:center;width:52px;">Sl.No</th>
+            <th>Username</th>
+            <th>Employee Code</th>
+            <th>Tenant</th>
+            <th>Location</th>
+            <th>Role</th>
+            <th>Need Counter</th>
+            <th>Transit Only</th>
+            <th>Customer Creation</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user in users %}
+            <tr>
+              <td style="text-align:center;">{{ loop.index }}</td>
+              <td>{{ user.username }}</td>
+              <td>{{ user.employeecode or '-' }}</td>
+              <td>{{ user.tenant_id or '-' }}</td>
+              <td>{{ user.location or '-' }}</td>
+              <td>{% if not user.role_id %}<span class="muted">No role assigned</span>{% elif user.role_name %}{{ user.role_name }}{% else %}<span title="Role ID not found in Roles table — user has full menu access until fixed">{{ user.role_id }} (unknown role)</span>{% endif %}</td>
+              <td>{{ 'Yes' if (user.needcounter or 'N') == 'Y' else 'No' }}</td>
+              <td>{{ 'Yes' if (user.transit_only or 'N') == 'Y' else 'No' }}</td>
+              <td>{{ 'Yes' if (user.customer_creation or 'N') == 'Y' else 'No' }}</td>
+              <td>{{ 'Active' if (user.active_flag or 'Y') == 'Y' else 'Inactive' }}</td>
+              <td style="text-align:center;">
+                <a class="btn-view" href="{{ url_for('users.user_edit_role', username=user.username) }}" aria-label="Edit Role" title="Edit Role">Edit</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="co-table-wrap">
+      <table class="co-table"><tbody><tr><td style="text-align:center;padding:14px;color:#64748b;">No users found.</td></tr></tbody></table>
+    </div>
+  {% endif %}
+</div>
+
+<div class="ul-modal-bg" id="locationModal">
+  <div class="ul-modal-box">
+    <div class="ul-modal-head">
+      <h4>Select Location</h4>
+      <button class="ul-modal-close" type="button" data-close-modal="locationModal">×</button>
+    </div>
+    <div class="ul-modal-search">
+      <input type="text" id="locationSearch" placeholder="Search location..." />
+    </div>
+    <div class="ul-modal-list" id="locationList">
+      {% for loc in available_locations %}
+      <div class="ul-modal-item {% if location_filter == loc %}selected{% endif %}" tabindex="0" data-value="{{ loc }}" data-label="{{ loc }}" data-search="{{ (loc or '')|lower }}">
+        {{ loc }}
+      </div>
+      {% endfor %}
+    </div>
+    <div class="ul-modal-footer">
+      <button type="button" class="ul-modal-all" data-clear-filter="location">All Locations</button>
+    </div>
+  </div>
+</div>
+
+<div class="ul-modal-bg" id="tenantModal">
+  <div class="ul-modal-box">
+    <div class="ul-modal-head">
+      <h4>Select Tenant</h4>
+      <button class="ul-modal-close" type="button" data-close-modal="tenantModal">×</button>
+    </div>
+    <div class="ul-modal-search">
+      <input type="text" id="tenantSearch" placeholder="Search tenant..." />
+    </div>
+    <div class="ul-modal-list" id="tenantList">
+      {% for t in available_tenants %}
+      <div class="ul-modal-item {% if tenant_filter == t.tenant_id %}selected{% endif %}" tabindex="0" data-value="{{ t.tenant_id }}" data-label="{{ t.display_name or t.tenant_id }}" data-search="{{ ((t.tenant_id or '') ~ ' ' ~ (t.display_name or ''))|lower }}">
+        <span>{{ t.tenant_id }}</span> {{ t.display_name or '' }}
+      </div>
+      {% endfor %}
+    </div>
+    <div class="ul-modal-footer">
+      <button type="button" class="ul-modal-all" data-clear-filter="tenant">All Tenants</button>
+    </div>
+  </div>
+</div>
+
+<div class="ul-modal-bg" id="roleModal">
+  <div class="ul-modal-box">
+    <div class="ul-modal-head">
+      <h4>Select Role</h4>
+      <button class="ul-modal-close" type="button" data-close-modal="roleModal">×</button>
+    </div>
+    <div class="ul-modal-search">
+      <input type="text" id="roleSearch" placeholder="Search role..." />
+    </div>
+    <div class="ul-modal-list" id="roleList">
+      <div class="ul-modal-item {% if role_filter == '__FULL_ACCESS__' %}selected{% endif %}" tabindex="0" data-value="__FULL_ACCESS__" data-label="No role assigned" data-search="no role unassigned full access">
+        No role assigned
+      </div>
+      {% for role in available_roles %}
+      <div class="ul-modal-item {% if role_filter|upper == role.role_id|upper %}selected{% endif %}" tabindex="0" data-value="{{ role.role_id }}" data-label="{{ role.role_name or role.role_id }}" data-search="{{ ((role.role_id or '') ~ ' ' ~ (role.role_name or ''))|lower }}">
+        <span>{{ role.role_id }}</span> {{ role.role_name or '' }}
+      </div>
+      {% endfor %}
+    </div>
+    <div class="ul-modal-footer">
+      <button type="button" class="ul-modal-all" data-clear-filter="role">All Roles</button>
+    </div>
+  </div>
+</div>
+
+  <script>
+  (function() {
+    const filterMap = {
+      location: {
+        hidden: document.getElementById('locationFilter'),
+        display: document.getElementById('locationDisplay'),
+        clear: document.getElementById('locationClear'),
+        modal: document.getElementById('locationModal'),
+        open: document.getElementById('locationOpen'),
+        search: document.getElementById('locationSearch'),
+        list: document.getElementById('locationList'),
+      },
+      tenant: {
+        hidden: document.getElementById('tenantFilter'),
+        display: document.getElementById('tenantDisplay'),
+        clear: document.getElementById('tenantClear'),
+        modal: document.getElementById('tenantModal'),
+        open: document.getElementById('tenantOpen'),
+        search: document.getElementById('tenantSearch'),
+        list: document.getElementById('tenantList'),
+      },
+      role: {
+        hidden: document.getElementById('roleFilter'),
+        display: document.getElementById('roleDisplay'),
+        clear: document.getElementById('roleClear'),
+        modal: document.getElementById('roleModal'),
+        open: document.getElementById('roleOpen'),
+        search: document.getElementById('roleSearch'),
+        list: document.getElementById('roleList'),
+      },
+    };
+    const btnFilter = document.getElementById('btnFilter');
+    const btnClearFilter = document.getElementById('btnClearFilter');
+    const searchFilter = document.getElementById('searchFilter');
+
+    function openModal(key) {
+      const cfg = filterMap[key];
+      if (!cfg || !cfg.modal) return;
+      cfg.modal.classList.add('open');
+      if (cfg.search) {
+        cfg.search.value = '';
+        filterModalItems(key);
+        cfg.search.focus();
+      }
+    }
+
+    function closeModal(key) {
+      const cfg = filterMap[key];
+      if (!cfg || !cfg.modal) return;
+      cfg.modal.classList.remove('open');
+    }
+
+    function setFilterValue(key, value, label) {
+      const cfg = filterMap[key];
+      if (!cfg) return;
+      cfg.hidden.value = value || '';
+      cfg.display.textContent = label || 'All';
+      cfg.display.classList.toggle('placeholder', !value);
+      if (cfg.clear) cfg.clear.style.display = value ? '' : 'none';
+      if (cfg.list) {
+        cfg.list.querySelectorAll('.ul-modal-item').forEach(function(item) {
+          item.classList.toggle('selected', (item.dataset.value || '') === (value || ''));
+        });
+      }
+      closeModal(key);
+    }
+
+    function clearFilterValue(key) {
+      setFilterValue(key, '', 'All');
+    }
+
+    function filterModalItems(key) {
+      const cfg = filterMap[key];
+      if (!cfg || !cfg.search || !cfg.list) return;
+      const term = (cfg.search.value || '').toLowerCase().trim();
+      cfg.list.querySelectorAll('.ul-modal-item').forEach(function(item) {
+        const hay = (item.dataset.search || '').toLowerCase();
+        item.style.display = !term || hay.indexOf(term) !== -1 ? '' : 'none';
+      });
+    }
+
+    Object.keys(filterMap).forEach(function(key) {
+      const cfg = filterMap[key];
+      if (cfg.open) cfg.open.addEventListener('click', function() { openModal(key); });
+      if (cfg.display) cfg.display.addEventListener('click', function() { openModal(key); });
+      if (cfg.clear) cfg.clear.addEventListener('click', function() { clearFilterValue(key); });
+      if (cfg.search) cfg.search.addEventListener('input', function() { filterModalItems(key); });
+      if (cfg.list) {
+        cfg.list.querySelectorAll('.ul-modal-item').forEach(function(item) {
+          item.addEventListener('click', function() {
+            setFilterValue(key, item.dataset.value || '', item.dataset.label || 'All');
+          });
+          item.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              setFilterValue(key, item.dataset.value || '', item.dataset.label || 'All');
+            }
+          });
+        });
+      }
+      if (cfg.modal) {
+        cfg.modal.addEventListener('click', function(e) {
+          if (e.target === cfg.modal) closeModal(key);
+        });
+      }
+    });
+
+    document.querySelectorAll('[data-close-modal]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const modalId = btn.getAttribute('data-close-modal');
+        const modal = document.getElementById(modalId);
+        if (!modal) return;
+        modal.classList.remove('open');
+      });
+    });
+    document.querySelectorAll('[data-clear-filter]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const key = btn.getAttribute('data-clear-filter');
+        clearFilterValue(key);
+      });
+    });
+
+    if (btnFilter) {
+      btnFilter.addEventListener('click', function() {
+        const location = (filterMap.location.hidden.value || '').trim();
+        const tenantId = (filterMap.tenant.hidden.value || '').trim();
+        const roleId = (filterMap.role.hidden.value || '').trim();
+        const search = (searchFilter && searchFilter.value ? searchFilter.value : '').trim();
+        const params = new URLSearchParams(window.location.search);
+        if (location) params.set('location', location);
+        else params.delete('location');
+        if (tenantId) params.set('tenant_id', tenantId);
+        else params.delete('tenant_id');
+        if (roleId) params.set('role_id', roleId);
+        else params.delete('role_id');
+        if (search) params.set('search', search);
+        else params.delete('search');
+        window.location.search = params.toString();
+      });
+    }
+    if (btnClearFilter) {
+      btnClearFilter.addEventListener('click', function() {
+        const params = new URLSearchParams(window.location.search);
+        params.delete('location');
+        params.delete('tenant_id');
+        params.delete('role_id');
+        params.delete('search');
+        window.location.search = params.toString();
+      });
+    }
+    if (searchFilter) {
+      searchFilter.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && btnFilter) {
+          e.preventDefault();
+          btnFilter.click();
+        }
+      });
+    }
+  })();
+  </script>
+{% endblock %}

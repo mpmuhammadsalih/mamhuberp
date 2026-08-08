@@ -1,0 +1,1018 @@
+{% extends "base.html" %}
+{% block title %}Warehouse storage{% endblock %}
+{% block content %}
+<style>
+  #whListTable { width: 100%; border-collapse: collapse !important; }
+  #whListTable th, #whListTable td {
+    border: 1px solid #cfd4da !important; padding: 7px 10px !important; font-size: 13px; vertical-align: top;
+  }
+  #whListTable thead th {
+    background: #eef2f7 !important; position: sticky; top: 0; z-index: 2; font-weight: 600; color: #374151;
+  }
+  #whListTable tbody tr:nth-child(even) { background: #fbfcfe; }
+  #whListTable tbody tr:hover { background: #f0f5ff !important; }
+  .wh-level-0 { font-weight: 600; }
+  .wh-level-1 { padding-left: 1.2rem !important; }
+  .wh-level-2 { padding-left: 2.4rem !important; }
+  .wh-link-btn { font-size: 12px; padding: 3px 10px; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; color: #334155; }
+  .wh-link-btn:hover { background: #f1f5f9; border-color: #94a3b8; }
+  .wh-link-btn--primary { border-color: #0f766e; color: #0f766e; }
+  .wh-badge-s, .wh-badge-b, .wh-badge-r, .wh-badge-v, .wh-badge-t {
+    display: inline-block; min-width: 1rem; text-align: center; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 700;
+  }
+  .wh-badge-s { background: #e0f2fe; color: #0369a1; }
+  .wh-badge-b { background: #ede9fe; color: #5b21b6; }
+  .wh-badge-r { background: #ffedd5; color: #c2410c; }
+  .wh-badge-t { background: #d1fae5; color: #047857; }
+  .wh-badge-v { background: #f1f5f9; color: #64748b; }
+  .wh-st-active { color: #166534; font-weight: 600; }
+  .wh-st-inactive { color: #9ca3af; }
+  .wh-tree { font-size: 13px; }
+  .wh-tree ul { list-style: none; padding-left: 20px; margin: 0; }
+  .wh-tree > ul { padding-left: 0; }
+  .wh-tree li { margin: 3px 0; position: relative; }
+  .wh-tree li::before { content: ''; position: absolute; left: -20px; top: 15px; width: 15px; height: 1px; border-top: 1px solid #ddd; }
+  .wh-tree li::after  { content: ''; position: absolute; left: -20px; top: 0; bottom: 15px; width: 1px; border-left: 1px solid #ddd; }
+  .wh-tree li:last-child::after { display: none; }
+  .wh-tree ul.wh-children.is-collapsed { display: none; }
+  .wh-tree-toggle {
+    flex: 0 0 22px; width: 22px; height: 22px; padding: 0; border: none; background: #eef2f7;
+    border-radius: 4px; cursor: pointer; font-size: 10px; line-height: 1; color: #4b5563;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .wh-tree-toggle:hover { background: #ccfbf1; color: #0f766e; }
+  .wh-tree-spacer { flex: 0 0 22px; width: 22px; }
+  .wh-item {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 7px 10px;
+    border: 1px solid #e2e8f0; border-radius: 4px; margin: 2px 0; background: #fff; transition: background .15s;
+  }
+  .wh-item:hover { background: #f0fdfa; }
+  .wh-item--virtual { background: #f8fafc; border-style: dashed; }
+  .wh-item-code { font-weight: 600; color: #0f766e; min-width: 64px; font-family: monospace; font-size: 13px; }
+  .wh-item-name { flex: 1; min-width: 120px; font-size: 13px; }
+  .wh-item-actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .view-toggle { display: flex; gap: 0; border: 1px solid #dee2e6; border-radius: 4px; overflow: hidden; }
+  .view-toggle button { padding: 6px 16px; font-size: 13px; border: none; background: #fff; color: #555; cursor: pointer; }
+  .view-toggle button.active { background: #0f766e; color: #fff; }
+  .table-wrap { max-height: calc(100vh - 240px); overflow: auto; }
+  .tree-wrap { max-height: calc(100vh - 240px); overflow: auto; padding: 4px; }
+  .wh-loc-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
+  .wh-loc-bar label { font-weight: 600; font-size: 13px; color: #334155; margin: 0; }
+  .wh-loc-picker-row {
+    display: flex; flex-wrap: wrap; align-items: stretch; gap: 0; min-width: 0; flex: 1; max-width: 520px;
+    border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; overflow: hidden;
+  }
+  .wh-loc-picker-row input[readonly] {
+    flex: 1; min-width: 180px; border: none !important; padding: 8px 12px; font-size: 13px;
+    background: #fff !important; cursor: default;
+  }
+  .wh-loc-picker-btn {
+    flex-shrink: 0; padding: 8px 14px; border: none; border-left: 1px solid #e2e8f0;
+    background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .wh-loc-picker-btn:hover { filter: brightness(1.05); }
+  .wh-loc-picker-btn:disabled { opacity: 0.5; cursor: not-allowed; filter: none; }
+  .wh-toolbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .wh-src-pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #e0f2fe; color: #0369a1; font-weight: 600; }
+  #whLocationPickerModal .modal__content { max-width: 560px; width: 96vw; }
+  #whLocationPickerModal .scroll-table { max-height: 52vh; overflow: auto; border: 1px solid #e2e8f0; border-radius: 6px; }
+  #whBulkLayoutModal .modal__content { max-width: 680px; width: 96vw; }
+  .wh-bulk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 12px 0; }
+  .wh-bulk-grid label, .wh-bulk-sites label { font-size: 12px; font-weight: 700; color: #334155; display: block; margin-bottom: 4px; }
+  .wh-bulk-grid input { width: 100%; box-sizing: border-box; }
+  .wh-bulk-sites { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; max-height: 220px; overflow: auto; background: #fff; }
+  .wh-bulk-site { display: flex; gap: 8px; align-items: center; padding: 5px 2px; font-size: 13px; }
+  .wh-bulk-site code { font-size: 12px; color: #0f766e; }
+  .wh-bulk-hint { background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 10px 12px; font-size: 12px; color: #475569; line-height: 1.45; }
+</style>
+<div class="list-refresh-slot" style="display:flex;justify-content:flex-end;flex-wrap:wrap;align-items:center;margin:6px 0 12px;">{% include 'includes/list_refresh_bar.html' %}</div>
+
+
+<div class="page-po nexa-list-page" style="max-width: 1400px;">
+  <div class="page-po__topbar" style="align-items: flex-start; gap: 12px; flex-wrap: wrap;">
+    <div>
+      <h1 class="page-po__title">Warehouse storage</h1>
+      <p class="page-po__muted"><strong>ERP-style:</strong> <strong>rack</strong> (bay) → <strong>shelf</strong> (level) → <strong>bin</strong> or <strong>staging</strong> (putaway / receive). One warehouse: <code>WAREHOUSE_ID</code> + <code>PARENT_STORAGE_ID</code> (rack has no parent; shelf → rack; bin or staging bin → shelf).</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+      <button type="button" class="page-po__btn-primary" id="whBtnBulkLayout" {% if not location_sites %}disabled title="Add warehouse locations first"{% endif %} style="flex-shrink:0; background: linear-gradient(135deg, #4338ca 0%, #3730a3 100%) !important; border: none !important;">Auto generate bins</button>
+      <button type="button" class="page-po__btn-primary" data-wh-action="create-rack" id="whBtnNewRack" {% if not location_sites or not selected_loc_key %}disabled title="Choose a warehouse location first"{% endif %} style="flex-shrink:0; background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%) !important; border: none !important;">+ New rack</button>
+    </div>
+  </div>
+
+  <div class="wh-loc-bar">
+    <label for="whLocationDisplay">Warehouse location</label>
+    <div class="wh-loc-picker-row">
+      <input type="text" id="whLocationDisplay" readonly
+        placeholder="Click Pick to choose a warehouse site…"
+        value="{% if selected_loc_key %}{{ selected_loc_name }} — {{ selected_loc_key }}{% endif %}"
+        aria-label="Selected warehouse location" />
+      <button type="button" class="wh-loc-picker-btn" id="whLocationPickBtn" {% if not location_sites %}disabled title="No locations available"{% endif %}>Pick…</button>
+    </div>
+    {% if selected_loc_key %}
+    <span class="wh-src-pill" title="Data source for site list">Source: {{ location_source or '—' }}</span>
+    <span class="muted" style="font-size:12px;">Session location: {{ session_location_code }}</span>
+    {% endif %}
+  </div>
+
+  <div class="wh-toolbar-row">
+    <div class="view-toggle">
+      <button type="button" id="btnWhTreeView" class="active" onclick="whSwitchView('tree')">Tree view</button>
+      <button type="button" id="btnWhListView" onclick="whSwitchView('list')">List view</button>
+    </div>
+    <span id="whTreeExpandBar" style="display:inline-flex; gap:6px; align-items:center;">
+      <button type="button" class="input" id="whExpandAll" style="padding:5px 10px; cursor:pointer; font-size:12px;" title="Open all nodes">Expand all</button>
+      <button type="button" class="input" id="whCollapseAll" style="padding:5px 10px; cursor:pointer; font-size:12px;" title="Close all nodes">Collapse all</button>
+    </span>
+    <input type="text" class="input" id="searchWh" placeholder="Search code or name…" style="min-width:240px; max-width:380px;" onkeyup="filterWhStorage()" />
+  </div>
+
+  <div id="whTreeViewCard">
+    <div style="background:#eef2f7; border:1px solid #cfd4da; border-radius:4px 4px 0 0; padding:8px 12px; font-weight:600; font-size:13px; color:#374151;">
+      Storage hierarchy (rack → shelf → bin / staging)
+    </div>
+    <div style="border:1px solid #cfd4da; border-top:none; border-radius:0 0 4px 4px;">
+      <div class="tree-wrap">
+        <div id="whTreeContainer" class="wh-tree">
+          {% if storage_tree and storage_tree|length > 0 %}
+          <ul>
+            {% for m in storage_tree %}
+            {% set mtype = (m.storage_type or '')|upper %}
+            {% if mtype == '_UNPLACED' %}
+            <li data-search="unplaced {{ m.name|e }}">
+              <div class="wh-item wh-item--virtual">
+                <span class="wh-badge-v">~</span>
+                <span class="wh-item-name" style="font-weight:600;">{{ m.name }}</span>
+                <span class="muted" style="font-size:12px;">Re-parent in Edit, or add a <strong>+ New rack</strong> above</span>
+              </div>
+              {% if m.children and m.children|length > 0 %}
+              <ul class="wh-children">
+                {% for c in m.children %}
+                {% set cst = (c.storage_type or 'BIN')|upper %}
+                <li data-search="{{ ((c.get('code') or '')|string) ~ ' ' ~ (c.name or '') ~ ' ' ~ cst }}">
+                  <div class="wh-item">
+                    <span class="wh-tree-spacer" style="width:22px;flex:0 0 22px;"></span>
+                    {% if cst == 'RACK' %}<span class="wh-badge-r">R</span>
+                    {% elif cst == 'SHELF' %}<span class="wh-badge-s">S</span>
+                    {% elif cst == 'STAGING' %}<span class="wh-badge-t">T</span>
+                    {% else %}<span class="wh-badge-b">B</span>{% endif %}
+                    <span class="wh-item-code">{{ c.get('code') or '—' }}</span>
+                    <span class="wh-item-name">{{ c.name or '' }}</span>
+                    <span class="muted" style="font-size:12px;">ID {{ c.storage_id }}</span>
+                    {% set st0 = (c.status or 'ACTIVE')|upper %}
+                    {% if st0 == 'ACTIVE' %}<span class="wh-st-active">{{ st0 }}</span>{% else %}<span class="wh-st-inactive">{{ st0 }}</span>{% endif %}
+                    <div class="wh-item-actions">
+                      <button type="button" class="wh-link-btn" data-wh-action="edit" data-sid="{{ c.storage_id }}"
+                        data-stype="{{ cst }}"
+                        data-pid="{% if c.get('parent_storage_id') is not none %}{{ c.get('parent_storage_id') }}{% endif %}"
+                        data-name="{{ (c.name or '')|e }}" data-code="{{ c.get('code') or '' }}"
+                        data-status="{{ (c.status or 'ACTIVE')|e }}" data-remarks="{{ (c.remarks or '')|e }}">Edit</button>
+                      <button type="button" class="wh-link-btn" style="border-color:#fca5a5;color:#b91c1c;" data-wh-action="delete" data-sid="{{ c.storage_id }}" data-code="{{ c.get('code') or '' }}">Delete</button>
+                    </div>
+                  </div>
+                </li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+            </li>
+            {% else %}
+            <li data-search="{{ (m.code|string|default('') ~ ' ' ~ (m.name or '') ~ ' R rack') }}">
+              <div class="wh-item">
+                {% if m.children and m.children|length > 0 %}
+                <button type="button" class="wh-tree-toggle" aria-expanded="true" data-wh-caret>▼</button>
+                {% else %}
+                <span class="wh-tree-spacer" aria-hidden="true"></span>
+                {% endif %}
+                <span class="wh-badge-r">R</span>
+                <span class="wh-item-code">{{ m.code }}</span>
+                <span class="wh-item-name">{{ m.name or '' }}</span>
+                <span class="muted" style="font-size:12px;">ID {{ m.storage_id }}</span>
+                {% set sm = (m.status or 'ACTIVE')|upper %}
+                {% if sm == 'ACTIVE' %}<span class="wh-st-active">{{ sm }}</span>{% else %}<span class="wh-st-inactive">{{ sm }}</span>{% endif %}
+                <div class="wh-item-actions">
+                  <button type="button" class="wh-link-btn" data-wh-action="edit" data-sid="{{ m.storage_id }}"
+                    data-stype="RACK" data-pid="" data-name="{{ (m.name or '')|e }}" data-code="{{ m.code }}"
+                    data-status="{{ (m.status or 'ACTIVE')|e }}" data-remarks="{{ (m.remarks or '')|e }}">Edit</button>
+                  <button type="button" class="wh-link-btn wh-link-btn--primary" data-wh-action="create-shelf" data-rack-id="{{ m.storage_id }}">+ Shelf</button>
+                  <button type="button" class="wh-link-btn" style="border-color:#fca5a5;color:#b91c1c;" data-wh-action="delete" data-sid="{{ m.storage_id }}" data-code="{{ m.code }}">Delete</button>
+                </div>
+              </div>
+              {% if m.children and m.children|length > 0 %}
+              <ul class="wh-children">
+                {% for s in m.children %}
+                <li data-search="{{ (s.code|string|default('') ~ ' ' ~ (s.name or '') ~ ' S shelf') }}">
+                  <div class="wh-item">
+                    {% if s.children and s.children|length > 0 %}
+                    <button type="button" class="wh-tree-toggle" aria-expanded="true" data-wh-caret>▼</button>
+                    {% else %}
+                    <span class="wh-tree-spacer" style="width:22px;flex:0 0 22px;"></span>
+                    {% endif %}
+                    <span class="wh-badge-s">S</span>
+                    <span class="wh-item-code">{{ s.code }}</span>
+                    <span class="wh-item-name">{{ s.name or '' }}</span>
+                    <span class="muted" style="font-size:12px;">ID {{ s.storage_id }} · rack {{ m.code }}</span>
+                    {% set sst = (s.status or 'ACTIVE')|upper %}
+                    {% if sst == 'ACTIVE' %}<span class="wh-st-active">{{ sst }}</span>{% else %}<span class="wh-st-inactive">{{ sst }}</span>{% endif %}
+                    <div class="wh-item-actions">
+                      <button type="button" class="wh-link-btn" data-wh-action="edit" data-sid="{{ s.storage_id }}"
+                        data-stype="SHELF"
+                        data-pid="{% if s.get('parent_storage_id') is not none %}{{ s.get('parent_storage_id') }}{% else %}{% if m.storage_id is not none %}{{ m.storage_id }}{% endif %}{% endif %}"
+                        data-name="{{ (s.name or '')|e }}" data-code="{{ s.code }}"
+                        data-status="{{ (s.status or 'ACTIVE')|e }}" data-remarks="{{ (s.remarks or '')|e }}">Edit</button>
+                      <button type="button" class="wh-link-btn wh-link-btn--primary" data-wh-action="create-bin" data-shelf-id="{{ s.storage_id }}">+ Bin</button>
+                      <button type="button" class="wh-link-btn wh-link-btn--primary" data-wh-action="create-staging" data-shelf-id="{{ s.storage_id }}">+ Staging</button>
+                      <button type="button" class="wh-link-btn" style="border-color:#fca5a5;color:#b91c1c;" data-wh-action="delete" data-sid="{{ s.storage_id }}" data-code="{{ s.code }}">Delete</button>
+                    </div>
+                  </div>
+                  {% if s.children and s.children|length > 0 %}
+                  <ul class="wh-children">
+                    {% for b in s.children %}
+                    {% set bst2 = ((b.storage_type or 'BIN')|upper) %}
+                    <li data-search="{{ (b.code|string|default('') ~ ' ' ~ (b.name or '') ~ ' ' ~ ('staging' if bst2 == 'STAGING' else 'bin')) }}">
+                      <div class="wh-item">
+                        <span class="wh-tree-spacer" style="width:22px;flex:0 0 22px;"></span>
+                        {% if bst2 == 'STAGING' %}<span class="wh-badge-t">T</span>
+                        {% else %}<span class="wh-badge-b">B</span>{% endif %}
+                        <span class="wh-item-code">{{ b.code }}</span>
+                        <span class="wh-item-name">{{ b.name or '' }}</span>
+                        <span class="muted" style="font-size:12px;">ID {{ b.storage_id }} · shelf {{ s.code }}</span>
+                        {% set bt = (b.status or 'ACTIVE')|upper %}
+                        {% if bt == 'ACTIVE' %}<span class="wh-st-active">{{ bt }}</span>{% else %}<span class="wh-st-inactive">{{ bt }}</span>{% endif %}
+                        <div class="wh-item-actions">
+                          <button type="button" class="wh-link-btn" data-wh-action="edit" data-sid="{{ b.storage_id }}"
+                            data-stype="{{ bst2 }}"
+                            data-pid="{% if b.get('parent_storage_id') is not none %}{{ b.get('parent_storage_id') }}{% else %}{% if s.storage_id is not none %}{{ s.storage_id }}{% endif %}{% endif %}"
+                            data-name="{{ (b.name or '')|e }}" data-code="{{ b.code }}"
+                            data-status="{{ (b.status or 'ACTIVE')|e }}" data-remarks="{{ (b.remarks or '')|e }}">Edit</button>
+                          <button type="button" class="wh-link-btn" style="border-color:#fca5a5;color:#b91c1c;" data-wh-action="delete" data-sid="{{ b.storage_id }}" data-code="{{ b.code }}">Delete</button>
+                        </div>
+                      </div>
+                    </li>
+                    {% endfor %}
+                  </ul>
+                  {% endif %}
+                </li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+            </li>
+            {% endif %}
+            {% endfor %}
+          </ul>
+          {% else %}
+          <p class="muted" style="padding:12px;">{% if not selected_loc_key %}Pick a warehouse location to see storage.{% else %}No racks for this site yet. Use <strong>+ New rack</strong> (then add a shelf, then bins or staging).{% endif %}</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="whListViewCard" style="display:none;">
+    <div class="table-wrap">
+      <table id="whListTable" class="table">
+        <thead>
+          <tr>
+            <th>Sl.</th>
+            <th>Type</th>
+            <th>Level</th>
+            <th>ID</th>
+            <th>Code</th>
+            <th>Name</th>
+            <th>Parent rack</th>
+            <th>Parent shelf</th>
+            <th>Status</th>
+            <th>Remarks</th>
+            <th style="text-align:center; white-space:nowrap;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="whListBody">
+          {% for r in flat_rows %}
+          <tr class="wh-level-{{ r.level }}"
+            data-search="{{ (r.code|string ~ ' ' ~ (r.name or '') ~ ' ' ~ (r.storage_type or '') ~ ' ' ~ (r.level_name or '')) }}">
+            <td style="text-align:center; color:#6b7280;">{{ loop.index }}</td>
+            <td>
+              {% if r.storage_type == 'SHELF' %}<span class="wh-badge-s">S</span> Shelf
+              {% elif r.storage_type == 'RACK' %}<span class="wh-badge-r">R</span> Rack
+              {% elif r.storage_type == 'STAGING' %}<span class="wh-badge-t">T</span> Staging
+              {% else %}<span class="wh-badge-b">B</span> Bin{% endif %}
+            </td>
+            <td>{{ r.level_name }}</td>
+            <td style="font-family:monospace;">{{ r.storage_id }}</td>
+            <td style="font-family:monospace; font-weight:600;">{{ r.code }}</td>
+            <td>{{ r.name or '' }}</td>
+            <td class="muted" style="font-size:12px;">{{ r.get('parent_rack_code') or '—' }}</td>
+            <td class="muted" style="font-size:12px;">{{ r.get('parent_shelf_code') or '—' }}</td>
+            <td>
+              {% set stl = (r.status or 'ACTIVE')|upper %}
+              {% if stl == 'ACTIVE' %}<span class="wh-st-active">{{ stl }}</span>
+              {% else %}<span class="wh-st-inactive">{{ stl }}</span>{% endif %}
+            </td>
+            <td class="muted" style="font-size:12px;">{{ r.remarks or '—' }}</td>
+            <td style="text-align:center; white-space:nowrap;">
+              <button type="button" class="wh-link-btn" data-wh-action="edit" data-sid="{{ r.storage_id }}"
+                data-stype="{{ r.storage_type }}"
+                data-pid="{% if r.get('parent_storage_id') is not none %}{{ r.get('parent_storage_id') }}{% endif %}"
+                data-name="{{ (r.name or '')|e }}" data-code="{{ r.code }}"
+                data-status="{{ (r.status or 'ACTIVE')|e }}" data-remarks="{{ (r.remarks or '')|e }}">Edit</button>
+              {% if r.storage_type == 'RACK' %}
+              <button type="button" class="wh-link-btn wh-link-btn--primary" data-wh-action="create-shelf" data-rack-id="{{ r.storage_id }}">+ Shelf</button>
+              {% elif r.storage_type == 'SHELF' %}
+              <button type="button" class="wh-link-btn wh-link-btn--primary" data-wh-action="create-bin" data-shelf-id="{{ r.storage_id }}">+ Bin</button>
+              <button type="button" class="wh-link-btn wh-link-btn--primary" data-wh-action="create-staging" data-shelf-id="{{ r.storage_id }}">+ Staging</button>
+              {% endif %}
+              <button type="button" class="wh-link-btn" style="border-color:#fca5a5;color:#b91c1c;" data-wh-action="delete" data-sid="{{ r.storage_id }}" data-code="{{ r.code }}">Delete</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="11" class="muted" style="text-align:center; padding:20px;">No rows. Add a <strong>rack</strong>, then a <strong>shelf</strong>, then <strong>bins</strong> or <strong>staging</strong>.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="whLocationPickerModal" role="dialog" aria-modal="true" aria-labelledby="whLocPickerTitle">
+  <div class="modal__overlay" data-close="whLocationPickerModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3 id="whLocPickerTitle">Select warehouse location</h3>
+      <button type="button" class="modal__close" data-close="whLocationPickerModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <p class="page-po__muted" style="margin-bottom:10px;">Choose a site from <strong>WAREHOUSE_MASTER</strong> or <strong>LOCATIONMASTER</strong>. Double-click or tap a row to apply.</p>
+      <div class="modal__search mb-2">
+        <div class="search-field">
+          <input type="text" id="whLocPickerSearch" placeholder="Search by name or code…" autocomplete="off" />
+          <button type="button" class="search-clear" id="whLocPickerSearchClear" style="display:none;">×</button>
+        </div>
+      </div>
+      <div class="scroll-table modal__table">
+        <table class="table" id="whLocPickerTable">
+          <thead>
+            <tr>
+              <th>Code / key</th>
+              <th>Name</th>
+              <th>Source</th>
+            </tr>
+          </thead>
+          <tbody id="whLocPickerBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:8px; padding:12px 20px; border-top:1px solid #e2e8f0;">
+      <button type="button" class="btn btn-secondary" data-close="whLocationPickerModal">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="whBulkLayoutModal" role="dialog" aria-modal="true" aria-labelledby="whBulkLayoutTitle">
+  <div class="modal__overlay" data-close="whBulkLayoutModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3 id="whBulkLayoutTitle">Auto generate rack / shelf / bin layout</h3>
+      <button type="button" class="modal__close" data-close="whBulkLayoutModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="wh-bulk-hint">
+        This creates unique codes per store using this pattern:
+        <strong>S01-R01</strong> → <strong>S01-R01-SH01</strong> → <strong>S01-R01-SH01-B01</strong>.
+        For example, <strong>STORE1</strong> becomes <strong>S01</strong>, <strong>STORE2</strong> becomes <strong>S02</strong>.
+        Existing codes are skipped, so you can run it again safely.
+      </div>
+      <div class="wh-bulk-grid">
+        <div>
+          <label for="whBulkRacks">Racks per store</label>
+          <input type="number" class="form-control" id="whBulkRacks" value="5" min="1" max="50" />
+        </div>
+        <div>
+          <label for="whBulkShelves">Shelves per rack</label>
+          <input type="number" class="form-control" id="whBulkShelves" value="3" min="1" max="50" />
+        </div>
+        <div>
+          <label for="whBulkBins">Bins per shelf</label>
+          <input type="number" class="form-control" id="whBulkBins" value="6" min="1" max="100" />
+        </div>
+      </div>
+      <label class="wh-bulk-site" style="padding-left:0;margin-bottom:8px;">
+        <input type="checkbox" id="whBulkStorePrefix" checked />
+        <span>Include store prefix in codes (<code>S01-R01-SH01-B01</code>)</span>
+      </label>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:8px 0;">
+        <label style="font-weight:700;color:#334155;margin:0;">Stores / warehouse sites</label>
+        <button type="button" class="wh-link-btn" id="whBulkSelectAll">Select all</button>
+      </div>
+      <div class="wh-bulk-sites" id="whBulkSites">
+        {% for s in location_sites %}
+        {% set skey = (s.key|string).strip() %}
+        <label class="wh-bulk-site">
+          <input type="checkbox" value="{{ skey }}" {% if selected_loc_key and skey == selected_loc_key %}checked{% endif %} />
+          <span><code>{{ skey }}</code>{% if s.name %} — {{ s.name }}{% endif %}</span>
+        </label>
+        {% endfor %}
+      </div>
+      <p class="page-po__muted" style="font-size:12px;margin-top:10px;">
+        Default setup for 3 stores will create up to <strong>330 rows</strong>: 15 racks, 45 shelves, and 270 bins.
+      </p>
+      <pre id="whBulkResult" class="wh-bulk-hint" style="display:none;white-space:pre-wrap;margin-top:10px;"></pre>
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:8px; padding:12px 20px; border-top:1px solid #e2e8f0;">
+      <button type="button" class="btn btn-secondary" data-close="whBulkLayoutModal">Cancel</button>
+      <button type="button" class="btn btn-primary" id="whBulkRun" style="background:#4338ca; border-color:#4338ca;">Generate</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="whModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="whModal"></div>
+  <div class="modal__content" style="max-width: 460px;">
+    <div class="modal__header">
+      <h3 id="whModalTitle">Storage</h3>
+      <button type="button" class="modal__close" data-close="whModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <p class="page-po__muted" id="whModalHint" style="margin-bottom:12px;"></p>
+      <input type="hidden" id="wh-mode" />
+      <input type="hidden" id="wh-sid" />
+      <input type="hidden" id="wh-stype" value="" />
+      <div class="mb-3" id="wh-code-row">
+        <label class="form-label" for="wh-code">Code *</label>
+        <input type="text" class="form-control" id="wh-code" maxlength="50" placeholder="e.g. S-A1, BIN-01" style="text-transform:uppercase;" />
+      </div>
+      <div class="mb-3" id="wh-code-readonly-row" style="display:none;">
+        <label class="form-label" for="wh-code-readonly">Code</label>
+        <input type="text" class="form-control" id="wh-code-readonly" readonly style="background:#f8fafc; font-family:monospace;" />
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="wh-name">Name *</label>
+        <input type="text" class="form-control" id="wh-name" maxlength="200" />
+      </div>
+      <div class="mb-3" id="wh-status-row" style="display:none;">
+        <label class="form-label" for="wh-status">Status</label>
+        <select class="form-select" id="wh-status">
+          <option value="ACTIVE">Active</option>
+          <option value="INACTIVE">Inactive</option>
+        </select>
+      </div>
+      <div class="mb-3" id="wh-parent-row" style="display:none;">
+        <label class="form-label" for="wh-parent" id="wh-parent-label">Parent</label>
+        <select class="form-select" id="wh-parent" aria-label="Parent storage"></select>
+        <p class="page-po__muted" id="wh-parent-hint" style="font-size:12px; margin-top:6px; margin-bottom:0;"></p>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="wh-remarks">Remarks</label>
+        <input type="text" class="form-control" id="wh-remarks" maxlength="500" placeholder="Optional" />
+      </div>
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:8px; padding:12px 20px; border-top:1px solid #e2e8f0;">
+      <button type="button" class="btn btn-secondary" data-close="whModal">Cancel</button>
+      <button type="button" class="btn btn-primary" id="wh-save" style="background:#0d9488; border-color:#0d9488;">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var WH_SAVE_URL = {{ url_for('warehouse.warehouse_storage_save')|tojson }};
+var WH_BASE_URL = {{ url_for('warehouse.warehouse_storage_list')|tojson }};
+function whParseJsonResponse(r) {
+  return r.text().then(function(txt) {
+    var data = null;
+    if (txt) {
+      try { data = JSON.parse(txt); } catch (e) { /* not JSON */ }
+    }
+    return { ok: r.ok, data: data, raw: txt, status: r.status };
+  });
+}
+function whAlertSaveError(res, fallback) {
+  if (res.data && res.data.error) {
+    alert(res.data.error);
+    return;
+  }
+  if (res.raw && res.raw.indexOf('<') >= 0) {
+    alert((fallback || 'Save failed') + ' (HTTP ' + res.status + '). Check server log.');
+    return;
+  }
+  if (res.raw) {
+    alert(res.raw.slice(0, 500));
+    return;
+  }
+  alert(fallback || 'Save failed');
+}
+function whFetchSave(body, btn) {
+  if (btn) btn.disabled = true;
+  var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  var timer = controller ? setTimeout(function() { controller.abort(); }, 300000) : null;
+  return fetch(WH_SAVE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify(body),
+    signal: controller ? controller.signal : undefined
+  }).then(whParseJsonResponse).finally(function() {
+    if (timer) clearTimeout(timer);
+    if (btn) btn.disabled = false;
+  });
+}
+function whFetchSaveCatch(err, btn) {
+  if (btn) btn.disabled = false;
+  var msg = (err && err.name === 'AbortError') ? 'Request timed out (5 min). Try fewer stores or smaller layout.' : (err && err.message ? err.message : 'network error');
+  alert('Request failed: ' + msg);
+}
+var WH_LOC_KEY = {{ (selected_loc_key or '')|tojson }};
+var WH_LOCATION_SITES = {{ location_sites|tojson }};
+var WH_SHELVES = {{ (rows_shelf or [])|tojson }};
+var WH_RACKS = {{ (rows_rack or [])|tojson }};
+var WH_TITLES = { SHELF: 'Shelf', BIN: 'Bin', RACK: 'Rack', STAGING: 'Staging' };
+
+function whNavigateToLocation(key) {
+  var v = (key || '').trim();
+  if (!v) return;
+  var u = WH_BASE_URL + (WH_BASE_URL.indexOf('?') >= 0 ? '&' : '?') + 'wh=' + encodeURIComponent(v);
+  window.location.href = u;
+}
+
+function whLocPickerClose() {
+  var m = document.getElementById('whLocationPickerModal');
+  if (m) m.classList.add('hidden');
+}
+function whLocPickerOpen() {
+  var m = document.getElementById('whLocationPickerModal');
+  if (!m) return;
+  whLocPickerRender('');
+  var se = document.getElementById('whLocPickerSearch');
+  if (se) { se.value = ''; se.focus(); }
+  var clr = document.getElementById('whLocPickerSearchClear');
+  if (clr) clr.style.display = 'none';
+  m.classList.remove('hidden');
+}
+function whBulkLayoutOpen() {
+  var m = document.getElementById('whBulkLayoutModal');
+  if (!m) return;
+  var out = document.getElementById('whBulkResult');
+  if (out) { out.style.display = 'none'; out.textContent = ''; }
+  m.classList.remove('hidden');
+}
+function whBulkLayoutClose() {
+  var m = document.getElementById('whBulkLayoutModal');
+  if (m) m.classList.add('hidden');
+}
+function whLocPickerRender(filterQ) {
+  var tbody = document.getElementById('whLocPickerBody');
+  if (!tbody) return;
+  var q = (filterQ || '').trim().toLowerCase();
+  var list = WH_LOCATION_SITES || [];
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="3" class="muted" style="text-align:center;padding:20px;">No warehouse locations.</td></tr>';
+    return;
+  }
+  var rows = !q ? list : list.filter(function(s) {
+    var k = String(s.key || '').toLowerCase();
+    var n = String(s.name || '').toLowerCase();
+    return k.indexOf(q) >= 0 || n.indexOf(q) >= 0 || String(s.source || '').toLowerCase().indexOf(q) >= 0;
+  });
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="3" class="muted" style="text-align:center;padding:20px;">No locations match.</td></tr>';
+    return;
+  }
+  function esc(t) {
+    return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  }
+  tbody.innerHTML = rows.map(function(s) {
+    var k = String(s.key == null ? '' : s.key).trim();
+    return '<tr data-loc-key="' + esc(k) + '"><td style="font-family:monospace;font-weight:600;">' + esc(k) + '</td><td>' + esc(s.name) + '</td><td class="muted">' + esc(s.source) + '</td></tr>';
+  }).join('');
+}
+(function() {
+  var btn = document.getElementById('whLocationPickBtn');
+  if (btn) btn.addEventListener('click', function() { whLocPickerOpen(); });
+  var bulkBtn = document.getElementById('whBtnBulkLayout');
+  if (bulkBtn) bulkBtn.addEventListener('click', function() { whBulkLayoutOpen(); });
+  var modal = document.getElementById('whLocationPickerModal');
+  if (modal) {
+    modal.addEventListener('click', function(e) {
+      if (e.target.getAttribute('data-close') === 'whLocationPickerModal' || e.target.classList.contains('modal__overlay') || e.target.classList.contains('modal__close')) {
+        whLocPickerClose();
+      }
+    });
+  }
+  var bulkModal = document.getElementById('whBulkLayoutModal');
+  if (bulkModal) {
+    bulkModal.addEventListener('click', function(e) {
+      if (e.target.getAttribute('data-close') === 'whBulkLayoutModal' || e.target.classList.contains('modal__overlay') || e.target.classList.contains('modal__close')) {
+        whBulkLayoutClose();
+      }
+    });
+  }
+  var selAll = document.getElementById('whBulkSelectAll');
+  if (selAll) {
+    selAll.addEventListener('click', function() {
+      var boxes = document.querySelectorAll('#whBulkSites input[type="checkbox"]');
+      var allChecked = true;
+      for (var i = 0; i < boxes.length; i++) {
+        if (!boxes[i].checked) { allChecked = false; break; }
+      }
+      for (var j = 0; j < boxes.length; j++) boxes[j].checked = !allChecked;
+      selAll.textContent = allChecked ? 'Select all' : 'Clear all';
+    });
+  }
+  var runBulk = document.getElementById('whBulkRun');
+  if (runBulk) {
+    runBulk.addEventListener('click', function() {
+      var keys = [];
+      var boxes = document.querySelectorAll('#whBulkSites input[type="checkbox"]:checked');
+      for (var i = 0; i < boxes.length; i++) {
+        if (boxes[i].value) keys.push(boxes[i].value);
+      }
+      if (!keys.length) { alert('Choose at least one store / warehouse site.'); return; }
+      var racks = parseInt((document.getElementById('whBulkRacks') || {}).value || '5', 10);
+      var shelves = parseInt((document.getElementById('whBulkShelves') || {}).value || '3', 10);
+      var bins = parseInt((document.getElementById('whBulkBins') || {}).value || '6', 10);
+      var prefixEl = document.getElementById('whBulkStorePrefix');
+      var includePrefix = !prefixEl || prefixEl.checked;
+      var planned = keys.length * (racks + (racks * shelves) + (racks * shelves * bins));
+      var fmt = includePrefix ? 'S01-R01 → S01-R01-SH01 → S01-R01-SH01-B01' : 'R01 → R01-SH01 → R01-SH01-B01';
+      if (!confirm('Generate standard layout for ' + keys.length + ' store(s)?\\nPlanned rows (before skipping existing): ' + planned + '\\n\\nFormat: ' + fmt)) return;
+      whFetchSave({
+        mode: 'bulk_standard',
+        location_keys: keys,
+        racks: racks,
+        shelves_per_rack: shelves,
+        bins_per_shelf: bins,
+        include_store_prefix: includePrefix
+      }, runBulk).then(function(res) {
+        if (!res.ok || !res.data || !res.data.ok) {
+          whAlertSaveError(res, 'Generate failed');
+          return;
+        }
+        var c = res.data.created || {};
+        var s = res.data.skipped || {};
+        var prefixes = (res.data.results || []).map(function(x) {
+          return (x.loc_key || '') + (x.store_prefix ? ' = ' + x.store_prefix : '');
+        }).filter(Boolean).join(', ');
+        var msg = (prefixes ? 'Store prefixes: ' + prefixes + '\\n' : '') +
+          'Created: racks ' + (c.rack || 0) + ', shelves ' + (c.shelf || 0) + ', bins ' + (c.bin || 0) +
+          '\\nSkipped existing: racks ' + (s.rack || 0) + ', shelves ' + (s.shelf || 0) + ', bins ' + (s.bin || 0);
+        if (res.data.errors && res.data.errors.length) msg += '\\n\\nErrors:\\n' + res.data.errors.join('\\n');
+        var out = document.getElementById('whBulkResult');
+        if (out) { out.textContent = msg; out.style.display = ''; }
+        alert(msg);
+        window.location.reload();
+      }).catch(function(err) { whFetchSaveCatch(err, runBulk); });
+    });
+  }
+  var search = document.getElementById('whLocPickerSearch');
+  var clr = document.getElementById('whLocPickerSearchClear');
+  if (search) {
+    search.addEventListener('input', function() {
+      whLocPickerRender(this.value);
+      if (clr) clr.style.display = this.value ? 'block' : 'none';
+    });
+  }
+  if (clr) clr.addEventListener('click', function() {
+    if (search) { search.value = ''; whLocPickerRender(''); }
+    clr.style.display = 'none';
+    if (search) search.focus();
+  });
+  var pickerBody = document.getElementById('whLocPickerBody');
+  if (pickerBody) {
+    pickerBody.addEventListener('click', function(e) {
+      var tr = e.target.closest('tr[data-loc-key]');
+      if (!tr) return;
+      whNavigateToLocation(tr.getAttribute('data-loc-key'));
+    });
+  }
+})();
+
+function whClose() { var m = document.getElementById('whModal'); if (m) m.classList.add('hidden'); }
+function whOpen() { var m = document.getElementById('whModal'); if (m) m.classList.remove('hidden'); var n = document.getElementById('wh-name'); if (n) n.focus(); }
+
+function whFillRackOptions(selectedId) {
+  var sel = document.getElementById('wh-parent');
+  if (!sel) return;
+  var s = (selectedId == null || selectedId === '') ? '' : String(selectedId);
+  var list = Array.isArray(WH_RACKS) ? WH_RACKS : [];
+  var opts = ['<option value="">— Select parent rack * —</option>'];
+  for (var i = 0; i < list.length; i++) {
+    var r = list[i] || {};
+    var id = r.storage_id == null ? '' : String(r.storage_id);
+    if (!id) continue;
+    var c = (r.code == null ? '' : String(r.code));
+    var n = (r.name == null ? '' : String(r.name));
+    var lab = c + (n ? ' — ' + n : '');
+    var selA = s === id ? ' selected' : '';
+    opts.push('<option value="' + id.replace(/"/g, '&quot;') + '"' + selA + '>' + lab.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>');
+  }
+  sel.innerHTML = opts.join('');
+  if (s) sel.value = s;
+}
+function whFillShelfOptions(selectedId) {
+  var sel = document.getElementById('wh-parent');
+  if (!sel) return;
+  var s = (selectedId == null || selectedId === '') ? '' : String(selectedId);
+  var list = Array.isArray(WH_SHELVES) ? WH_SHELVES : [];
+  var opts = ['<option value="">— Select parent shelf * —</option>'];
+  for (var i = 0; i < list.length; i++) {
+    var r = list[i] || {};
+    var id = r.storage_id == null ? '' : String(r.storage_id);
+    if (!id) continue;
+    var c = (r.code == null ? '' : String(r.code));
+    var n = (r.name == null ? '' : String(r.name));
+    var lab = c + (n ? ' — ' + n : '');
+    var selA = s === id ? ' selected' : '';
+    opts.push('<option value="' + id.replace(/"/g, '&quot;') + '"' + selA + '>' + lab.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>');
+  }
+  sel.innerHTML = opts.join('');
+  if (s) sel.value = s;
+}
+function whSetParentRowForType(st, selectedId) {
+  var t = (st || '').toUpperCase();
+  var row = document.getElementById('wh-parent-row');
+  var lbl = document.getElementById('wh-parent-label');
+  var ph = document.getElementById('wh-parent-hint');
+  if (!row) return;
+  if (t === 'RACK') {
+    row.style.display = 'none';
+    if (lbl) lbl.textContent = 'Parent';
+    if (ph) ph.textContent = '';
+    return;
+  }
+  if (t === 'SHELF') {
+    row.style.display = '';
+    if (lbl) lbl.textContent = 'Parent rack *';
+    if (ph) ph.textContent = 'Each shelf (level) belongs to one rack in this site.';
+    whFillRackOptions(selectedId);
+    return;
+  }
+  if (t === 'BIN' || t === 'STAGING') {
+    row.style.display = '';
+    if (lbl) lbl.textContent = 'Parent shelf *';
+    if (ph) ph.textContent = (t === 'STAGING')
+      ? 'Receive or stage stock on this shelf before putaway.'
+      : 'Stock is usually held at the bin; place the bin on a shelf.';
+    whFillShelfOptions(selectedId);
+    return;
+  }
+  row.style.display = 'none';
+}
+function whReset() {
+  var mode = document.getElementById('wh-mode');
+  if (mode) mode.value = '';
+  var sid = document.getElementById('wh-sid');
+  if (sid) sid.value = '';
+  var wst = document.getElementById('wh-stype');
+  if (wst) wst.value = '';
+  var c = document.getElementById('wh-code');
+  if (c) c.value = '';
+  var nm = document.getElementById('wh-name');
+  if (nm) nm.value = '';
+  var r = document.getElementById('wh-remarks');
+  if (r) r.value = '';
+  var st = document.getElementById('wh-status');
+  if (st) st.value = 'ACTIVE';
+  var pr = document.getElementById('wh-parent');
+  if (pr) pr.innerHTML = '';
+  var cr = document.getElementById('wh-code-row');
+  if (cr) cr.style.display = '';
+  var crr = document.getElementById('wh-code-readonly-row');
+  if (crr) crr.style.display = 'none';
+  var statusRow = document.getElementById('wh-status-row');
+  if (statusRow) statusRow.style.display = 'none';
+  var parentRow = document.getElementById('wh-parent-row');
+  if (parentRow) parentRow.style.display = 'none';
+  var hint = document.getElementById('whModalHint');
+  if (hint) hint.textContent = '';
+}
+
+function whOpenCreateRack() {
+  whReset();
+  if (document.getElementById('wh-mode')) document.getElementById('wh-mode').value = 'create';
+  if (document.getElementById('wh-stype')) document.getElementById('wh-stype').value = 'RACK';
+  if (document.getElementById('whModalTitle')) document.getElementById('whModalTitle').textContent = 'New rack';
+  var lk = (typeof WH_LOC_KEY === 'string' && WH_LOC_KEY) ? WH_LOC_KEY : '';
+  if (!lk) { alert('Select a warehouse location first (Pick…).'); return; }
+  if (document.getElementById('whModalHint')) document.getElementById('whModalHint').textContent = 'Type: RACK (top) · site: ' + lk;
+  whSetParentRowForType('RACK', '');
+  whOpen();
+  var c = document.getElementById('wh-code');
+  if (c) c.focus();
+}
+function whOpenCreateShelf(rackStorageId) {
+  whReset();
+  if (document.getElementById('wh-mode')) document.getElementById('wh-mode').value = 'create';
+  if (document.getElementById('wh-stype')) document.getElementById('wh-stype').value = 'SHELF';
+  if (document.getElementById('whModalTitle')) document.getElementById('whModalTitle').textContent = 'New shelf (level)';
+  var lk = (typeof WH_LOC_KEY === 'string' && WH_LOC_KEY) ? WH_LOC_KEY : '';
+  if (!lk) { alert('Select a warehouse location first.'); return; }
+  if (document.getElementById('whModalHint')) {
+    var rid = (rackStorageId == null || String(rackStorageId) === '') ? 'none' : String(rackStorageId);
+    document.getElementById('whModalHint').textContent = 'Type: SHELF · site: ' + lk + (rid !== 'none' ? ' · rack id ' + rid : ' · pick a parent rack');
+  }
+  whSetParentRowForType('SHELF', rackStorageId);
+  whOpen();
+  var c = document.getElementById('wh-code');
+  if (c) c.focus();
+}
+function whOpenCreateBin(shelfStorageId) {
+  whReset();
+  if (document.getElementById('wh-mode')) document.getElementById('wh-mode').value = 'create';
+  if (document.getElementById('wh-stype')) document.getElementById('wh-stype').value = 'BIN';
+  if (document.getElementById('whModalTitle')) document.getElementById('whModalTitle').textContent = 'New bin';
+  var lk = (typeof WH_LOC_KEY === 'string' && WH_LOC_KEY) ? WH_LOC_KEY : '';
+  if (!lk) { alert('Select a warehouse location first.'); return; }
+  if (document.getElementById('whModalHint')) {
+    var sid = (shelfStorageId == null || String(shelfStorageId) === '') ? 'none' : String(shelfStorageId);
+    document.getElementById('whModalHint').textContent = 'Type: BIN · site: ' + lk + (sid !== 'none' ? ' · shelf id ' + sid : ' · pick a parent shelf');
+  }
+  whSetParentRowForType('BIN', shelfStorageId);
+  whOpen();
+  var c = document.getElementById('wh-code');
+  if (c) c.focus();
+}
+function whOpenCreateStaging(shelfStorageId) {
+  whReset();
+  if (document.getElementById('wh-mode')) document.getElementById('wh-mode').value = 'create';
+  if (document.getElementById('wh-stype')) document.getElementById('wh-stype').value = 'STAGING';
+  if (document.getElementById('whModalTitle')) document.getElementById('whModalTitle').textContent = 'New staging bin';
+  var lk = (typeof WH_LOC_KEY === 'string' && WH_LOC_KEY) ? WH_LOC_KEY : '';
+  if (!lk) { alert('Select a warehouse location first.'); return; }
+  if (document.getElementById('whModalHint')) {
+    var sid = (shelfStorageId == null || String(shelfStorageId) === '') ? 'none' : String(shelfStorageId);
+    document.getElementById('whModalHint').textContent = 'Type: STAGING · site: ' + lk + (sid !== 'none' ? ' · shelf id ' + sid : ' · pick a parent shelf');
+  }
+  whSetParentRowForType('STAGING', shelfStorageId);
+  whOpen();
+  var c = document.getElementById('wh-code');
+  if (c) c.focus();
+}
+
+function whSwitchView(mode) {
+  var tree = document.getElementById('whTreeViewCard');
+  var list = document.getElementById('whListViewCard');
+  var bar = document.getElementById('whTreeExpandBar');
+  var bTree = document.getElementById('btnWhTreeView');
+  var bList = document.getElementById('btnWhListView');
+  if (mode === 'tree') {
+    if (tree) tree.style.display = '';
+    if (list) list.style.display = 'none';
+    if (bar) bar.style.display = 'inline-flex';
+    if (bTree) bTree.classList.add('active');
+    if (bList) bList.classList.remove('active');
+  } else {
+    if (tree) tree.style.display = 'none';
+    if (list) list.style.display = '';
+    if (bar) bar.style.display = 'none';
+    if (bList) bList.classList.add('active');
+    if (bTree) bTree.classList.remove('active');
+  }
+}
+function whSetWhTreeExpanded(expand) {
+  var uls = document.querySelectorAll('#whTreeContainer ul.wh-children');
+  var toggles = document.querySelectorAll('#whTreeContainer .wh-tree-toggle[data-wh-caret]');
+  for (var i = 0; i < uls.length; i++) {
+    if (expand) uls[i].classList.remove('is-collapsed');
+    else uls[i].classList.add('is-collapsed');
+  }
+  for (var j = 0; j < toggles.length; j++) {
+    var t = toggles[j];
+    t.setAttribute('aria-expanded', expand ? 'true' : 'false');
+    t.textContent = expand ? '▼' : '▶';
+  }
+}
+if (document.getElementById('whTreeContainer')) {
+  document.getElementById('whTreeContainer').addEventListener('click', function(e) {
+    var btn = e.target && e.target.closest && e.target.closest('.wh-tree-toggle[data-wh-caret]');
+    if (!btn) return;
+    e.preventDefault();
+    var li = btn.closest('li');
+    if (!li) return;
+    var sub = li.querySelector(':scope > ul.wh-children');
+    if (!sub) return;
+    var isOpen = !sub.classList.contains('is-collapsed');
+    if (isOpen) {
+      sub.classList.add('is-collapsed');
+      btn.setAttribute('aria-expanded', 'false');
+      btn.textContent = '▶';
+    } else {
+      sub.classList.remove('is-collapsed');
+      btn.setAttribute('aria-expanded', 'true');
+      btn.textContent = '▼';
+    }
+  });
+}
+var _whEx = document.getElementById('whExpandAll');
+if (_whEx) _whEx.addEventListener('click', function() { whSetWhTreeExpanded(true); });
+var _whCl = document.getElementById('whCollapseAll');
+if (_whCl) _whCl.addEventListener('click', function() { whSetWhTreeExpanded(false); });
+
+function filterWhStorage() {
+  var q = (document.getElementById('searchWh') && document.getElementById('searchWh').value || '').trim().toLowerCase();
+  var treeLis = document.querySelectorAll('#whTreeContainer li[data-search]');
+  for (var i = 0; i < treeLis.length; i++) {
+    var li = treeLis[i];
+    var hay = (li.getAttribute('data-search') || '').toLowerCase();
+    li.style.display = !q || hay.indexOf(q) >= 0 ? '' : 'none';
+  }
+  var rows = document.querySelectorAll('#whListBody tr[data-search]');
+  for (var j = 0; j < rows.length; j++) {
+    var tr = rows[j];
+    var h = (tr.getAttribute('data-search') || '').toLowerCase();
+    tr.style.display = !q || h.indexOf(q) >= 0 ? '' : 'none';
+  }
+}
+
+document.querySelector('.page-po').addEventListener('click', function(e) {
+  var t = e.target.closest('[data-wh-action]');
+  if (!t) return;
+  var a = t.getAttribute('data-wh-action');
+  if (a === 'create-rack') { whOpenCreateRack(); return; }
+  if (a === 'create-shelf') {
+    whOpenCreateShelf(t.getAttribute('data-rack-id'));
+    return;
+  }
+  if (a === 'create-bin') {
+    whOpenCreateBin(t.getAttribute('data-shelf-id'));
+    return;
+  }
+  if (a === 'create-staging') {
+    whOpenCreateStaging(t.getAttribute('data-shelf-id'));
+    return;
+  }
+  if (a === 'edit') {
+    whReset();
+    if (document.getElementById('wh-mode')) document.getElementById('wh-mode').value = 'update';
+    if (document.getElementById('wh-sid')) document.getElementById('wh-sid').value = t.getAttribute('data-sid') || '';
+    var wst = (t.getAttribute('data-stype') || 'RACK').toUpperCase();
+    if (document.getElementById('wh-stype')) document.getElementById('wh-stype').value = wst;
+    if (document.getElementById('wh-code-row')) document.getElementById('wh-code-row').style.display = 'none';
+    if (document.getElementById('wh-code-readonly-row')) document.getElementById('wh-code-readonly-row').style.display = '';
+    if (document.getElementById('wh-code-readonly')) document.getElementById('wh-code-readonly').value = t.getAttribute('data-code') || '';
+    if (document.getElementById('wh-name')) document.getElementById('wh-name').value = t.getAttribute('data-name') || '';
+    if (document.getElementById('wh-remarks')) document.getElementById('wh-remarks').value = t.getAttribute('data-remarks') || '';
+    var st0 = (t.getAttribute('data-status') || 'ACTIVE').toUpperCase();
+    if (document.getElementById('wh-status')) document.getElementById('wh-status').value = st0 === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    if (document.getElementById('wh-status-row')) document.getElementById('wh-status-row').style.display = '';
+    whSetParentRowForType(wst, t.getAttribute('data-pid') || '');
+    if (document.getElementById('whModalTitle')) document.getElementById('whModalTitle').textContent = 'Edit storage';
+    if (document.getElementById('whModalHint')) document.getElementById('whModalHint').textContent = 'Code cannot be changed.';
+    whOpen();
+  }
+  if (a === 'delete') {
+    var code = t.getAttribute('data-code') || '';
+    if (!confirm('Delete ' + code + '?')) return;
+    var sid = t.getAttribute('data-sid');
+    fetch(WH_SAVE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'delete', storage_id: parseInt(sid, 10) }) })
+      .then(whParseJsonResponse)
+      .then(function(res) {
+        if (res.ok && res.data && res.data.ok) { window.location.reload(); return; }
+        whAlertSaveError(res, 'Delete failed');
+      }).catch(function(err) { alert('Request failed: ' + (err && err.message ? err.message : 'network error')); });
+  }
+});
+
+document.getElementById('whModal').addEventListener('click', function(e) {
+  if (e.target.getAttribute('data-close') === 'whModal' || e.target.classList.contains('modal__overlay') || e.target.classList.contains('modal__close')) {
+    whClose();
+  }
+});
+document.getElementById('wh-save').addEventListener('click', function() {
+  var mode = document.getElementById('wh-mode').value;
+  var name = (document.getElementById('wh-name').value || '').trim();
+  if (!name) { alert('Name is required'); return; }
+  var rem = (document.getElementById('wh-remarks').value || '').trim();
+  var body;
+  if (mode === 'create') {
+    var code = (document.getElementById('wh-code').value || '').trim();
+    if (!code) { alert('Code is required'); return; }
+    var lk2 = (typeof WH_LOC_KEY === 'string' && WH_LOC_KEY) ? WH_LOC_KEY : '';
+    if (!lk2) { alert('Select a warehouse location from the list first.'); return; }
+    var tNew = (document.getElementById('wh-stype') && document.getElementById('wh-stype').value || 'RACK').toUpperCase();
+    body = { mode: 'create', location_key: lk2, storage_type: tNew, code: code, name: name, remarks: rem };
+    if (tNew === 'SHELF' || tNew === 'BIN' || tNew === 'STAGING') {
+      var pselC = document.getElementById('wh-parent');
+      if (pselC && pselC.value) body.parent_storage_id = parseInt(pselC.value, 10);
+    }
+  } else if (mode === 'update') {
+    var sid = parseInt(document.getElementById('wh-sid').value, 10);
+    if (!sid) { alert('Missing id'); return; }
+    var wstU = (document.getElementById('wh-stype') && document.getElementById('wh-stype').value || '').toUpperCase();
+    body = { mode: 'update', storage_id: sid, name: name, status: document.getElementById('wh-status').value, remarks: rem };
+    if (wstU === 'RACK') {
+      body.update_parent = true;
+    } else if (wstU === 'SHELF' || wstU === 'BIN' || wstU === 'STAGING') {
+      body.update_parent = true;
+      var pselU = document.getElementById('wh-parent');
+      if (pselU && pselU.value) body.parent_storage_id = parseInt(pselU.value, 10);
+    } else {
+      body.update_parent = false;
+    }
+  } else { return; }
+  var btn = document.getElementById('wh-save');
+  whFetchSave(body, btn)
+    .then(function(res) {
+      if (res.ok && res.data && res.data.ok) { whClose(); window.location.reload(); return; }
+      whAlertSaveError(res, 'Save failed');
+    })
+    .catch(function(err) { whFetchSaveCatch(err, btn); });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,57 @@
+/**
+ * demo_sales addon — module-scoped UI (served via Blueprint static).
+ * URL: /demo-sales/static/css/demo_sales.css  →  url_for('demo_sales.static', filename='css/demo_sales.css')
+ */
+
+.addon-demo-sales {
+  --ds-accent: #0d9488;
+  --ds-muted: #64748b;
+}
+
+.addon-demo-sales .addon-demo-sales__title {
+  letter-spacing: -0.02em;
+}
+
+.addon-demo-sales .addon-demo-sales__kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.addon-demo-sales .addon-demo-sales__kpi-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fafafa;
+  border-left: 3px solid var(--ds-accent);
+}
+
+.addon-demo-sales .addon-demo-sales__kpi-card .addon-demo-sales__kpi-label {
+  font-size: 12px;
+  color: var(--ds-muted);
+}
+
+.addon-demo-sales .addon-demo-sales__kpi-card .addon-demo-sales__kpi-val {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.addon-demo-sales table.addon-demo-sales__tbl {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.addon-demo-sales .addon-demo-sales__pipeline li {
+  margin-bottom: 8px;
+}
+
+.addon-demo-sales .addon-demo-sales__nav {
+  margin-top: 20px;
+  font-size: 14px;
+}
+
+.addon-demo-sales .addon-demo-sales__nav a {
+  color: var(--ds-accent);
+  font-weight: 600;
+}

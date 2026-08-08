@@ -1,0 +1,1330 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body { background: #f8f9fa !important; }
+
+  /* ── Page layout ─────────────────────────────────────────── */
+  .pdc-page { max-width: 1400px; margin: 0 auto; padding: 0 4px 40px; }
+  .pdc-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+  .pdc-title { font-size: 20px; font-weight: 700; color: #1e293b; margin: 0; }
+  .pdc-subtitle { font-size: 13px; color: #64748b; margin: 2px 0 0; }
+
+  /* ── Summary cards ───────────────────────────────────────── */
+  .pdc-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .pdc-card {
+    background: #fff; border-radius: 10px; padding: 14px 16px;
+    border-left: 4px solid #cbd5e1; box-shadow: 0 1px 4px rgba(0,0,0,.07);
+    cursor: pointer; transition: box-shadow .15s, transform .1s;
+  }
+  .pdc-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.12); transform: translateY(-1px); }
+  .pdc-card.active-filter { box-shadow: 0 0 0 2px #3b82f6; }
+  .pdc-card--pending   { border-left-color: #f59e0b; }
+  .pdc-card--deposited { border-left-color: #3b82f6; }
+  .pdc-card--cleared   { border-left-color: #10b981; }
+  .pdc-card--bounced   { border-left-color: #ef4444; }
+  .pdc-card--cancelled { border-left-color: #9ca3af; }
+  .pdc-card--soon      { border-left-color: #f97316; }
+  .pdc-card--overdue   { border-left-color: #dc2626; }
+  .pdc-card__label { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+  .pdc-card__count { font-size: 22px; font-weight: 800; color: #1e293b; line-height: 1; }
+  .pdc-card__amount { font-size: 12px; color: #64748b; margin-top: 3px; }
+
+  /* ── Filter bar ──────────────────────────────────────────── */
+  .pdc-filter-bar {
+    background: #fff; border-radius: 10px; padding: 14px 18px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.07); margin-bottom: 16px;
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;
+  }
+  .pdc-filter-bar .fg { display: flex; flex-direction: column; gap: 3px; }
+  .pdc-filter-bar label { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .4px; }
+  .pdc-filter-bar input[type="text"],
+  .pdc-filter-bar input[type="date"] {
+    height: 32px; font-size: 13px; padding: 0 8px;
+    border: 1px solid #d1d5db; border-radius: 6px;
+    background: #f9fafb; min-width: 120px;
+  }
+  .pdc-filter-bar input[type="text"] { min-width: 180px; }
+  .pdc-filter-bar .btn-filter {
+    height: 32px; padding: 0 16px; border-radius: 6px; border: none;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .btn-filter--apply  { background: #3b82f6; color: #fff; }
+  .btn-filter--reset  { background: #e5e7eb; color: #374151; }
+  .btn-filter--apply:hover { background: #2563eb; }
+  .btn-filter--reset:hover { background: #d1d5db; }
+
+  /* ── Add button ──────────────────────────────────────────── */
+  .btn-add-pdc {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #10b981; color: #fff; border: none; border-radius: 7px;
+    padding: 8px 18px; font-size: 13px; font-weight: 700; cursor: pointer;
+    text-decoration: none; transition: background .15s;
+  }
+  .btn-add-pdc:hover { background: #059669; color: #fff; }
+
+  .pdc-topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .btn-audit-log {
+    display: inline-flex; align-items: center;
+    background: #fff; color: #334155; border: 1px solid #cbd5e1; border-radius: 7px;
+    padding: 8px 16px; font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  .btn-audit-log:hover { background: #f8fafc; border-color: #94a3b8; }
+
+  /* ── Table ───────────────────────────────────────────────── */
+  .pdc-table-wrap {
+    background: #fff; border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.07); overflow: hidden;
+  }
+  .pdc-table-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 18px; border-bottom: 1px solid #e5e7eb;
+  }
+  .pdc-table-header h3 { margin: 0; font-size: 14px; font-weight: 700; color: #1e293b; }
+  .pdc-count-badge { background: #e0f2fe; color: #0369a1; font-size: 11px; font-weight: 700; border-radius: 10px; padding: 2px 8px; }
+  table.pdc-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.pdc-tbl thead tr { background: #f1f5f9; }
+  table.pdc-tbl th { padding: 9px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
+  table.pdc-tbl td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  table.pdc-tbl tbody tr:hover { background: #f8fafc; }
+  table.pdc-tbl tbody tr.row--overdue { background: #fff5f5; }
+  table.pdc-tbl tbody tr.row--due-soon { background: #fffbeb; }
+
+  /* ── Status badges ───────────────────────────────────────── */
+  .badge {
+    display: inline-block; padding: 2px 10px; border-radius: 10px;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px;
+  }
+  .badge--PENDING   { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+  .badge--DEPOSITED { background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; }
+  .badge--CLEARED   { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+  .badge--BOUNCED   { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+  .badge--CANCELLED { background: #f3f4f6; color: #6b7280; border: 1px solid #d1d5db; }
+
+  .type-pill {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 11px; font-weight: 700;
+  }
+  .type-pill--RECEIVED { background: #ecfdf5; color: #065f46; }
+  .type-pill--ISSUED   { background: #fdf4ff; color: #7e22ce; }
+
+  /* ── Action buttons in table ─────────────────────────────── */
+  .tbl-actions { display: flex; gap: 4px; flex-wrap: nowrap; }
+  .tbl-btn {
+    font-size: 11px; font-weight: 600; border: none; border-radius: 4px;
+    padding: 3px 9px; cursor: pointer; transition: opacity .12s; white-space: nowrap;
+  }
+  .tbl-btn:hover { opacity: .85; }
+  .tbl-btn--edit     { background: #e0f2fe; color: #0369a1; }
+  .tbl-btn--status   { background: #f0fdf4; color: #166534; }
+  .tbl-btn--delete   { background: #fee2e2; color: #991b1b; }
+  .tbl-btn--history { background: #f5f3ff; color: #5b21b6; }
+
+  /* ── Activity / audit log modal ────────────────────────────── */
+  .pdc-audit-overlay {
+    display: none; position: fixed; inset: 0; z-index: 960;
+    background: rgba(15,23,42,.5); align-items: center; justify-content: center;
+    padding: 12px;
+  }
+  .pdc-audit-overlay.open { display: flex; }
+  .pdc-audit-modal {
+    background: #fff; border-radius: 12px;
+    width: min(960px, 100%); max-height: 88vh;
+    box-shadow: 0 8px 40px rgba(0,0,0,.22);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .pdc-audit-modal__head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid #e5e7eb; flex-shrink: 0;
+  }
+  .pdc-audit-modal__head h3 { margin: 0; font-size: 15px; font-weight: 700; color: #1e293b; }
+  .pdc-audit-modal__close {
+    border: none; background: transparent; font-size: 22px; cursor: pointer; color: #64748b; line-height: 1;
+  }
+  .pdc-audit-modal__body { padding: 12px 16px 16px; overflow: auto; flex: 1; min-height: 0; }
+  table.pdc-audit-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.pdc-audit-tbl th {
+    text-align: left; padding: 8px 10px; background: #f1f5f9;
+    font-size: 10px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: .4px;
+    position: sticky; top: 0;
+  }
+  table.pdc-audit-tbl td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+  table.pdc-audit-tbl tbody tr:hover { background: #fafafa; }
+  .pdc-audit-json {
+    font-family: ui-monospace, monospace; font-size: 11px; max-height: 220px;
+    overflow: auto; margin: 6px 0 0; white-space: pre-wrap; word-break: break-word;
+    background: #f8fafc; padding: 8px; border-radius: 6px; border: 1px solid #e5e7eb;
+  }
+  .pdc-audit-overlay .pdc-audit-empty { text-align: center; padding: 28px 16px; color: #94a3b8; font-size: 13px; }
+  .pdc-audit-badge {
+    display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: .3px;
+  }
+  .pdc-audit-badge--CREATED { background: #d1fae5; color: #065f46; }
+  .pdc-audit-badge--UPDATED { background: #e0f2fe; color: #0369a1; }
+  .pdc-audit-badge--STATUS { background: #fef3c7; color: #92400e; }
+  .pdc-audit-badge--DELETED { background: #fee2e2; color: #991b1b; }
+
+  /* ── Slide-in form panel ─────────────────────────────────── */
+  .pdc-form-overlay {
+    display: none; position: fixed; inset: 0; z-index: 900;
+    background: rgba(15,23,42,.4);
+  }
+  .pdc-form-overlay.open { display: flex; align-items: flex-start; justify-content: flex-end; }
+  .pdc-form-panel {
+    background: #fff; width: 520px; max-width: 98vw; height: 100%;
+    overflow-y: auto; box-shadow: -4px 0 24px rgba(0,0,0,.18);
+    display: flex; flex-direction: column;
+    animation: slideIn .2s ease;
+  }
+  @keyframes slideIn { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .pdc-form-panel__head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 20px; border-bottom: 1px solid #e5e7eb;
+    position: sticky; top: 0; background: #fff; z-index: 1;
+  }
+  .pdc-form-panel__head h2 { margin: 0; font-size: 16px; font-weight: 700; color: #1e293b; }
+  .pdc-form-panel__close { background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b; line-height: 1; }
+  .pdc-form-body { padding: 20px; flex: 1; }
+  .pdc-form-body .fg { margin-bottom: 14px; }
+  .pdc-form-body label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px; }
+  .pdc-form-body label .req { color: #ef4444; }
+  .pdc-form-body input[type="text"],
+  .pdc-form-body input[type="number"],
+  .pdc-form-body input[type="date"],
+  .pdc-form-body textarea {
+    width: 100%; font-size: 13px; padding: 7px 10px;
+    border: 1px solid #d1d5db; border-radius: 6px; background: #fff; box-sizing: border-box;
+  }
+  .pdc-form-body textarea { resize: vertical; min-height: 60px; }
+  .pdc-form-body .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .pdc-form-footer {
+    padding: 14px 20px; border-top: 1px solid #e5e7eb;
+    display: flex; gap: 10px; position: sticky; bottom: 0; background: #fff;
+  }
+  .btn-save-pdc   { flex: 1; background: #10b981; color: #fff; border: none; border-radius: 7px; padding: 9px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .btn-cancel-pdc { flex: 1; background: #f1f5f9; color: #374151; border: none; border-radius: 7px; padding: 9px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .btn-save-pdc:hover   { background: #059669; }
+  .btn-cancel-pdc:hover { background: #e2e8f0; }
+
+  /* ── Status change modal ─────────────────────────────────── */
+  .pdc-modal-overlay {
+    display: none; position: fixed; inset: 0; z-index: 950;
+    background: rgba(15,23,42,.5); align-items: center; justify-content: center;
+  }
+  .pdc-modal-overlay.open { display: flex; }
+  .pdc-modal {
+    background: #fff; border-radius: 12px; padding: 24px 28px;
+    width: 380px; max-width: 96vw; box-shadow: 0 8px 40px rgba(0,0,0,.2);
+  }
+  .pdc-modal h3 { margin: 0 0 16px; font-size: 16px; font-weight: 700; color: #1e293b; }
+  .pdc-modal .fg { margin-bottom: 12px; }
+  .pdc-modal label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px; }
+  .pdc-modal input[type="date"] {
+    width: 100%; padding: 7px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;
+  }
+  .picker-field {
+    display: flex; align-items: center; gap: 0;
+    border: 1px solid #d1d5db; border-radius: 6px; background: #fff; overflow: hidden;
+  }
+  .picker-field .picker-input {
+    flex: 1; border: none !important; background: transparent; padding: 7px 10px; font-size: 13px; height: 32px;
+  }
+  .picker-field .picker-btn {
+    border: none; border-left: 1px solid #e5e7eb; background: #f8fafc;
+    height: 32px; min-width: 34px; cursor: pointer; color: #334155; font-size: 14px;
+  }
+  .picker-field .picker-btn:hover { background: #eef2ff; }
+  .pdc-option-modal.hidden { display: none; }
+  .pdc-option-modal {
+    position: fixed; inset: 0; z-index: 1200;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(15,23,42,.45);
+  }
+  .pdc-option-modal__card {
+    width: min(440px, 94vw); background: #fff; border-radius: 10px; overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,.2);
+  }
+  .pdc-option-modal__head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px; border-bottom: 1px solid #e5e7eb;
+  }
+  .pdc-option-modal__title { font-size: 14px; font-weight: 700; color: #1e293b; }
+  .pdc-option-modal__close { border: none; background: transparent; font-size: 20px; cursor: pointer; color: #64748b; }
+  .pdc-option-modal__body { padding: 10px 12px; }
+  .pdc-option-search {
+    width: 100%; border: 1px solid #d1d5db; border-radius: 6px;
+    height: 34px; padding: 0 10px; font-size: 13px; margin-bottom: 8px;
+  }
+  .pdc-option-list { max-height: 300px; overflow: auto; border: 1px solid #e5e7eb; border-radius: 6px; }
+  .pdc-option-row {
+    padding: 8px 10px; font-size: 13px; cursor: pointer; border-bottom: 1px solid #f1f5f9;
+  }
+  .pdc-option-row:last-child { border-bottom: none; }
+  .pdc-option-row:hover { background: #eef2ff; }
+  .pdc-party-type-hint {
+    width: 100%; font-size: 13px; padding: 7px 10px;
+    border: 1px solid #e5e7eb; border-radius: 6px; background: #f8fafc;
+    color: #334155; box-sizing: border-box;
+  }
+  .pdc-party-type-note { font-size: 12px; color: #64748b; margin: 6px 0 0; line-height: 1.35; }
+  .pdc-party-picker-modal {
+    display: none; position: fixed; inset: 0; z-index: 1100;
+    align-items: center; justify-content: center;
+    background: rgba(15,23,42,.5);
+  }
+  .pdc-party-picker-modal.open { display: flex; }
+  .pdc-party-picker-modal__card {
+    width: min(720px, 96vw); max-height: 88vh; background: #fff; border-radius: 10px;
+    overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,.22);
+    display: flex; flex-direction: column;
+  }
+  .pdc-party-picker-modal__head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-bottom: 1px solid #e5e7eb; flex-shrink: 0;
+  }
+  .pdc-party-picker-modal__head h3 { margin: 0; font-size: 15px; font-weight: 700; color: #1e293b; }
+  .pdc-party-picker-modal__close { border: none; background: transparent; font-size: 22px; cursor: pointer; color: #64748b; line-height: 1; }
+  .pdc-party-picker-modal__body { padding: 12px 16px 16px; overflow: hidden; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .pdc-party-picker-modal__body .pdc-party-search {
+    width: 100%; border: 1px solid #d1d5db; border-radius: 6px; height: 36px;
+    padding: 0 10px; font-size: 13px; margin-bottom: 10px; box-sizing: border-box;
+  }
+  .pdc-party-picker-modal__body .scroll-wrap { overflow: auto; flex: 1; border: 1px solid #e5e7eb; border-radius: 6px; max-height: min(52vh, 420px); }
+  .pdc-party-picker-modal__body table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .pdc-party-picker-modal__body th {
+    position: sticky; top: 0; background: #f1f5f9; padding: 8px 10px; text-align: left;
+    font-size: 11px; font-weight: 700; color: #475569; border-bottom: 1px solid #e5e7eb;
+  }
+  .pdc-party-picker-modal__body td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  .pdc-party-picker-modal__body tbody tr { cursor: pointer; }
+  .pdc-party-picker-modal__body tbody tr:hover { background: #eef2ff; }
+  .pdc-modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+  .btn-modal-ok     { flex: 1; background: #3b82f6; color: #fff; border: none; border-radius: 7px; padding: 9px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .btn-modal-cancel { flex: 1; background: #f1f5f9; color: #374151; border: none; border-radius: 7px; padding: 9px; font-size: 14px; cursor: pointer; }
+  .btn-modal-ok:hover     { background: #2563eb; }
+  .btn-modal-cancel:hover { background: #e2e8f0; }
+
+  /* ── Empty state ─────────────────────────────────────────── */
+  .pdc-empty { text-align: center; padding: 60px 20px; color: #94a3b8; }
+  .pdc-empty svg { width: 56px; height: 56px; margin-bottom: 12px; }
+  .pdc-empty p { font-size: 14px; margin: 0; }
+
+  /* ── Days-to-due pill ────────────────────────────────────── */
+  .due-pill {
+    font-size: 11px; font-weight: 700; border-radius: 4px; padding: 1px 7px; display: inline-block;
+  }
+  .due-pill--overdue { background: #fee2e2; color: #991b1b; }
+  .due-pill--today   { background: #fef3c7; color: #92400e; }
+  .due-pill--soon    { background: #fff7ed; color: #9a3412; }
+  .due-pill--ok      { background: #f0fdf4; color: #166534; }
+
+  @media (max-width: 900px) {
+    .pdc-cards { grid-template-columns: repeat(2, 1fr); }
+    .pdc-form-panel { width: 100%; }
+  }
+</style>
+
+<div class="pdc-page">
+
+  <!-- Top bar -->
+  <div class="pdc-topbar">
+    <div>
+      <h1 class="pdc-title">PDC Check Tracking</h1>
+      <p class="pdc-subtitle">Post-Dated Cheque management — Received &amp; Issued</p>
+    </div>
+    <div class="pdc-topbar-actions">
+      <button type="button" class="btn-audit-log" onclick="openPdcAuditLog(null)">Activity log</button>
+      <button type="button" class="btn-add-pdc" onclick="openPdcForm()">＋ Add PDC</button>
+    </div>
+  </div>
+
+  <!-- Summary cards -->
+  <div class="pdc-cards">
+    <div class="pdc-card pdc-card--overdue" onclick="filterByStatus('PENDING', true)" title="Cheques past due date still pending">
+      <div class="pdc-card__label">⚠ Overdue</div>
+      <div class="pdc-card__count">{{ summary.overdue.count }}</div>
+      <div class="pdc-card__amount">{{ "%.3f"|format(summary.overdue.total) }}</div>
+    </div>
+    <div class="pdc-card pdc-card--soon" onclick="filterByStatus('PENDING')" title="Pending cheques due within 7 days">
+      <div class="pdc-card__label">📅 Due Soon</div>
+      <div class="pdc-card__count">{{ summary.due_soon.count }}</div>
+      <div class="pdc-card__amount">{{ "%.3f"|format(summary.due_soon.total) }}</div>
+    </div>
+    <div class="pdc-card pdc-card--pending" onclick="filterByStatus('PENDING')">
+      <div class="pdc-card__label">Pending</div>
+      <div class="pdc-card__count">{{ summary.pending.count }}</div>
+      <div class="pdc-card__amount">{{ "%.3f"|format(summary.pending.total) }}</div>
+    </div>
+    <div class="pdc-card pdc-card--deposited" onclick="filterByStatus('DEPOSITED')">
+      <div class="pdc-card__label">Deposited</div>
+      <div class="pdc-card__count">{{ summary.deposited.count }}</div>
+      <div class="pdc-card__amount">{{ "%.3f"|format(summary.deposited.total) }}</div>
+    </div>
+    <div class="pdc-card pdc-card--cleared" onclick="filterByStatus('CLEARED')">
+      <div class="pdc-card__label">Cleared</div>
+      <div class="pdc-card__count">{{ summary.cleared.count }}</div>
+      <div class="pdc-card__amount">{{ "%.3f"|format(summary.cleared.total) }}</div>
+    </div>
+    <div class="pdc-card pdc-card--bounced" onclick="filterByStatus('BOUNCED')">
+      <div class="pdc-card__label">Bounced</div>
+      <div class="pdc-card__count">{{ summary.bounced.count }}</div>
+      <div class="pdc-card__amount">{{ "%.3f"|format(summary.bounced.total) }}</div>
+    </div>
+    <div class="pdc-card pdc-card--cancelled" onclick="filterByStatus('CANCELLED')">
+      <div class="pdc-card__label">Cancelled</div>
+      <div class="pdc-card__count">{{ summary.cancelled.count }}</div>
+      <div class="pdc-card__amount">{{ "%.3f"|format(summary.cancelled.total) }}</div>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <form class="pdc-filter-bar" method="get" action="{{ url_for('accounts.pdc_tracker') }}" id="pdcFilterForm">
+    <div class="fg">
+      <label>Type</label>
+      <input type="hidden" name="pdc_type" id="f_pdc_type" value="{{ filters.pdc_type or '' }}" />
+      <div class="picker-field">
+        <input type="text" id="f_pdc_type_display" class="picker-input" readonly
+               value="{% if filters.pdc_type == 'RECEIVED' %}Received{% elif filters.pdc_type == 'ISSUED' %}Issued{% else %}All Types{% endif %}" />
+        <button type="button" class="picker-btn" onclick="openOptionPicker('filter_type')">▾</button>
+      </div>
+    </div>
+    <div class="fg">
+      <label>Status</label>
+      <input type="hidden" name="status" id="f_status" value="{{ filters.status or '' }}" />
+      <div class="picker-field">
+        <input type="text" id="f_status_display" class="picker-input" readonly
+               value="{% if filters.status %}{{ filters.status|title }}{% else %}All Statuses{% endif %}" />
+        <button type="button" class="picker-btn" onclick="openOptionPicker('filter_status')">▾</button>
+      </div>
+    </div>
+    <div class="fg">
+      <label>Party Type</label>
+      <input type="hidden" name="party_type" id="f_party_type_filter" value="{{ filters.party_type or '' }}" />
+      <div class="picker-field">
+        <input type="text" id="f_party_type_filter_display" class="picker-input" readonly
+               value="{% if filters.party_type == 'CUSTOMER' %}Customer{% elif filters.party_type == 'SUPPLIER' %}Supplier{% else %}All Parties{% endif %}" />
+        <button type="button" class="picker-btn" onclick="openOptionPicker('filter_party')">▾</button>
+      </div>
+    </div>
+    <div class="fg">
+      <label>Cheque Date From</label>
+      <input type="date" name="date_from" value="{{ filters.date_from or '' }}" />
+    </div>
+    <div class="fg">
+      <label>Cheque Date To</label>
+      <input type="date" name="date_to" value="{{ filters.date_to or '' }}" />
+    </div>
+    <div class="fg">
+      <label>Search</label>
+      <input type="text" name="search" value="{{ filters.search or '' }}" placeholder="Cheque no / party / bank…" />
+    </div>
+    <button type="submit" class="btn-filter btn-filter--apply">Apply</button>
+    <button type="button" class="btn-filter btn-filter--reset" onclick="window.location='{{ url_for('accounts.pdc_tracker') }}'">Reset</button>
+  </form>
+
+  <!-- Table -->
+  <div class="pdc-table-wrap">
+    <div class="pdc-table-header">
+      <h3>PDC Records</h3>
+      <span class="pdc-count-badge">{{ rows|length }} record{{ 's' if rows|length != 1 }}</span>
+    </div>
+    {% if rows %}
+    <div style="overflow-x:auto;">
+    <table class="pdc-tbl">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Type</th>
+          <th>Cheque No</th>
+          <th>Cheque Date</th>
+          <th>Days</th>
+          <th>Bank</th>
+          <th>Party</th>
+          <th>Amount</th>
+          <th>Status</th>
+          <th>Deposit Date</th>
+          <th>Narration</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+          {% set days = none %}
+          {% if r.cheque_date and r.status == 'PENDING' %}
+            {# days computed in JS via data attribute #}
+          {% endif %}
+          <tr
+            class="{% if r.status == 'PENDING' and r.cheque_date and r.cheque_date < today %}row--overdue{% endif %}"
+            data-cheque-date="{{ r.cheque_date or '' }}"
+            data-status="{{ r.status }}"
+          >
+            <td style="color:#94a3b8;font-size:12px;">{{ loop.index }}</td>
+            <td><span class="type-pill type-pill--{{ r.pdc_type }}">{{ r.pdc_type }}</span></td>
+            <td style="font-weight:600;color:#1e293b;">{{ r.cheque_no }}</td>
+            <td>{{ r.cheque_date or '—' }}</td>
+            <td class="days-cell" data-date="{{ r.cheque_date or '' }}" data-status="{{ r.status }}"></td>
+            <td>{{ r.bank_name or '—' }}{% if r.branch_name %}<br><span style="font-size:11px;color:#94a3b8;">{{ r.branch_name }}</span>{% endif %}</td>
+            <td>
+              {% if r.party_name %}
+                <span style="font-weight:500;">{{ r.party_name }}</span>
+                {% if r.party_code %}<br><span style="font-size:11px;color:#94a3b8;">{{ r.party_type }} · {{ r.party_code }}</span>{% endif %}
+              {% else %}
+                <span style="color:#cbd5e1;">—</span>
+              {% endif %}
+            </td>
+            <td style="font-weight:700;text-align:right;">{{ "%.3f"|format(r.amount) }}</td>
+            <td><span class="badge badge--{{ r.status }}">{{ r.status }}</span></td>
+            <td style="font-size:12px;color:#64748b;">{{ r.deposit_date or '—' }}</td>
+            <td style="font-size:12px;color:#64748b;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ r.narration }}">{{ r.narration or '—' }}</td>
+            <td>
+              <div class="tbl-actions">
+                <button class="tbl-btn tbl-btn--edit" onclick="editPdc({{ r | tojson | e }})">Edit</button>
+                <button class="tbl-btn tbl-btn--status" onclick="openStatusModal({{ r.id }}, '{{ r.status }}')">Status</button>
+                <button type="button" class="tbl-btn tbl-btn--history" onclick="openPdcAuditLog({{ r.id }})">History</button>
+                {% if r.status in ('PENDING', 'CANCELLED') %}
+                <button class="tbl-btn tbl-btn--delete" onclick="deletePdc({{ r.id }})">Delete</button>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="pdc-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="3" y="5" width="18" height="14" rx="2"/>
+        <path d="M3 10h18M7 15h4"/>
+      </svg>
+      <p>No PDC records found. Click <strong>+ Add PDC</strong> to get started.</p>
+    </div>
+    {% endif %}
+  </div>
+
+</div><!-- /pdc-page -->
+
+<!-- ── Slide-in form panel ──────────────────────────────────────────────── -->
+<div class="pdc-form-overlay" id="pdcFormOverlay">
+  <div class="pdc-form-panel">
+    <div class="pdc-form-panel__head">
+      <h2 id="pdcFormTitle">Add PDC</h2>
+      <button class="pdc-form-panel__close" onclick="closePdcForm()">×</button>
+    </div>
+    <div class="pdc-form-body">
+      <form id="pdcForm" method="post">
+        <input type="hidden" name="pdc_edit_id" id="pdc_edit_id" />
+
+        <div class="fg">
+          <label>PDC type <span class="req">*</span></label>
+          <input type="hidden" name="pdc_type" id="f_pdc_type_form" />
+          <div class="picker-field">
+            <input type="text" id="f_pdc_type_form_display" class="picker-input" readonly placeholder="Select PDC type" />
+            <button type="button" class="picker-btn" onclick="openOptionPicker('form_type')" aria-label="Open PDC type list">▾</button>
+          </div>
+          <p class="pdc-party-type-note">Received sets party to <strong>Customer</strong>; Issued sets party to <strong>Supplier</strong>.</p>
+        </div>
+        <div class="fg">
+          <label>Party type</label>
+          <input type="hidden" name="party_type" id="f_party_type_form" />
+          <input type="text" id="f_party_type_hint" class="pdc-party-type-hint" readonly tabindex="-1" placeholder="— Choose PDC type above —" aria-live="polite" />
+        </div>
+
+        <div class="row2">
+          <div class="fg">
+            <label>Cheque No <span class="req">*</span></label>
+            <input type="text" name="cheque_no" id="f_cheque_no" required placeholder="e.g. 001234" />
+          </div>
+          <div class="fg">
+            <label>Cheque Date <span class="req">*</span></label>
+            <input type="date" name="cheque_date" id="f_cheque_date" required />
+          </div>
+        </div>
+
+        <div class="row2">
+          <div class="fg">
+            <label>Bank account <span class="req">*</span></label>
+            <div class="picker-field">
+              <input type="text" name="bank_name" id="f_bank_name" required placeholder="Pick from chart or type bank…" autocomplete="off" />
+              <button type="button" class="picker-btn" id="pdcBankPickerBtn" onclick="openPdcBankPicker()" aria-label="Open chart cash/bank accounts">▾</button>
+            </div>
+            <p class="pdc-party-type-note" style="margin-top:6px;">Cash/Bank accounts from <strong>Chart of Accounts</strong> (same list as supplier payment receipts).</p>
+          </div>
+          <div class="fg">
+            <label>Branch Name</label>
+            <input type="text" name="branch_name" id="f_branch_name" placeholder="Branch (optional)" />
+          </div>
+        </div>
+
+        <div class="fg">
+          <label>Amount <span class="req">*</span></label>
+          <input type="number" name="amount" id="f_amount" required min="0.001" step="0.001" placeholder="0.000" />
+        </div>
+
+        <div class="row2">
+          <div class="fg">
+            <label>Party code</label>
+            <div class="picker-field">
+              <input type="text" name="party_code" id="f_party_code" placeholder="Pick or type code" autocomplete="off" />
+              <button type="button" class="picker-btn" id="pdcPartyPickerBtn" onclick="openPdcPartyPicker()" aria-label="Open party list">▾</button>
+            </div>
+          </div>
+          <div class="fg">
+            <label>Party name</label>
+            <input type="text" name="party_name" id="f_party_name" placeholder="Filled when you pick from list" autocomplete="off" />
+          </div>
+        </div>
+
+        <div class="fg">
+          <label>Narration</label>
+          <textarea name="narration" id="f_narration" placeholder="Details / reference…"></textarea>
+        </div>
+
+        <div class="fg">
+          <label>Remarks</label>
+          <textarea name="remarks" id="f_remarks" placeholder="Internal notes…"></textarea>
+        </div>
+      </form>
+    </div>
+    <div class="pdc-form-footer">
+      <button class="btn-save-pdc" onclick="submitPdcForm()">Save PDC</button>
+      <button class="btn-cancel-pdc" onclick="closePdcForm()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Status change modal ──────────────────────────────────────────────── -->
+<div class="pdc-modal-overlay" id="statusModalOverlay">
+  <div class="pdc-modal">
+    <h3>Update PDC Status</h3>
+    <div class="fg">
+      <label>New Status</label>
+      <input type="hidden" id="statusSelect" value="PENDING" />
+      <div class="picker-field">
+        <input type="text" id="statusSelectDisplay" class="picker-input" readonly value="Pending" />
+        <button type="button" class="picker-btn" onclick="openOptionPicker('status_modal')">▾</button>
+      </div>
+    </div>
+    <div class="fg">
+      <label>Action Date <span style="color:#94a3b8;font-weight:400;">(deposit / cleared / bounce date)</span></label>
+      <input type="date" id="statusDate" value="{{ today }}" />
+    </div>
+    <div class="pdc-modal-actions">
+      <button class="btn-modal-ok" onclick="confirmStatusChange()">Update</button>
+      <button class="btn-modal-cancel" onclick="closeStatusModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Activity / audit log modal ───────────────────────────────────── -->
+<div class="pdc-audit-overlay" id="pdcAuditOverlay" aria-hidden="true">
+  <div class="pdc-audit-modal" role="dialog" aria-labelledby="pdcAuditModalTitle">
+    <div class="pdc-audit-modal__head">
+      <h3 id="pdcAuditModalTitle">Activity log</h3>
+      <button type="button" class="pdc-audit-modal__close" onclick="closePdcAuditLog()" aria-label="Close">×</button>
+    </div>
+    <div class="pdc-audit-modal__body">
+      <p id="pdcAuditLoading" class="pdc-audit-empty" style="display:none;">Loading…</p>
+      <p id="pdcAuditError" class="pdc-audit-empty" style="display:none;color:#b91c1c;"></p>
+      <div id="pdcAuditTableWrap" style="display:none;">
+        <table class="pdc-audit-tbl">
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>User</th>
+              <th>Action</th>
+              <th>PDC #</th>
+              <th>Summary</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody id="pdcAuditTableBody"></tbody>
+        </table>
+      </div>
+      <p id="pdcAuditEmpty" class="pdc-audit-empty" style="display:none;">No activity recorded yet.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── Party pick list (customer / supplier) ───────────────────────────── -->
+<div class="pdc-party-picker-modal" id="pdcPartyPickerModal" role="dialog" aria-modal="true" aria-labelledby="pdcPartyPickerTitle">
+  <div class="pdc-party-picker-modal__card">
+    <div class="pdc-party-picker-modal__head">
+      <h3 id="pdcPartyPickerTitle">Select party</h3>
+      <button type="button" class="pdc-party-picker-modal__close" onclick="closePdcPartyPicker()" aria-label="Close">×</button>
+    </div>
+    <div class="pdc-party-picker-modal__body">
+      <input type="text" class="pdc-party-search" id="pdcPartyPickerSearch" placeholder="Search code or name…" autocomplete="off" />
+      <div class="scroll-wrap">
+        <table>
+          <thead id="pdcPartyPickerThead"></thead>
+          <tbody id="pdcPartyPickerBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Bank account pick list (Chart of Accounts cash/bank) ───────────── -->
+<div class="pdc-party-picker-modal" id="pdcBankPickerModal" role="dialog" aria-modal="true" aria-labelledby="pdcBankPickerTitle">
+  <div class="pdc-party-picker-modal__card">
+    <div class="pdc-party-picker-modal__head">
+      <h3 id="pdcBankPickerTitle">Select bank account</h3>
+      <button type="button" class="pdc-party-picker-modal__close" onclick="closePdcBankPicker()" aria-label="Close">×</button>
+    </div>
+    <div class="pdc-party-picker-modal__body">
+      <input type="text" class="pdc-party-search" id="pdcBankPickerSearch" placeholder="Search account code or name…" autocomplete="off" />
+      <div class="scroll-wrap">
+        <table>
+          <thead>
+            <tr><th>Code</th><th>Account name</th></tr>
+          </thead>
+          <tbody id="pdcBankPickerBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Shared picker modal (for replacing dropdowns) ───────────────────── -->
+<div class="pdc-option-modal hidden" id="pdcOptionModal">
+  <div class="pdc-option-modal__card">
+    <div class="pdc-option-modal__head">
+      <div class="pdc-option-modal__title" id="pdcOptionModalTitle">Select</div>
+      <button type="button" class="pdc-option-modal__close" id="pdcOptionModalClose">×</button>
+    </div>
+    <div class="pdc-option-modal__body">
+      <input type="text" class="pdc-option-search" id="pdcOptionSearch" placeholder="Search..." autocomplete="off" />
+      <div class="pdc-option-list" id="pdcOptionList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  var today = {{ today | tojson }};
+  var PDC_AUDIT_LOG_URL = {{ url_for('accounts.api_pdc_audit_log') | tojson }};
+  var PDC_PARTY_CUSTOMERS = {{ (pdc_party_customers or []) | tojson }};
+  var PDC_PARTY_SUPPLIERS = {{ (pdc_party_suppliers or []) | tojson }};
+  var PDC_BANK_ACCOUNTS = {{ (pdc_bank_accounts or []) | tojson }};
+  if (!Array.isArray(PDC_PARTY_CUSTOMERS)) PDC_PARTY_CUSTOMERS = [];
+  if (!Array.isArray(PDC_PARTY_SUPPLIERS)) PDC_PARTY_SUPPLIERS = [];
+  if (!Array.isArray(PDC_BANK_ACCOUNTS)) PDC_BANK_ACCOUNTS = [];
+
+  var OPTION_SETS = {
+    filter_type: {
+      title: 'Select Type',
+      hiddenId: 'f_pdc_type',
+      displayId: 'f_pdc_type_display',
+      options: [
+        { value: '', label: 'All Types' },
+        { value: 'RECEIVED', label: 'Received' },
+        { value: 'ISSUED', label: 'Issued' }
+      ]
+    },
+    filter_status: {
+      title: 'Select Status',
+      hiddenId: 'f_status',
+      displayId: 'f_status_display',
+      options: [
+        { value: '', label: 'All Statuses' },
+        { value: 'PENDING', label: 'Pending' },
+        { value: 'DEPOSITED', label: 'Deposited' },
+        { value: 'CLEARED', label: 'Cleared' },
+        { value: 'BOUNCED', label: 'Bounced' },
+        { value: 'CANCELLED', label: 'Cancelled' }
+      ]
+    },
+    filter_party: {
+      title: 'Select Party Type',
+      hiddenId: 'f_party_type_filter',
+      displayId: 'f_party_type_filter_display',
+      options: [
+        { value: '', label: 'All Parties' },
+        { value: 'CUSTOMER', label: 'Customer' },
+        { value: 'SUPPLIER', label: 'Supplier' }
+      ]
+    },
+    form_type: {
+      title: 'Select PDC Type',
+      hiddenId: 'f_pdc_type_form',
+      displayId: 'f_pdc_type_form_display',
+      options: [
+        { value: 'RECEIVED', label: 'Received (from Customer)' },
+        { value: 'ISSUED', label: 'Issued (to Supplier)' }
+      ]
+    },
+    status_modal: {
+      title: 'Select New Status',
+      hiddenId: 'statusSelect',
+      displayId: 'statusSelectDisplay',
+      options: [
+        { value: 'PENDING', label: 'Pending' },
+        { value: 'DEPOSITED', label: 'Deposited' },
+        { value: 'CLEARED', label: 'Cleared' },
+        { value: 'BOUNCED', label: 'Bounced' },
+        { value: 'CANCELLED', label: 'Cancelled' }
+      ]
+    }
+  };
+  var optionModal = document.getElementById('pdcOptionModal');
+  var optionModalTitle = document.getElementById('pdcOptionModalTitle');
+  var optionSearch = document.getElementById('pdcOptionSearch');
+  var optionList = document.getElementById('pdcOptionList');
+  var activeOptionSetKey = null;
+
+  function setPickerValue(setKey, value) {
+    var set = OPTION_SETS[setKey];
+    if (!set) return;
+    var hidden = document.getElementById(set.hiddenId);
+    var display = document.getElementById(set.displayId);
+    var found = (set.options || []).find(function(opt) { return String(opt.value) === String(value || ''); });
+    if (hidden) hidden.value = found ? found.value : '';
+    if (display) display.value = found ? found.label : '';
+  }
+
+  function renderOptionRows(setKey, query) {
+    var set = OPTION_SETS[setKey];
+    if (!set || !optionList) return;
+    var q = String(query || '').trim().toLowerCase();
+    var rows = (set.options || []).filter(function(opt) {
+      return !q || String(opt.label || '').toLowerCase().indexOf(q) !== -1;
+    });
+    if (!rows.length) {
+      optionList.innerHTML = '<div class="pdc-option-row">No results.</div>';
+      return;
+    }
+    optionList.innerHTML = rows.map(function(opt) {
+      return '<div class="pdc-option-row" data-value="' + String(opt.value || '').replace(/"/g, '&quot;') + '">' + opt.label + '</div>';
+    }).join('');
+    optionList.querySelectorAll('.pdc-option-row').forEach(function(row) {
+      row.addEventListener('click', function() {
+        var prevType = '';
+        if (setKey === 'form_type') {
+          var pte = document.getElementById('f_pdc_type_form');
+          prevType = pte ? String(pte.value || '') : '';
+        }
+        setPickerValue(setKey, row.dataset.value || '');
+        if (setKey === 'form_type') {
+          var nxt = document.getElementById('f_pdc_type_form');
+          var nextType = nxt ? String(nxt.value || '') : '';
+          syncPartyTypeFromPdcType(prevType !== nextType);
+        }
+        closeOptionPicker();
+      });
+    });
+  }
+
+  /** RECEIVED → CUSTOMER, ISSUED → SUPPLIER; optional clear of party when PDC type changes */
+  function syncPartyTypeFromPdcType(clearPartyIfTypeChanged) {
+    var t = document.getElementById('f_pdc_type_form');
+    var pt = document.getElementById('f_party_type_form');
+    var hint = document.getElementById('f_party_type_hint');
+    var v = t ? String(t.value || '') : '';
+    var newPt = '';
+    if (v === 'RECEIVED') newPt = 'CUSTOMER';
+    else if (v === 'ISSUED') newPt = 'SUPPLIER';
+    if (pt) pt.value = newPt;
+    if (hint) {
+      if (newPt === 'CUSTOMER') hint.value = 'Customer';
+      else if (newPt === 'SUPPLIER') hint.value = 'Supplier';
+      else hint.value = '';
+    }
+    if (clearPartyIfTypeChanged) {
+      var pc = document.getElementById('f_party_code');
+      var pn = document.getElementById('f_party_name');
+      if (pc) pc.value = '';
+      if (pn) pn.value = '';
+    }
+  }
+
+  function escHtml(s) {
+    if (s == null) return '';
+    var d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+  }
+
+  function renderPdcPartyRows(kind, query) {
+    var thead = document.getElementById('pdcPartyPickerThead');
+    var tbody = document.getElementById('pdcPartyPickerBody');
+    if (!thead || !tbody) return;
+    var q = String(query || '').trim().toLowerCase();
+    var src = kind === 'CUSTOMER' ? PDC_PARTY_CUSTOMERS : PDC_PARTY_SUPPLIERS;
+    var list = (src || []).filter(function(row) {
+      if (!q) return true;
+      var code = String(row.customercode != null ? row.customercode : (row.suppliercode != null ? row.suppliercode : '')).toLowerCase();
+      var name = String(row.customername != null ? row.customername : (row.suppliername != null ? row.suppliername : '')).toLowerCase();
+      return code.indexOf(q) !== -1 || name.indexOf(q) !== -1;
+    });
+    if (kind === 'CUSTOMER') {
+      thead.innerHTML = '<tr><th>Code</th><th>Name</th><th>Receivable A/c</th></tr>';
+      tbody.innerHTML = list.map(function(c) {
+        var code = c.customercode != null ? String(c.customercode) : '';
+        if (!code) return '';
+        var name = c.customername != null ? String(c.customername) : '';
+        var ra = c.receivableaccount != null ? String(c.receivableaccount) : '\u2014';
+        return '<tr data-code="' + escHtml(code).replace(/"/g, '&quot;') + '">' +
+          '<td><strong>' + escHtml(code) + '</strong></td><td>' + escHtml(name) + '</td><td>' + escHtml(ra) + '</td></tr>';
+      }).join('');
+    } else {
+      thead.innerHTML = '<tr><th>Code</th><th>Name</th><th>Location</th></tr>';
+      tbody.innerHTML = list.map(function(s) {
+        var code = s.suppliercode != null ? String(s.suppliercode) : '';
+        if (!code) return '';
+        var name = s.suppliername != null ? String(s.suppliername) : '';
+        var loc = s.locationcode != null ? String(s.locationcode) : '\u2014';
+        return '<tr data-code="' + escHtml(code).replace(/"/g, '&quot;') + '">' +
+          '<td><strong>' + escHtml(code) + '</strong></td><td>' + escHtml(name) + '</td><td>' + escHtml(loc) + '</td></tr>';
+      }).join('');
+    }
+  }
+
+  window.openPdcPartyPicker = function() {
+    var pt = document.getElementById('f_party_type_form');
+    var kind = pt ? String(pt.value || '').trim().toUpperCase() : '';
+    if (kind !== 'CUSTOMER' && kind !== 'SUPPLIER') {
+      alert('Choose PDC type first (Received = customer, Issued = supplier).');
+      return;
+    }
+    var modal = document.getElementById('pdcPartyPickerModal');
+    var title = document.getElementById('pdcPartyPickerTitle');
+    var search = document.getElementById('pdcPartyPickerSearch');
+    if (!modal) return;
+    if (title) title.textContent = kind === 'CUSTOMER' ? 'Select customer' : 'Select supplier';
+    renderPdcPartyRows(kind, '');
+    if (search) { search.value = ''; setTimeout(function() { search.focus(); }, 0); }
+    modal.classList.add('open');
+  };
+
+  window.closePdcPartyPicker = function() {
+    var modal = document.getElementById('pdcPartyPickerModal');
+    if (modal) modal.classList.remove('open');
+  };
+
+  var pdcPartyPickerModalEl = document.getElementById('pdcPartyPickerModal');
+  if (pdcPartyPickerModalEl) {
+    pdcPartyPickerModalEl.addEventListener('click', function(e) {
+      if (e.target === pdcPartyPickerModalEl) closePdcPartyPicker();
+    });
+  }
+  var pdcPartyPickerBody = document.getElementById('pdcPartyPickerBody');
+  if (pdcPartyPickerBody) {
+    pdcPartyPickerBody.addEventListener('click', function(e) {
+      var tr = e.target && e.target.closest ? e.target.closest('tr[data-code]') : null;
+      if (!tr) return;
+      var code = tr.getAttribute('data-code') || '';
+      var tds = tr.querySelectorAll('td');
+      var name = tds.length > 1 ? String(tds[1].textContent || '').trim() : '';
+      var ci = document.getElementById('f_party_code');
+      var ni = document.getElementById('f_party_name');
+      if (ci) ci.value = code;
+      if (ni) ni.value = name;
+      closePdcPartyPicker();
+    });
+  }
+  var pdcPartyPickerSearchEl = document.getElementById('pdcPartyPickerSearch');
+  if (pdcPartyPickerSearchEl) {
+    pdcPartyPickerSearchEl.addEventListener('input', function() {
+      var pt = document.getElementById('f_party_type_form');
+      var kind = pt ? String(pt.value || '').trim().toUpperCase() : '';
+      if (kind === 'CUSTOMER' || kind === 'SUPPLIER') renderPdcPartyRows(kind, pdcPartyPickerSearchEl.value);
+    });
+    pdcPartyPickerSearchEl.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') { e.preventDefault(); closePdcPartyPicker(); }
+    });
+  }
+
+  function renderPdcBankRows(query) {
+    var tbody = document.getElementById('pdcBankPickerBody');
+    if (!tbody) return;
+    var q = String(query || '').trim().toLowerCase();
+    var list = (PDC_BANK_ACCOUNTS || []).filter(function(a) {
+      if (!q) return true;
+      var code = String(a.code != null ? a.code : '').toLowerCase();
+      var name = String(a.name != null ? a.name : '').toLowerCase();
+      return code.indexOf(q) !== -1 || name.indexOf(q) !== -1;
+    });
+    tbody.innerHTML = list.map(function(a) {
+      var code = a.code != null ? String(a.code) : '';
+      if (!code) return '';
+      var name = a.name != null ? String(a.name) : '';
+      return '<tr data-code="' + escHtml(code).replace(/"/g, '&quot;') + '" style="cursor:pointer;">' +
+        '<td><strong>' + escHtml(code) + '</strong></td><td>' + escHtml(name) + '</td></tr>';
+    }).join('');
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="2" style="padding:12px;color:#64748b;text-align:center;">No matching cash/bank accounts.</td></tr>';
+    }
+  }
+
+  window.openPdcBankPicker = function() {
+    if (!PDC_BANK_ACCOUNTS.length) {
+      alert('No cash/bank accounts found in Chart of Accounts. Add postable ASSET accounts under a Cash/Bank group first.');
+      return;
+    }
+    var modal = document.getElementById('pdcBankPickerModal');
+    var search = document.getElementById('pdcBankPickerSearch');
+    if (!modal) return;
+    renderPdcBankRows('');
+    if (search) { search.value = ''; setTimeout(function() { search.focus(); }, 0); }
+    modal.classList.add('open');
+  };
+
+  window.closePdcBankPicker = function() {
+    var modal = document.getElementById('pdcBankPickerModal');
+    if (modal) modal.classList.remove('open');
+  };
+
+  var pdcBankPickerModalEl = document.getElementById('pdcBankPickerModal');
+  if (pdcBankPickerModalEl) {
+    pdcBankPickerModalEl.addEventListener('click', function(e) {
+      if (e.target === pdcBankPickerModalEl) closePdcBankPicker();
+    });
+  }
+  var pdcBankPickerBody = document.getElementById('pdcBankPickerBody');
+  if (pdcBankPickerBody) {
+    pdcBankPickerBody.addEventListener('click', function(e) {
+      var tr = e.target && e.target.closest ? e.target.closest('tr[data-code]') : null;
+      if (!tr) return;
+      var code = tr.getAttribute('data-code') || '';
+      var tds = tr.querySelectorAll('td');
+      var name = tds.length > 1 ? String(tds[1].textContent || '').trim() : '';
+      var bn = document.getElementById('f_bank_name');
+      if (bn) bn.value = (code && name) ? (code + ' \u2013 ' + name) : (code || name);
+      closePdcBankPicker();
+    });
+  }
+  var pdcBankPickerSearchEl = document.getElementById('pdcBankPickerSearch');
+  if (pdcBankPickerSearchEl) {
+    pdcBankPickerSearchEl.addEventListener('input', function() {
+      renderPdcBankRows(pdcBankPickerSearchEl.value);
+    });
+    pdcBankPickerSearchEl.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') { e.preventDefault(); closePdcBankPicker(); }
+    });
+  }
+
+  function closeOptionPicker() {
+    activeOptionSetKey = null;
+    if (optionModal) optionModal.classList.add('hidden');
+    if (optionSearch) optionSearch.value = '';
+  }
+
+  window.openOptionPicker = function(setKey) {
+    var set = OPTION_SETS[setKey];
+    if (!set) return;
+    activeOptionSetKey = setKey;
+    if (optionModalTitle) optionModalTitle.textContent = set.title || 'Select';
+    renderOptionRows(setKey, '');
+    if (optionModal) optionModal.classList.remove('hidden');
+    if (optionSearch) {
+      optionSearch.value = '';
+      setTimeout(function() { optionSearch.focus(); }, 0);
+    }
+  };
+
+  /* ── Days-to-due rendering ─────────────────────────────────────── */
+  document.querySelectorAll('.days-cell').forEach(function(cell) {
+    var dateStr = cell.dataset.date;
+    var status  = cell.dataset.status;
+    if (!dateStr || status !== 'PENDING') { cell.textContent = ''; return; }
+    var due  = new Date(dateStr);
+    var now  = new Date(today);
+    var diff = Math.round((due - now) / 86400000);
+    var cls, txt;
+    if (diff < 0)      { cls = 'overdue'; txt = Math.abs(diff) + 'd overdue'; }
+    else if (diff === 0){ cls = 'today';   txt = 'Today'; }
+    else if (diff <= 7) { cls = 'soon';    txt = 'In ' + diff + 'd'; }
+    else                { cls = 'ok';      txt = 'In ' + diff + 'd'; }
+    cell.innerHTML = '<span class="due-pill due-pill--' + cls + '">' + txt + '</span>';
+  });
+  var optionModalCloseBtn = document.getElementById('pdcOptionModalClose');
+  if (optionModalCloseBtn) optionModalCloseBtn.addEventListener('click', closeOptionPicker);
+  if (optionModal) optionModal.addEventListener('click', function(e) { if (e.target === optionModal) closeOptionPicker(); });
+  if (optionSearch) {
+    optionSearch.addEventListener('input', function() {
+      if (!activeOptionSetKey) return;
+      renderOptionRows(activeOptionSetKey, optionSearch.value);
+    });
+    optionSearch.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeOptionPicker();
+      }
+    });
+  }
+  // F1 opens picker on focused picker display field
+  Object.keys(OPTION_SETS).forEach(function(setKey) {
+    var set = OPTION_SETS[setKey];
+    var displayEl = document.getElementById(set.displayId);
+    if (!displayEl) return;
+    displayEl.addEventListener('keydown', function(e) {
+      if (e.key === 'F1') {
+        e.preventDefault();
+        openOptionPicker(setKey);
+      }
+    });
+  });
+
+  /* ── Filter by status via card click ──────────────────────────── */
+  window.filterByStatus = function(status) {
+    var form = document.getElementById('pdcFilterForm');
+    setPickerValue('filter_status', status);
+    form.submit();
+  };
+
+  /* ── Form panel ────────────────────────────────────────────────── */
+  var overlay  = document.getElementById('pdcFormOverlay');
+  var pdcForm  = document.getElementById('pdcForm');
+  var formTitle= document.getElementById('pdcFormTitle');
+
+  window.openPdcForm = function() {
+    pdcForm.reset();
+    document.getElementById('pdc_edit_id').value = '';
+    pdcForm.action = {{ url_for('accounts.pdc_add') | tojson }};
+    formTitle.textContent = 'Add PDC';
+    overlay.classList.add('open');
+    document.getElementById('f_cheque_date').value = today;
+    setPickerValue('form_type', '');
+    syncPartyTypeFromPdcType(false);
+    setTimeout(function(){ document.getElementById('f_pdc_type_form_display').focus(); }, 100);
+  };
+
+  window.editPdc = function(r) {
+    pdcForm.reset();
+    document.getElementById('pdc_edit_id').value = r.id;
+    pdcForm.action = '/accounts/pdc/' + r.id + '/edit';
+    formTitle.textContent = 'Edit PDC #' + r.id;
+    setPickerValue('form_type', r.pdc_type || '');
+    syncPartyTypeFromPdcType(false);
+    document.getElementById('f_cheque_no').value      = r.cheque_no  || '';
+    document.getElementById('f_cheque_date').value    = r.cheque_date|| '';
+    document.getElementById('f_bank_name').value      = r.bank_name  || '';
+    document.getElementById('f_branch_name').value    = r.branch_name|| '';
+    document.getElementById('f_amount').value         = r.amount      != null ? r.amount : '';
+    document.getElementById('f_party_code').value     = r.party_code || '';
+    document.getElementById('f_party_name').value     = r.party_name || '';
+    document.getElementById('f_narration').value      = r.narration  || '';
+    document.getElementById('f_remarks').value        = r.remarks    || '';
+    overlay.classList.add('open');
+  };
+
+  window.closePdcForm = function() {
+    overlay.classList.remove('open');
+  };
+
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) closePdcForm();
+  });
+
+  window.submitPdcForm = function() {
+    // Basic required check
+    var required = [
+      {id:'f_pdc_type_form', label:'PDC type'},
+      {id:'f_party_type_form', label:'Party type', checkHiddenPartyType: true},
+      {id:'f_cheque_no',     label:'Cheque No'},
+      {id:'f_cheque_date',   label:'Cheque Date'},
+      {id:'f_bank_name',     label:'Bank account'},
+      {id:'f_amount',        label:'Amount'},
+    ];
+    for (var i = 0; i < required.length; i++) {
+      var el = document.getElementById(required[i].id);
+      var empty = !el || (required[i].checkHiddenPartyType ? !String(el.value || '').trim() : !el.value.trim());
+      if (empty) {
+        alert('Please fill in: ' + required[i].label);
+        if (required[i].id === 'f_pdc_type_form') {
+          document.getElementById('f_pdc_type_form_display')?.focus();
+        } else if (required[i].checkHiddenPartyType) {
+          document.getElementById('f_pdc_type_form_display')?.focus();
+        } else if (el) {
+          el.focus();
+        }
+        return;
+      }
+    }
+    pdcForm.submit();
+  };
+
+  /* ── Status modal ──────────────────────────────────────────────── */
+  var statusOverlay = document.getElementById('statusModalOverlay');
+  var _statusPdcId  = null;
+
+  window.openStatusModal = function(pdcId, currentStatus) {
+    _statusPdcId = pdcId;
+    setPickerValue('status_modal', currentStatus || 'PENDING');
+    document.getElementById('statusDate').value   = today;
+    statusOverlay.classList.add('open');
+  };
+
+  window.closeStatusModal = function() {
+    statusOverlay.classList.remove('open');
+  };
+
+  statusOverlay.addEventListener('click', function(e) {
+    if (e.target === statusOverlay) closeStatusModal();
+  });
+
+  window.confirmStatusChange = function() {
+    var newStatus  = document.getElementById('statusSelect').value;
+    var actionDate = document.getElementById('statusDate').value;
+    if (!newStatus) { alert('Please select a status.'); return; }
+    fetch('/accounts/pdc/' + _statusPdcId + '/status', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({status: newStatus, action_date: actionDate}),
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (data.success) { closeStatusModal(); window.location.reload(); }
+      else { alert('Error: ' + (data.error || 'Unknown error')); }
+    })
+    .catch(function(){ alert('Network error, please try again.'); });
+  };
+
+  /* ── Activity / audit log ───────────────────────────────────────── */
+  var auditOverlay = document.getElementById('pdcAuditOverlay');
+  var auditTitleEl = document.getElementById('pdcAuditModalTitle');
+  var auditLoading = document.getElementById('pdcAuditLoading');
+  var auditError = document.getElementById('pdcAuditError');
+  var auditEmpty = document.getElementById('pdcAuditEmpty');
+  var auditWrap = document.getElementById('pdcAuditTableWrap');
+  var auditBody = document.getElementById('pdcAuditTableBody');
+
+  function auditBadgeClass(action) {
+    var a = String(action || '').toUpperCase();
+    if (a === 'CREATED') return 'pdc-audit-badge pdc-audit-badge--CREATED';
+    if (a === 'UPDATED') return 'pdc-audit-badge pdc-audit-badge--UPDATED';
+    if (a === 'STATUS') return 'pdc-audit-badge pdc-audit-badge--STATUS';
+    if (a === 'DELETED') return 'pdc-audit-badge pdc-audit-badge--DELETED';
+    return 'pdc-audit-badge';
+  }
+
+  window.closePdcAuditLog = function() {
+    if (auditOverlay) {
+      auditOverlay.classList.remove('open');
+      auditOverlay.setAttribute('aria-hidden', 'true');
+    }
+  };
+
+  window.openPdcAuditLog = function(pdcId) {
+    if (!auditOverlay || !auditBody) return;
+    auditOverlay.classList.add('open');
+    auditOverlay.setAttribute('aria-hidden', 'false');
+    if (auditTitleEl) {
+      auditTitleEl.textContent = pdcId != null && pdcId !== ''
+        ? ('History — PDC #' + pdcId)
+        : 'Activity log — all PDCs';
+    }
+    auditLoading.style.display = 'block';
+    auditError.style.display = 'none';
+    auditError.textContent = '';
+    auditEmpty.style.display = 'none';
+    auditWrap.style.display = 'none';
+    auditBody.innerHTML = '';
+
+    var q = PDC_AUDIT_LOG_URL + '?limit=2000';
+    if (pdcId != null && pdcId !== '') q += '&pdc_id=' + encodeURIComponent(String(pdcId));
+
+    fetch(q)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        auditLoading.style.display = 'none';
+        if (!data.success) {
+          auditError.textContent = data.error || 'Could not load activity log.';
+          auditError.style.display = 'block';
+          return;
+        }
+        var rows = data.rows || [];
+        if (!rows.length) {
+          auditEmpty.style.display = 'block';
+          return;
+        }
+        auditWrap.style.display = 'block';
+        rows.forEach(function(row) {
+          var tr = document.createElement('tr');
+          var tdWhen = document.createElement('td');
+          tdWhen.textContent = row.logged_at || '—';
+          var tdUser = document.createElement('td');
+          tdUser.textContent = row.username || '—';
+          var tdAct = document.createElement('td');
+          var span = document.createElement('span');
+          span.className = auditBadgeClass(row.action);
+          span.textContent = row.action || '—';
+          tdAct.appendChild(span);
+          var tdId = document.createElement('td');
+          tdId.textContent = row.pdc_id != null ? String(row.pdc_id) : '—';
+          var tdSum = document.createElement('td');
+          tdSum.style.maxWidth = '280px';
+          tdSum.style.wordBreak = 'break-word';
+          tdSum.textContent = row.summary || '—';
+          var tdDet = document.createElement('td');
+          var det = document.createElement('details');
+          var sumEl = document.createElement('summary');
+          sumEl.style.cursor = 'pointer';
+          sumEl.style.fontWeight = '600';
+          sumEl.style.fontSize = '11px';
+          sumEl.textContent = 'JSON';
+          var pre = document.createElement('pre');
+          pre.className = 'pdc-audit-json';
+          try {
+            pre.textContent = JSON.stringify(row.detail || {}, null, 2);
+          } catch (e) {
+            pre.textContent = String(row.detail);
+          }
+          det.appendChild(sumEl);
+          det.appendChild(pre);
+          tdDet.appendChild(det);
+          tr.appendChild(tdWhen);
+          tr.appendChild(tdUser);
+          tr.appendChild(tdAct);
+          tr.appendChild(tdId);
+          tr.appendChild(tdSum);
+          tr.appendChild(tdDet);
+          auditBody.appendChild(tr);
+        });
+      })
+      .catch(function() {
+        auditLoading.style.display = 'none';
+        auditError.textContent = 'Network error loading activity log.';
+        auditError.style.display = 'block';
+      });
+  };
+
+  if (auditOverlay) {
+    auditOverlay.addEventListener('click', function(e) {
+      if (e.target === auditOverlay) closePdcAuditLog();
+    });
+  }
+
+  /* ── Delete ────────────────────────────────────────────────────── */
+  window.deletePdc = function(pdcId) {
+    if (!confirm('Delete this PDC record? This cannot be undone.')) return;
+    fetch('/accounts/pdc/' + pdcId + '/delete', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: '{}',
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (data.success) { window.location.reload(); }
+      else { alert('Cannot delete: only Pending or Cancelled records can be deleted.'); }
+    })
+    .catch(function(){ alert('Network error, please try again.'); });
+  };
+
+  /* ── Auto-open form if show_form flag is set ───────────────────── */
+  {% if show_form %}
+  document.addEventListener('DOMContentLoaded', function(){
+    {% if edit_data %}
+    editPdc({{ edit_data | tojson }});
+    {% else %}
+    openPdcForm();
+    {% endif %}
+  });
+  {% endif %}
+
+})();
+</script>
+{% endblock %}

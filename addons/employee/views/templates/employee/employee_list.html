@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+
+{% set employee_kpis = employee_kpis if employee_kpis is defined else {} %}
+{% set ek = namespace(n=employee_kpis.total|default((employees or [])|length, true), des=employee_kpis.designation|default(0, true)) %}
+{% if employee_kpis.total is not defined %}
+  {% for employee in employees or [] %}
+    {% if employee.designation and employee.designation|string|trim %}{% set ek.des = ek.des + 1 %}{% endif %}
+  {% endfor %}
+{% endif %}
+{% set list_colspan = 6 if show_employee_id else 5 %}
+
+<style>
+  .muted { color: #6b7280; }
+  .employee-scroll-status {
+    margin: 10px 0 2px;
+    padding: 9px 12px;
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 12px;
+    text-align: center;
+    cursor: pointer;
+  }
+  .employee-scroll-status.is-error {
+    border-color: #fecaca;
+    background: #fff1f2;
+    color: #b91c1c;
+  }
+</style>
+<div class="page-po nexa-list-page nexa-setup-list-page employee-list-page" style="max-width: 1300px;" data-items-api="{{ employee_items_api_url or url_for('employee.employee_list_api_items') }}" data-current-page="{{ current_page or 0 }}" data-total-pages="{{ total_pages or 1 }}" data-total-count="{{ total_count or ek.n or 0 }}">
+  <section class="nexa-stat-grid" aria-label="Employee summary">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-people" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Employees</p>
+        <p class="nexa-stat-value" id="employeeKpiTotal">{{ "{:,}".format(ek.n) }}</p>
+        <p class="nexa-stat-sub">Employee master</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-briefcase" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Designation</p>
+        <p class="nexa-stat-value" id="employeeKpiDesignation">{{ "{:,}".format(ek.des) }}</p>
+        <p class="nexa-stat-sub">Filled field</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Employee List</h1>
+      <p class="page-po__muted">View and manage employees (EMPLOYEE table).</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% include 'includes/list_refresh_bar.html' %}
+      {% if allow_all_permissions or has_menu_permission('employee.employee_create') %}
+      <a href="{{ url_for('employee.employee_create') }}" class="page-po__btn-primary">+ New employee</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="nexa-list-toolbar">
+    <input type="text" id="searchEmployee" class="input" placeholder="Search by code or name…" style="min-width:240px; max-width:320px;">
+    <button type="button" id="btnClearSearch" class="page-po__btn-secondary" style="height:36px;">Clear</button>
+    <a href="{{ url_for('employee.employee_export') }}" class="page-po__btn-secondary" id="btnExport" style="height:36px; line-height:36px; text-decoration:none;">Export</a>
+  </div>
+
+  <div class="co-table-wrap">
+    <table class="co-table co-table--th-hint" id="empListTable">
+      <thead>
+        <tr>
+          <th style="text-align:center;">Sl.No</th>
+          {% if show_employee_id %}<th>Employee ID</th>{% endif %}
+          <th>Employee Code</th>
+          <th>Employee Name</th>
+          <th>Designation</th>
+          <th style="text-align:center;">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="employeeListBody">
+        {% if employees %}
+          {% for employee in employees %}
+            <tr class="employee-row"
+                data-code="{{ (employee.employeecode or '')|string }}"
+                data-name="{{ (employee.employeename or '')|string }}">
+              <td style="text-align:center;" class="sl-no">{{ loop.index }}</td>
+              {% if show_employee_id %}<td>{{ employee.employeeid or '-' }}</td>{% endif %}
+              <td>{{ employee.employeecode or '-' }}</td>
+              <td>{{ employee.employeename or '-' }}</td>
+              <td>{{ employee.designation or '-' }}</td>
+              <td style="text-align:center; white-space:nowrap;">
+                <a href="{{ url_for('employee.employee_view', employeecode=employee.employeecode) }}"
+                   class="btn-view" style="margin-right:6px;">View</a>
+                <a href="{{ url_for('employee.employee_edit', employeecode=employee.employeecode) }}"
+                   class="btn-view">Edit</a>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr id="employeeListLoading"><td colspan="{{ list_colspan }}" class="muted" style="text-align:center; padding:20px;">Loading employees...</td></tr>
+        {% endif %}
+        <tr id="employeeListNoResults" style="display:none;">
+          <td colspan="{{ list_colspan }}" class="muted" style="text-align:center;">No matching employees.</td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <th colspan="{{ list_colspan }}" id="empCount" style="font-size:12px; color:#555; font-weight:500;">
+            Total: {{ employees|length if employees else 0 }} employees
+          </th>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  <div id="employeeInfiniteScrollStatus" class="employee-scroll-status">Loading employees...</div>
+  <div id="employeeInfiniteScrollSentinel" style="height:1px;"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const searchInput   = document.getElementById('searchEmployee');
+  const btnClear      = document.getElementById('btnClearSearch');
+  const showEmployeeId = {{ show_employee_id|default(false)|tojson }};
+  const listColspan = showEmployeeId ? 6 : 5;
+  const tbody         = document.getElementById('employeeListBody');
+  const noResultsRow  = document.getElementById('employeeListNoResults');
+  const empCount      = document.getElementById('empCount');
+  const table         = document.getElementById('empListTable');
+  const headers       = table.querySelectorAll('thead th');
+  const pageRoot      = document.querySelector('.employee-list-page');
+  const scrollStatus  = document.getElementById('employeeInfiniteScrollStatus');
+  const scrollSentinel = document.getElementById('employeeInfiniteScrollSentinel');
+  const itemsApi      = pageRoot && pageRoot.dataset ? (pageRoot.dataset.itemsApi || '{{ url_for("employee.employee_list_api_items") }}') : '{{ url_for("employee.employee_list_api_items") }}';
+  let scrollPage      = Number(pageRoot && pageRoot.dataset ? pageRoot.dataset.currentPage || '0' : '0') || 0;
+  let scrollTotalPages = Number(pageRoot && pageRoot.dataset ? pageRoot.dataset.totalPages || '1' : '1') || 1;
+  let scrollTotalCount = Number(pageRoot && pageRoot.dataset ? pageRoot.dataset.totalCount || '0' : '0') || 0;
+  let scrollLoading = false;
+  let scrollDone = false;
+
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, ch => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[ch]));
+  }
+
+  function setKpi(id, value) {
+    const el = document.getElementById(id);
+    const n = Number(value || 0);
+    if (el) el.textContent = Number.isFinite(n) ? n.toLocaleString() : '0';
+  }
+
+  function updateEmployeeKpis(kpis) {
+    if (!kpis) return;
+    setKpi('employeeKpiTotal', kpis.total);
+    setKpi('employeeKpiDesignation', kpis.designation);
+  }
+
+  function employeeRow(employee, absoluteIndex) {
+    const tr = document.createElement('tr');
+    tr.className = 'employee-row';
+    tr.dataset.code = employee.employeecode == null ? '' : String(employee.employeecode);
+    tr.dataset.name = employee.employeename || '';
+    const code = encodeURIComponent(employee.employeecode || '');
+    tr.innerHTML =
+      '<td style="text-align:center;" class="sl-no">' + absoluteIndex + '</td>' +
+      (showEmployeeId ? '<td>' + esc(employee.employeeid != null ? employee.employeeid : '-') + '</td>' : '') +
+      '<td>' + esc(employee.employeecode || '-') + '</td>' +
+      '<td>' + esc(employee.employeename || '-') + '</td>' +
+      '<td>' + esc(employee.designation || '-') + '</td>' +
+      '<td style="text-align:center; white-space:nowrap;">' +
+      '<a href="/master/employee/' + code + '/view" class="btn-view" style="margin-right:6px;">View</a>' +
+      '<a href="/master/employee/' + code + '/edit" class="btn-view">Edit</a>' +
+      '</td>';
+    return tr;
+  }
+
+  function setScrollStatus(msg, isError) {
+    if (!scrollStatus) return;
+    scrollStatus.textContent = msg;
+    scrollStatus.classList.toggle('is-error', !!isError);
+  }
+
+  function itemsApiUrl(nextPage) {
+    const params = new URLSearchParams(window.location.search);
+    params.delete('pending');
+    params.set('page', String(nextPage));
+    params.set('per_page', nextPage <= 1 ? '50' : '100');
+    if (scrollTotalCount > 0) params.set('total_count', String(scrollTotalCount));
+    return itemsApi + '?' + params.toString();
+  }
+
+  async function loadNextEmployeePage(pageOverride) {
+    if (!tbody || scrollLoading || scrollDone) return;
+    const loaded = tbody.querySelectorAll('.employee-row').length;
+    if (pageOverride === 1 && loaded > 0) return;
+    if (scrollPage >= scrollTotalPages && loaded > 0) {
+      scrollDone = true;
+      setScrollStatus('All ' + loaded + ' employees loaded.');
+      return;
+    }
+    scrollLoading = true;
+    const nextPage = pageOverride || (scrollPage + 1);
+    setScrollStatus('Loading employees... (' + loaded + ' of ' + scrollTotalCount + ')');
+    try {
+      const res = await fetch(itemsApiUrl(nextPage), { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.error || data.message || `Load failed (${res.status})`);
+      if (nextPage <= 1) {
+        Array.from(tbody.querySelectorAll('tr:not(#employeeListNoResults)')).forEach(r => r.remove());
+      }
+      const before = tbody.querySelectorAll('.employee-row').length;
+      (data.items || []).forEach((employee, idx) => {
+        tbody.insertBefore(employeeRow(employee, before + idx + 1), noResultsRow || null);
+      });
+      updateEmployeeKpis(data.kpis);
+      scrollPage = Number(data.page || nextPage) || nextPage;
+      scrollTotalPages = Number(data.total_pages || scrollTotalPages) || scrollTotalPages;
+      scrollTotalCount = Number(data.total_count || scrollTotalCount) || scrollTotalCount;
+      if (pageRoot && pageRoot.dataset) {
+        pageRoot.dataset.currentPage = String(scrollPage);
+        pageRoot.dataset.totalPages = String(scrollTotalPages);
+        pageRoot.dataset.totalCount = String(scrollTotalCount);
+      }
+      filterRows();
+      const loadedNow = tbody.querySelectorAll('.employee-row').length;
+      if (scrollPage >= scrollTotalPages || !(data.items || []).length) {
+        scrollDone = true;
+        setScrollStatus('All ' + loadedNow + ' employees loaded.');
+      } else {
+        setScrollStatus('Showing ' + loadedNow + ' of ' + scrollTotalCount + ' employees. Scroll down or click here to load more.');
+      }
+    } catch (err) {
+      setScrollStatus(err && err.message ? err.message : 'Could not load employees.', true);
+    } finally {
+      scrollLoading = false;
+    }
+  }
+
+  function initEmployeeInfiniteScroll() {
+    if (scrollStatus) scrollStatus.addEventListener('click', () => loadNextEmployeePage());
+    if (scrollSentinel && 'IntersectionObserver' in window) {
+      const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) loadNextEmployeePage();
+        });
+      }, { rootMargin: '500px 0px' });
+      observer.observe(scrollSentinel);
+    } else {
+      window.addEventListener('scroll', () => {
+        const remaining = document.documentElement.scrollHeight - window.innerHeight - window.scrollY;
+        if (remaining < 500) loadNextEmployeePage();
+      }, { passive: true });
+    }
+    loadNextEmployeePage(1);
+  }
+
+  headers.forEach((th, idx) => {
+    th.addEventListener('click', () => {
+      const order = th.getAttribute('data-order') === 'asc' ? 'desc' : 'asc';
+      headers.forEach(h => h.removeAttribute('data-order'));
+      th.setAttribute('data-order', order);
+      const rows = Array.from(tbody.querySelectorAll('tr.employee-row:not([style*="display: none"])'));
+      rows.sort((a, b) => {
+        const av = (a.children[idx]?.textContent || '').trim();
+        const bv = (b.children[idx]?.textContent || '').trim();
+        const an = parseFloat(av), bn = parseFloat(bv);
+        const res = (!isNaN(an) && !isNaN(bn)) ? an - bn : av.localeCompare(bv);
+        return order === 'asc' ? res : -res;
+      });
+      rows.forEach(r => tbody.insertBefore(r, noResultsRow));
+      reindex();
+    });
+  });
+
+  function filterRows() {
+    const q  = (searchInput.value || '').trim().toLowerCase();
+    const rows = tbody.querySelectorAll('.employee-row');
+    let visible = 0;
+    rows.forEach(row => {
+      const code = (row.dataset.code || '').toLowerCase();
+      const name = (row.dataset.name || '').toLowerCase();
+      const show = !q || code.includes(q) || name.includes(q);
+      row.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    if (noResultsRow)
+      noResultsRow.style.display = (visible === 0 && rows.length > 0) ? '' : 'none';
+    if (empCount) empCount.textContent = `Total: ${visible} employee${visible !== 1 ? 's' : ''}`;
+    reindex();
+  }
+
+  function reindex() {
+    let sl = 0;
+    tbody.querySelectorAll('.employee-row').forEach(row => {
+      if (row.style.display !== 'none') {
+        sl++;
+        const cell = row.querySelector('.sl-no');
+        if (cell) cell.textContent = sl;
+      }
+    });
+  }
+
+  if (searchInput) searchInput.addEventListener('input', filterRows);
+
+  if (btnClear) {
+    btnClear.addEventListener('click', () => {
+      if (searchInput) searchInput.value = '';
+      filterRows();
+    });
+  }
+
+  initEmployeeInfiniteScroll();
+});
+</script>
+{% endblock %}

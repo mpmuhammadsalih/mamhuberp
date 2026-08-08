@@ -1,0 +1,2 @@
+"""Addon manifest — Sales invoice, return, orders."""
+MANIFEST = {'technical_name': 'sales', 'name': 'Sales', 'version': '1.0.0', 'category': 'Sales', 'summary': 'Sales invoice, return, orders', 'depends': [], 'application': True, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/sales'}, 'flask': {'blueprint': 'sales', 'blueprint_ref': 'addons.sales:bp', 'models_package': 'addons.sales.models', 'routes_module': 'addons.sales.controllers.routes'}}

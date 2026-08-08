@@ -1,0 +1,670 @@
+{% extends "base.html" %}
+{% block title %}Bin stock &amp; moves{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page bss-stock-page" style="max-width:1320px;">
+<style>
+  /* Bin stock — Item Master / lot inventory list parity */
+  body:has(.bss-stock-page) { background: #f5f6f8; }
+  .bss-stock-page {
+    --bss-fill: rgba(255, 255, 255, 0.52);
+    --bss-fill-strong: #eaf2fa;
+    --bss-border: #e5eaf2;
+    margin: 0 auto !important;
+    padding: 8px 0 24px !important;
+  }
+
+  .bss-stock-page .im-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .bss-stock-page .im-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 11px;
+    border: 1px solid var(--bss-border);
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, .06);
+  }
+  .bss-stock-page .im-stat-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    border-radius: 9px;
+    color: #fff;
+    font-size: 17px;
+  }
+  .bss-stock-page .im-stat-icon--teal { background: linear-gradient(135deg, #0d9488, #14b8a6); }
+  .bss-stock-page .im-stat-icon--blue { background: linear-gradient(135deg, #2563eb, #38bdf8); }
+  .bss-stock-page .im-stat-icon--green { background: linear-gradient(135deg, #16a34a, #22c55e); }
+  .bss-stock-page .im-stat-icon--amber { background: linear-gradient(135deg, #f59e0b, #facc15); }
+  .bss-stock-page .im-stat-icon--purple { background: linear-gradient(135deg, #7c3aed, #a78bfa); }
+  .bss-stock-page .im-stat-label { margin: 0 0 4px; color: #475569; font-size: 11px; font-weight: 700; }
+  .bss-stock-page .im-stat-value { margin: 0; color: #0f172a; font-size: clamp(16px, 1.45vw, 21px); font-weight: 850; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .bss-stock-page .im-stat-sub { margin: 3px 0 0; color: #64748b; font-size: 11px; }
+
+  .bss-stock-page .bss-shell {
+    background: var(--bss-fill-strong);
+    border: 1px solid var(--bss-border);
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, .06);
+    overflow: hidden;
+  }
+  .bss-stock-page .bss-section {
+    position: relative;
+    margin: 0;
+    padding: 36px 14px 14px;
+    border-bottom: 1px solid var(--bss-border);
+    background: var(--bss-fill-strong);
+  }
+  .bss-stock-page .bss-section:last-child { border-bottom: 0; }
+  .bss-stock-page .bss-section::before {
+    content: attr(data-section-title);
+    position: absolute;
+    top: 10px;
+    left: 14px;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 850;
+  }
+
+  .bss-stock-page .bss-form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 16px;
+    align-items: flex-end;
+  }
+  .bss-stock-page .bss-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+  .bss-stock-page .bss-field label {
+    color: #495057;
+    font-size: 13px;
+    font-weight: 400;
+    margin: 0;
+  }
+  .bss-stock-page .bss-field input[type="text"],
+  .bss-stock-page .bss-field input[type="number"],
+  .bss-stock-page .bss-field input[type="search"],
+  .bss-stock-page .bss-field select {
+    border: none;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 0;
+    padding: 6px 0;
+    font-size: 13px;
+    background: var(--bss-fill);
+    min-width: 0;
+  }
+  .bss-stock-page .bss-field select { padding: 6px 4px; }
+  .bss-stock-page .bss-field input:focus,
+  .bss-stock-page .bss-field select:focus {
+    outline: none;
+    border-bottom-color: var(--nexa-focus-color);
+  }
+  .bss-stock-page .bss-field input[readonly] {
+    background: rgba(226, 236, 247, 0.92);
+    color: #6c757d;
+  }
+  .bss-stock-page .bss-wh-picker {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+    min-width: 220px;
+    max-width: 400px;
+    flex: 1;
+  }
+  .bss-stock-page .bss-wh-picker input { flex: 1; }
+  .bss-stock-page .bss-pick-btn {
+    flex-shrink: 0;
+    min-height: 32px;
+    padding: 6px 14px;
+    border: 1px solid rgba(13, 110, 253, 0.16);
+    border-radius: 6px;
+    background: var(--bss-fill-strong);
+    color: #0d6efd;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .bss-stock-page .bss-pick-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .bss-stock-page .bss-pick-btn:not(:disabled):hover { background: #dfe8f3; }
+
+  .bss-stock-page .page-po__btn-primary,
+  .bss-stock-page .page-po__btn-secondary {
+    min-height: 32px;
+    padding: 6px 14px !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    border-radius: 6px !important;
+  }
+
+  .bss-stock-page .bss-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    align-items: end;
+  }
+  .bss-stock-page .bss-form-grid label { font-size: 13px; color: #495057; display: block; margin-bottom: 4px; }
+  .bss-stock-page .bss-note { font-size: 12px; color: #64748b; margin: 10px 0 0; line-height: 1.45; }
+
+  .bss-stock-page .co-table-wrap {
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.55);
+    max-height: min(58vh, 680px);
+    overflow: auto;
+  }
+  .bss-stock-page .co-table-wrap--short { max-height: min(36vh, 420px); }
+  .bss-stock-page .co-table {
+    width: 100%;
+    font-size: 13px;
+    border-collapse: collapse;
+  }
+  .bss-stock-page .co-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--bss-fill-strong) !important;
+    color: #495057 !important;
+    padding: 8px 10px !important;
+    border-bottom: 1px solid #dee2e6 !important;
+    font-weight: 600 !important;
+    font-size: 12px !important;
+    white-space: nowrap;
+    text-align: left;
+  }
+  .bss-stock-page .co-table tbody td {
+    padding: 8px 10px !important;
+    border-bottom: 1px solid #dee2e6 !important;
+    vertical-align: middle;
+  }
+  .bss-stock-page .co-table tbody tr:nth-child(even) { background: rgba(248, 250, 252, 0.65); }
+  .bss-stock-page .co-table tbody tr.bss-stock-row:hover { background: #eef2ff !important; }
+  .bss-stock-page .co-table .num { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .bss-stock-page .co-table .mono { font-family: ui-monospace, monospace; font-weight: 600; }
+
+  .bss-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .bss-badge--staging { background: #fef9c3; color: #854d0e; }
+  .bss-badge--bin { background: #e0e7ff; color: #3730a3; }
+
+  #bsLocationPickerModal.hidden, #bssLinesModal.hidden { display: none !important; }
+  body.bss-modal-open { overflow: hidden; }
+
+  @media (max-width: 1100px) {
+    .bss-stock-page .im-stat-grid { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+  }
+  @media (max-width: 700px) {
+    .bss-stock-page .im-stat-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+  }
+  @media (max-width: 480px) {
+    .bss-stock-page .im-stat-grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+  {% set bs = bss_summary or {} %}
+  {% if selected_loc_key %}
+    {% set kpi_lines = bs.line_count|default(0) %}
+    {% set kpi_qty = bs.total_qty|default(0)|round(4) %}
+    {% set kpi_items = bs.item_count|default(0) %}
+    {% set kpi_positions = bs.bin_positions|default(0) %}
+    {% set kpi_lines_sub = 'BIN_STOCK rows' %}
+    {% set kpi_qty_sub = 'On-hand at site' %}
+    {% set kpi_pos_label = 'Bins with stock' %}
+    {% set kpi_pos_sub = 'Distinct bin positions' %}
+  {% else %}
+    {% set kpi_lines = bs.wh_line_count|default(0) %}
+    {% set kpi_qty = bs.wh_total_qty|default(0)|round(4) %}
+    {% set kpi_items = bs.wh_item_count|default(0) %}
+    {% set kpi_positions = bs.wh_warehouse_count|default(0) %}
+    {% set kpi_lines_sub = 'WAREHOUSE_STOCK rows' %}
+    {% set kpi_qty_sub = 'Branch total' %}
+    {% set kpi_pos_label = 'Warehouses' %}
+    {% set kpi_pos_sub = 'Sites with stock' %}
+  {% endif %}
+
+  <section class="im-stat-grid" aria-label="Bin stock summary">
+    <div class="im-stat-card">
+      <span class="im-stat-icon im-stat-icon--teal" aria-hidden="true"><i class="bi bi-list-ul"></i></span>
+      <div>
+        <p class="im-stat-label">Stock lines</p>
+        <p class="im-stat-value">{{ kpi_lines }}</p>
+        <p class="im-stat-sub">{{ kpi_lines_sub }}</p>
+      </div>
+    </div>
+    <div class="im-stat-card">
+      <span class="im-stat-icon im-stat-icon--blue" aria-hidden="true"><i class="bi bi-box-seam"></i></span>
+      <div>
+        <p class="im-stat-label">Total qty</p>
+        <p class="im-stat-value">{{ kpi_qty }}</p>
+        <p class="im-stat-sub">{{ kpi_qty_sub }}</p>
+      </div>
+    </div>
+    <div class="im-stat-card">
+      <span class="im-stat-icon im-stat-icon--green" aria-hidden="true"><i class="bi bi-upc-scan"></i></span>
+      <div>
+        <p class="im-stat-label">Distinct items</p>
+        <p class="im-stat-value">{{ kpi_items }}</p>
+        <p class="im-stat-sub">Unique item codes</p>
+      </div>
+    </div>
+    <div class="im-stat-card">
+      <span class="im-stat-icon im-stat-icon--amber" aria-hidden="true"><i class="bi bi-building"></i></span>
+      <div>
+        <p class="im-stat-label">{{ kpi_pos_label }}</p>
+        <p class="im-stat-value">{{ kpi_positions }}</p>
+        <p class="im-stat-sub">{{ kpi_pos_sub }}</p>
+      </div>
+    </div>
+    <div class="im-stat-card">
+      <span class="im-stat-icon im-stat-icon--purple" aria-hidden="true"><i class="bi bi-arrow-left-right"></i></span>
+      <div>
+        <p class="im-stat-label">Recent transfers</p>
+        <p class="im-stat-value">{{ bs.recent_transfers|default(0) }}</p>
+        <p class="im-stat-sub">{% if selected_loc_key %}Last 30 at site{% else %}Pick a site to list{% endif %}</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Bin stock &amp; moves</h1>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a class="page-po__btn-secondary" href="{{ url_for('purchase.batch_lot_inquiry') }}">Lot / batch inquiry</a>
+      <a class="page-po__btn-secondary" href="{{ url_for('warehouse.warehouse_locations_list') }}">Warehouse locations</a>
+      <a class="page-po__btn-secondary" href="{{ url_for('warehouse.warehouse_visual_stock') }}{% if selected_loc_key %}?wh={{ selected_loc_key|urlencode }}{% endif %}">Visual stock</a>
+    </div>
+  </div>
+
+  <div class="bss-shell">
+    <section class="bss-section" data-section-title="Warehouse site &amp; filter">
+      <div class="bss-form-row">
+        <div class="bss-field" style="flex:1; min-width:240px;">
+          <label for="bsLocationDisplay">Active site (bins &amp; moves)</label>
+          <div class="bss-wh-picker">
+            <input type="text" id="bsLocationDisplay" readonly
+              placeholder="Pick warehouse site…"
+              value="{% if selected_loc_key %}{{ selected_loc_name }} — {{ selected_loc_key }}{% endif %}" />
+            <button type="button" id="bsLocationPickBtn" class="bss-pick-btn" {% if not location_sites %}disabled title="No warehouse sites"{% endif %}>Pick…</button>
+          </div>
+        </div>
+        <div class="bss-field" style="flex:1; max-width:360px;">
+          <label for="bssStockSearch">Quick filter (bin on-hand)</label>
+          <input type="search" id="bssStockSearch" placeholder="Bin, item, name…" autocomplete="off" {% if not selected_loc_key %}disabled{% endif %} />
+        </div>
+      </div>
+      {% if not location_sites %}
+      <p class="bss-note" style="color:#b91c1c;">No warehouse locations. Check <code>WAREHOUSE_MASTER</code> / <code>LOCATIONMASTER</code>.</p>
+      {% elif not selected_loc_key %}
+      <p class="bss-note">Warehouse totals for branch <strong>{{ session_location_code }}</strong> are in the next section. <strong>Pick</strong> a site or open <code>?wh=WAREHOUSE_ID</code> for bin stock, transfers, and adjustments.</p>
+      {% endif %}
+    </section>
+
+    {% if location_sites %}
+    <section class="bss-section" data-section-title="Warehouse total (WAREHOUSE_STOCK)">
+      <p class="bss-note" style="margin:0 0 10px;">
+        {% if selected_warehouse_id %}Showing warehouse <strong>{{ selected_warehouse_id }}</strong>{% if selected_loc_name %} ({{ selected_loc_name }}){% endif %}.{% else %}All warehouses at branch <strong>{{ session_location_code }}</strong>.{% endif %}
+        Posted from GRN / lot sync; session branch must match <code>LOCATIONCODE</code> on rows.
+      </p>
+      <div class="co-table-wrap co-table-wrap--short" role="region" aria-label="Warehouse stock table">
+        <table class="co-table">
+          <thead>
+            <tr>
+              <th>Warehouse</th>
+              <th>Item</th>
+              <th>Name</th>
+              <th class="num">Qty</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in warehouse_stock_rows %}
+            <tr>
+              <td class="mono">{{ r.warehouse_code or r.warehouse_id }}</td>
+              <td class="mono">{{ r.itemcode }}</td>
+              <td>{{ r.itemname or '—' }}</td>
+              <td class="num">{{ r.qty }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align:center;padding:24px;color:#64748b;">No <code>WAREHOUSE_STOCK</code> for branch {{ session_location_code }}{% if selected_warehouse_id %} / warehouse {{ selected_warehouse_id }}{% endif %}.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if location_sites and selected_loc_key %}
+    <section class="bss-section" data-section-title="On-hand (BIN_STOCK)">
+      <div class="co-table-wrap" role="region" aria-label="Bin stock table">
+        <table class="co-table" id="bsTable">
+          <thead>
+            <tr>
+              <th>Type / bin</th>
+              <th>Item</th>
+              <th>Name</th>
+              <th class="num">Qty</th>
+            </tr>
+          </thead>
+          <tbody id="bssStockTbody">
+            {% for r in stock_rows %}
+            <tr class="bss-stock-row" data-bss-search="{{ ((r.bin_code or '') ~ ' ' ~ (r.bin_name or '') ~ ' ' ~ r.itemcode ~ ' ' ~ (r.itemname or ''))|lower }}">
+              <td>{% set styp = ((r.bin_type or '')|upper) %}
+                {% if styp == 'STAGING' %}<span class="bss-badge bss-badge--staging">STG</span>{% else %}<span class="bss-badge bss-badge--bin">BIN</span>{% endif %}
+                {{ r.bin_code }} — {{ r.bin_name }}</td>
+              <td class="mono">{{ r.itemcode }}</td>
+              <td>{{ r.itemname or '—' }}</td>
+              <td class="num">{{ r.qty }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align:center;padding:36px;color:#64748b;">No bin stock rows. Use Adjust below — or GRN/lot putaway into bins.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="bss-section" data-section-title="Transfer between bins (same site)">
+      <div class="bss-form-grid">
+        <div class="bss-field">
+          <label for="bsTFrom">From bin</label>
+          <select id="bsTFrom">{% for b in bin_rows %}<option value="{{ b.storage_id }}">{{ b.code }} — {{ b.name }}{% if (b.storage_type or '')|upper == 'STAGING' %} · staging{% endif %}</option>{% endfor %}</select>
+        </div>
+        <div class="bss-field">
+          <label for="bsTTo">To bin</label>
+          <select id="bsTTo">{% for b in bin_rows %}<option value="{{ b.storage_id }}">{{ b.code }} — {{ b.name }}{% if (b.storage_type or '')|upper == 'STAGING' %} · staging{% endif %}</option>{% endfor %}</select>
+        </div>
+        <div class="bss-field">
+          <label for="bsTItem">Item code</label>
+          <input type="number" id="bsTItem" placeholder="ITEMCODE" />
+        </div>
+        <div class="bss-field">
+          <label for="bsTQty">Qty</label>
+          <input type="number" id="bsTQty" step="any" min="0" placeholder="0" />
+        </div>
+        <div class="bss-field" style="grid-column: span 2; min-width: 200px;">
+          <label for="bsTRem">Remarks</label>
+          <input type="text" id="bsTRem" maxlength="500" />
+        </div>
+        <div class="bss-field">
+          <label>&nbsp;</label>
+          <button type="button" class="page-po__btn-primary" id="bsTGo">Post transfer</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="bss-section" data-section-title="Adjust (delta or set quantity)">
+      <div class="bss-form-grid">
+        <div class="bss-field">
+          <label for="bsABin">Bin</label>
+          <select id="bsABin">{% for b in bin_rows %}<option value="{{ b.storage_id }}">{{ b.code }} — {{ b.name }}{% if (b.storage_type or '')|upper == 'STAGING' %} · staging{% endif %}</option>{% endfor %}</select>
+        </div>
+        <div class="bss-field">
+          <label for="bsAItem">Item code</label>
+          <input type="number" id="bsAItem" placeholder="ITEMCODE" />
+        </div>
+      </div>
+      <div class="bss-form-grid" style="margin-top:10px;">
+        <div class="bss-field">
+          <label><input type="radio" name="bsAmode" value="delta" checked /> Delta (add/subtract)</label>
+          <input type="number" id="bsADelta" step="any" placeholder="±qty" />
+        </div>
+        <div class="bss-field">
+          <label><input type="radio" name="bsAmode" value="set" /> Set exact qty</label>
+          <input type="number" id="bsASet" step="any" min="0" />
+        </div>
+        <div class="bss-field">
+          <label>&nbsp;</label>
+          <button type="button" class="page-po__btn-primary" id="bsAGo">Apply</button>
+        </div>
+      </div>
+      <p class="bss-note">Items must exist in <code>ITEMMASTER</code> for session branch <code>{{ session_location_code }}</code>.</p>
+    </section>
+
+    <section class="bss-section" data-section-title="Recent transfers">
+      <div class="co-table-wrap" style="max-height:280px;">
+        <table class="co-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>From → To</th>
+              <th>Notes</th>
+              <th style="width:90px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for t in transfers %}
+            <tr>
+              <td style="font-weight:700;">#{{ t.transfer_id }}</td>
+              <td><span class="mono">{{ t.from_bin_code }}</span> → <span class="mono">{{ t.to_bin_code }}</span></td>
+              <td style="color:#64748b;">{{ t.remarks or '—' }}</td>
+              <td><button type="button" class="page-po__btn-secondary" data-bs-show-lines="{{ t.transfer_id }}">Lines</button></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:20px;">No transfers recorded for this site yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+  </div>
+</div>
+
+<div class="modal hidden" id="bsLocationPickerModal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="modal__overlay" data-close="bsLocationPickerModal"></div>
+  <div class="modal__content" style="max-width: 560px; width: 96vw;">
+    <div class="modal__header" style="display:flex; justify-content:space-between; align-items:center;">
+      <h3 class="modal__title" style="margin:0;">Choose warehouse site</h3>
+      <button type="button" class="modal__close" data-close="bsLocationPickerModal" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal__body">
+      <div class="co-table-wrap" style="max-height:52vh;">
+        <table class="co-table">
+          <thead><tr><th>Key</th><th>Name</th><th></th></tr></thead>
+          <tbody id="bsLocTbody">
+            {% for s in location_sites %}
+            <tr>
+              <td class="mono">{{ s.key }}</td>
+              <td>{{ s.name or '—' }}</td>
+              <td><button type="button" class="page-po__btn-primary" style="padding:5px 12px !important;" data-bs-pick-loc="{{ s.key }}">Select</button></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="bssLinesModal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="modal__overlay" data-close="bssLinesModal"></div>
+  <div class="modal__content" style="max-width: 520px; width: 96vw;">
+    <div class="modal__header" style="display:flex; justify-content:space-between; align-items:center;">
+      <h3 id="bssLinesTitle" class="modal__title" style="margin:0;">Transfer lines</h3>
+      <button type="button" class="modal__close" data-close="bssLinesModal" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal__body" id="bssLinesBody" style="font-size:13px; max-height:50vh; overflow:auto;"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var locKey = {{ (selected_loc_key or '')|tojson }};
+  var saveUrl = {{ url_for('warehouse.warehouse_bin_stock_save')|tojson }};
+  var xferLinesTpl = {{ (url_for('warehouse.warehouse_bin_transfer_lines_json', transfer_id=0))|tojson }};
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function el(id) { return document.getElementById(id); }
+
+  function syncBssModalOpen() {
+    var loc = el('bsLocationPickerModal');
+    var lin = el('bssLinesModal');
+    var any = (loc && !loc.classList.contains('hidden')) || (lin && !lin.classList.contains('hidden'));
+    document.body.classList.toggle('bss-modal-open', !!any);
+  }
+
+  function showLocModal(on) {
+    var m = el('bsLocationPickerModal');
+    if (!m) return;
+    if (on) {
+      m.classList.remove('hidden');
+      m.setAttribute('aria-hidden', 'false');
+    } else {
+      m.classList.add('hidden');
+      m.setAttribute('aria-hidden', 'true');
+    }
+    syncBssModalOpen();
+  }
+
+  function showLinesModal(on) {
+    var m = el('bssLinesModal');
+    if (!m) return;
+    if (on) {
+      m.classList.remove('hidden');
+      m.setAttribute('aria-hidden', 'false');
+    } else {
+      m.classList.add('hidden');
+      m.setAttribute('aria-hidden', 'true');
+    }
+    syncBssModalOpen();
+  }
+
+  el('bsLocationPickBtn') && (el('bsLocationPickBtn').onclick = function () { showLocModal(true); });
+  var mdl = el('bsLocationPickerModal');
+  if (mdl) mdl.addEventListener('click', function (e) {
+    if (e.target.getAttribute('data-close') === 'bsLocationPickerModal' || e.target.classList.contains('modal__overlay') || e.target.classList.contains('modal__close')) showLocModal(false);
+  });
+  var linesM = el('bssLinesModal');
+  if (linesM) linesM.addEventListener('click', function (e) {
+    if (e.target.getAttribute('data-close') === 'bssLinesModal' || e.target.classList.contains('modal__overlay') || e.target.classList.contains('modal__close')) showLinesModal(false);
+  });
+
+  document.querySelectorAll('#bsLocationPickerModal [data-bs-pick-loc]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var k = b.getAttribute('data-bs-pick-loc') || '';
+      if (k) window.location = {{ url_for('warehouse.warehouse_bin_stock')|tojson }} + '?wh=' + encodeURIComponent(k);
+    });
+  });
+
+  var searchEl = el('bssStockSearch');
+  if (searchEl) {
+    searchEl.addEventListener('input', function () {
+      var q = (searchEl.value || '').trim().toLowerCase();
+      document.querySelectorAll('#bssStockTbody tr.bss-stock-row').forEach(function (tr) {
+        var hay = tr.getAttribute('data-bss-search') || '';
+        tr.style.display = (!q || hay.indexOf(q) !== -1) ? '' : 'none';
+      });
+    });
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    showLocModal(false);
+    showLinesModal(false);
+  });
+
+  function postJson(body) {
+    return fetch(saveUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      credentials: 'same-origin'
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, data: j }; }); });
+  }
+
+  el('bsTGo') && (el('bsTGo').onclick = function () {
+    if (!locKey) { alert('Pick a warehouse site first.'); return; }
+    var fromId = parseInt(el('bsTFrom').value, 10);
+    var toId = parseInt(el('bsTTo').value, 10);
+    var item = parseInt(el('bsTItem').value, 10);
+    var q = parseFloat(el('bsTQty').value);
+    if (fromId === toId) { alert('From and to must differ.'); return; }
+    if (!item || isNaN(q) || q <= 0) { alert('Enter item code and a positive quantity.'); return; }
+    el('bsTGo').disabled = true;
+    postJson({
+      mode: 'transfer', location_key: locKey, from_storage_id: fromId, to_storage_id: toId,
+      itemcode: item, qty: q, remarks: (el('bsTRem').value || '')
+    }).then(function (r) {
+      el('bsTGo').disabled = false;
+      if (r.data && r.data.ok) window.location.reload();
+      else alert((r.data && r.data.error) || 'Request failed');
+    });
+  });
+
+  el('bsAGo') && (el('bsAGo').onclick = function () {
+    if (!locKey) { alert('Pick a warehouse site first.'); return; }
+    var mode = (document.querySelector('input[name="bsAmode"]:checked') || {}).value || 'delta';
+    var sid = parseInt(el('bsABin').value, 10);
+    var item = parseInt(el('bsAItem').value, 10);
+    if (!sid || !item) { alert('Choose bin and item code.'); return; }
+    el('bsAGo').disabled = true;
+    var p = { mode: mode === 'set' ? 'set' : 'delta', location_key: locKey, storage_id: sid, itemcode: item };
+    if (mode === 'set') {
+      p.qty = parseFloat(el('bsASet').value);
+      if (isNaN(p.qty) || p.qty < 0) { alert('Invalid quantity.'); el('bsAGo').disabled = false; return; }
+    } else {
+      p.delta = parseFloat(el('bsADelta').value);
+      if (isNaN(p.delta) || p.delta === 0) { alert('Enter a non-zero delta.'); el('bsAGo').disabled = false; return; }
+    }
+    postJson(p).then(function (r) {
+      el('bsAGo').disabled = false;
+      if (r.data && r.data.ok) window.location.reload();
+      else alert((r.data && r.data.error) || 'Request failed');
+    });
+  });
+
+  document.querySelectorAll('[data-bs-show-lines]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var tid = b.getAttribute('data-bs-show-lines');
+      if (!tid) return;
+      var u = xferLinesTpl.replace(/\/transfer\/0\/lines/, '/transfer/' + encodeURIComponent(String(tid)) + '/lines');
+      fetch(u, { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (j) {
+        var body = el('bssLinesBody');
+        var title = el('bssLinesTitle');
+        if (!j.ok) {
+          if (body) body.innerHTML = '<p style="color:#b91c1c;">' + esc(j.error || 'Failed') + '</p>';
+          if (title) title.textContent = 'Transfer';
+          showLinesModal(true);
+          return;
+        }
+        if (title) title.textContent = 'Transfer #' + tid;
+        var rows = (j.lines || []).map(function (L) {
+          return '<tr><td class="mono">' + esc(L.itemcode) + '</td><td class="num">' + esc(L.qty) + '</td></tr>';
+        }).join('');
+        if (body) {
+          body.innerHTML = '<table class="co-table" style="width:100%;"><thead><tr><th>Item</th><th class="num">Qty</th></tr></thead><tbody>' +
+            (rows || '<tr><td colspan="2" style="text-align:center;color:#94a3b8;">No lines</td></tr>') + '</tbody></table>';
+        }
+        showLinesModal(true);
+      }).catch(function () {
+        var body = el('bssLinesBody');
+        if (body) body.textContent = 'Request failed.';
+        showLinesModal(true);
+      });
+    });
+  });
+})();
+</script>
+{% endblock %}

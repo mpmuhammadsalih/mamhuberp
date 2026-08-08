@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .iva-list { max-width: 1200px; margin: 0 auto; padding: 12px 16px 24px; }
+  .iva-list__top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .iva-list__title { margin: 0; font-size: 22px; font-weight: 500; }
+  .iva-list__muted { margin: 4px 0 0; font-size: 13px; color: #6c757d; }
+  .iva-list__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .iva-btn { border: 1px solid #dee2e6; border-radius: 4px; padding: 7px 14px; font-size: 13px; background: #fff; cursor: pointer; text-decoration: none; color: #212529; display: inline-flex; align-items: center; }
+  .iva-btn--primary { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+  .iva-btn--primary:hover { background: #0b5ed7; color: #fff; }
+  .iva-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: end; }
+  .iva-filters label { font-size: 12px; color: #6c757d; display: block; margin-bottom: 2px; }
+  .iva-filters input, .iva-filters select { border: 1px solid #dee2e6; border-radius: 4px; padding: 6px 8px; font-size: 13px; }
+  .iva-table-wrap { overflow: auto; border: 1px solid #dee2e6; border-radius: 4px; max-height: 72vh; }
+  .iva-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .iva-table th, .iva-table td { padding: 8px 10px; border-bottom: 1px solid #e9ecef; white-space: nowrap; }
+  .iva-table th { background: #f8f9fa; font-weight: 600; position: sticky; top: 0; z-index: 1; }
+  .iva-table tbody tr:hover { background: #f0f7ff; }
+  .iva-table td.num, .iva-table th.num { text-align: right; }
+  .iva-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .iva-badge--draft { background: #e9ecef; color: #495057; }
+  .iva-badge--progress { background: #cff4fc; color: #055160; }
+  .iva-badge--posted { background: #d1e7dd; color: #0f5132; }
+  .iva-summary { margin-bottom: 10px; font-size: 13px; font-weight: 600; color: #334155; }
+</style>
+
+<div class="iva-list">
+  <div class="iva-list__top">
+    <div>
+      <h1 class="iva-list__title">Inventory value adjustment</h1>
+      <p class="iva-list__muted">Correct item average cost and inventory value without quantity movement.</p>
+    </div>
+    <div class="iva-list__actions">
+      <a class="iva-btn iva-btn--primary" href="{{ url_for('purchase.inventory_value_adjustment_form') }}">+ New journal</a>
+    </div>
+  </div>
+
+  <form class="iva-filters" method="get" action="{{ url_for('purchase.inventory_value_adjustment_list') }}">
+    <div>
+      <label for="search">Search</label>
+      <input type="search" id="search" name="search" value="{{ search or '' }}" placeholder="Journal no, name, reference…" />
+    </div>
+    <div>
+      <label for="status">Status</label>
+      <select id="status" name="status">
+        <option value="">All</option>
+        <option value="DRAFT"{% if status_filter == 'DRAFT' %} selected{% endif %}>Draft</option>
+        <option value="IN_PROGRESS"{% if status_filter == 'IN_PROGRESS' %} selected{% endif %}>In progress</option>
+        <option value="POSTED"{% if status_filter == 'POSTED' %} selected{% endif %}>Posted</option>
+      </select>
+    </div>
+    <button type="submit" class="iva-btn">Filter</button>
+    {% if search or status_filter %}
+    <a class="iva-btn" href="{{ url_for('purchase.inventory_value_adjustment_list') }}">Clear</a>
+    {% endif %}
+  </form>
+
+  {% if rows %}
+  <p class="iva-summary">Total adjustment (listed): {{ '{:,.2f}'.format((total_adjustment or 0)|float) }}</p>
+  {% endif %}
+
+  <div class="iva-table-wrap">
+    <table class="iva-table">
+      <thead>
+        <tr>
+          <th>Journal</th>
+          <th>Description</th>
+          <th>Date</th>
+          <th>Posting date</th>
+          <th>Warehouse</th>
+          <th>Status</th>
+          <th class="num">Lines</th>
+          <th class="num">Adjustment amount</th>
+          <th>Reference</th>
+          <th>Created by</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if rows %}
+        {% for r in rows %}
+        <tr>
+          <td><strong>{{ r.journalname or ('IVAJ-' ~ '%06d' % (r.journalno|int)) }}</strong></td>
+          <td>{{ r.description or '—' }}</td>
+          <td>{{ r.journal_date.strftime('%Y-%m-%d') if r.journal_date else '—' }}</td>
+          <td>{{ r.posting_date.strftime('%Y-%m-%d') if r.posting_date else '—' }}</td>
+          <td>{{ r.warehouse_code or '—' }}</td>
+          <td>
+            {% set st = (r.status or '')|upper %}
+            {% if st == 'POSTED' %}
+            <span class="iva-badge iva-badge--posted">Posted</span>
+            {% elif st == 'IN_PROGRESS' %}
+            <span class="iva-badge iva-badge--progress">In progress</span>
+            {% else %}
+            <span class="iva-badge iva-badge--draft">{{ st or 'Draft' }}</span>
+            {% endif %}
+          </td>
+          <td class="num">{{ r.line_count or 0 }}</td>
+          <td class="num">{{ '{:,.2f}'.format((r.total_adjustment or 0)|float) }}</td>
+          <td>{{ r.reference or '—' }}</td>
+          <td>{{ r.createdby or '—' }}</td>
+          <td><a class="iva-btn" href="{{ url_for('purchase.inventory_value_adjustment_view', journal_no=r.journalno) }}">Open</a></td>
+        </tr>
+        {% endfor %}
+        {% else %}
+        <tr><td colspan="11" style="text-align:center;color:#6c757d;padding:24px;">No journals found.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

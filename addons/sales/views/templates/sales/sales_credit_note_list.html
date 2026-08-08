@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Sales Credit Note{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .scn-list-page .scn-row-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .scn-list-page .scn-row-actions .page-po__btn-secondary {
+    padding: 4px 10px !important;
+    min-height: 28px !important;
+    font-size: 11px !important;
+  }
+</style>
+{% set _total_n = (rows or [])|length %}
+
+<div class="page-po nexa-list-page nexa-setup-list-page scn-list-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title page-po__title--with-icon">
+        <span class="page-po__title-icon" aria-hidden="true"><i class="bi bi-file-earmark-minus"></i></span>
+        Sales Credit Note
+      </h1>
+      <p class="page-po__muted">Issue credit notes to customers (reduces receivable; posts to GL). No stock movement.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('sales.sales_credit_note_new') }}" class="page-po__btn-primary">+ New credit note</a>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div class="nexa-stat-grid" aria-label="Credit note summary">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue" aria-hidden="true"><i class="bi bi-files"></i></span>
+      <div>
+        <p class="nexa-stat-label">Total</p>
+        <p class="nexa-stat-value">{{ _total_n }}</p>
+        <p class="nexa-stat-sub">Saved credit notes</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green" aria-hidden="true"><i class="bi bi-check2-circle"></i></span>
+      <div>
+        <p class="nexa-stat-label">Posted</p>
+        <p class="nexa-stat-value">{{ _total_n }}</p>
+        <p class="nexa-stat-sub">CRHDR + GL entries</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="nexa-list-toolbar">
+    <input type="text" id="scnListSearch" class="input" placeholder="Search no, customer…"
+           style="min-width:220px; max-width:360px;" autocomplete="off" />
+    <button type="button" class="page-po__btn-secondary" id="scnListSearchClear" style="padding:4px 10px; font-size:11px;">Clear</button>
+    <span id="scnListMeta" class="nexa-num"></span>
+  </div>
+
+  <div class="page-po__section-title">Credit notes</div>
+  <div class="co-table-wrap">
+    <table class="co-table" id="scnTable">
+      <thead>
+        <tr>
+          <th>Credit Note No</th>
+          <th>Date</th>
+          <th>Customer</th>
+          <th class="num">Amount</th>
+          <th style="cursor:default;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows or [] %}
+        <tr data-search="{{ r.crno }} {{ r.customercode or '' }} {{ r.customername or '' }}">
+          <td><a class="pi-link" href="{{ url_for('sales.sales_credit_note_query', cr_no=r.crno) }}">{{ r.crno }}</a></td>
+          <td>{{ (r.crdate|string)[:10] if r.crdate else '-' }}</td>
+          <td>
+            {% if r.customercode %}{{ r.customercode }}{% endif %}
+            {% if r.customername %} — {{ r.customername }}{% endif %}
+          </td>
+          <td class="num">{{ "%.2f"|format((r.cramount or 0)|float) }}</td>
+          <td>
+            <div class="scn-row-actions">
+              <a class="page-po__btn-secondary" href="{{ url_for('sales.sales_credit_note_query', cr_no=r.crno) }}">View</a>
+              <a class="page-po__btn-secondary" href="{{ url_for('sales.sales_credit_note_edit', cr_no=r.crno) }}">Edit</a>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" style="text-align:center;padding:12px;color:#6b7280;font-style:italic;">No credit notes yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<script>
+(function () {
+  const searchEl = document.getElementById('scnListSearch');
+  const clearBtn = document.getElementById('scnListSearchClear');
+  const metaEl = document.getElementById('scnListMeta');
+  function filterRows() {
+    const q = (searchEl && searchEl.value || '').trim().toLowerCase();
+    let visible = 0, total = 0;
+    document.querySelectorAll('#scnTable tbody tr[data-search]').forEach(function (tr) {
+      total += 1;
+      const hay = (tr.getAttribute('data-search') || '').toLowerCase();
+      const show = !q || hay.indexOf(q) !== -1;
+      tr.style.display = show ? '' : 'none';
+      if (show) visible += 1;
+    });
+    if (metaEl) metaEl.textContent = q ? (visible + ' of ' + total + ' shown') : (total + ' records');
+  }
+  if (searchEl) searchEl.addEventListener('input', filterRows);
+  if (clearBtn) clearBtn.addEventListener('click', function () {
+    if (searchEl) searchEl.value = '';
+    filterRows();
+  });
+  filterRows();
+})();
+</script>
+{% endblock %}

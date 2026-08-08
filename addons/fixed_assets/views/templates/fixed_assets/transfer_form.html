@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}New Fixed Asset Transfer{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/fixed_assets_pages.css') }}?v=4" />
+
+<div class="fa-form-page">
+  {% include 'fixed_assets/_fa_nav.html' %}
+
+  <div class="fa-topbar">
+    <div class="fa-topbar-main">
+      <h1>Fixed Assets / <span class="fa-ref">New transfer</span></h1>
+      <div class="fa-actions">
+        <button type="submit" form="faTransferForm" class="fa-btn-save">Save transfer</button>
+        <a href="{{ url_for('fixed_assets.fa_transfer_list') }}" class="fa-btn-secondary">List</a>
+      </div>
+    </div>
+  </div>
+
+  <form id="faTransferForm" method="post" action="{{ url_for('fixed_assets.fa_transfer_form') }}" class="fa-form-shell">
+    <section class="form-section">
+      <h2 class="form-section-title">Asset</h2>
+      <div class="form-group">
+        <label for="asset_id">Asset</label>
+        <select id="asset_id" name="asset_id" class="input" required>
+          <option value="">— Select asset —</option>
+          {% for a in eligible_assets %}
+          <option value="{{ a.asset_id }}"
+            {% if (row.asset_id|string) == (a.asset_id|string) or (selected_asset and (selected_asset.asset_id|string) == (a.asset_id|string)) %}selected{% endif %}
+            data-loc="{{ a.location_code or '' }}"
+            data-locname="{{ a.location_name or '' }}"
+            data-cust="{{ a.custodian or '' }}">{{ a.asset_no }} — {{ a.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Current location / custodian</label>
+        <input id="faTrfFrom" class="input input-readonly" readonly value="{% if selected_asset %}{% if selected_asset.location_code %}{{ selected_asset.location_code }}{% if selected_asset.location_name %} — {{ selected_asset.location_name }}{% endif %}{% else %}—{% endif %} · {{ selected_asset.custodian or '—' }}{% endif %}" />
+      </div>
+    </section>
+
+    <section class="form-section">
+      <h2 class="form-section-title">Transfer to</h2>
+      <div class="form-group">
+        <label for="transfer_date">Transfer date</label>
+        <input id="transfer_date" name="transfer_date" type="date" class="input" required value="{{ row.transfer_date or '' }}" />
+      </div>
+      <div class="form-group">
+        <label for="to_location_code">To location</label>
+        <select id="to_location_code" name="to_location_code" class="input">
+          <option value="">— No change / clear —</option>
+          {% for loc in locations %}
+          <option value="{{ loc.code }}" {% if (row.to_location_code|string) == (loc.code|string) %}selected{% endif %}>{{ loc.code }} — {{ loc.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="to_custodian">To custodian</label>
+        <input id="to_custodian" name="to_custodian" class="input" maxlength="100" value="{{ row.to_custodian or '' }}" placeholder="Employee or department name" />
+      </div>
+      <div class="form-group form-group--full">
+        <label for="remarks">Remarks</label>
+        <textarea id="remarks" name="remarks" class="input" rows="2" maxlength="500">{{ row.remarks or '' }}</textarea>
+      </div>
+      <p class="field-hint">Internal transfer only — updates asset location/custodian and keeps an audit trail. No GL posting.</p>
+    </section>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var assetSel = document.getElementById('asset_id');
+  var fromEl = document.getElementById('faTrfFrom');
+  if (!assetSel) return;
+  assetSel.addEventListener('change', function () {
+    if (assetSel.value) {
+      window.location.href = '{{ url_for("fixed_assets.fa_transfer_form") }}?asset_id=' + encodeURIComponent(assetSel.value);
+    } else if (fromEl) {
+      fromEl.value = '';
+    }
+  });
+})();
+</script>
+{% endblock %}

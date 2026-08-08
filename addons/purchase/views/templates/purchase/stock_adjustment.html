@@ -1,0 +1,454 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .page { max-width: 1280px; margin: 0 auto; padding: 12px 16px 24px; }
+  .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #dee2e6; padding-bottom: 10px; }
+  .title { margin: 0; font-size: 22px; font-weight: 500; }
+  .actions { display: flex; gap: 8px; }
+  .btn { border: 1px solid #d1d5db; border-radius: 4px; padding: 7px 12px; font-size: 13px; cursor: pointer; background: #fff; }
+  .btn.primary { background: #16a34a; color: #fff; border-color: #16a34a; }
+  .grid { display: grid; grid-template-columns: 160px 180px 1fr; gap: 8px; margin-bottom: 12px; align-items: end; }
+  .input { width: 100%; border: 1px solid #dee2e6; border-radius: 4px; padding: 6px 8px; font-size: 13px; }
+  .label { font-size: 12px; color: #6b7280; margin-bottom: 3px; display: block; }
+  .table-wrap { overflow: auto; border: 1px solid #dee2e6; border-radius: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: left; white-space: nowrap; }
+  th { background: #f8fafc; font-size: 12px; font-weight: 600; }
+  td.num, th.num { text-align: right; }
+  .entry th { background: #fff; font-weight: 400; }
+  .entry .input { border: none; border-bottom: 1px solid #d1d5db; border-radius: 0; padding: 2px 0; background: transparent; }
+  .entry .search-wrap { display: flex; align-items: center; border-bottom: 1px solid #d1d5db; }
+  .entry .search-wrap .input { border: none; }
+  .icon-btn { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #d1d5db; border-radius: 4px; background: #fff; cursor: pointer; }
+  .line-action { display: flex; gap: 6px; }
+  .muted { color: #6b7280; font-style: italic; text-align: center; padding: 14px; }
+  #adjTable .sa-col-barcode { width: 128px; min-width: 128px; }
+  #adjTable th.sa-col-barcode,
+  #adjTable td.sa-col-barcode {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+  }
+  #adjTable tbody td.sa-col-barcode .input.barcode {
+    min-width: 116px;
+    font-variant-numeric: tabular-nums;
+  }
+  #adjTable tbody tr.sa-data-row td.sa-col-barcode,
+  #adjTable tbody tr.sa-data-row td.sa-col-itemcode,
+  #adjTable tbody tr.sa-data-row td.sa-col-lot,
+  #adjTable tbody tr.sa-data-row td.sa-col-adjustqty { cursor: cell; }
+  #adjTable tbody tr.sa-data-row td.sa-col-barcode:hover,
+  #adjTable tbody tr.sa-data-row td.sa-col-itemcode:hover,
+  #adjTable tbody tr.sa-data-row td.sa-col-lot:hover,
+  #adjTable tbody tr.sa-data-row td.sa-col-adjustqty:hover { outline: 1px solid #93c5fd; outline-offset: -1px; }
+  #adjTable tbody tr.sa-data-row td.sa-col-uom,
+  #adjTable tbody tr.sa-data-row td.sa-col-store { color: #475569; cursor: default; }
+  #adjTable tbody tr.sa-line-entry td.sa-col-uom .input,
+  #adjTable tbody tr.sa-line-entry td.sa-col-store .input { color: #475569; cursor: default; }
+  #adjTable .sa-inline-input { width: 100%; box-sizing: border-box; border: 1px solid #2563eb; border-radius: 3px; padding: 1px 3px; font-size: 12px; line-height: 1.3; min-height: 22px; background: #fff; }
+  #adjTable td.sa-col-adjustqty .sa-inline-input,
+  #adjTable td.sa-col-currentqty .sa-inline-input,
+  #adjTable td.sa-col-newqty .sa-inline-input { text-align: right; }
+  #adjTable tbody td.sa-cell-invalid { background: #fee2e2 !important; color: #991b1b; font-weight: 600; box-shadow: inset 0 0 0 1px #ef4444; cursor: cell; }
+  #adjTable tbody td.sa-cell-checking { background: #fef9c3 !important; }
+  #adjTable tbody td.sa-col-itemname { color: #475569; }
+  #adjTable tbody tr.sa-line-entry { background: #f8fafc; border-top: 2px solid #cbd5e1; }
+  #adjTable tbody tr.sa-line-entry.sa-line-entry--active { background: #fff8e1 !important; outline: 1px solid #ffc107; }
+  #adjTable tbody tr.sa-line-entry td { vertical-align: middle; }
+  #adjTable tbody tr.sa-line-entry .input { width: 100%; box-sizing: border-box; border: none; border-bottom: 1px solid #d1d5db; border-radius: 0; padding: 2px 0; background: transparent; font-size: 13px; }
+  #adjTable tbody tr.sa-line-entry .search-wrap { display: flex; align-items: center; border-bottom: 1px solid #d1d5db; }
+  #adjTable tbody tr.sa-line-entry .search-wrap .input { border: none; }
+  #adjTable tbody tr.sa-line-entry td.sa-cell-invalid { background: #fee2e2 !important; box-shadow: inset 0 0 0 1px #ef4444; }
+  #adjTable tbody tr.sa-line-entry td.sa-cell-invalid .input { color: #991b1b; font-weight: 600; }
+  #adjTable tbody tr.sa-row-negative-stock { background: #fee2e2 !important; }
+  #adjTable tbody tr.sa-row-negative-stock td { color: #991b1b; font-weight: 600; box-shadow: inset 0 0 0 1px #ef4444; }
+  #adjTable tbody tr.sa-row-negative-stock td.sa-col-itemname { color: #7f1d1d; font-weight: 500; }
+
+  .modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal.hidden { display: none; }
+  .modal__overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.4); cursor: pointer; }
+  .modal__content { position: relative; background: #fff; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.18); max-height: 86vh; display: flex; flex-direction: column; overflow: hidden; }
+  .modal__header { padding: 6px 12px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+  .modal__header h4 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.25; color: #0f172a; }
+  .modal__body { padding: 6px 12px 10px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; }
+  .modal-close, .modal__close { border: none; background: transparent; font-size: 18px; cursor: pointer; color: #64748b; line-height: 1; }
+  #itemModal .modal__content { width: auto; min-width: 420px; max-width: min(720px, 94vw); box-sizing: border-box; }
+  #itemModal .modal__body { max-height: 65vh; }
+  #itemModal #itemSearch {
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0 0 6px;
+    flex-shrink: 0;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 0 10px;
+    line-height: 26px;
+    min-height: 26px;
+  }
+  .item-toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; flex-shrink: 0; }
+  .item-toolbar #itemSortBy { width: 132px; flex: 0 0 132px; padding: 4px 6px; font-size: 12px; min-height: 26px; }
+  .item-toolbar #itemSortDir { flex: 0 0 32px; }
+  .item-count { font-size: 11px; color: #64748b; margin-left: auto; white-space: nowrap; }
+  .excel-wrap { border: 1px solid #e2e8f0; border-radius: 4px; flex: 1; min-height: 120px; max-height: 50vh; overflow: auto; -webkit-overflow-scrolling: touch; }
+  #itemTable { width: max-content; min-width: 100%; border-collapse: collapse; table-layout: auto; font-size: 12px; }
+  #itemTable thead { background: #334155 !important; }
+  #itemTable thead th { background: #334155 !important; color: #fff !important; padding: 6px 8px; font-weight: 600; font-size: 11px; position: sticky; top: 0; z-index: 1; white-space: nowrap; }
+  #itemTable tbody td { padding: 6px 8px; border: 1px solid #e2e8f0; text-align: left; vertical-align: top; white-space: nowrap; }
+  #itemTable tbody tr:nth-child(even) { background: #f8fafc; }
+  #itemTable tbody tr:hover { background: #f0f9ff; cursor: pointer; }
+  #itemTable .col-sl { width: 1%; text-align: center; color: #64748b; padding-left: 6px; padding-right: 6px; }
+  #itemTable .col-code { width: 1%; }
+  #itemTable .col-barcode { width: 1%; font-variant-numeric: tabular-nums; }
+  #itemTable .col-name { max-width: 220px; min-width: 130px; white-space: normal; word-break: break-word; line-height: 1.3; }
+  #itemTable tbody tr:focus { outline: 2px solid #2563eb; outline-offset: -2px; background: #eff6ff !important; }
+  #itemTable .col-uom { width: 1%; text-align: center; }
+  #itemTable .col-stock { width: 1%; text-align: right; padding-left: 10px; }
+  #itemTable thead th.col-name { white-space: nowrap; max-width: none; min-width: 0; }
+  .sort-th { width: 100%; border: none; background: transparent; font-weight: 600; font-size: 11px; color: #fff; padding: 0; text-align: left; cursor: pointer; display: inline-flex; align-items: center; justify-content: space-between; gap: 4px; }
+  #itemTable thead th:nth-child(6) .sort-th { justify-content: flex-end; }
+  .sort-th .arr { color: #cbd5e1; font-size: 10px; flex-shrink: 0; }
+  #warehouseModal .modal__content { width: auto; min-width: 360px; max-width: min(520px, 94vw); box-sizing: border-box; }
+  #warehouseModal .modal__body { max-height: 55vh; }
+  #warehouseModal #warehouseSearch {
+    box-sizing: border-box; width: 100%; margin: 0 0 6px; flex-shrink: 0;
+    border: 1px solid #dee2e6; border-radius: 4px; padding: 0 10px; line-height: 26px; min-height: 26px;
+  }
+  #warehouseTable { width: 100%; border-collapse: collapse; font-size: 12px; }
+  #warehouseTable thead { background: #334155 !important; }
+  #warehouseTable thead th { background: #334155 !important; color: #fff !important; padding: 6px 8px; font-weight: 600; font-size: 11px; position: sticky; top: 0; z-index: 1; }
+  #warehouseTable tbody td { padding: 6px 8px; border: 1px solid #e2e8f0; }
+  #warehouseTable tbody tr:nth-child(even) { background: #f8fafc; }
+  #warehouseTable tbody tr:hover { background: #f0f9ff; cursor: pointer; }
+  .sa-query-mode #adjTable tbody tr.sa-data-row td.sa-col-barcode,
+  .sa-query-mode #adjTable tbody tr.sa-data-row td.sa-col-itemcode,
+  .sa-query-mode #adjTable tbody tr.sa-data-row td.sa-col-lot,
+  .sa-query-mode #adjTable tbody tr.sa-data-row td.sa-col-adjustqty { cursor: default; }
+  .sa-query-mode #adjTable tbody tr.sa-data-row td.sa-col-barcode:hover,
+  .sa-query-mode #adjTable tbody tr.sa-data-row td.sa-col-itemcode:hover,
+  .sa-query-mode #adjTable tbody tr.sa-data-row td.sa-col-lot:hover,
+  .sa-query-mode #adjTable tbody tr.sa-data-row td.sa-col-adjustqty:hover { outline: none; }
+  .sa-query-mode tr.sa-line-entry { display: none !important; }
+</style>
+<div class="page{% if query_mode %} sa-query-mode{% endif %}" data-transaction-audit="StockAdjustment"
+     data-transaction-no-selector="#adjNo"
+     data-save-button="#btnSaveAdjustment"
+     data-track-root=".page"
+     data-save-url-pattern="/purchase/stock-adjustment/api/save">
+  <div class="top">
+    <h1 class="title">Stock Adjustment{% if query_mode %} <span style="font-size:0.72em; color:#64748b; font-weight:500;">(View)</span>{% endif %}</h1>
+    <div class="actions">
+      {% if not query_mode %}
+      <button type="button" class="btn primary" id="btnSaveAdjustment">Save</button>
+      <button type="button" class="btn" id="btnImportExcel">Import Excel</button>
+      <button type="button" class="btn" id="btnImportPostJob">Import &amp; Post Large Excel</button>
+      <a class="btn" href="{{ url_for('purchase.stock_adjustment_import_template') }}">Excel template</a>
+      <a class="btn" href="{{ url_for('purchase.stock_adjustment_form') }}">New</a>
+      {% else %}
+      {% if pdf_url %}<a class="btn primary" href="{{ pdf_url }}" target="_blank" rel="noopener noreferrer">PDF</a>{% endif %}
+      {% if can_reverse %}
+      <button type="button" class="btn" id="btnReverseAdjustment" style="background:#b91c1c;border-color:#b91c1c;color:#fff;"
+              data-adj-no="{{ next_adj_no }}"
+              data-action="{{ reverse_url }}">Reverse</button>
+      {% elif reverse_block_reason %}
+      <button type="button" class="btn" disabled title="{{ reverse_block_reason }}">Reverse</button>
+      {% endif %}
+      {% endif %}
+      <a class="btn" href="{{ url_for('purchase.stock_adjustment_accounts_configuration_page') }}">Accounts setup</a>
+      <a class="btn" href="{{ url_for('purchase.stock_adjustment_list') }}">List</a>
+      <input type="file" id="stkAdjExcelFile" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden />
+      <input type="file" id="stkAdjLargeExcelFile" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden />
+    </div>
+  </div>
+  {% if query_mode and is_reversal %}
+  <p style="margin:0 0 12px;font-size:13px;color:#b45309;font-weight:600;">This document is a reversal.</p>
+  {% elif query_mode and reversal_no %}
+  <p style="margin:0 0 12px;font-size:13px;color:#64748b;font-weight:600;">
+    This adjustment was reversed by
+    <a href="{{ url_for('purchase.stock_adjustment_view', adj_no=reversal_no) }}">#{{ reversal_no }}</a>.
+  </p>
+  {% endif %}
+  <div class="grid">
+    <div>
+      <label class="label" for="adjNo">Adjustment No</label>
+      <input class="input" id="adjNo" type="text" value="{{ next_adj_no or '' }}" readonly />
+    </div>
+    <div>
+      <label class="label" for="adjDate">Date</label>
+      <input class="input" id="adjDate" type="date" value="{{ default_adj_date or '' }}" {% if query_mode %}readonly{% endif %} />
+    </div>
+    <div>
+      <label class="label" for="adjRemarks">Remarks</label>
+      <input class="input" id="adjRemarks" type="text" {% if query_mode %}readonly{% endif %} />
+    </div>
+  </div>
+  {% if opening_stock_mode and not query_mode %}
+  <p style="margin: 0 0 12px; font-size: 13px; color: #047857; font-weight: 600;">
+    Opening stock import mode is ON (Accounts setup) — posts Dr inventory (1300) / Cr opening balance (3900).
+  </p>
+  {% elif opening_stock_mode and query_mode %}
+  <p style="margin: 0 0 12px; font-size: 13px; color: #047857; font-weight: 600;">Opening stock import</p>
+  {% endif %}
+  <div class="table-wrap">
+    <table id="adjTable">
+      <thead>
+        <tr>
+          <th style="width:44px;">Sl</th>
+          <th class="sa-col-barcode">Barcode</th>
+          <th>Item Code</th>
+          <th>Item Name</th>
+          <th>UOM</th>
+          <th>Warehouse</th>
+          <th style="min-width:72px;">Lot (opt.)</th>
+          <th class="num">Current Qty</th>
+          <th class="num">Adjust Qty (+/-)</th>
+          <th class="num">New Qty</th>
+          <th style="width:70px;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="adjBody">
+        <tr class="empty-row">
+          <td colspan="11" class="muted">No lines added.</td>
+        </tr>
+        <tr class="sa-line-entry sa-entry-row" id="saEntryRow">
+          <td class="sa-col-sl"></td>
+          <td class="sa-col-barcode">
+            <input class="input barcode" id="entryBarcode" type="text" placeholder="Scan or enter barcode" autocomplete="off" title="F1: item list" />
+          </td>
+          <td class="sa-col-itemcode">
+            <div class="search-wrap">
+              <input class="input" id="entryItemCode" type="text" placeholder="Code..." autocomplete="off" />
+              <button class="icon-btn" type="button" id="btnItemPicker" title="Item list (F1)">▾</button>
+            </div>
+          </td>
+          <td class="sa-col-itemname"><input class="input" id="entryItemName" type="text" placeholder="Item Name" readonly tabindex="-1" /></td>
+          <td class="sa-col-uom"><input class="input" id="entryUom" type="text" placeholder="UOM" readonly tabindex="-1" /></td>
+          <td class="sa-col-store">
+            <div class="search-wrap">
+              <input class="input" id="entryStore" type="text" placeholder="Warehouse..." readonly autocomplete="off" title="F1 or ▾: warehouse list" />
+              <button class="icon-btn" type="button" id="btnStorePicker" title="Warehouse list (F1)">▾</button>
+            </div>
+          </td>
+          <td class="sa-col-lot"><input class="input" id="entryLotId" type="text" placeholder="FEFO" title="For batch: optional lot id" autocomplete="off" /></td>
+          <td class="sa-col-currentqty num"><input class="input" id="entryCurrentQty" type="number" step="0.001" readonly tabindex="-1" /></td>
+          <td class="sa-col-adjustqty num"><input class="input" id="entryAdjustQty" type="number" step="0.001" autocomplete="off" /></td>
+          <td class="sa-col-newqty num"><input class="input" id="entryNewQty" type="number" step="0.001" readonly tabindex="-1" /></td>
+          <td class="sa-col-action" style="text-align:center;">
+            <button class="icon-btn" id="btnAddLine" type="button" title="Add line (Ctrl+Enter)">+</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal hidden" id="itemModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="itemModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>Select Item</h4>
+      <button class="modal__close" type="button" data-close="itemModal">×</button>
+    </div>
+    <div class="modal__body">
+      <input class="input" id="itemSearch" type="text" placeholder="Search by code, barcode or name..." autocomplete="off" />
+      <div class="item-toolbar">
+        <select class="input" id="itemSortBy">
+          <option value="itemcode">Sort: Code</option>
+          <option value="barcode">Sort: Barcode</option>
+          <option value="itemname">Sort: Name</option>
+          <option value="baseuom">Sort: UOM</option>
+          <option value="currentstock">Sort: Stock</option>
+        </select>
+        <button type="button" class="icon-btn" id="itemSortDir" title="Toggle sort direction">↑</button>
+        <div class="item-count" id="itemCount"></div>
+      </div>
+      <div class="excel-wrap">
+        <table id="itemTable">
+          <colgroup>
+            <col class="col-sl" />
+            <col class="col-code" />
+            <col class="col-barcode" />
+            <col class="col-name" />
+            <col class="col-uom" />
+            <col class="col-stock" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="col-sl">#</th>
+              <th class="col-code"><button type="button" class="sort-th" data-sort="itemcode">Code <span class="arr">↕</span></button></th>
+              <th class="col-barcode"><button type="button" class="sort-th" data-sort="barcode">Barcode <span class="arr">↕</span></button></th>
+              <th class="col-name"><button type="button" class="sort-th" data-sort="itemname">Name <span class="arr">↕</span></button></th>
+              <th class="col-uom"><button type="button" class="sort-th" data-sort="baseuom">UOM <span class="arr">↕</span></button></th>
+              <th class="col-stock"><button type="button" class="sort-th" data-sort="currentstock" style="justify-content:flex-end;">Stock <span class="arr">↕</span></button></th>
+            </tr>
+          </thead>
+          <tbody id="itemTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="warehouseModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="warehouseModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>Select Warehouse</h4>
+      <button class="modal__close" type="button" data-close="warehouseModal">×</button>
+    </div>
+    <div class="modal__body">
+      <input class="input" id="warehouseSearch" type="text" placeholder="Search code or name..." autocomplete="off" />
+      <div class="excel-wrap">
+        <table id="warehouseTable">
+          <thead>
+            <tr><th>Code</th><th>Name</th></tr>
+          </thead>
+          <tbody id="warehouseTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if query_mode and can_reverse %}
+<div class="modal hidden" id="saReverseModal" aria-labelledby="saReverseModalTitle" style="position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center;padding:16px;">
+  <div class="modal__overlay" id="saReverseModalOverlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.45);"></div>
+  <div style="position:relative;background:#fff;border-radius:8px;max-width:420px;width:100%;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.2);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <h4 id="saReverseModalTitle" style="margin:0;font-size:15px;">Reverse Stock Adjustment</h4>
+      <button type="button" id="saReverseModalClose" aria-label="Close" style="border:none;background:none;font-size:20px;cursor:pointer;">×</button>
+    </div>
+    <p id="saReverseModalMessage" style="margin:0 0 12px;color:#475569;font-size:13px;"></p>
+    <label for="saReversePassword" style="display:block;margin-bottom:6px;font-size:12px;font-weight:600;color:#334155;">Your password</label>
+    <input type="password" id="saReversePassword" class="input" placeholder="Enter your login password" autocomplete="current-password" style="width:100%;box-sizing:border-box;" />
+    <p id="saReversePasswordError" style="display:none;margin:10px 0 0;color:#dc3545;font-size:12px;"></p>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+      <button type="button" id="saReverseCancel" class="btn">Cancel</button>
+      <button type="button" id="saReverseSubmit" class="btn" style="background:#b91c1c;border-color:#b91c1c;color:#fff;">Reverse</button>
+    </div>
+  </div>
+</div>
+<style>#saReverseModal.hidden{display:none!important;}#saReverseModal:not(.hidden){display:flex;}</style>
+{% endif %}
+<script>
+  window.__STOCK_ADJ_INITIAL__ = {{ initial_data|tojson if initial_data else 'null' }};
+  window.__STK_ADJ_OPENING_MODE__ = {{ opening_stock_mode|default(false)|tojson }};
+</script>
+<script>
+  window.__STK_ADJ_IMPORT_URL__ = {{ url_for('purchase.stock_adjustment_import_excel')|tojson }};
+  window.__STK_ADJ_IMPORT_POST_JOB_URL__ = {{ url_for('purchase.stock_adjustment_import_post_job_start')|tojson }};
+  window.__STK_ADJ_WAREHOUSES_URL__ = {{ url_for('purchase.stock_adjustment_warehouses')|tojson }};
+  window.__STK_ADJ_WAREHOUSE_ENABLED__ = {{ 'true' if warehouse_enabled else 'false' }};
+  window.__STK_ADJ_LIST_URL__ = {{ url_for('purchase.stock_adjustment_list')|tojson }};
+  window.__STK_ADJ_QUERY_MODE__ = {{ 'true' if query_mode else 'false' }};
+  {# New form is always editable; View mode never saves. #}
+  window.__STK_ADJ_CAN_EDIT__ = {{ 'false' if query_mode else 'true' }};
+</script>
+<script src="{{ url_for('static', filename='js/stock_adjustment.js') }}?v=32"></script>
+<script src="{{ url_for('static', filename='js/transaction_recording_client.js') }}?v=7"></script>
+{% if query_mode and can_reverse %}
+<script>
+(function () {
+  var reverseModal = document.getElementById('saReverseModal');
+  var reverseBtn = document.getElementById('btnReverseAdjustment');
+  if (!reverseModal || !reverseBtn) return;
+  var reverseModalOverlay = document.getElementById('saReverseModalOverlay');
+  var reverseModalClose = document.getElementById('saReverseModalClose');
+  var reverseCancel = document.getElementById('saReverseCancel');
+  var reverseSubmit = document.getElementById('saReverseSubmit');
+  var reverseMessage = document.getElementById('saReverseModalMessage');
+  var reversePassword = document.getElementById('saReversePassword');
+  var reversePasswordError = document.getElementById('saReversePasswordError');
+  var reversePendingUrl = reverseBtn.getAttribute('data-action') || '';
+  var reversePendingNo = reverseBtn.getAttribute('data-adj-no') || '';
+
+  function closeReverseModal() {
+    reverseModal.classList.add('hidden');
+    if (reversePassword) reversePassword.value = '';
+    if (reversePasswordError) {
+      reversePasswordError.style.display = 'none';
+      reversePasswordError.textContent = '';
+    }
+    if (reverseSubmit) reverseSubmit.disabled = false;
+  }
+  function openReverseModal() {
+    if (reverseMessage) {
+      reverseMessage.textContent =
+        'Reverse stock adjustment #' + reversePendingNo +
+        '? This posts opposite stock, item journal, and GL entries. The source document will be locked from further edits.';
+    }
+    reverseModal.classList.remove('hidden');
+    if (reversePassword) {
+      reversePassword.value = '';
+      window.setTimeout(function () { reversePassword.focus(); }, 0);
+    }
+  }
+  function submitReverse() {
+    if (!reversePendingUrl) return;
+    var pwd = (reversePassword && reversePassword.value || '').trim();
+    if (!pwd) {
+      if (reversePasswordError) {
+        reversePasswordError.textContent = 'Enter your password.';
+        reversePasswordError.style.display = 'block';
+      }
+      return;
+    }
+    if (reverseSubmit) reverseSubmit.disabled = true;
+    reverseBtn.disabled = true;
+    reverseModal.classList.add('hidden');
+    if (typeof window.showLoadingOverlay === 'function') {
+      window.showLoadingOverlay('Reversing stock adjustment…');
+    }
+    var payload = { password: pwd };
+    if (typeof window.__GLOBAL_SAVE_NONCE === 'string' && window.__GLOBAL_SAVE_NONCE) {
+      payload.save_nonce = window.__GLOBAL_SAVE_NONCE;
+    }
+    fetch(reversePendingUrl, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify(payload),
+    })
+      .then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (data) {
+          if (data && typeof data.save_nonce === 'string' && data.save_nonce) {
+            window.__GLOBAL_SAVE_NONCE = data.save_nonce;
+          }
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || ('Reverse failed (' + res.status + ')'));
+          }
+          return data;
+        });
+      })
+      .then(function (data) {
+        if (data.pdf_url) window.open(data.pdf_url, '_blank', 'noopener,noreferrer');
+        window.location.href = data.view_url || data.list_url || window.__STK_ADJ_LIST_URL__ || '/purchase/stock-adjustment/list';
+      })
+      .catch(function (err) {
+        if (typeof window.hideLoadingOverlay === 'function') window.hideLoadingOverlay();
+        alert(err.message || 'Reverse failed');
+        reverseBtn.disabled = false;
+        if (reverseSubmit) reverseSubmit.disabled = false;
+        openReverseModal();
+      });
+  }
+  reverseBtn.addEventListener('click', openReverseModal);
+  if (reverseModalClose) reverseModalClose.addEventListener('click', closeReverseModal);
+  if (reverseCancel) reverseCancel.addEventListener('click', closeReverseModal);
+  if (reverseModalOverlay) reverseModalOverlay.addEventListener('click', closeReverseModal);
+  if (reverseSubmit) reverseSubmit.addEventListener('click', submitReverse);
+  if (reversePassword) {
+    reversePassword.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        submitReverse();
+      }
+    });
+  }
+})();
+</script>
+{% endif %}
+{% endblock %}

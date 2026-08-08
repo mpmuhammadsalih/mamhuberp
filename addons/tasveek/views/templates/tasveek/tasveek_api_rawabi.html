@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}Tasveek API data{% endblock %}
+{% block content %}
+<style>
+  .tap-page { max-width: 1480px; margin: 0 auto; padding: 20px 16px 40px; }
+  .tap-page h1 { font-size: 24px; font-weight: 500; margin: 0 0 8px; color: #212529; }
+  .tap-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-bottom: 16px; padding: 12px 14px; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; }
+  .tap-controls label { font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
+  .tap-controls input[type="search"], .tap-controls input[type="text"] {
+    min-width: 240px;
+    padding: 7px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  .tap-btn { padding: 7px 16px; border-radius: 4px; font-size: 13px; cursor: pointer; border: none; background: #0d9488; color: #fff; }
+  .tap-btn:hover { background: #0f766e; }
+  .tap-btn-secondary {
+    padding: 7px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px solid #ced4da;
+    background: #fff;
+    color: #495057;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tap-btn-secondary:hover { background: #f8f9fa; }
+  .tap-btn-secondary[aria-disabled="true"] {
+    opacity: .45;
+    pointer-events: none;
+    cursor: not-allowed;
+  }
+  .tap-scroll { overflow: auto; max-height: 72vh; border: 1px solid #e9ecef; border-radius: 6px; background: #fff; }
+  .tap-scroll table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .tap-scroll th, .tap-scroll td { border-bottom: 1px solid #e9ecef; padding: 8px 10px; text-align: left; vertical-align: top; white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+  .tap-scroll thead th { position: sticky; top: 0; background: #f1f5f9; font-weight: 600; color: #334155; z-index: 1; }
+  .tap-scroll tbody tr:nth-child(even) { background: #fafbfc; }
+  .tap-scroll tbody tr:hover { background: #f1f5f9; }
+  .tap-scroll tbody tr.tap-row-variance { background: #fee2e2 !important; }
+  .tap-scroll tbody tr.tap-row-variance:hover { background: #fecaca !important; }
+  .tap-controls form.tap-filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 20px;
+    flex: 1 1 auto;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    min-width: 0;
+  }
+  .tap-controls select {
+    padding: 7px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 13px;
+    min-width: 160px;
+    background: #fff;
+  }
+  .tap-alert { padding: 12px 14px; border-radius: 6px; margin-bottom: 14px; font-size: 14px; background: #fee2e2; color: #7f1d1d; border: 1px solid #fecaca; }
+  .tap-empty-hint {
+    margin: 10px 0 0;
+    padding: 12px 14px;
+    border-radius: 6px;
+    font-size: 14px;
+    background: #f0f9ff;
+    color: #1e3a5f;
+    border: 1px solid #bfdbfe;
+    max-width: 920px;
+  }
+</style>
+
+<div class="tap-page">
+  <h1>Tasveek API data</h1>
+  <p style="margin:0 0 12px;font-size:13px;color:#495057;max-width:960px;">
+    <strong>System stock</strong> is loaded from your logged-in tenant database:
+    <code>SUM(ITEMMASTERDETAILS.currentstock)</code> grouped by <code>rawabicode</code> + <code>unit</code>,
+    matched by API <strong>ItemNo</strong> (else <strong>Barcode</strong>) → <code>rawabicode</code>,
+    and API <strong>Uom</strong> → <code>unit</code> (case-insensitive).
+    Rows where <strong>Stock</strong> and <strong>System stock</strong> both parse as numbers but differ are shaded <strong style="color:#991b1b;">red</strong>.
+  </p>
+
+  {% if error %}
+  <div class="tap-alert" role="alert">{{ error }}</div>
+  {% endif %}
+
+  <div class="tap-controls">
+    <form id="tapRawabiFilterForm" class="tap-filter-form" method="get" action="{{ url_for('tasveek.tasveek_api_rawabi_data') }}">
+      <label>Search <input type="search" name="q" value="{{ search_q or '' }}" maxlength="200"
+        placeholder="Barcode, product name, store…" autocomplete="off" /></label>
+      <label>Page <input type="number" name="page" min="1" max="100000" value="{{ page }}" /></label>
+      <label>Per page <input type="number" name="per_page" min="1" max="500" value="{{ per_page }}" /></label>
+      <label>Item status
+        <select name="item_status" title="Filter by ItemStatus 1 or 0 (numeric/boolean friendly)">
+          <option value="" {% if not item_status %}selected{% endif %}>All</option>
+          <option value="1" {% if item_status == '1' %}selected{% endif %}>1</option>
+          <option value="0" {% if item_status == '0' %}selected{% endif %}>0</option>
+        </select>
+      </label>
+      <label>Stock variance
+        <select name="stock_variance" title="Filter by API Stock vs System stock">
+          <option value="all" {% if (stock_variance or 'all') == 'all' %}selected{% endif %}>All rows</option>
+          <option value="diff" {% if stock_variance == 'diff' %}selected{% endif %}>Mismatch only</option>
+          <option value="match" {% if stock_variance == 'match' %}selected{% endif %}>Match only</option>
+        </select>
+      </label>
+      <button type="submit" class="tap-btn">Load</button>
+    </form>
+    <a class="tap-btn-secondary" href="{{ url_for('tasveek.tasveek_api_rawabi_export_xlsx', page=page, per_page=per_page, q=search_q or '', stock_variance=stock_variance, item_status=item_status or '') }}">Export Excel</a>
+    {% if search_q %}
+    <a class="tap-btn-secondary" href="{{ url_for('tasveek.tasveek_api_rawabi_data', page=1, per_page=per_page, stock_variance=stock_variance, item_status=item_status or '') }}">Clear search</a>
+    {% endif %}
+    {% if page > 1 %}
+    <a class="tap-btn-secondary" href="{{ url_for('tasveek.tasveek_api_rawabi_data', page=page - 1, per_page=per_page, q=search_q or '', stock_variance=stock_variance, item_status=item_status or '') }}">← Previous</a>
+    {% endif %}
+    {% if has_more %}
+    <a class="tap-btn-secondary" href="{{ url_for('tasveek.tasveek_api_rawabi_data', page=page + 1, per_page=per_page, q=search_q or '', stock_variance=stock_variance, item_status=item_status or '') }}">Next →</a>
+    {% elif page > 1 and not error %}
+    <span class="tap-btn-secondary" aria-disabled="true">End of data</span>
+    {% endif %}
+    <span style="margin-left:auto;font-size:13px;color:#495057;">
+      <strong>{{ row_count }}</strong> rows shown{% if search_q %} ({{ api_row_total }} loaded from API this page){% endif %} · page {{ page }}
+      {% if stock_variance == 'diff' %} · <strong style="color:#991b1b;">variance filter</strong>{% elif stock_variance == 'match' %} · match filter{% endif %}
+      {% if item_status %} · Item status: <strong>{{ item_status }}</strong>{% endif %}
+    </span>
+  </div>
+
+  {% if rows and columns %}
+  <div class="tap-scroll">
+    <table>
+      <thead>
+        <tr>
+          {% for c in columns %}<th title="{{ c }}">{{ c }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr{% if r.get('_tap_stock_variance') %} class="tap-row-variance"{% endif %}>
+          {% for c in columns %}
+          <td title="{{ r.get(c, '') }}">{{ r.get(c) if r.get(c) is not none else '' }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% elif not error %}
+  <p style="margin:0;color:#6c757d;font-size:14px;">No rows for this page.</p>
+  {% if rawabi_empty_hint %}
+  <p class="tap-empty-hint" role="status">{{ rawabi_empty_hint }}</p>
+  {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

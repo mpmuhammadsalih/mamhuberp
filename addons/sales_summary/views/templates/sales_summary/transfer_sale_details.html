@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+  body {
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+  
+  /* Modern colorful card */
+  .card {
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.5);
+    border: none !important;
+    padding: 12px 16px;
+  }
+  
+  /* Colorful page header */
+  .page-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    padding: 10px 16px !important;
+    border-radius: 12px;
+    margin-bottom: 10px !important;
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+  }
+  .page-header h2 {
+    color: #ffffff !important;
+    font-weight: 700;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    font-size: 22px !important;
+    margin: 0;
+  }
+  .page-header .muted {
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  
+  /* Colorful buttons */
+  .button--secondary {
+    background: rgba(255, 255, 255, 0.2) !important;
+    border: 2px solid rgba(255, 255, 255, 0.3) !important;
+    color: #ffffff !important;
+    border-radius: 10px;
+    padding: 6px 14px !important;
+    font-size: 13px !important;
+    transition: all 0.3s;
+    backdrop-filter: blur(10px);
+  }
+  .button--secondary:hover {
+    background: rgba(255, 255, 255, 0.3) !important;
+    transform: translateY(-1px);
+  }
+  
+  /* Colorful table header */
+  .table thead {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  }
+  .table thead th {
+    background: transparent !important;
+    color: #ffffff !important;
+    font-weight: 700;
+    padding: 8px 10px !important;
+  }
+  
+  /* Scroll table */
+  .scroll-table {
+    border-radius: 12px;
+    border: 2px solid #e2e8f0;
+    background: #ffffff;
+  }
+</style>
+  <div class="card" style="max-width: 1000px; margin: 0 auto;">
+    <div class="page-header">
+      <div class="page-header__title">
+        <h2>🔄 Transfer Sale Details</h2>
+        <p class="muted">Date Range: {{ date_from }} to {{ date_to }}</p>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <a class="button button--secondary" href="{{ url_for('sales_summary.sales_summary', date_from=date_from, date_to=date_to) }}">🔙 Back</a>
+      </div>
+    </div>
+
+    <div class="form-section" style="padding: 8px;">
+      {% if rows and rows|length > 0 %}
+        <div class="scroll-table" style="max-height: 400px;">
+          <table class="table" style="font-size: 12px; width: 100%;">
+            <thead>
+              <tr>
+                <th style="padding: 5px 6px; width: 50px;">Sl.No</th>
+                <th style="padding: 5px 6px;">Bill No</th>
+                <th style="padding: 5px 6px;">Bill Date</th>
+                <th style="padding: 5px 6px;">Customer Code</th>
+                <th style="padding: 5px 6px;">Customer Name</th>
+                <th style="text-align: right; padding: 5px 6px; width: 120px;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in rows %}
+                <tr>
+                  <td style="padding: 4px 6px;">{{ row.slno }}</td>
+                  <td style="padding: 4px 6px;">{{ row.billno }}</td>
+                  <td style="padding: 4px 6px;">
+                    {% if row.billdate %}
+                      {{ row.billdate.strftime('%d-%m-%Y') if row.billdate else '-' }}
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                  <td style="padding: 4px 6px;">{{ row.customercode or '-' }}</td>
+                  <td style="padding: 4px 6px;">{{ row.customername or '-' }}</td>
+                  <td style="text-align: right; padding: 4px 6px;">{{ "%.2f"|format((row.amount or 0)|float) }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              {% set total_amount = rows | sum(attribute='amount') %}
+              <tr class="table-total">
+                <th colspan="5" style="text-align: right; padding: 5px 6px;">Total</th>
+                <th style="text-align: right; padding: 5px 6px;">{{ "%.2f"|format(total_amount|float) }}</th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      {% else %}
+        <div style="padding: 12px; text-align: center; color: #6b7280; font-size: 12px;">
+          <p style="margin: 0;">No transfer sale data available for the selected date range.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

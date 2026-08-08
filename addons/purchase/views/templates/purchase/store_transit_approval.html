@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .st-page { max-width: 1200px; margin: 0 auto; padding: 22px 14px; }
+  .st-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .st-title { margin: 0; font-size: 24px; font-weight: 400; }
+  .st-sub { margin: 4px 0 0; color: #6b7280; font-size: 13px; }
+  .st-btn { display: inline-block; text-decoration: none; background: #2563eb; color: #fff; border-radius: 6px; padding: 8px 14px; font-size: 13px; font-weight: 600; }
+  .st-tabs { display: flex; gap: 8px; margin: 12px 0; }
+  .st-tab { border: 1px solid #d1d5db; background: #fff; color: #111827; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 13px; }
+  .st-tab.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+  .st-card { border: 1px solid #e5e7eb; border-radius: 8px; overflow: auto; }
+  .st-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .st-table th, .st-table td { padding: 9px 10px; border-bottom: 1px solid #e5e7eb; text-align: left; white-space: nowrap; }
+  .st-table th { background: #f8fafc; font-size: 12px; text-transform: uppercase; letter-spacing: 0.2px; }
+  .st-link { color: #1d4ed8; text-decoration: none; margin-right: 8px; font-size: 12px; }
+  .st-table tbody tr[data-st-href] { cursor: pointer; }
+  .st-table tbody tr[data-st-href]:hover { background: #f8fafc; }
+  .st-table tbody tr[data-st-href]:focus-visible { outline: 2px solid #93c5fd; outline-offset: -2px; }
+  .st-empty { padding: 14px; color: #64748b; font-size: 13px; }
+  .st-hidden { display: none; }
+</style>
+<div class="st-page">
+  <div class="st-top">
+    <div>
+      <h1 class="st-title">Store Transit Approval</h1>
+      <p class="st-sub">Transit workflow queue for transfer and approval.</p>
+    </div>
+  </div>
+  <div class="st-tabs">
+    <button type="button" class="st-tab active" data-tab="pending-transfer">Pending to Transfer</button>
+    <button type="button" class="st-tab" data-tab="pending-approve">Pending to Approve</button>
+    <button type="button" class="st-tab" data-tab="completed">Completed</button>
+  </div>
+  <div id="tab-pending-transfer" class="st-card">
+    <table class="st-table">
+      <thead>
+        <tr>
+          <th>Request No</th>
+          <th>Date</th>
+          <th>From Store</th>
+          <th>To Store</th>
+          <th>Status</th>
+          <th>Created By</th>
+          <th>Transferred By</th>
+          <th>Approved By</th>
+          <th>Remarks</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in pending_transfer_rows %}
+          <tr data-st-href="{{ url_for('purchase.stock_transfer_query', transfer_no=row.transferno) }}" tabindex="0" role="link" aria-label="Open transfer {{ row.transferno }}">
+            <td>{{ row.transferno }}</td>
+            <td>{{ row.transferdate.strftime('%Y-%m-%d') if row.transferdate else '' }}</td>
+            <td>{{ row.fromstore }}</td>
+            <td>{{ row.tostore }}</td>
+            <td>
+              {% set st = (row.status or 'P')|upper %}
+              {% if st == 'C' %}Created{% elif st in ['T', 'P'] %}Transferred{% else %}{{ st }}{% endif %}
+            </td>
+            <td>{{ row.createdby or '-' }}</td>
+            <td>{{ row.transferredby or '-' }}</td>
+            <td>{{ row.approvedby or '-' }}</td>
+            <td>{{ row.remarks }}</td>
+            <td>
+              <a class="st-link" href="{{ url_for('purchase.stock_transfer_query', transfer_no=row.transferno) }}">View Request</a>
+              <a class="st-link" href="{{ url_for('purchase.stock_transfer_pdf', transfer_no=row.transferno, copy=1) }}" target="_blank">PDF</a>
+              <a class="st-link js-transfer" href="#" data-no="{{ row.transferno }}">Transfer</a>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="10" class="st-empty">No pending to transfer requests.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div id="tab-pending-approve" class="st-card st-hidden">
+    <table class="st-table">
+      <thead>
+        <tr>
+          <th>Request No</th>
+          <th>Date</th>
+          <th>From Store</th>
+          <th>To Store</th>
+          <th>Status</th>
+          <th>Created By</th>
+          <th>Transferred By</th>
+          <th>Approved By</th>
+          <th>Remarks</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in pending_approve_rows %}
+          <tr data-st-href="{{ url_for('purchase.stock_transfer_query', transfer_no=row.transferno) }}" tabindex="0" role="link" aria-label="Open transfer {{ row.transferno }}">
+            <td>{{ row.transferno }}</td>
+            <td>{{ row.transferdate.strftime('%Y-%m-%d') if row.transferdate else '' }}</td>
+            <td>{{ row.fromstore }}</td>
+            <td>{{ row.tostore }}</td>
+            <td>
+              {% set st = (row.status or 'P')|upper %}
+              {% if st == 'C' %}Created{% elif st in ['T', 'P'] %}Transferred{% else %}{{ st }}{% endif %}
+            </td>
+            <td>{{ row.createdby or '-' }}</td>
+            <td>{{ row.transferredby or '-' }}</td>
+            <td>{{ row.approvedby or '-' }}</td>
+            <td>{{ row.remarks }}</td>
+            <td>
+              <a class="st-link" href="{{ url_for('purchase.stock_transfer_query', transfer_no=row.transferno) }}">View Request</a>
+              <a class="st-link" href="{{ url_for('purchase.stock_transfer_pdf', transfer_no=row.transferno, copy=1) }}" target="_blank">PDF</a>
+              <a class="st-link js-approve" href="#" data-no="{{ row.transferno }}">Approve</a>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="10" class="st-empty">No pending to approve requests.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div id="tab-completed" class="st-card st-hidden">
+    <table class="st-table">
+      <thead>
+        <tr>
+          <th>Transfer No</th>
+          <th>Date</th>
+          <th>From Store</th>
+          <th>To Store</th>
+          <th>Created By</th>
+          <th>Transferred By</th>
+          <th>Approved By</th>
+          <th>Remarks</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in completed_rows %}
+          <tr data-st-href="{{ url_for('purchase.stock_transfer_query', transfer_no=row.transferno) }}" tabindex="0" role="link" aria-label="Open transfer {{ row.transferno }}">
+            <td>{{ row.transferno }}</td>
+            <td>{{ row.transferdate.strftime('%Y-%m-%d') if row.transferdate else '' }}</td>
+            <td>{{ row.fromstore }}</td>
+            <td>{{ row.tostore }}</td>
+            <td>{{ row.createdby or '-' }}</td>
+            <td>{{ row.transferredby or '-' }}</td>
+            <td>{{ row.approvedby or '-' }}</td>
+            <td>{{ row.remarks }}</td>
+            <td>
+              <a class="st-link" href="{{ url_for('purchase.stock_transfer_query', transfer_no=row.transferno) }}">View</a>
+              <a class="st-link" href="{{ url_for('purchase.stock_transfer_pdf', transfer_no=row.transferno, copy=1) }}" target="_blank">PDF</a>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="9" class="st-empty">No approved transfers.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<script>
+  (function () {
+    const tabs = document.querySelectorAll(".st-tab");
+    const pTransfer = document.getElementById("tab-pending-transfer");
+    const pApprove = document.getElementById("tab-pending-approve");
+    const c = document.getElementById("tab-completed");
+    tabs.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        tabs.forEach((x) => x.classList.remove("active"));
+        btn.classList.add("active");
+        const tab = btn.dataset.tab;
+        pTransfer.classList.toggle("st-hidden", tab !== "pending-transfer");
+        pApprove.classList.toggle("st-hidden", tab !== "pending-approve");
+        c.classList.toggle("st-hidden", tab !== "completed");
+      });
+    });
+    document.querySelectorAll(".js-transfer").forEach((a) => {
+      a.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const no = a.dataset.no;
+        if (!no || !confirm("Post this transfer to transit stock?")) return;
+        const r = await fetch(`/purchase/stock-transfer/api/transfer/${no}`, { method: "POST" });
+        const d = await r.json();
+        if (!r.ok || !d.success) {
+          alert(d.error || "Transfer failed");
+          return;
+        }
+        alert("Transfer posted to transit");
+        window.location.reload();
+      });
+    });
+    document.querySelectorAll(".js-approve").forEach((a) => {
+      a.addEventListener("click", async (e) => {
+        e.preventDefault();
+        if (a.dataset.approving === "1") return;
+        const no = a.dataset.no;
+        if (!no || !confirm("Approve this transfer request?")) return;
+        a.dataset.approving = "1";
+        const prevPe = a.style.pointerEvents;
+        const prevOp = a.style.opacity;
+        a.style.pointerEvents = "none";
+        a.style.opacity = "0.65";
+        try {
+          if (typeof window.showLoadingOverlay === "function") {
+            window.showLoadingOverlay("Approving transfer...");
+          }
+          try {
+            const r = await fetch(`/purchase/stock-transfer/api/approve/${no}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({}),
+            });
+            const d = await r.json().catch(() => ({}));
+            if ((r.status === 409 || d.replay_blocked) && d.error) {
+              alert(d.error);
+              return;
+            }
+            if (!r.ok || !d.success) {
+              alert(d.error || "Approval failed");
+              return;
+            }
+            if (typeof d.save_nonce === "string" && d.save_nonce) {
+              window.__GLOBAL_SAVE_NONCE = d.save_nonce;
+            }
+            if (typeof window.hideLoadingOverlay === "function") {
+              window.hideLoadingOverlay();
+            }
+            alert("Transfer approved");
+            window.location.reload();
+          } finally {
+            if (typeof window.hideLoadingOverlay === "function") {
+              window.hideLoadingOverlay();
+            }
+          }
+        } finally {
+          a.dataset.approving = "0";
+          a.style.pointerEvents = prevPe;
+          a.style.opacity = prevOp;
+        }
+      });
+    });
+
+    document.querySelectorAll("tr[data-st-href]").forEach((tr) => {
+      const href = tr.getAttribute("data-st-href");
+      if (!href) return;
+      const go = (openNewTab) => {
+        if (openNewTab) window.open(href, "_blank", "noopener,noreferrer");
+        else window.location.assign(href);
+      };
+      tr.addEventListener("click", (e) => {
+        if (e.target.closest && (e.target.closest("a") || e.target.closest("button"))) return;
+        if (e.metaKey || e.ctrlKey) {
+          e.preventDefault();
+          go(true);
+          return;
+        }
+        go(false);
+      });
+      tr.addEventListener("auxclick", (e) => {
+        if (e.button !== 1) return;
+        if (e.target.closest && (e.target.closest("a") || e.target.closest("button"))) return;
+        e.preventDefault();
+        go(true);
+      });
+      tr.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        if (e.ctrlKey || e.metaKey) go(true);
+        else go(false);
+      });
+    });
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,29 @@
+{# fa_nav_active: categories | assets | depreciation | disposal | sale | transfer #}
+<nav class="fa-nav-wrap" aria-label="Fixed assets sections">
+  <div class="po-tabs" role="tablist">
+    <a href="{{ url_for('fixed_assets.fa_category_list') }}"
+       class="po-tab{% if fa_nav_active == 'categories' %} active{% endif %}"
+       role="tab"
+       {% if fa_nav_active == 'categories' %}aria-current="page"{% endif %}><i class="bi bi-tags" aria-hidden="true"></i> Categories</a>
+    <a href="{{ url_for('fixed_assets.fa_asset_list') }}"
+       class="po-tab{% if fa_nav_active == 'assets' %} active{% endif %}"
+       role="tab"
+       {% if fa_nav_active == 'assets' %}aria-current="page"{% endif %}><i class="bi bi-building-gear" aria-hidden="true"></i> Asset register</a>
+    <a href="{{ url_for('fixed_assets.fa_depreciation_page') }}"
+       class="po-tab{% if fa_nav_active == 'depreciation' %} active{% endif %}"
+       role="tab"
+       {% if fa_nav_active == 'depreciation' %}aria-current="page"{% endif %}><i class="bi bi-graph-down-arrow" aria-hidden="true"></i> Depreciation</a>
+    <a href="{{ url_for('fixed_assets.fa_sale_list') }}"
+       class="po-tab{% if fa_nav_active == 'sale' %} active{% endif %}"
+       role="tab"
+       {% if fa_nav_active == 'sale' %}aria-current="page"{% endif %}><i class="bi bi-cash-coin" aria-hidden="true"></i> Asset sale</a>
+    <a href="{{ url_for('fixed_assets.fa_disposal_list') }}"
+       class="po-tab{% if fa_nav_active == 'disposal' %} active{% endif %}"
+       role="tab"
+       {% if fa_nav_active == 'disposal' %}aria-current="page"{% endif %}><i class="bi bi-trash3" aria-hidden="true"></i> Disposal</a>
+    <a href="{{ url_for('fixed_assets.fa_transfer_list') }}"
+       class="po-tab{% if fa_nav_active == 'transfer' %} active{% endif %}"
+       role="tab"
+       {% if fa_nav_active == 'transfer' %}aria-current="page"{% endif %}><i class="bi bi-arrow-left-right" aria-hidden="true"></i> Transfer</a>
+  </div>
+</nav>

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Routes{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+
+{% set ns = namespace(n=(routes or [])|length, main=0, morn=0, eve=0) %}
+{% for r in routes or [] %}
+  {% if r.mainroute is not none and r.mainroute != '' %}{% set ns.main = ns.main + 1 %}{% endif %}
+  {% if r.morning and r.morning|string|trim %}{% set ns.morn = ns.morn + 1 %}{% endif %}
+  {% if r.evening and r.evening|string|trim %}{% set ns.eve = ns.eve + 1 %}{% endif %}
+{% endfor %}
+
+<div class="page-po nexa-list-page nexa-setup-list-page">
+  <section class="nexa-stat-grid" aria-label="Route summary">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-signpost-split" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Total routes</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.n) }}</p>
+        <p class="nexa-stat-sub">TBLROUTES</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-star" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Main route set</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.main) }}</p>
+        <p class="nexa-stat-sub">mainroute field</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-sunrise" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Morning</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.morn) }}</p>
+        <p class="nexa-stat-sub">Filled</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-moon" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Evening</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.eve) }}</p>
+        <p class="nexa-stat-sub">Filled</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--cyan"><i class="bi bi-geo-alt" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Branch</p>
+        <p class="nexa-stat-value" style="font-size:clamp(14px,1.2vw,18px);">{{ location_code }}</p>
+        <p class="nexa-stat-sub">{{ location_name or '' }}</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Route</h1>
+      <p class="page-po__muted">Branch routes (<strong>TBLROUTES</strong>).</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% include 'includes/list_refresh_bar.html' %}
+      <a href="{{ url_for('route_master.route_create') }}" class="page-po__btn-primary">+ New route</a>
+    </div>
+  </div>
+
+  <form class="nexa-list-filter-panel" method="get" action="{{ url_for('route_master.route_list') }}">
+    <div class="form-group" style="margin-bottom:0;">
+      <label for="rtSearch" style="font-size:11px;font-weight:700;color:#64748b;">Search</label>
+      <input id="rtSearch" type="text" name="search" class="input" placeholder="Route no. or name…" value="{{ search_term or '' }}" style="min-width:220px;" />
+    </div>
+    <button type="submit" class="page-po__btn-secondary">Filter</button>
+  </form>
+
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th style="text-align:center;width:52px;">Sl.No</th>
+          <th>Loc</th>
+          <th>Route no.</th>
+          <th>Name</th>
+          <th>Morning</th>
+          <th>Evening</th>
+          <th>Main route</th>
+          <th style="text-align:center;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if routes %}
+          {% for r in routes %}
+            <tr>
+              <td style="text-align:center;">{{ loop.index }}</td>
+              <td>{{ r.locationcode or '-' }}</td>
+              <td>{{ r.routeno if r.routeno is not none else '-' }}</td>
+              <td>{{ r.routename or '-' }}</td>
+              <td>{{ r.morning or '-' }}</td>
+              <td>{{ r.evening or '-' }}</td>
+              <td>{{ r.mainroute if r.mainroute is not none else '-' }}</td>
+              <td style="text-align:center;">
+                <a href="{{ url_for('route_master.route_edit', location_code=r.locationcode, routeno=r.routeno) }}" class="btn-view">Edit</a>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="8" style="text-align:center;padding:18px;color:#64748b;">No routes for this branch or table missing.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

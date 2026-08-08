@@ -1,0 +1,2 @@
+"""Addon manifest — New Company setup (Oracle truncate / fresh company)."""
+MANIFEST = {'technical_name': 'db_sync', 'name': 'New Company setup', 'version': '1.0.0', 'category': 'Setup', 'summary': 'Clear Oracle business data (TRUNCATE) for a fresh company on an existing schema', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/setup/new-company-setup'}, 'flask': {'blueprint': 'db_sync', 'blueprint_ref': 'addons.db_sync.controllers.routes:bp', 'routes_module': 'addons.db_sync.controllers.routes'}}

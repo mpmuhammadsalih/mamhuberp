@@ -1,0 +1,568 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  /* Match Customer Request form: global body is #f5f6f8; keep this module on a white canvas. */
+  body { background: #fff !important; }
+  .cr-wrap { width: 100%; max-width: none; margin: 0; }
+  .cr-top {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 12px 16px;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .cr-top-left  { justify-self: start; min-width: 0; }
+  .cr-top-center { justify-self: center; }
+  .cr-top-right { justify-self: end; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  /* AI auto: switch-style toggle (replaces checkbox) */
+  .cr-ai-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 6px 12px 6px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    background: #f8fafc;
+    cursor: pointer;
+    font: inherit;
+    color: #334155;
+    user-select: none;
+    transition: background .15s, border-color .15s, box-shadow .15s;
+  }
+  .cr-ai-toggle:hover { border-color: #94a3b8; background: #f1f5f9; }
+  .cr-ai-toggle:focus { outline: none; box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25); }
+  .cr-ai-toggle__track {
+    position: relative;
+    width: 44px;
+    height: 26px;
+    border-radius: 999px;
+    background: #cbd5e1;
+    flex-shrink: 0;
+    transition: background .2s;
+  }
+  .cr-ai-toggle__knob {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    transition: transform .2s;
+  }
+  .cr-ai-toggle--on .cr-ai-toggle__track { background: #0d6efd; }
+  .cr-ai-toggle--on .cr-ai-toggle__knob { transform: translateX(18px); }
+  .cr-ai-toggle--on { border-color: var(--nexa-focus-color); background: #f0f9ff; }
+  .cr-ai-toggle__text { font-size: 13px; font-weight: 600; }
+  @media (max-width: 900px) {
+    .cr-top { grid-template-columns: 1fr; }
+    .cr-top-left, .cr-top-center, .cr-top-right { justify-self: center; text-align: center; }
+    .cr-top-left .page-po__muted { display: none; }
+  }
+  .cr-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+  .cr-tab  {
+    text-decoration: none;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 8px 14px;
+    color: #495057;
+    background: #fff;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .cr-tab.active { background: #e7f1ff; border-color: #0d6efd; color: #0d6efd; font-weight: 700; }
+  .cr-table-wrap { border: 1px solid #dee2e6; border-radius: 6px; overflow: auto; max-height: 60vh; }
+  #crTable { width: 100%; min-width: 960px; border-collapse: collapse; font-size: 13px; }
+  #crTable th, #crTable td { border-bottom: 1px solid #dee2e6; padding: 8px 10px; text-align: center; vertical-align: middle; }
+  #crTable td:nth-child(3) { text-align: left; }
+  #crTable thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; font-weight: 600; }
+  .cr-badge-pending   { background:#fff3cd; color:#856404; border-radius:4px; padding:2px 8px; font-size:11px; font-weight:600; }
+  .cr-badge-approved  { background:#d1e7dd; color:#0a3622; border-radius:4px; padding:2px 8px; font-size:11px; font-weight:600; }
+  .cr-badge-rejected  { background:#f8d7da; color:#58151c; border-radius:4px; padding:2px 8px; font-size:11px; font-weight:600; }
+  .cr-badge-converted { background:#cff4fc; color:#055160; border-radius:4px; padding:2px 8px; font-size:11px; font-weight:600; }
+  .cr-badge-converting { background:#e0e7ff; color:#3730a3; border-radius:4px; padding:2px 8px; font-size:11px; font-weight:600; }
+
+  /* ── Filter bar (same style as customer list) ─────────────── */
+  .cl-filters { display:flex; flex-wrap:wrap; gap:10px 16px; align-items:flex-end; padding:14px 0 12px; border-bottom:1px solid #dee2e6; margin-bottom:14px; }
+  .cl-fg { display:flex; flex-direction:column; gap:4px; }
+  .cl-fg label { font-size:11px; font-weight:600; color:#6c757d; text-transform:uppercase; letter-spacing:.4px; }
+  .cl-pick-wrap { display:inline-flex; align-items:center; border:1px solid #ced4da; border-radius:4px; background:#fff; min-width:150px; overflow:hidden; }
+  .cl-pick-display { flex:1; font-size:13px; padding:6px 10px; background:transparent; border:none; cursor:pointer; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#495057; }
+  .cl-pick-display.placeholder { color:#adb5bd; }
+  .cl-pick-btn   { background:transparent; border:none; border-left:1px solid #ced4da; padding:6px 9px; cursor:pointer; color:#007bff; font-size:13px; }
+  .cl-pick-clear { background:transparent; border:none; padding:6px 7px; cursor:pointer; color:#adb5bd; font-size:13px; }
+  .cl-pick-clear:hover { color:#dc3545; }
+  .cl-fg input[type="date"] { font-size:13px; padding:6px 10px; border:1px solid #ced4da; border-radius:4px; min-width:138px; background:#fff; }
+  .cl-fg .cl-text-input { font-size:13px; padding:6px 10px; border:1px solid #ced4da; border-radius:4px; min-width:200px; background:#fff; }
+  .cl-btn-row { display:flex; gap:8px; align-items:flex-end; padding-bottom:1px; }
+  /* Filter popup modals */
+  .cl-modal-bg { display:none; position:fixed; inset:0; z-index:1050; background:rgba(0,0,0,.35); }
+  .cl-modal-bg.open { display:flex; align-items:flex-start; justify-content:center; padding-top:80px; }
+  .cl-modal-box { background:#fff; border-radius:8px; box-shadow:0 8px 32px rgba(0,0,0,.18); width:380px; max-width:96vw; display:flex; flex-direction:column; max-height:480px; }
+  .cl-modal-head { display:flex; align-items:center; justify-content:space-between; padding:14px 16px 10px; border-bottom:1px solid #dee2e6; }
+  .cl-modal-head h4 { margin:0; font-size:14px; font-weight:700; color:#212529; }
+  .cl-modal-close { background:none; border:none; font-size:20px; cursor:pointer; color:#6c757d; line-height:1; padding:0 4px; }
+  .cl-modal-search { padding:10px 12px 6px; }
+  .cl-modal-search input { width:100%; padding:7px 10px; border:1px solid #ced4da; border-radius:4px; font-size:13px; box-sizing:border-box; }
+  .cl-modal-list { overflow-y:auto; flex:1; }
+  .cl-modal-item { padding:9px 16px; font-size:13px; cursor:pointer; border-bottom:1px solid #f0f0f0; color:#212529; display:flex; align-items:center; gap:8px; }
+  .cl-modal-item:hover, .cl-modal-item:focus { background:#e9f0ff; outline:none; }
+  .cl-modal-item.selected { background:#dbeafe; font-weight:600; color:#1a56db; }
+  .cl-modal-footer { padding:10px 12px; border-top:1px solid #dee2e6; display:flex; gap:8px; }
+  .cl-modal-all { flex:1; padding:7px; font-size:13px; border:1px solid #ced4da; border-radius:4px; background:#f8f9fa; cursor:pointer; color:#495057; }
+  .cl-modal-all:hover { background:#e9ecef; }
+</style>
+<div class="nexa-list-page cr-wrap">
+  <div class="cr-top">
+    <div class="cr-top-left">
+      <h1 class="page-po__title">Customer Request</h1>
+      <p class="page-po__muted">Manage customer requests — review, approve, or reject pending entries.</p>
+    </div>
+    {% if user_customer_creation or allow_all_permissions %}
+    <div class="cr-top-center">
+      <button type="button"
+              id="crAiAutoToggle"
+              class="cr-ai-toggle"
+              aria-pressed="false"
+              title="When on, the same branch is checked for exact duplicates; if none, the request is saved to branch and central (Convert to Central). If duplicate, AI rejects with a comment.">
+        <span class="cr-ai-toggle__track" aria-hidden="true"><span class="cr-ai-toggle__knob"></span></span>
+        <span class="cr-ai-toggle__text">AI auto-convert</span>
+      </button>
+      <span class="page-po__muted" style="font-size:12px;max-width:220px;">On/Off is saved for <strong>all users</strong> (organization setting).</span>
+    </div>
+    {% else %}
+    <div class="cr-top-center" aria-hidden="true"></div>
+    {% endif %}
+    <div class="cr-top-right">
+      <a href="{{ url_for('ho.customer_request_form') }}" class="page-po__btn-primary">+ New Request</a>
+    </div>
+  </div>
+
+  <!-- ── Filter bar ──────────────────────────────────────────── -->
+  <div class="cl-filters">
+    <div class="cl-fg">
+      <label>Search</label>
+      <input type="text" id="crSearch" class="cl-text-input" placeholder="Code or name…" value="{{ search or '' }}" />
+    </div>
+
+    <!-- Branch popup -->
+    <div class="cl-fg">
+      <label>Branch</label>
+      <div class="cl-pick-wrap">
+        <button type="button" class="cl-pick-display {% if not branch_filter %}placeholder{% endif %}" id="crBranchDisplay"
+                onclick="crOpenModal('branch')">
+          {%- if branch_filter -%}
+            {%- for b in branch_list if b.tenant_id == branch_filter -%}{{ b.locationname or b.tenant_id }}{%- endfor -%}
+            {%- if not branch_list or branch_filter not in branch_list|map(attribute='tenant_id')|list -%}{{ branch_filter }}{%- endif -%}
+          {%- else -%}All{%- endif -%}
+        </button>
+        <button type="button" class="cl-pick-clear" id="crBranchClear" title="Clear"
+                style="{{ '' if branch_filter else 'display:none' }}" onclick="crClearPick('branch')">×</button>
+        <button type="button" class="cl-pick-btn" onclick="crOpenModal('branch')">▾</button>
+        <input type="hidden" id="crBranchVal" value="{{ branch_filter or '' }}" />
+      </div>
+    </div>
+
+    <!-- Invoice Type popup -->
+    <div class="cl-fg">
+      <label>Invoice Type</label>
+      <div class="cl-pick-wrap">
+        <button type="button" class="cl-pick-display {% if not invoice_filter %}placeholder{% endif %}" id="crInvoiceDisplay"
+                onclick="crOpenModal('invoice')">{{ 'Cash' if invoice_filter=='1' else ('Credit' if invoice_filter=='2' else 'All') }}</button>
+        <button type="button" class="cl-pick-clear" id="crInvoiceClear" title="Clear"
+                style="{{ '' if invoice_filter else 'display:none' }}" onclick="crClearPick('invoice')">×</button>
+        <button type="button" class="cl-pick-btn" onclick="crOpenModal('invoice')">▾</button>
+        <input type="hidden" id="crInvoiceVal" value="{{ invoice_filter or '' }}" />
+      </div>
+    </div>
+
+    <div class="cl-fg">
+      <label>Created From</label>
+      <input type="date" id="crDateFrom" value="{{ date_from or '' }}" />
+    </div>
+    <div class="cl-fg">
+      <label>Created To</label>
+      <input type="date" id="crDateTo" value="{{ date_to or '' }}" />
+    </div>
+
+    <div class="cl-btn-row">
+      <button type="button" id="crBtnFilter" class="page-po__btn-primary">Filter</button>
+      <button type="button" id="crBtnClear"  class="page-po__btn-secondary">Clear</button>
+    </div>
+  </div>
+
+  <p style="margin:0 0 10px;font-size:12px;color:#6c757d;">
+    Showing <strong id="crCount">{{ rows|length }}</strong> record(s).
+    <span style="display:block;margin-top:4px;font-size:11px;color:#94a3b8;">Pending tab: list reloads about every 10s while this window is visible and you are not actively editing filters (search/dates). Other tabs: use Filter or refresh the page. Menu bell &amp; alerts still poll the server every 30s.</span>
+  </p>
+
+  <div class="cr-tabs">
+    <a class="cr-tab {% if selected_tab == 'pending'   %}active{% endif %}" href="{{ url_for('ho.customer_request', tab='pending') }}">
+      Pending <span style="margin-left:4px;">({{ counts.pending or 0 }})</span>
+    </a>
+    <a class="cr-tab {% if selected_tab == 'converted' %}active{% endif %}" href="{{ url_for('ho.customer_request', tab='converted') }}">
+      Converted <span style="margin-left:4px;">({{ counts.converted or 0 }})</span>
+    </a>
+    <a class="cr-tab {% if selected_tab == 'rejected'  %}active{% endif %}" href="{{ url_for('ho.customer_request', tab='rejected') }}">
+      Rejected <span style="margin-left:4px;">({{ counts.rejected or 0 }})</span>
+    </a>
+  </div>
+
+  <div class="cr-table-wrap">
+    <table id="crTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Cust Code</th>
+          <th>Customer Name</th>
+          <th>Branch</th>
+          <th>Mobile</th>
+          <th>Telephone</th>
+          <th>Type</th>
+          <th>Status</th>
+          {% if selected_tab == 'pending' %}
+          <th>Alert Accepted By</th>
+          {% endif %}
+          {% if selected_tab == 'rejected' %}
+          <th>Rejected Remarks</th>
+          {% endif %}
+          <th>Assigned Code</th>
+          <th>Created By</th>
+          <th>Created Date</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td><strong>{{ r.customercode or '' }}</strong></td>
+            <td>{{ r.customername or '' }}</td>
+            <td>{{ r.branch or '-' }}</td>
+            <td>{{ r.mobile or '' }}</td>
+            <td>{{ r.telephone or '' }}</td>
+            <td>{% if r.invoicecode == 1 or r.invoicecode == '1' %}Cash{% elif r.invoicecode == 2 or r.invoicecode == '2' %}Credit{% else %}-{% endif %}</td>
+            <td>
+              {% set st = (r.status or 'PENDING')|upper %}
+              {% if st == 'PENDING'   %}<span class="cr-badge-pending">Pending</span>
+              {% elif st == 'CONVERTING' %}<span class="cr-badge-converting">Converting…</span>
+              {% elif st == 'CONVERTED' %}<span class="cr-badge-converted">Converted</span>
+              {% elif st == 'APPROVED'  %}<span class="cr-badge-approved">Approved</span>
+              {% elif st == 'REJECTED'  %}<span class="cr-badge-rejected">Rejected</span>
+              {% else %}{{ r.status }}{% endif %}
+            </td>
+            {% if selected_tab == 'pending' %}
+            <td style="text-align:left;max-width:220px;white-space:normal;word-break:break-word;">
+              {% if r.alertackby %}
+                <span style="font-weight:600;color:#0f5132;">{{ r.alertackby }}</span>
+                {% if r.alertackdate %}<br><span style="font-size:11px;color:#6c757d;">{{ r.alertackdate }}</span>{% endif %}
+              {% else %}
+                -
+              {% endif %}
+            </td>
+            {% endif %}
+            {% if selected_tab == 'rejected' %}
+            <td style="text-align:left;max-width:280px;white-space:normal;word-break:break-word;">
+              {{ r.rejectcomment or '-' }}
+            </td>
+            {% endif %}
+            <td>
+              {% if r.assignedcode %}
+                <span style="color:#0d6efd;font-weight:700;">{{ r.assignedcode }}</span>
+                {% if r.assignedccode %}<br><span style="color:#198754;font-size:11px;">{{ r.assignedccode }}</span>{% endif %}
+              {% else %}—{% endif %}
+            </td>
+            <td>{{ r.createdby or '' }}</td>
+            <td>{{ r.createddate or '' }}</td>
+            <td style="white-space:nowrap;">
+              {% set st = (r.status or 'PENDING')|upper %}
+              {% if st == 'CONVERTED' %}
+                <a class="page-po__btn-secondary" style="padding:2px 8px;font-size:12px;"
+                   href="{{ url_for('ho.customer_request_form', customercode=r.customercode, view=1) }}">View</a>
+              {% elif st == 'REJECTED' %}
+                <a class="page-po__btn-secondary" style="padding:2px 8px;font-size:12px;"
+                   href="{{ url_for('ho.customer_request_form', customercode=r.customercode, view=1) }}">View</a>
+                {% if user_customer_creation or allow_all_permissions %}
+                  <button class="page-po__btn-secondary"
+                          style="padding:2px 8px;font-size:12px;margin-left:4px;background:#f59e0b;border-color:#f59e0b;color:#fff;border-radius:4px;cursor:pointer;"
+                          onclick="reopenRequest({{ r.customercode }}, this)">↩ Pending</button>
+                  <a class="page-po__btn-primary"
+                     href="{{ url_for('ho.customer_central_form', from_cr=r.customercode) }}"
+                     style="padding:2px 8px;font-size:12px;margin-left:4px;background:#198754;border-color:#198754;color:#fff;text-decoration:none;border-radius:4px;display:inline-block;">Convert</a>
+                {% endif %}
+              {% else %}
+                <a class="page-po__btn-secondary" style="padding:2px 8px;font-size:12px;"
+                   href="{{ url_for('ho.customer_request_form', customercode=r.customercode) }}">Open</a>
+                {% if st == 'PENDING' and (user_customer_creation or allow_all_permissions) %}
+                  {% if not r.alertackby %}
+                  <button class="page-po__btn-secondary"
+                          style="padding:2px 8px;font-size:12px;margin-left:4px;background:#0ea5e9;border-color:#0ea5e9;color:#fff;border-radius:4px;cursor:pointer;"
+                          onclick="acknowledgeAlert({{ r.customercode }}, this)">Stop Alert</button>
+                  {% endif %}
+                  <a class="page-po__btn-primary"
+                     href="{{ url_for('ho.customer_central_form', from_cr=r.customercode) }}"
+                     style="padding:2px 8px;font-size:12px;margin-left:4px;background:#198754;border-color:#198754;color:#fff;text-decoration:none;border-radius:4px;display:inline-block;">Convert to Central</a>
+                {% endif %}
+              {% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="{{ 13 if selected_tab == 'rejected' or selected_tab == 'pending' else 12 }}" style="text-align:center;padding:24px;color:#6c757d;">No customer requests found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Branch popup modal ──────────────────────────────────────── -->
+<div class="cl-modal-bg" id="crModalBranch">
+  <div class="cl-modal-box">
+    <div class="cl-modal-head">
+      <h4>Select Branch</h4>
+      <button class="cl-modal-close" onclick="crCloseModal('branch')">×</button>
+    </div>
+    <div class="cl-modal-search">
+      <input type="text" id="crBranchSearch" placeholder="Search branch…" oninput="crFilterModal('branch')" />
+    </div>
+    <div class="cl-modal-list" id="crBranchList">
+      {% for b in branch_list %}
+        <div class="cl-modal-item {% if branch_filter == b.tenant_id %}selected{% endif %}"
+             tabindex="0"
+             data-val="{{ b.tenant_id }}"
+             data-label="{{ b.locationname or b.tenant_id }}"
+             data-search="{{ ((b.tenant_id or '') ~ ' ' ~ (b.locationname or ''))|lower }}"
+             onclick="crPickItem('branch', '{{ b.tenant_id }}', '{{ b.locationname or b.tenant_id }}')">
+          <span class="cl-item-code">{{ b.tenant_id }}</span> {{ b.locationname or '' }}
+        </div>
+      {% endfor %}
+    </div>
+    <div class="cl-modal-footer">
+      <button class="cl-modal-all" onclick="crPickItem('branch','','All')">All Branches</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Invoice popup modal ────────────────────────────────────── -->
+<div class="cl-modal-bg" id="crModalInvoice">
+  <div class="cl-modal-box">
+    <div class="cl-modal-head">
+      <h4>Select Invoice Type</h4>
+      <button class="cl-modal-close" onclick="crCloseModal('invoice')">×</button>
+    </div>
+    <div class="cl-modal-list">
+      <div class="cl-modal-item {% if invoice_filter=='1' %}selected{% endif %}" tabindex="0"
+           onclick="crPickItem('invoice','1','Cash')">Cash</div>
+      <div class="cl-modal-item {% if invoice_filter=='2' %}selected{% endif %}" tabindex="0"
+           onclick="crPickItem('invoice','2','Credit')">Credit</div>
+    </div>
+    <div class="cl-modal-footer">
+      <button class="cl-modal-all" onclick="crPickItem('invoice','','All')">All</button>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+(function() {
+  const listBase = {{ url_for('ho.customer_request')|tojson }};
+
+  async function postAction(url, label, btn) {
+    if (!confirm(`${label} this customer request?`)) return;
+    const old = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Processing...';
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error((data && (data.error || data.message)) || `Failed (HTTP ${res.status})`);
+      window.location.href = listBase + '?tab=pending';
+    } catch(e) {
+      alert('Error: ' + (e.message || e));
+      btn.disabled = false;
+      btn.textContent = old;
+    }
+  }
+
+  /* ── Filter modal logic ─────────────────────────────────────── */
+  var crModalMap = {
+    branch:  { modal:'crModalBranch',  display:'crBranchDisplay',  hidden:'crBranchVal',  clear:'crBranchClear',  search:'crBranchSearch'  },
+    invoice: { modal:'crModalInvoice', display:'crInvoiceDisplay', hidden:'crInvoiceVal', clear:'crInvoiceClear', search:null              },
+  };
+
+  window.crOpenModal = function(key) {
+    var cfg = crModalMap[key]; if (!cfg) return;
+    document.getElementById(cfg.modal).classList.add('open');
+    if (cfg.search) { var s = document.getElementById(cfg.search); if (s) { s.value=''; s.focus(); crFilterModal(key); } }
+  };
+  window.crCloseModal = function(key) {
+    var cfg = crModalMap[key]; if (!cfg) return;
+    document.getElementById(cfg.modal).classList.remove('open');
+  };
+  window.crPickItem = function(key, val, label) {
+    var cfg = crModalMap[key]; if (!cfg) return;
+    document.getElementById(cfg.hidden).value = val;
+    var disp = document.getElementById(cfg.display);
+    disp.textContent = label || 'All';
+    disp.classList.toggle('placeholder', !val);
+    var clr = document.getElementById(cfg.clear);
+    if (clr) clr.style.display = val ? '' : 'none';
+    crCloseModal(key);
+  };
+  window.crClearPick = function(key) { crPickItem(key, '', 'All'); };
+  window.crFilterModal = function(key) {
+    var cfg = crModalMap[key]; if (!cfg || !cfg.search) return;
+    var term = (document.getElementById(cfg.search).value || '').toLowerCase();
+    var list = document.getElementById(cfg.modal);
+    list.querySelectorAll('.cl-modal-item[data-search]').forEach(function(el) {
+      el.style.display = (!term || el.dataset.search.indexOf(term) !== -1) ? '' : 'none';
+    });
+  };
+  // Close modal on backdrop click
+  document.querySelectorAll('.cl-modal-bg').forEach(function(bg) {
+    bg.addEventListener('click', function(e) { if (e.target === bg) bg.classList.remove('open'); });
+  });
+
+  /* ── Build filter URL ────────────────────────────────────────── */
+  function buildFilterUrl(tab) {
+    var t    = tab || (new URLSearchParams(window.location.search).get('tab') || 'pending');
+    var q    = (document.getElementById('crSearch')   || {}).value || '';
+    var br   = (document.getElementById('crBranchVal')  || {}).value || '';
+    var inv  = (document.getElementById('crInvoiceVal') || {}).value || '';
+    var df   = (document.getElementById('crDateFrom')   || {}).value || '';
+    var dt   = (document.getElementById('crDateTo')     || {}).value || '';
+    var url  = listBase + '?tab=' + encodeURIComponent(t);
+    if (q.trim())   url += '&search='    + encodeURIComponent(q.trim());
+    if (br)         url += '&branch='    + encodeURIComponent(br);
+    if (inv)        url += '&invoice='   + encodeURIComponent(inv);
+    if (df)         url += '&date_from=' + encodeURIComponent(df);
+    if (dt)         url += '&date_to='   + encodeURIComponent(dt);
+    return url;
+  }
+
+  var btnFilter = document.getElementById('crBtnFilter');
+  var btnClear  = document.getElementById('crBtnClear');
+  if (btnFilter) btnFilter.addEventListener('click', function() { window.location.href = buildFilterUrl(); });
+  if (btnClear)  btnClear.addEventListener('click',  function() { window.location.href = listBase + '?tab=' + (new URLSearchParams(window.location.search).get('tab') || 'pending'); });
+
+  // Enter on search box triggers filter
+  var searchEl = document.getElementById('crSearch');
+  if (searchEl) searchEl.addEventListener('keydown', function(e) { if (e.key === 'Enter') window.location.href = buildFilterUrl(); });
+
+  /** Last time the user changed a filter field (ms). Used so 10s reload does not steal focus while typing. */
+  window._crFilterActivityAt = window._crFilterActivityAt || 0;
+  function markCrFilterActivity() {
+    window._crFilterActivityAt = Date.now();
+  }
+  ['crSearch', 'crDateFrom', 'crDateTo', 'crBranchVal', 'crInvoiceVal'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('keydown', markCrFilterActivity);
+    el.addEventListener('input', markCrFilterActivity);
+    el.addEventListener('change', markCrFilterActivity);
+  });
+
+  function shouldAutoRefreshPendingList() {
+    var params = new URLSearchParams(window.location.search);
+    var activeTab = (params.get('tab') || 'pending').toLowerCase();
+    if (activeTab !== 'pending') return false;
+    if (document.hidden) return false;
+    if (document.querySelector('.cl-modal-bg.open')) return false;
+    // Skip if user edited filters in the last 12s (typing search, changing dates, etc.)
+    if (Date.now() - (window._crFilterActivityAt || 0) < 12000) return false;
+    return true;
+  }
+
+  // Keep pending list fresh (10s; menu bell/alerts in base.html remain on a 30s poll).
+  setInterval(function() {
+    if (!shouldAutoRefreshPendingList()) return;
+    window.location.href = buildFilterUrl('pending');
+  }, 10000);
+
+  window.reopenRequest = async function(customercode, btn) {
+    if (!confirm('Move this rejected request back to Pending?')) return;
+    const old = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Moving…';
+    try {
+      const res = await fetch(`/ho/customer-request/reopen/${customercode}`, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error((data && (data.error || data.message)) || `Failed (HTTP ${res.status})`);
+      window.location.href = listBase + '?tab=pending';
+    } catch(e) {
+      alert('Error: ' + (e.message || e));
+      btn.disabled = false;
+      btn.textContent = old;
+    }
+  };
+
+  window.acknowledgeAlert = async function(customercode, btn) {
+    if (!confirm('Stop alert for this pending request?')) return;
+    const old = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Stopping…';
+    try {
+      const res = await fetch(`/ho/customer-request/ack-alert/${customercode}`, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error((data && (data.error || data.message)) || `Failed (HTTP ${res.status})`);
+      window.location.href = buildFilterUrl('pending');
+    } catch(e) {
+      alert('Error: ' + (e.message || e));
+      btn.disabled = false;
+      btn.textContent = old;
+    }
+  };
+
+  var crAiToggle = document.getElementById('crAiAutoToggle');
+  if (crAiToggle) {
+    var crAiServerOn = {{ 'true' if cr_ai_auto_convert else 'false' }};
+    function crAiSync() {
+      var on = typeof window.crGlobalAiAutoConvert === 'string'
+        ? (window.crGlobalAiAutoConvert === 'Y')
+        : !!crAiServerOn;
+      crAiToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+      crAiToggle.classList.toggle('cr-ai-toggle--on', on);
+    }
+    window.crGlobalAiAutoConvert = crAiServerOn ? 'Y' : 'N';
+    crAiSync();
+    crAiToggle.addEventListener('click', function() {
+      var wantOn = !crAiToggle.classList.contains('cr-ai-toggle--on');
+      var btn = crAiToggle;
+      btn.disabled = true;
+      fetch('/ho/api/customer-request-ai-auto-convert', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        body: JSON.stringify({ enabled: wantOn })
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (!d || !d.success) {
+            throw new Error((d && d.error) || 'Save failed');
+          }
+          window.crGlobalAiAutoConvert = d.ai_auto_convert || (wantOn ? 'Y' : 'N');
+          try {
+            localStorage.setItem('cr_ai_auto_convert', window.crGlobalAiAutoConvert === 'Y' ? '1' : '0');
+          } catch (e) {}
+          crAiSync();
+        })
+        .catch(function(err) {
+          alert('Could not update AI auto-convert: ' + (err && err.message ? err.message : err));
+        })
+        .finally(function() { btn.disabled = false; });
+    });
+  }
+})();
+</script>
+{% endblock %}

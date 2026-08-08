@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+.dba-wrap { max-width: 1100px; margin: 20px auto 60px; padding: 0 16px; }
+.dba-wrap h1 { font-size: 22px; margin: 0 0 4px; }
+.dba-wrap .lead { color: #6c757d; font-size: 13px; margin: 0 0 16px; }
+.dba-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+.dba-toolbar input[type="text"] {
+  flex: 1 1 260px; min-width: 200px; padding: 8px 12px; border: 1px solid #ced4da;
+  border-radius: 8px; font-size: 14px;
+}
+.dba-btn {
+  border: 1px solid #ced4da; background: #fff; color: #212529; padding: 8px 14px;
+  border-radius: 8px; font-size: 13px; cursor: pointer; font-weight: 600;
+}
+.dba-btn:hover { background: #f1f3f5; }
+.dba-btn.primary { background: #0d6efd; border-color: #0d6efd; color: #fff; }
+.dba-btn.primary:hover { background: #0b5ed7; }
+.dba-btn.danger { background: #dc3545; border-color: #dc3545; color: #fff; }
+.dba-btn.danger:hover { background: #bb2d3b; }
+.dba-btn:disabled { opacity: .55; cursor: not-allowed; }
+.dba-stats { display: flex; gap: 18px; font-size: 13px; color: #495057; margin-left: auto; }
+.dba-stats b { color: #212529; }
+.dba-alert { border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 12px; }
+.dba-alert.err { background: #f8d7da; color: #842029; border: 1px solid #f5c2c7; }
+.dba-alert.ok { background: #d1e7dd; color: #0f5132; border: 1px solid #badbcc; }
+.dba-table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff;
+  border: 1px solid #e9ecef; border-radius: 10px; overflow: hidden; }
+.dba-table th, .dba-table td { padding: 9px 12px; text-align: left; border-bottom: 1px solid #f1f3f5; }
+.dba-table th { background: #f8f9fa; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: #6c757d; }
+.dba-table tr.locked-row { background: #fff8f0; }
+.dba-table tr:hover { background: #f8f9fa; }
+.pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.pill.free { background: #d1e7dd; color: #0f5132; }
+.pill.locked { background: #f8d7da; color: #842029; }
+.mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+.lock-detail { font-size: 12px; color: #842029; margin-top: 4px; line-height: 1.5; }
+.lock-detail .lk { display: block; }
+.muted { color: #adb5bd; }
+.dba-loading { text-align: center; padding: 30px; color: #6c757d; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+
+<div class="dba-wrap">
+  <h1>DBA — Tables &amp; Lock Status</h1>
+  <p class="lead">Live view of database tables and any active locks. {% if can_unlock %}You can release a locked table by killing the sessions holding it.{% else %}Releasing locks is restricted to administrators.{% endif %}</p>
+
+  <div id="dbaMsg"></div>
+
+  <div class="dba-toolbar">
+    <input type="text" id="dbaSearch" placeholder="Filter tables by name..." autocomplete="off" />
+    <button class="dba-btn primary" id="dbaRefresh" type="button">Refresh</button>
+    <label style="font-size:13px;color:#495057;display:flex;align-items:center;gap:6px;">
+      <input type="checkbox" id="dbaOnlyLocked" /> Show locked only
+    </label>
+    <div class="dba-stats">
+      <span>Tables: <b id="dbaTotal">0</b></span>
+      <span>Locked: <b id="dbaLocked" style="color:#dc3545">0</b></span>
+    </div>
+  </div>
+
+  <div id="dbaLockErr"></div>
+
+  <table class="dba-table">
+    <thead>
+      <tr>
+        <th style="width:34%">Table</th>
+        <th style="width:12%">Status</th>
+        <th class="num" style="width:12%">Rows (est.)</th>
+        <th style="width:26%">Lock details</th>
+        <th style="width:16%">Action</th>
+      </tr>
+    </thead>
+    <tbody id="dbaBody">
+      <tr><td colspan="5" class="dba-loading">Loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+(function () {
+  var API_TABLES = {{ api_tables_url | tojson }};
+  var API_UNLOCK = {{ api_unlock_url | tojson }};
+  var CAN_UNLOCK = {{ 'true' if can_unlock else 'false' }};
+
+  var $body = document.getElementById('dbaBody');
+  var $search = document.getElementById('dbaSearch');
+  var $refresh = document.getElementById('dbaRefresh');
+  var $onlyLocked = document.getElementById('dbaOnlyLocked');
+  var $total = document.getElementById('dbaTotal');
+  var $locked = document.getElementById('dbaLocked');
+  var $msg = document.getElementById('dbaMsg');
+  var $lockErr = document.getElementById('dbaLockErr');
+  var allTables = [];
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function showMsg(text, kind) {
+    if (!text) { $msg.innerHTML = ''; return; }
+    $msg.innerHTML = '<div class="dba-alert ' + (kind === 'ok' ? 'ok' : 'err') + '">' + esc(text) + '</div>';
+  }
+
+  function lockDetailHtml(lockers) {
+    if (!lockers || !lockers.length) return '<span class="muted">—</span>';
+    return lockers.map(function (l) {
+      var who = [l.lock_username, l.osuser].filter(Boolean).join(' / ');
+      return '<span class="lk"><span class="mono">SID ' + esc(l.sid) + ',' + esc(l.serial_no) + '</span> · ' +
+        esc(l.locked_mode_label) + (who ? ' · ' + esc(who) : '') +
+        (l.program ? ' · ' + esc(l.program) : '') + '</span>';
+    }).join('');
+  }
+
+  function render() {
+    var onlyLocked = $onlyLocked.checked;
+    var rows = allTables.filter(function (t) { return !onlyLocked || t.locked; });
+    if (!rows.length) {
+      $body.innerHTML = '<tr><td colspan="5" class="dba-loading">No tables to show.</td></tr>';
+      return;
+    }
+    $body.innerHTML = rows.map(function (t) {
+      var status = t.locked
+        ? '<span class="pill locked">LOCKED (' + t.lock_count + ')</span>'
+        : '<span class="pill free">Free</span>';
+      var action = '';
+      if (t.locked && CAN_UNLOCK) {
+        action = '<button class="dba-btn danger" data-unlock="' + esc(t.table_name) + '" type="button">Unlock</button>';
+      } else if (t.locked) {
+        action = '<span class="muted">admin only</span>';
+      } else {
+        action = '<span class="muted">—</span>';
+      }
+      return '<tr class="' + (t.locked ? 'locked-row' : '') + '">' +
+        '<td class="mono"><b>' + esc(t.table_name) + '</b>' +
+          (t.locked ? '<div class="lock-detail">' + lockDetailHtml(t.lockers) + '</div>' : '') + '</td>' +
+        '<td>' + status + '</td>' +
+        '<td class="num">' + (t.num_rows || 0).toLocaleString() + '</td>' +
+        '<td>' + (t.last_analyzed ? '<span class="muted">analyzed ' + esc(t.last_analyzed) + '</span>' : '<span class="muted">—</span>') + '</td>' +
+        '<td>' + action + '</td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  function load() {
+    $body.innerHTML = '<tr><td colspan="5" class="dba-loading">Loading…</td></tr>';
+    var url = API_TABLES + '?search=' + encodeURIComponent(($search.value || '').trim());
+    fetch(url, { headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || !d.success) {
+          $body.innerHTML = '<tr><td colspan="5" class="dba-loading">Error: ' + esc(d && d.error || 'failed') + '</td></tr>';
+          return;
+        }
+        allTables = d.tables || [];
+        $total.textContent = d.total || 0;
+        $locked.textContent = d.locked_total || 0;
+        $lockErr.innerHTML = d.lock_error
+          ? '<div class="dba-alert err">Lock view unavailable: ' + esc(d.lock_error) + '. Grant SELECT on V$LOCKED_OBJECT / V$SESSION to see lock status.</div>'
+          : '';
+        render();
+      })
+      .catch(function (e) {
+        $body.innerHTML = '<tr><td colspan="5" class="dba-loading">Request failed: ' + esc(e && e.message) + '</td></tr>';
+      });
+  }
+
+  function unlock(table) {
+    if (!confirm('Release locks on ' + table + '?\n\nThis will KILL the Oracle session(s) holding the lock. Any uncommitted work in those sessions will be rolled back.')) return;
+    showMsg('Releasing locks on ' + table + '…', 'ok');
+    fetch(API_UNLOCK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ table_name: table })
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        var d = res.d || {};
+        showMsg(d.message || d.error || (res.ok ? 'Done.' : 'Failed.'), d.success ? 'ok' : 'err');
+        load();
+      })
+      .catch(function (e) { showMsg('Request failed: ' + (e && e.message), 'err'); });
+  }
+
+  $body.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-unlock]');
+    if (btn) unlock(btn.getAttribute('data-unlock'));
+  });
+  $refresh.addEventListener('click', load);
+  $onlyLocked.addEventListener('change', render);
+  var t = null;
+  $search.addEventListener('input', function () { clearTimeout(t); t = setTimeout(load, 300); });
+  $search.addEventListener('keydown', function (e) { if (e.key === 'Enter') { clearTimeout(t); load(); } });
+
+  load();
+})();
+</script>
+{% endblock %}

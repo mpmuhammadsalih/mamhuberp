@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body {
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+  
+  /* Modern colorful card */
+  .card {
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.5);
+    border: none !important;
+    padding: 12px 16px;
+  }
+  
+  /* Colorful page header */
+  .page-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    padding: 10px 16px !important;
+    border-radius: 12px;
+    margin-bottom: 10px !important;
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+  }
+  .page-header h1 {
+    color: #ffffff !important;
+    font-weight: 700;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    font-size: 22px !important;
+    margin: 0;
+  }
+  .page-header .muted {
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  
+  /* Colorful buttons */
+  .button--secondary {
+    background: rgba(255, 255, 255, 0.2) !important;
+    border: 2px solid rgba(255, 255, 255, 0.3) !important;
+    color: #ffffff !important;
+    border-radius: 10px;
+    padding: 6px 14px !important;
+    font-size: 13px !important;
+    transition: all 0.3s;
+    backdrop-filter: blur(10px);
+  }
+  .button--secondary:hover {
+    background: rgba(255, 255, 255, 0.3) !important;
+    transform: translateY(-1px);
+  }
+  
+  /* Colorful table header */
+  .table thead {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  }
+  .table thead th {
+    background: transparent !important;
+    color: #ffffff !important;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    padding: 8px 10px !important;
+    border: none !important;
+  }
+  
+  /* Table styling */
+  .table td {
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+  }
+  .table tbody tr {
+    transition: all 0.2s;
+  }
+  .table tbody tr:hover {
+    background-color: rgba(102, 126, 234, 0.1) !important;
+    transform: scale(1.01);
+  }
+  
+  /* Scroll table */
+  .scroll-table {
+    border-radius: 12px;
+    border: 2px solid #e2e8f0;
+    background: #ffffff;
+  }
+</style>
+  <section class="card" style="max-width: 1400px; margin: 0 auto;">
+    <div class="page-header">
+      <div>
+        <h1>🛣️ Route Outstanding Details</h1>
+        <p class="muted">Bucket: {{ bucket_label }}{% if routecode %} | Route: {{ routecode }}{% endif %}</p>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <a class="button button--secondary" href="{{ url_for('reports.route_outstanding_details_export', bucket=bucket, routecode=routecode or '') }}" aria-label="Export to Excel" title="Export to Excel">📥 Export</a>
+        <a class="button button--secondary" href="{{ url_for('reports.route_outstanding') }}">🔙 Back</a>
+      </div>
+    </div>
+    {% if rows %}
+      <div class="scroll-table">
+        <table class="table table-fixed">
+          <thead>
+            <tr>
+              <th>SL No</th>
+              <th>Bill No</th>
+              <th>Bill Date</th>
+              <th>Customer Code</th>
+              <th>Customer Name</th>
+              <th>Route Code</th>
+              <th>Route Name</th>
+              <th>Salesman Code</th>
+              <th>Salesman Name</th>
+              <th>Employee Code</th>
+              <th>Employee Name</th>
+              <th>Bill Amount</th>
+              <th>Paid Amount</th>
+              <th>Outstanding</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td>{{ row.slno }}</td>
+                <td>{{ row.billno }}</td>
+                <td>
+                  {% if row.billdate %}
+                    {{ row.billdate.strftime('%d-%m-%Y') if row.billdate else '-' }}
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td>{{ row.customercode }}</td>
+                <td>{{ row.customername or '-' }}</td>
+                <td>{{ row.routecode or '-' }}</td>
+                <td>{{ row.routename or '-' }}</td>
+                <td>{{ row.salesmancode or '-' }}</td>
+                <td>{{ row.salesmanname or '-' }}</td>
+                <td>{{ row.employeecode or '-' }}</td>
+                <td>{{ row.employeename or '-' }}</td>
+                <td>{{ "%.2f"|format(row.billamount or 0) }}</td>
+                <td>{{ "%.2f"|format(row.paidamount or 0) }}</td>
+                <td>{{ "%.2f"|format(row.outstanding or 0) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            {% set total_bill = rows | sum(attribute='billamount') %}
+            {% set total_paid = rows | sum(attribute='paidamount') %}
+            {% set total_out = rows | sum(attribute='outstanding') %}
+            <tr class="table-total">
+              <th colspan="11">Total</th>
+              <th>{{ "%.2f"|format(total_bill|float) }}</th>
+              <th>{{ "%.2f"|format(total_paid|float) }}</th>
+              <th>{{ "%.2f"|format(total_out|float) }}</th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    {% else %}
+      <p class="muted">No invoice details found.</p>
+      {% if bucket == "30" %}
+        <div style="margin-top: 16px; padding: 12px; background: #f3f4f6; border-radius: 4px; font-size: 13px;">
+          <p style="margin: 0 0 8px 0; font-weight: 600;">Why no rows here?</p>
+          <ul style="margin: 0; padding-left: 20px;">
+            <li><strong>Bucket 0-30</strong> shows only invoices whose <strong>bill date</strong> is within the last 30 days. If all outstanding for this route are older, try <a href="{{ url_for('reports.route_outstanding_details', bucket='all', routecode=routecode or '') }}">All Periods</a>.</li>
+            <li>Route filter uses <strong>customers</strong> table route column linked to <strong>tblroute</strong> (e.g. routecode = {{ routecode or '?' }}).</li>
+            <li>Only rows with <strong>balance > 0</strong> and <strong>flag = 'B'</strong> are shown.</li>
+          </ul>
+        </div>
+      {% endif %}
+    {% endif %}
+  </section>
+{% endblock %}

@@ -1,0 +1,423 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="crl-container nexa-list-page">
+<style>
+  body { overflow-x: auto; min-height: 100vh; background: #fff; color: #212529; }
+  .crl-page { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
+  .crl-topbar { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #dee2e6; }
+  .crl-topbar h1 { margin: 0; font-size: 24px; font-weight: 400; color: #212529; }
+  .crl-topbar .crl-muted { font-size: 12px; color: #6c757d; margin-top: 4px; }
+  .crl-topbar .crl-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .crl-btn-primary { background: #28a745 !important; border: none; color: #fff !important; padding: 8px 20px; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; text-decoration: none; }
+  .crl-btn-primary:hover { background: #218838 !important; color: #fff !important; }
+  .crl-link { color: #007bff; text-decoration: none; font-size: 13px; cursor: pointer; background: none; border: none; padding: 0; }
+  .crl-link:hover { text-decoration: underline; }
+  .crl-btn-secondary { background: transparent; border: 1px solid #dee2e6; color: #495057; padding: 8px 16px; border-radius: 4px; font-size: 13px; cursor: pointer; }
+  .crl-btn-secondary:hover { background: #f8f9fa; }
+  .crl-filters { margin-bottom: 20px; padding: 16px 0; border-bottom: 1px solid #dee2e6; }
+  .crl-filters .form-grid { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; }
+  .crl-filters .form-group { margin-bottom: 0; }
+  .crl-filters .form-group label { margin: 0 0 4px 0; font-size: 13px; font-weight: 400; color: #495057; display: block; }
+  .crl-filters .input { border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; padding: 6px 0; font-size: 13px; background: transparent; width: 140px; }
+  .crl-filters .input:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .crl-section-title { font-size: 14px; font-weight: 600; color: #212529; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #007bff; display: inline-block; }
+  #creditReceiptTable thead { position: sticky; top: 0; z-index: 1; background: #f8f9fa !important; }
+  #creditReceiptTable thead th { background: #f8f9fa !important; color: #495057 !important; padding: 10px 12px; font-weight: 600; font-size: 12px; border: none; border-bottom: 1px solid #dee2e6; }
+  #creditReceiptTable thead th.sortable { cursor: pointer; }
+  #creditReceiptTable thead th.sortable:hover { background: #e9ecef !important; }
+  #creditReceiptTable thead .sort-icon { color: #6c757d; font-weight: 700; }
+  #creditReceiptTable tbody td { padding: 8px 12px; border: none; border-bottom: 1px solid #dee2e6; font-size: 13px; }
+  .receipt-list-row-clickable { cursor: pointer; }
+  .receipt-list-row-clickable:hover { background: #f8f9fa !important; }
+  .crl-container .scroll-table { border: 1px solid #dee2e6; border-radius: 4px; background: #fff; overflow: auto; }
+  .crl-container .table-total { background: #f8f9fa !important; }
+  .crl-container .table-total td { font-weight: 700; color: #212529; padding: 8px 12px !important; }
+  .crl-container .btn-print-receipt { background: #007bff !important; color: #fff !important; border: none !important; padding: 4px 10px !important; border-radius: 4px !important; cursor: pointer !important; font-size: 12px !important; min-width: 50px; }
+  .crl-container .btn-print-receipt:hover { background: #0056b3 !important; }
+</style>
+<div class="crl-page">
+  <div class="crl-topbar">
+    <div>
+      <h1>Credit Receipt List</h1>
+      <p class="crl-muted">From tblcreditsettlement where flag = 'R'. Use date filter to narrow. Click a row to open temp settlement detail.</p>
+    </div>
+    <div class="crl-actions">
+      <a href="{{ url_for('temporary_collection.credit_receipt_new') }}" class="crl-btn-primary">New receipt</a>
+      <button type="button" id="btnPrintPdf" class="crl-btn-secondary">Print PDF</button>
+      {% with list_refresh_skip_bootstrap=true %}{% include 'includes/list_refresh_bar.html' %}{% endwith %}
+    </div>
+  </div>
+
+  <div class="crl-filters">
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="dateFrom">From Date</label>
+        <input type="date" id="dateFrom" class="input" value="{{ date_from or '' }}" />
+      </div>
+      <div class="form-group">
+        <label for="dateTo">To Date</label>
+        <input type="date" id="dateTo" class="input" value="{{ date_to or '' }}" />
+      </div>
+      <div class="form-group">
+        <label style="visibility: hidden;">Button</label>
+        <button type="button" class="crl-btn-primary" id="btnDateFilter">Filter</button>
+      </div>
+      <div class="form-group">
+        <label style="visibility: hidden;">Button</label>
+        <button type="button" class="crl-btn-secondary" id="btnClearDateFilter">Clear dates</button>
+      </div>
+      <div class="form-group">
+        <label for="searchReceipt">Search</label>
+        <input type="text" id="searchReceipt" class="input" placeholder="Search by code or name..." style="width: 180px;" />
+      </div>
+      <div class="form-group">
+        <label style="visibility: hidden;">Button</label>
+        <button type="button" id="btnClearSearch" class="crl-btn-secondary">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="crl-section-title">Receipts</h3>
+  <div class="scroll-table">
+    <table class="table" id="creditReceiptTable">
+        <thead>
+          <tr>
+            <th class="sortable" data-sort-col="0" data-sort-type="number" title="Sort by Sl.No">Sl.No <span class="sort-icon"></span></th>
+            <th class="sortable" data-sort-col="1" data-sort-type="date" title="Sort by Date">Date <span class="sort-icon"></span></th>
+            <th class="sortable" data-sort-col="2" data-sort-type="text" title="Sort by Receipt No">Receipt No <span class="sort-icon"></span></th>
+            <th class="sortable" data-sort-col="3" data-sort-type="text" title="Sort by Customer Code">Customer Code <span class="sort-icon"></span></th>
+            <th class="sortable" data-sort-col="4" data-sort-type="text" title="Sort by Customer Name">Customer Name <span class="sort-icon"></span></th>
+            <th class="sortable" data-sort-col="5" data-sort-type="number" title="Sort by Amount" style="text-align: right;">Amount <span class="sort-icon"></span></th>
+            <th style="text-align: center; width: 80px;">Print</th>
+          </tr>
+        </thead>
+        <tbody id="receiptListBody">
+          {% if receipts %}
+            {% for item in receipts %}
+              {% set receipt_no = (item.pendingno if item.pendingno is defined and item.pendingno is not none else item.billno)|string %}
+              <tr class="receipt-list-row receipt-list-row-clickable" data-code="{{ (item.customercode or '')|string }}" data-name="{{ (item.customername or '')|string }}" data-receipt-no="{{ receipt_no }}" role="button" tabindex="0" title="Open detail">
+                <td>{{ loop.index }}</td>
+                <td data-sort-value="{% if item.paidate %}{% if item.paidate is string %}{{ item.paidate }}{% else %}{{ item.paidate.strftime('%Y-%m-%d') }}{% endif %}{% elif item.billdate %}{% if item.billdate is string %}{{ item.billdate }}{% else %}{{ item.billdate.strftime('%Y-%m-%d') }}{% endif %}{% else %}{% endif %}">
+                  {% if item.paidate %}
+                    {% if item.paidate is string %}{{ item.paidate }}{% else %}{{ item.paidate.strftime('%d/%b/%Y').upper() }}{% endif %}
+                  {% elif item.billdate %}
+                    {% if item.billdate is string %}{{ item.billdate }}{% else %}{{ item.billdate.strftime('%d/%b/%Y').upper() }}{% endif %}
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td>{{ item.billno or '-' }}</td>
+                <td>{{ item.customercode or '-' }}</td>
+                <td>{{ item.customername or '-' }}</td>
+                <td style="text-align: right;">{{ "%.2f"|format(item.amount|float) if item.amount is defined and item.amount is not none else '0.00' }}</td>
+                <td style="text-align: center;">
+                  <button type="button" class="btn-print-receipt" data-receipt-no="{{ receipt_no }}" data-code="{{ (item.customercode or '')|string }}" title="Print Receipt">📄</button>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr class="table-empty">
+              <td colspan="7">No credit receipt records found.</td>
+            </tr>
+          {% endif %}
+          <tr id="receiptListNoResults" class="table-empty" style="display: none;">
+            <td colspan="7">No matching records. Try different search criteria.</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr id="receiptListTotalRow" class="table-total" style="display: none;">
+            <td colspan="5" style="text-align: right; font-weight: 700;">Total</td>
+            <td id="listTotalAmount" style="text-align: right; font-weight: 700;">0.00</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+  </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var CREDIT_RECEIPT_LIST_ROWS_URL = {{ url_for('temporary_collection.api_credit_receipt_list_rows')|tojson }};
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const searchInput = document.getElementById('searchReceipt');
+  const btnClear = document.getElementById('btnClearSearch');
+  const tbody = document.getElementById('receiptListBody');
+  const noResultsRow = document.getElementById('receiptListNoResults');
+  const dateFrom = document.getElementById('dateFrom');
+  const dateTo = document.getElementById('dateTo');
+  const btnDateFilter = document.getElementById('btnDateFilter');
+  const btnClearDateFilter = document.getElementById('btnClearDateFilter');
+
+  if (btnDateFilter) {
+    btnDateFilter.addEventListener('click', function() {
+      const from = (dateFrom && dateFrom.value) ? dateFrom.value : '';
+      const to = (dateTo && dateTo.value) ? dateTo.value : '';
+      const params = new URLSearchParams(window.location.search);
+      if (from) params.set('date_from', from);
+      else params.delete('date_from');
+      if (to) params.set('date_to', to);
+      else params.delete('date_to');
+      window.location.search = params.toString();
+    });
+  }
+  if (btnClearDateFilter) {
+    btnClearDateFilter.addEventListener('click', function() {
+      const params = new URLSearchParams(window.location.search);
+      params.delete('date_from');
+      params.delete('date_to');
+      window.location.search = params.toString();
+    });
+  }
+
+  function escapeHtml(untrusted) {
+    return String(untrusted == null ? '' : untrusted)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function escapeAttr(untrusted) {
+    return escapeHtml(untrusted).replace(/'/g, '&#39;');
+  }
+
+  function rebuildCreditReceiptTableBody(rows) {
+    tbody.querySelectorAll('.receipt-list-row').forEach(function(tr) { tr.remove(); });
+    tbody.querySelectorAll('tr.table-empty').forEach(function(tr) {
+      if (tr.id !== 'receiptListNoResults') tr.remove();
+    });
+    var nr = document.getElementById('receiptListNoResults');
+    if (!rows || !rows.length) {
+      var trE = document.createElement('tr');
+      trE.className = 'table-empty';
+      var tdN = document.createElement('td');
+      tdN.setAttribute('colspan', '7');
+      tdN.textContent = 'No credit receipt records found.';
+      trE.appendChild(tdN);
+      tbody.insertBefore(trE, nr);
+    } else {
+      rows.forEach(function(item, ix) {
+        var rn = item.receipt_no || item.billno || '';
+        var tr = document.createElement('tr');
+        tr.className = 'receipt-list-row receipt-list-row-clickable';
+        tr.setAttribute('data-code', item.customercode || '');
+        tr.setAttribute('data-name', item.customername || '');
+        tr.setAttribute('data-receipt-no', String(rn));
+        tr.setAttribute('role', 'button');
+        tr.setAttribute('tabindex', '0');
+        tr.setAttribute('title', 'Open detail');
+        var sortIso = item.sort_date_iso || '';
+        var disp = item.display_date || '-';
+        var amt = (item.amount != null ? Number(item.amount) : 0).toFixed(2);
+        var cust = item.customercode || '';
+        tr.innerHTML =
+          '<td>' + (ix + 1) + '</td>' +
+          '<td data-sort-value="' + escapeAttr(sortIso) + '">' + escapeHtml(disp) + '</td>' +
+          '<td>' + escapeHtml(item.billno || '-') + '</td>' +
+          '<td>' + escapeHtml(item.customercode || '-') + '</td>' +
+          '<td>' + escapeHtml(item.customername || '-') + '</td>' +
+          '<td style="text-align:right;">' + escapeHtml(amt) + '</td>' +
+          '<td style="text-align:center;"><button type="button" class="btn-print-receipt" data-receipt-no="' +
+          escapeAttr(String(rn)) + '" data-code="' + escapeAttr(cust) + '" title="Print Receipt">📄</button></td>';
+        tbody.insertBefore(tr, nr);
+      });
+    }
+    sortCol = -1;
+    sortDir = 1;
+    document.querySelectorAll('#creditReceiptTable .sortable .sort-icon').forEach(function(span, i) {
+      span.textContent = (sortCol === i) ? (sortDir === 1 ? ' ▲' : ' ▼') : ' ⇅';
+    });
+    filterRows();
+  }
+
+  var creditRefreshCtl = null;
+  function attachCreditJsonRefresh() {
+    if (!window.ListDataRefresh || typeof ListDataRefresh.initJsonPolling !== 'function') return;
+    if (creditRefreshCtl && typeof creditRefreshCtl.stop === 'function') creditRefreshCtl.stop();
+    creditRefreshCtl = null;
+    creditRefreshCtl = ListDataRefresh.initJsonPolling({
+      getUrl: function() {
+        var qs = new URLSearchParams();
+        var from = dateFrom && dateFrom.value ? dateFrom.value : '';
+        var to = dateTo && dateTo.value ? dateTo.value : '';
+        if (from) qs.set('date_from', from);
+        if (to) qs.set('date_to', to);
+        return CREDIT_RECEIPT_LIST_ROWS_URL + (qs.toString() ? ('?' + qs.toString()) : '');
+      },
+      intervalMs: 5000,
+      shouldSkipPoll: function() {
+        try {
+          if (typeof document !== 'undefined' && document.hidden) return true;
+        } catch (e) {}
+        var si = document.getElementById('searchReceipt');
+        return !!(si && document.activeElement === si);
+      },
+      onPayload: function(resp) {
+        if (!resp || resp.success !== true || !Array.isArray(resp.rows)) return;
+        rebuildCreditReceiptTableBody(resp.rows);
+      }
+    });
+  }
+  attachCreditJsonRefresh();
+
+  function filterRows() {
+    const q = (searchInput.value || '').trim().toLowerCase();
+    const rows = tbody.querySelectorAll('.receipt-list-row');
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+      const code = (row.dataset.code || '').toString().toLowerCase();
+      const name = (row.dataset.name || '').toString().toLowerCase();
+      const match = !q || code.indexOf(q) !== -1 || name.indexOf(q) !== -1;
+      if (match) {
+        row.style.display = '';
+        visibleCount++;
+      } else {
+        row.style.display = 'none';
+      }
+    });
+
+    if (noResultsRow) {
+      noResultsRow.style.display = (visibleCount === 0 && rows.length > 0) ? '' : 'none';
+    }
+
+    let sl = 0;
+    let sumAmount = 0;
+    rows.forEach(row => {
+      if (row.style.display !== 'none') {
+        sl++;
+        if (row.cells[0]) row.cells[0].textContent = sl;
+        sumAmount += parseFloat(String(row.cells[5].textContent || '0').replace(/,/g, '')) || 0;
+      }
+    });
+
+    const totalRow = document.getElementById('receiptListTotalRow');
+    const totalAmountEl = document.getElementById('listTotalAmount');
+    if (totalRow && totalAmountEl) {
+      if (visibleCount > 0) {
+        totalRow.style.display = '';
+        totalAmountEl.textContent = sumAmount.toFixed(2);
+      } else {
+        totalRow.style.display = 'none';
+      }
+    }
+  }
+
+  searchInput.addEventListener('input', filterRows);
+  searchInput.addEventListener('keyup', filterRows);
+  if (btnClear) {
+    btnClear.addEventListener('click', function() {
+      searchInput.value = '';
+      searchInput.focus();
+      filterRows();
+    });
+  }
+
+  let sortCol = -1;
+  let sortDir = 1;
+
+  function getCellSortValue(row, colIndex, type) {
+    const cell = row.cells[colIndex];
+    if (!cell) return '';
+    const raw = (cell.textContent || '').trim();
+    const dataVal = cell.getAttribute('data-sort-value');
+    if (type === 'number') {
+      if (colIndex === 0) return parseInt(raw, 10) || 0;
+      const num = dataVal !== null && dataVal !== '' ? parseFloat(dataVal) : parseFloat(raw.replace(/,/g, ''));
+      return isNaN(num) ? 0 : num;
+    }
+    if (type === 'date') {
+      return dataVal || raw || '';
+    }
+    return (raw || '').toLowerCase();
+  }
+
+  function sortTable(colIndex, type) {
+    if (sortCol === colIndex) sortDir = -sortDir;
+    else { sortCol = colIndex; sortDir = 1; }
+    const rows = Array.from(tbody.querySelectorAll('.receipt-list-row'));
+    rows.sort(function(a, b) {
+      const aVal = getCellSortValue(a, colIndex, type);
+      const bVal = getCellSortValue(b, colIndex, type);
+      let cmp = 0;
+      if (type === 'number') cmp = aVal - bVal;
+      else if (type === 'date') cmp = (aVal || '').localeCompare(bVal || '');
+      else cmp = String(aVal).localeCompare(String(bVal));
+      return sortDir * (cmp < 0 ? -1 : cmp > 0 ? 1 : 0);
+    });
+    const fragment = document.createDocumentFragment();
+    rows.forEach(r => fragment.appendChild(r));
+    if (noResultsRow) tbody.insertBefore(fragment, noResultsRow);
+    document.querySelectorAll('#creditReceiptTable .sortable .sort-icon').forEach(function(span, i) {
+      span.textContent = (sortCol === i) ? (sortDir === 1 ? ' ▲' : ' ▼') : ' ⇅';
+    });
+    filterRows();
+  }
+
+  document.querySelectorAll('#creditReceiptTable thead .sortable').forEach(function(th) {
+    th.addEventListener('click', function() {
+      const col = parseInt(this.getAttribute('data-sort-col'), 10);
+      const type = this.getAttribute('data-sort-type') || 'text';
+      sortTable(col, type);
+    });
+  });
+
+  document.querySelectorAll('#creditReceiptTable .sortable .sort-icon').forEach(function(span, i) {
+    span.textContent = (sortCol === i) ? (sortDir === 1 ? ' ▲' : ' ▼') : ' ⇅';
+  });
+
+  function openDetail(row) {
+    if (!row.classList.contains('receipt-list-row-clickable')) return;
+    const receiptNo = (row.getAttribute('data-receipt-no') || '').trim();
+    const customerCode = (row.getAttribute('data-code') || '').trim();
+    if (!receiptNo) return;
+    const params = new URLSearchParams();
+    params.set('receipt_no', receiptNo);
+    if (customerCode) params.set('customer_code', customerCode);
+    const url = '{{ url_for("temporary_collection.credit_receipt_temp_settlement") }}?' + params.toString();
+    window.location.href = url;
+  }
+
+  tbody.addEventListener('click', function(e) {
+    var printBtn = e.target.closest('.btn-print-receipt');
+    if (printBtn) {
+      e.stopPropagation();
+      var receiptNo = printBtn.getAttribute('data-receipt-no');
+      var customerCode = printBtn.getAttribute('data-code') || '';
+      if (receiptNo) {
+        var u = '{{ url_for("temporary_collection.credit_receipt_print_single") }}?receipt_no=' + encodeURIComponent(receiptNo) +
+          (customerCode ? '&customer_code=' + encodeURIComponent(customerCode) : '');
+        window.open(u, '_blank');
+      }
+      return;
+    }
+    var row = e.target.closest('.receipt-list-row-clickable');
+    if (!row || e.target.closest('a')) return;
+    openDetail(row);
+  });
+  tbody.addEventListener('keydown', function(e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var row = e.target.closest('.receipt-list-row-clickable');
+    if (!row || !tbody.contains(row)) return;
+    e.preventDefault();
+    openDetail(row);
+  });
+
+  filterRows();
+
+  const btnPrintPdf = document.getElementById('btnPrintPdf');
+  if (btnPrintPdf) {
+    btnPrintPdf.addEventListener('click', function() {
+      const fromDate = (dateFrom && dateFrom.value) ? dateFrom.value : '';
+      const toDate = (dateTo && dateTo.value) ? dateTo.value : '';
+      const params = new URLSearchParams();
+      if (fromDate) params.set('date_from', fromDate);
+      if (toDate) params.set('date_to', toDate);
+      const url = '{{ url_for("temporary_collection.credit_receipt_list_print_pdf") }}?' + params.toString();
+      window.open(url, '_blank');
+    });
+  }
+});
+</script>
+{% endblock %}

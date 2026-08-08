@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .co-table { width: 100%; border-collapse: collapse !important; }
+  .co-table th, .co-table td {
+    border: 1px solid #cfd4da !important; padding: 7px 10px !important; white-space: nowrap; font-size: 13px;
+  }
+  .co-table thead th {
+    background: #eef2f7 !important; position: sticky; top: 0; z-index: 2;
+    cursor: pointer; user-select: none;
+  }
+  .co-table thead th:after { content: " ⇅"; opacity: .35; font-size: 11px; }
+  .co-table thead th[data-order="asc"]:after  { content: " ▲"; opacity: 1; }
+  .co-table thead th[data-order="desc"]:after { content: " ▼"; opacity: 1; }
+  .co-table tbody tr:nth-child(even) { background: #fbfcfe; }
+  .co-table tbody tr:hover { background: #f0f5ff !important; }
+  .co-table tfoot tr th { background: #e9edf3 !important; font-weight: 700; }
+  .co-table td a { color: inherit; text-decoration: none; }
+  .co-table td a:hover { text-decoration: underline; color: #1a56a4; }
+</style>
+
+<div class="page-po" style="max-width: 1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Customer Outstanding Credit</h1>
+      <p class="page-po__muted">Outstanding from <strong>GL vouchers</strong> and <strong>AR payment allocation</strong>, grouped by customer — aging 30 / 60 / 90 / 120 / 120+ days.</p>
+    </div>
+    <div class="page-po__actions">
+      <a class="page-po__btn-secondary" href="{{ url_for('reports.customer_outstanding_cr_month', branchflag=sel_branchflag or '', transferbranch=sel_transferbranch or '') }}">By month</a>
+    </div>
+  </div>
+
+  {# ── Branch Filters ── #}
+  <form method="get" style="display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:14px;">
+    {% if filter_options.branchflag %}
+    <div>
+      <label class="label" style="font-size:12px;">Branch Flag</label>
+      <select name="branchflag" class="input" style="min-width:140px;">
+        <option value="">All</option>
+        {% for v in filter_options.branchflag %}
+          <option value="{{ v }}" {% if sel_branchflag == v %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    {% if filter_options.transferbranch %}
+    <div>
+      <label class="label" style="font-size:12px;">Transfer Branch</label>
+      <select name="transferbranch" class="input" style="min-width:140px;">
+        <option value="">All</option>
+        {% for v in filter_options.transferbranch %}
+          <option value="{{ v }}" {% if sel_transferbranch == v %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <button type="submit" class="page-po__btn-primary" style="height:36px;">Filter</button>
+    {% if sel_branchflag or sel_transferbranch %}
+      <a href="{{ url_for('reports.customer_outstanding_cr') }}" class="page-po__btn-secondary" style="height:36px;line-height:36px;">Clear</a>
+    {% endif %}
+  </form>
+
+  <div style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+    <input type="text" class="input" id="creditSearch" placeholder="Search by customer code or name…" style="max-width:300px;">
+    <a class="page-po__btn-secondary" href="{{ url_for('reports.customer_outstanding_cr_export_summary', branchflag=sel_branchflag, transferbranch=sel_transferbranch) }}">Export Summary</a>
+  </div>
+
+  <div class="table-wrap">
+    <table class="co-table" id="creditTable">
+      <thead>
+          <tr>
+            <th style="text-align:center;">Sl.No</th>
+            <th>Customer Code</th>
+            <th>Customer Name</th>
+          <th style="text-align:right;">0–30</th>
+          <th style="text-align:right;">31–60</th>
+          <th style="text-align:right;">61–90</th>
+          <th style="text-align:right;">91–120</th>
+          <th style="text-align:right;">120+</th>
+          <th style="text-align:right;">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+          {% for row in credit_rows %}
+            {% set total = (row.d30 or 0) + (row.d60 or 0) + (row.d90 or 0) + (row.d120 or 0) + (row.d120p or 0) %}
+            <tr data-code="{{ row.customercode or '' }}" data-name="{{ (row.customername or '')|lower }}">
+              <td style="text-align:center;">{{ loop.index }}</td>
+              <td>{{ row.customercode }}</td>
+              <td>{{ row.customername or '-' }}</td>
+              <td style="text-align:right;">
+                <a href="{{ url_for('reports.customer_outstanding_cr_details_credit', customer_code=row.customercode, bucket='30',   branchflag=sel_branchflag, transferbranch=sel_transferbranch) }}">{{ "%.2f"|format(row.d30 or 0) }}</a>
+              </td>
+              <td style="text-align:right;">
+                <a href="{{ url_for('reports.customer_outstanding_cr_details_credit', customer_code=row.customercode, bucket='60',   branchflag=sel_branchflag, transferbranch=sel_transferbranch) }}">{{ "%.2f"|format(row.d60 or 0) }}</a>
+              </td>
+              <td style="text-align:right;">
+                <a href="{{ url_for('reports.customer_outstanding_cr_details_credit', customer_code=row.customercode, bucket='90',   branchflag=sel_branchflag, transferbranch=sel_transferbranch) }}">{{ "%.2f"|format(row.d90 or 0) }}</a>
+              </td>
+              <td style="text-align:right;">
+                <a href="{{ url_for('reports.customer_outstanding_cr_details_credit', customer_code=row.customercode, bucket='120',  branchflag=sel_branchflag, transferbranch=sel_transferbranch) }}">{{ "%.2f"|format(row.d120 or 0) }}</a>
+              </td>
+              <td style="text-align:right;">
+                <a href="{{ url_for('reports.customer_outstanding_cr_details_credit', customer_code=row.customercode, bucket='120p', branchflag=sel_branchflag, transferbranch=sel_transferbranch) }}">{{ "%.2f"|format(row.d120p or 0) }}</a>
+              </td>
+              <td style="text-align:right;">
+                <a href="{{ url_for('reports.customer_outstanding_cr_details_credit', customer_code=row.customercode, bucket='all',  branchflag=sel_branchflag, transferbranch=sel_transferbranch) }}">{{ "%.2f"|format(total) }}</a>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="9" class="muted" style="text-align:center;">No credit outstanding balances found.</td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          {% set cd30  = credit_rows | sum(attribute='d30')  %}
+          {% set cd60  = credit_rows | sum(attribute='d60')  %}
+          {% set cd90  = credit_rows | sum(attribute='d90')  %}
+          {% set cd120 = credit_rows | sum(attribute='d120') %}
+          {% set cd120p= credit_rows | sum(attribute='d120p')%}
+          {% set cgrand= (cd30 or 0)+(cd60 or 0)+(cd90 or 0)+(cd120 or 0)+(cd120p or 0) %}
+          <tr>
+            <th colspan="3">Total</th>
+            <th style="text-align:right;"><a href="{{ url_for('reports.customer_outstanding_cr_details_credit', bucket='30',   branchflag=sel_branchflag, transferbranch=sel_transferbranch) }}">{{ "%.2f"|format(cd30 or 0)   }}</a></th>
+            <th style="text-align:right;"><a href="{{ url_for('reports.customer_outstanding_cr_details_credit', bucket='60',   branchflag=sel_branchflag, transferbranch=sel_transferbranch) }}">{{ "%.2f"|format(cd60 or 0)   }}</a></th>
+            <th style="text-align:right;"><a href="{{ url_for('reports.customer_outstanding_cr_details_credit', bucket='90',   branchflag=sel_branchflag, transferbranch=sel_transferbranch) }}">{{ "%.2f"|format(cd90 or 0)   }}</a></th>
+            <th style="text-align:right;"><a href="{{ url_for('reports.customer_outstanding_cr_details_credit', bucket='120',  branchflag=sel_branchflag, transferbranch=sel_transferbranch) }}">{{ "%.2f"|format(cd120 or 0)  }}</a></th>
+            <th style="text-align:right;"><a href="{{ url_for('reports.customer_outstanding_cr_details_credit', bucket='120p', branchflag=sel_branchflag, transferbranch=sel_transferbranch) }}">{{ "%.2f"|format(cd120p or 0) }}</a></th>
+            <th style="text-align:right;"><a href="{{ url_for('reports.customer_outstanding_cr_details_credit', bucket='all',  branchflag=sel_branchflag, transferbranch=sel_transferbranch) }}">{{ "%.2f"|format(cgrand)       }}</a></th>
+          </tr>
+        </tfoot>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const table = document.getElementById("creditTable");
+  if (!table) return;
+  const tbody = table.querySelector("tbody");
+  const headers = table.querySelectorAll("thead th");
+
+  headers.forEach((th, idx) => {
+    th.addEventListener("click", () => {
+      const order = th.getAttribute("data-order") === "asc" ? "desc" : "asc";
+      headers.forEach(h => h.removeAttribute("data-order"));
+      th.setAttribute("data-order", order);
+      const rows = Array.from(tbody.querySelectorAll("tr:not([style*='display: none'])"));
+      rows.sort((a, b) => {
+        const av = (a.children[idx]?.textContent || "").trim();
+        const bv = (b.children[idx]?.textContent || "").trim();
+        const an = parseFloat(av.replace(/,/g, ""));
+        const bn = parseFloat(bv.replace(/,/g, ""));
+        const res = (!isNaN(an) && !isNaN(bn)) ? an - bn : av.localeCompare(bv);
+        return order === "asc" ? res : -res;
+      });
+      rows.forEach(r => tbody.appendChild(r));
+    });
+  });
+
+  const searchInput = document.getElementById("creditSearch");
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      const term = searchInput.value.trim().toLowerCase();
+      Array.from(tbody.querySelectorAll("tr")).forEach(r => {
+        const code = (r.dataset.code || "").toLowerCase();
+        const name = (r.dataset.name || "").toLowerCase();
+        r.style.display = (!term || code.includes(term) || name.includes(term)) ? "" : "none";
+      });
+    });
+  }
+});
+</script>
+{% endblock %}

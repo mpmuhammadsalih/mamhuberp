@@ -1,0 +1,633 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body { background: #fff !important; }
+  .filter-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; align-items: center; justify-content: center; padding: 16px; }
+  .filter-overlay.is-open { display: flex; }
+  .filter-popup { background: #fff; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); padding: 20px 24px; min-width: 320px; max-width: 90vw; border: 1px solid #dee2e6; }
+  .filter-popup h3 { margin: 0 0 16px 0; font-size: 18px; color: #212529; }
+  .filter-popup .filter-row { margin-bottom: 14px; }
+  .filter-popup label { display: block; font-size: 13px; font-weight: 600; color: #495057; margin-bottom: 6px; }
+  .filter-popup select, .filter-popup input[type="date"] { width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 14px; }
+  .filter-popup .filter-actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+  .filter-popup .btn-apply { background: #198754; color: #fff; border: none; padding: 8px 18px; border-radius: 6px; font-size: 14px; cursor: pointer; }
+  .filter-popup .btn-apply:hover { background: #157347; }
+  .filter-popup .btn-close, .filter-popup .btn-clear { background: #fff; color: #495057; border: 1px solid #dee2e6; padding: 8px 18px; border-radius: 6px; font-size: 14px; cursor: pointer; text-decoration: none; }
+  .filter-popup .btn-close:hover, .filter-popup .btn-clear:hover { background: #e9ecef; }
+  .filter-popup .search-field--popup { display: flex; align-items: center; gap: 4px; width: 100%; max-width: 320px; }
+  .filter-popup .search-field--popup input { flex: 1; padding: 8px 10px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 14px; }
+  .filter-popup .list-modal { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,0.35); z-index: 10; }
+  .filter-popup .list-modal.hidden { display: none; }
+  .filter-popup .list-modal .modal__content { background: #fff; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); max-width: 480px; width: 100%; max-height: 85vh; display: flex; flex-direction: column; border: 1px solid #dee2e6; }
+  .filter-popup .list-modal .modal__header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #dee2e6; }
+  .filter-popup .list-modal .modal__body { padding: 12px 16px; overflow: hidden; display: flex; flex-direction: column; gap: 10px; }
+  .filter-popup .list-modal .modal__table { max-height: 320px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 6px; }
+  .filter-popup .list-modal .table { margin: 0; }
+  .filter-popup .list-modal .table thead th { padding: 8px 10px; font-size: 12px; background: #f8f9fa; }
+  .filter-popup .list-modal .table tbody tr { cursor: pointer; }
+  .filter-popup .list-modal .table tbody tr:hover { background: #f8f9fa; }
+  .filter-popup .list-modal .table tbody td { padding: 8px 10px; font-size: 13px; }
+  .scroll-table .table tbody tr.data-row { cursor: pointer; }
+  .scroll-table .table tbody tr.data-row:hover { background: #f8f9fa; }
+  .followup-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1100; align-items: center; justify-content: center; padding: 16px; }
+  .followup-modal-overlay.is-open { display: flex; }
+  .followup-modal { background: #fff; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); padding: 20px 24px; min-width: 360px; max-width: 90vw; border: 1px solid #dee2e6; }
+  .followup-modal h4 { margin: 0 0 16px 0; font-size: 18px; color: #212529; }
+  .followup-modal .form-row { margin-bottom: 14px; }
+  .followup-modal label { display: block; font-size: 13px; font-weight: 600; color: #495057; margin-bottom: 6px; }
+  .followup-modal input[type="date"], .followup-modal input[type="text"], .followup-modal textarea { width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid #dee2e6; font-size: 14px; box-sizing: border-box; }
+  .followup-modal textarea { min-height: 80px; resize: vertical; }
+  .followup-modal .modal-actions { display: flex; gap: 10px; margin-top: 18px; }
+  .followup-modal .btn-save { background: #198754; color: #fff; border: none; padding: 8px 18px; border-radius: 6px; font-size: 14px; cursor: pointer; }
+  .followup-modal .btn-save:hover { background: #157347; }
+  .followup-modal .btn-close-followup { background: #fff; color: #495057; border: 1px solid #dee2e6; padding: 8px 18px; border-radius: 6px; font-size: 14px; cursor: pointer; }
+  .followup-modal .btn-close-followup:hover { background: #e9ecef; }
+  .view-followup-btn { background: #e9ecef; border: 1px solid #dee2e6; color: #212529; padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+  .view-followup-btn:hover { background: #dee2e6; }
+  .view-followup-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1200; align-items: center; justify-content: center; padding: 16px; }
+  .view-followup-modal-overlay.is-open { display: flex; }
+  .view-followup-modal { background: #fff; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); padding: 20px 24px; min-width: 480px; max-width: 95vw; max-height: 85vh; display: flex; flex-direction: column; border: 1px solid #dee2e6; }
+  .view-followup-modal h4 { margin: 0 0 12px 0; font-size: 18px; color: #212529; }
+  .view-followup-modal .followup-table-wrap { max-height: 320px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 6px; }
+  .view-followup-modal .followup-table { margin: 0; width: 100%; }
+  .view-followup-modal .followup-table th, .view-followup-modal .followup-table td { padding: 8px 10px; font-size: 13px; text-align: left; }
+  .view-followup-modal .followup-table thead th { background: #f8f9fa; color: #212529; border-bottom: 1px solid #dee2e6; }
+  .view-followup-modal .followup-table tbody tr:nth-child(even) { background: #f8f9fa; }
+  .view-followup-modal .btn-close-view { margin-top: 12px; background: #fff; color: #495057; border: 1px solid #dee2e6; padding: 8px 18px; border-radius: 6px; font-size: 14px; cursor: pointer; }
+  .view-followup-modal .btn-close-view:hover { background: #e9ecef; }
+</style>
+<div class="page-po" style="max-width: 1920px; width: 98%;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Employee Outstanding Details</h1>
+      <p class="page-po__muted">Bucket: {{ bucket_label }}{% if employeecode %} | Employee: {{ employeecode }}{% endif %}{% if salesmancode or customercode or date_from or date_to or expecteddate_from or expecteddate_to %} | Filter: {% if salesmancode %}Salesman{% endif %}{% if salesmancode and (customercode or date_from or date_to or expecteddate_from or expecteddate_to) %}, {% endif %}{% if customercode %}Customer{% endif %}{% if customercode and (date_from or date_to or expecteddate_from or expecteddate_to) %}, {% endif %}{% if date_from or date_to %}Bill date{% endif %}{% if (date_from or date_to) and (expecteddate_from or expecteddate_to) %}, {% endif %}{% if expecteddate_from or expecteddate_to %}Expected date{% endif %}{% endif %}</p>
+    </div>
+    <div class="page-po__actions">
+      <button type="button" class="page-po__btn-secondary" id="open-filter-btn" aria-label="Filter">Filter</button>
+      <a class="page-po__btn-secondary" href="{{ url_for('reports.employee_outstanding_details_export', bucket=bucket, employeecode=employeecode or '', salesmancode=salesmancode or '', customercode=customercode or '', date_from=date_from or '', date_to=date_to or '', expecteddate_from=expecteddate_from or '', expecteddate_to=expecteddate_to or '') }}" aria-label="Export to Excel" title="Export to Excel">Export</a>
+      <a class="page-po__btn-secondary" href="{{ url_for('reports.employee_outstanding') }}">Back</a>
+    </div>
+  </div>
+
+    <div class="filter-overlay" id="filter-overlay" aria-hidden="true">
+      <div class="filter-popup" role="dialog" aria-labelledby="filter-title" style="position: relative;">
+        <h3 id="filter-title">Filter by Salesman &amp; Customer</h3>
+        <form method="get" action="{{ url_for('reports.employee_outstanding_details') }}" id="filter-form">
+          <input type="hidden" name="bucket" value="{{ bucket }}">
+          <input type="hidden" name="employeecode" value="{{ employeecode or '' }}">
+          <div class="filter-row">
+            <label for="empOutSalesmanDisplay">Salesman</label>
+            <span class="search-field search-field--popup">
+              <input type="text" id="empOutSalesmanDisplay" placeholder="Type to search..." readonly autocomplete="off" />
+              <button type="button" class="search-clear" id="empOutSalesmanClear" aria-label="Clear salesman" style="display: none;">×</button>
+              <button type="button" class="search-picker" id="empOutSalesmanPicker" aria-label="Open salesman list" style="padding: 8px 12px; border-radius: 0 8px 8px 0;">▾</button>
+            </span>
+            <input type="hidden" name="salesmancode" id="empOutSalesmanCode" value="{{ salesmancode or '' }}" />
+          </div>
+          <div class="filter-row">
+            <label for="empOutCustomerDisplay">Customer</label>
+            <span class="search-field search-field--popup">
+              <input type="text" id="empOutCustomerDisplay" placeholder="Type to search..." readonly autocomplete="off" />
+              <button type="button" class="search-clear" id="empOutCustomerClear" aria-label="Clear customer" style="display: none;">×</button>
+              <button type="button" class="search-picker" id="empOutCustomerPicker" aria-label="Open customer list" style="padding: 8px 12px; border-radius: 0 8px 8px 0;">▾</button>
+            </span>
+            <input type="hidden" name="customercode" id="empOutCustomerCode" value="{{ customercode or '' }}" />
+          </div>
+          <div class="filter-row" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
+            <label style="margin-bottom: 0;">
+              <span style="display: block; font-size: 13px; font-weight: 600; color: #4a5568; margin-bottom: 6px;">From Date (Bill Date)</span>
+              <input type="date" name="date_from" id="empOutDateFrom" value="{{ date_from or '' }}" style="padding: 8px 10px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 14px;" />
+            </label>
+            <label style="margin-bottom: 0;">
+              <span style="display: block; font-size: 13px; font-weight: 600; color: #4a5568; margin-bottom: 6px;">To Date (Bill Date)</span>
+              <input type="date" name="date_to" id="empOutDateTo" value="{{ date_to or '' }}" style="padding: 8px 10px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 14px;" />
+            </label>
+          </div>
+          <div class="filter-row" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
+            <label style="margin-bottom: 0;">
+              <span style="display: block; font-size: 13px; font-weight: 600; color: #4a5568; margin-bottom: 6px;">From Date (Expected Date)</span>
+              <input type="date" name="expecteddate_from" id="empOutExpectedDateFrom" value="{{ expecteddate_from or '' }}" style="padding: 8px 10px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 14px;" />
+            </label>
+            <label style="margin-bottom: 0;">
+              <span style="display: block; font-size: 13px; font-weight: 600; color: #4a5568; margin-bottom: 6px;">To Date (Expected Date)</span>
+              <input type="date" name="expecteddate_to" id="empOutExpectedDateTo" value="{{ expecteddate_to or '' }}" style="padding: 8px 10px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 14px;" />
+            </label>
+          </div>
+          <div class="filter-actions">
+            <button type="submit" class="btn-apply">Apply</button>
+            <a href="{{ url_for('reports.employee_outstanding_details', bucket=bucket, employeecode=employeecode or '', date_from='', date_to='', expecteddate_from='', expecteddate_to='') }}" class="btn-clear">Clear filters</a>
+            <button type="button" class="btn-close" id="close-filter-btn">Close</button>
+          </div>
+        </form>
+
+        <!-- Salesman list popup -->
+        <div class="list-modal hidden" id="empOutSalesmanModal" role="dialog" aria-label="Select salesman">
+          <div class="modal__content">
+            <div class="modal__header">
+              <h4 style="margin: 0; font-size: 16px;">Select Salesman</h4>
+              <button type="button" class="modal__close" id="empOutSalesmanModalClose" aria-label="Close">×</button>
+            </div>
+            <div class="modal__body">
+              <span class="search-field search-field--wide" style="width: 100%;">
+                <input type="text" id="empOutSalesmanModalSearch" placeholder="Type to search..." autocomplete="off" />
+                <button type="button" class="search-clear" id="empOutSalesmanModalClear">×</button>
+              </span>
+              <div class="modal__table">
+                <table class="table" id="empOutSalesmanModalTable">
+                  <thead>
+                    <tr><th>Code</th><th>Name</th></tr>
+                  </thead>
+                  <tbody id="empOutSalesmanModalBody">
+                    <tr data-code="" data-name="All"><td>—</td><td>All</td></tr>
+                    {% for s in (salesmen or []) %}
+                      <tr data-code="{{ s.code or '' }}" data-name="{{ (s.name or s.code or '')|e }}">
+                        <td>{{ s.code or '-' }}</td>
+                        <td>{{ (s.name or '-')|truncate(50) }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Customer list popup -->
+        <div class="list-modal hidden" id="empOutCustomerModal" role="dialog" aria-label="Select customer">
+          <div class="modal__content">
+            <div class="modal__header">
+              <h4 style="margin: 0; font-size: 16px;">Select Customer</h4>
+              <button type="button" class="modal__close" id="empOutCustomerModalClose" aria-label="Close">×</button>
+            </div>
+            <div class="modal__body">
+              <span class="search-field search-field--wide" style="width: 100%;">
+                <input type="text" id="empOutCustomerModalSearch" placeholder="Type to search..." autocomplete="off" />
+                <button type="button" class="search-clear" id="empOutCustomerModalClear">×</button>
+              </span>
+              <div class="modal__table">
+                <table class="table" id="empOutCustomerModalTable">
+                  <thead>
+                    <tr><th>Code</th><th>Name</th><th style="text-align: right;">Outstanding</th></tr>
+                  </thead>
+                  <tbody id="empOutCustomerModalBody">
+                    <tr data-code="" data-name="All"><td>—</td><td>All</td><td></td></tr>
+                    {% for c in (customers or []) %}
+                      <tr data-code="{{ c.code or '' }}" data-name="{{ (c.name or c.code or '')|e }}">
+                        <td>{{ c.code or '-' }}</td>
+                        <td>{{ (c.name or '-')|truncate(50) }}</td>
+                        <td style="text-align: right; font-weight: 600; color: #059669;">{{ "%.2f"|format((c.outstanding or 0)|float) }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      (function() {
+        var overlay = document.getElementById('filter-overlay');
+        var openBtn = document.getElementById('open-filter-btn');
+        var closeBtn = document.getElementById('close-filter-btn');
+        if (!overlay || !openBtn) return;
+        openBtn.addEventListener('click', function() {
+          overlay.classList.add('is-open');
+          overlay.setAttribute('aria-hidden', 'false');
+          var smCode = document.getElementById('empOutSalesmanCode');
+          var smDisp = document.getElementById('empOutSalesmanDisplay');
+          var custCode = document.getElementById('empOutCustomerCode');
+          var custDisp = document.getElementById('empOutCustomerDisplay');
+          if (smCode && smDisp) smDisp.value = smCode.value ? (smCode.getAttribute('data-display') || smCode.value) : '';
+          if (custCode && custDisp) custDisp.value = custCode.value ? (custCode.getAttribute('data-display') || custCode.value) : '';
+          var smClear = document.getElementById('empOutSalesmanClear');
+          var custClear = document.getElementById('empOutCustomerClear');
+          if (smClear) smClear.style.display = smCode && smCode.value ? 'block' : 'none';
+          if (custClear) custClear.style.display = custCode && custCode.value ? 'block' : 'none';
+        });
+        if (closeBtn) closeBtn.addEventListener('click', function() {
+          overlay.classList.remove('is-open');
+          overlay.setAttribute('aria-hidden', 'true');
+        });
+        overlay.addEventListener('click', function(e) {
+          if (e.target === overlay) {
+            overlay.classList.remove('is-open');
+            overlay.setAttribute('aria-hidden', 'true');
+          }
+        });
+
+        function filterTableRows(tableId, query) {
+          var tbody = document.querySelector('#' + tableId + ' tbody');
+          if (!tbody) return;
+          var q = (query || '').trim().toLowerCase();
+          var rows = tbody.querySelectorAll('tr');
+          for (var i = 0; i < rows.length; i++) {
+            var r = rows[i];
+            var code = (r.getAttribute('data-code') || '').toLowerCase();
+            var name = (r.getAttribute('data-name') || '').toLowerCase();
+            r.style.display = (!q || code.indexOf(q) !== -1 || name.indexOf(q) !== -1) ? '' : 'none';
+          }
+        }
+        function openSalesmanModal() {
+          var m = document.getElementById('empOutSalesmanModal');
+          var s = document.getElementById('empOutSalesmanModalSearch');
+          if (m) m.classList.remove('hidden');
+          if (s) { s.value = ''; s.focus(); }
+          filterTableRows('empOutSalesmanModalTable', '');
+          var c = document.getElementById('empOutSalesmanModalClear');
+          if (c) c.style.display = 'none';
+        }
+        function closeSalesmanModal() {
+          var m = document.getElementById('empOutSalesmanModal');
+          if (m) m.classList.add('hidden');
+        }
+        function openCustomerModal() {
+          var m = document.getElementById('empOutCustomerModal');
+          var s = document.getElementById('empOutCustomerModalSearch');
+          if (m) m.classList.remove('hidden');
+          if (s) { s.value = ''; s.focus(); }
+          filterTableRows('empOutCustomerModalTable', '');
+          var c = document.getElementById('empOutCustomerModalClear');
+          if (c) c.style.display = 'none';
+        }
+        function closeCustomerModal() {
+          var m = document.getElementById('empOutCustomerModal');
+          if (m) m.classList.add('hidden');
+        }
+
+        var salesmanDisplay = document.getElementById('empOutSalesmanDisplay');
+        var salesmanCode = document.getElementById('empOutSalesmanCode');
+        var salesmanClear = document.getElementById('empOutSalesmanClear');
+        var salesmanPicker = document.getElementById('empOutSalesmanPicker');
+        if (salesmanPicker) salesmanPicker.addEventListener('click', function(e) { e.preventDefault(); openSalesmanModal(); });
+        if (salesmanDisplay) salesmanDisplay.addEventListener('click', function(e) { e.preventDefault(); openSalesmanModal(); });
+        if (salesmanClear) salesmanClear.addEventListener('click', function(e) {
+          e.preventDefault();
+          if (salesmanCode) salesmanCode.value = '';
+          if (salesmanDisplay) salesmanDisplay.value = '';
+          salesmanClear.style.display = 'none';
+        });
+        var smModal = document.getElementById('empOutSalesmanModal');
+        var smSearch = document.getElementById('empOutSalesmanModalSearch');
+        var smModalClear = document.getElementById('empOutSalesmanModalClear');
+        var smTable = document.getElementById('empOutSalesmanModalTable');
+        if (smSearch) smSearch.addEventListener('input', function() {
+          filterTableRows('empOutSalesmanModalTable', this.value);
+          if (smModalClear) smModalClear.style.display = this.value ? 'block' : 'none';
+        });
+        if (smModalClear) {
+          smModalClear.addEventListener('click', function() {
+            if (smSearch) { smSearch.value = ''; smSearch.focus(); }
+            filterTableRows('empOutSalesmanModalTable', '');
+            smModalClear.style.display = 'none';
+          });
+          smModalClear.style.display = 'none';
+        }
+        document.getElementById('empOutSalesmanModalClose').addEventListener('click', closeSalesmanModal);
+        if (smModal) smModal.addEventListener('click', function(e) {
+          if (e.target === smModal) closeSalesmanModal();
+        });
+        if (smTable) smTable.addEventListener('click', function(e) {
+          var row = e.target.closest('tbody tr');
+          if (!row) return;
+          var code = row.getAttribute('data-code') || '';
+          var name = row.getAttribute('data-name') || 'All';
+          if (salesmanCode) { salesmanCode.value = code; salesmanCode.setAttribute('data-display', code ? (code + ' - ' + name) : ''); }
+          if (salesmanDisplay) salesmanDisplay.value = code ? (code + ' - ' + name) : '';
+          if (salesmanClear) salesmanClear.style.display = code ? 'block' : 'none';
+          closeSalesmanModal();
+        });
+
+        var customerDisplay = document.getElementById('empOutCustomerDisplay');
+        var customerCode = document.getElementById('empOutCustomerCode');
+        var customerClear = document.getElementById('empOutCustomerClear');
+        var customerPicker = document.getElementById('empOutCustomerPicker');
+        if (customerPicker) customerPicker.addEventListener('click', function(e) { e.preventDefault(); openCustomerModal(); });
+        if (customerDisplay) customerDisplay.addEventListener('click', function(e) { e.preventDefault(); openCustomerModal(); });
+        if (customerClear) customerClear.addEventListener('click', function(e) {
+          e.preventDefault();
+          if (customerCode) customerCode.value = '';
+          if (customerDisplay) customerDisplay.value = '';
+          customerClear.style.display = 'none';
+        });
+        var custModal = document.getElementById('empOutCustomerModal');
+        var custSearch = document.getElementById('empOutCustomerModalSearch');
+        var custModalClear = document.getElementById('empOutCustomerModalClear');
+        var custTable = document.getElementById('empOutCustomerModalTable');
+        if (custSearch) custSearch.addEventListener('input', function() {
+          filterTableRows('empOutCustomerModalTable', this.value);
+          if (custModalClear) custModalClear.style.display = this.value ? 'block' : 'none';
+        });
+        if (custModalClear) {
+          custModalClear.addEventListener('click', function() {
+            if (custSearch) { custSearch.value = ''; custSearch.focus(); }
+            filterTableRows('empOutCustomerModalTable', '');
+            custModalClear.style.display = 'none';
+          });
+          custModalClear.style.display = 'none';
+        }
+        document.getElementById('empOutCustomerModalClose').addEventListener('click', closeCustomerModal);
+        if (custModal) custModal.addEventListener('click', function(e) {
+          if (e.target === custModal) closeCustomerModal();
+        });
+        if (custTable) custTable.addEventListener('click', function(e) {
+          var row = e.target.closest('tbody tr');
+          if (!row) return;
+          var code = row.getAttribute('data-code') || '';
+          var name = row.getAttribute('data-name') || 'All';
+          if (customerCode) { customerCode.value = code; customerCode.setAttribute('data-display', code ? (code + ' - ' + name) : ''); }
+          if (customerDisplay) customerDisplay.value = code ? (code + ' - ' + name) : '';
+          if (customerClear) customerClear.style.display = code ? 'block' : 'none';
+          closeCustomerModal();
+        });
+
+        var smCodeEl = document.getElementById('empOutSalesmanCode');
+        var custCodeEl = document.getElementById('empOutCustomerCode');
+        function displayLabel(code, name) {
+          return code ? (code + ' - ' + name) : '';
+        }
+        if (smCodeEl && salesmanDisplay) {
+          var smVal = smCodeEl.value;
+          var opt = document.querySelector('#empOutSalesmanModalBody tr[data-code="' + (smVal || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]');
+          salesmanDisplay.value = opt ? displayLabel(opt.getAttribute('data-code') || '', opt.getAttribute('data-name') || '') : smVal;
+          smCodeEl.setAttribute('data-display', salesmanDisplay.value);
+          if (salesmanClear) salesmanClear.style.display = smVal ? 'block' : 'none';
+        }
+        if (custCodeEl && customerDisplay) {
+          var cVal = custCodeEl.value;
+          var opt = document.querySelector('#empOutCustomerModalBody tr[data-code="' + (cVal || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]');
+          customerDisplay.value = opt ? displayLabel(opt.getAttribute('data-code') || '', opt.getAttribute('data-name') || '') : cVal;
+          custCodeEl.setAttribute('data-display', customerDisplay.value);
+          if (customerClear) customerClear.style.display = cVal ? 'block' : 'none';
+        }
+      })();
+    </script>
+    {% if rows %}
+      <div class="page-po__section-title">Invoice details</div>
+      <div class="table-responsive">
+      <div class="scroll-table">
+        <table class="table table-fixed">
+          <thead>
+            <tr>
+              <th>SL No</th>
+              <th>Bill No</th>
+              <th>Bill Date</th>
+              <th>Customer Code</th>
+              <th>Customer Name</th>
+              <th>Salesman Code</th>
+              <th>Salesman Name</th>
+              <th>Employee Code</th>
+              <th>Employee Name</th>
+              <th>Expected Date</th>
+              <th>Remarks</th>
+              <th>Bill Amount</th>
+              <th>Paid Amount</th>
+              <th>Outstanding</th>
+              <th style="width: 50px;" title="View follow-ups">👁</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr class="data-row" data-billno="{{ row.billno or '' }}" data-expecteddate="{% if row.expecteddate %}{% if row.expecteddate.__class__.__name__ in ['date', 'datetime'] %}{{ row.expecteddate.strftime('%Y-%m-%d') }}{% else %}{{ (row.expecteddate|string)[:10] }}{% endif %}{% else %}{% endif %}" data-remarks="{{ (row.remarks or '')|e }}">
+                <td>{{ row.slno }}</td>
+                <td>{{ row.billno }}</td>
+                <td>
+                  {% if row.billdate %}
+                    {{ row.billdate.strftime('%d-%m-%Y') if row.billdate else '-' }}
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td>{{ row.customercode }}</td>
+                <td>{{ row.customername or '-' }}</td>
+                <td>{{ row.salesmancode or '-' }}</td>
+                <td>{{ row.salesmanname or '-' }}</td>
+                <td>{{ row.employeecode or '-' }}</td>
+                <td>{{ row.employeename or '-' }}</td>
+                <td>
+                  {% if row.expecteddate %}
+                    {% if row.expecteddate.__class__.__name__ in ['date', 'datetime'] %}
+                      {{ row.expecteddate.strftime('%d-%m-%Y') }}
+                    {% else %}
+                      {{ (row.expecteddate|string)[:10] if (row.expecteddate|string)|length >= 10 else (row.expecteddate|string) }}
+                    {% endif %}
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td>{{ row.remarks or '-' }}</td>
+                <td>{{ "%.2f"|format(row.billamount or 0) }}</td>
+                <td>{{ "%.2f"|format(row.paidamount or 0) }}</td>
+                <td>{{ "%.2f"|format(row.outstanding or 0) }}</td>
+                <td>
+                  <button type="button" class="view-followup-btn" data-billno="{{ row.billno or '' }}" title="View follow-ups" aria-label="View follow-ups">👁</button>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            {% set total_bill = rows | sum(attribute='billamount') %}
+            {% set total_paid = rows | sum(attribute='paidamount') %}
+            {% set total_out = rows | sum(attribute='outstanding') %}
+            <tr class="table-total">
+              <th colspan="12">Total</th>
+              <th>{{ "%.2f"|format(total_bill|float) }}</th>
+              <th>{{ "%.2f"|format(total_paid|float) }}</th>
+              <th>{{ "%.2f"|format(total_out|float) }}</th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      </div>
+    <!-- Payment follow-up modal (billno row click) -->
+    <div class="followup-modal-overlay" id="followupModalOverlay" aria-hidden="true">
+      <div class="followup-modal" role="dialog" aria-labelledby="followupModalTitle">
+        <h4 id="followupModalTitle">Payment Follow-up</h4>
+        <input type="hidden" id="followupBillno" value="" />
+        <div class="form-row">
+          <label for="followupExpectedDate">Expected Date</label>
+          <input type="date" id="followupExpectedDate" />
+        </div>
+        <div class="form-row">
+          <label for="followupRemarks">Remarks</label>
+          <textarea id="followupRemarks" rows="3" placeholder="Optional remarks..."></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-save" id="followupSaveBtn">Save</button>
+          <button type="button" class="btn-close-followup" id="followupCloseBtn">Close</button>
+        </div>
+        <p id="followupMessage" class="muted" style="margin-top: 10px; display: none; font-size: 13px;"></p>
+      </div>
+    </div>
+
+    <!-- View follow-ups modal -->
+    <div class="view-followup-modal-overlay" id="viewFollowupModalOverlay" aria-hidden="true">
+      <div class="view-followup-modal" role="dialog" aria-labelledby="viewFollowupModalTitle">
+        <h4 id="viewFollowupModalTitle">Follow-ups – Bill No </h4>
+        <div class="followup-table-wrap">
+          <table class="table followup-table" id="viewFollowupTable">
+            <thead>
+              <tr>
+                <th>SL No</th>
+                <th>Expected Date</th>
+                <th>Remarks</th>
+                <th>Created At</th>
+                <th>Created By</th>
+              </tr>
+            </thead>
+            <tbody id="viewFollowupBody">
+            </tbody>
+          </table>
+        </div>
+        <p id="viewFollowupEmpty" class="muted" style="display: none; margin-top: 8px;">No follow-ups recorded.</p>
+        <button type="button" class="btn-close-view" id="viewFollowupCloseBtn">Close</button>
+      </div>
+    </div>
+    <script>
+      (function() {
+        var overlay = document.getElementById('followupModalOverlay');
+        var billnoInput = document.getElementById('followupBillno');
+        var expectedDateInput = document.getElementById('followupExpectedDate');
+        var remarksInput = document.getElementById('followupRemarks');
+        var saveBtn = document.getElementById('followupSaveBtn');
+        var closeBtn = document.getElementById('followupCloseBtn');
+        var messageEl = document.getElementById('followupMessage');
+        var dataRows = document.querySelectorAll('.scroll-table .table tbody tr.data-row');
+        function openFollowupModal(billno, expecteddate, remarks) {
+          if (billnoInput) billnoInput.value = billno || '';
+          if (expectedDateInput) expectedDateInput.value = expecteddate || '';
+          if (remarksInput) remarksInput.value = remarks || '';
+          if (messageEl) { messageEl.style.display = 'none'; messageEl.textContent = ''; }
+          if (document.getElementById('followupModalTitle')) document.getElementById('followupModalTitle').textContent = 'Payment Follow-up – Bill No ' + (billno || '');
+          if (overlay) { overlay.classList.add('is-open'); overlay.setAttribute('aria-hidden', 'false'); }
+        }
+        function closeFollowupModal() {
+          if (overlay) { overlay.classList.remove('is-open'); overlay.setAttribute('aria-hidden', 'true'); }
+        }
+        if (dataRows.length) {
+          dataRows.forEach(function(tr) {
+            tr.addEventListener('click', function(e) {
+              if (e.target.closest('.view-followup-btn')) return;
+              var billno = tr.getAttribute('data-billno') || '';
+              var expecteddate = tr.getAttribute('data-expecteddate') || '';
+              var remarks = (tr.getAttribute('data-remarks') || '').replace(/&quot;/g, '"');
+              openFollowupModal(billno, expecteddate, remarks);
+            });
+          });
+        }
+        var viewFollowupOverlay = document.getElementById('viewFollowupModalOverlay');
+        var viewFollowupTitle = document.getElementById('viewFollowupModalTitle');
+        var viewFollowupBody = document.getElementById('viewFollowupBody');
+        var viewFollowupEmpty = document.getElementById('viewFollowupEmpty');
+        var viewFollowupCloseBtn = document.getElementById('viewFollowupCloseBtn');
+        document.querySelectorAll('.view-followup-btn').forEach(function(btn) {
+          btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var billno = (btn.getAttribute('data-billno') || '').trim();
+            if (!billno) return;
+            if (viewFollowupTitle) viewFollowupTitle.textContent = 'Follow-ups – Bill No ' + billno;
+            if (viewFollowupBody) viewFollowupBody.innerHTML = '';
+            if (viewFollowupEmpty) viewFollowupEmpty.style.display = 'none';
+            fetch('{{ url_for("reports.employee_outstanding_details_followups") }}?billno=' + encodeURIComponent(billno), { method: 'GET', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+              .then(function(r) { return r.json(); })
+              .then(function(data) {
+                var list = (data && data.followups) ? data.followups : [];
+                if (viewFollowupBody) {
+                  if (list.length === 0) {
+                    if (viewFollowupEmpty) viewFollowupEmpty.style.display = 'block';
+                  } else {
+                    list.forEach(function(f) {
+                      var tr = document.createElement('tr');
+                      tr.innerHTML = '<td>' + (f.slno != null ? f.slno : '–') + '</td><td>' + (f.expecteddate || '–') + '</td><td>' + (f.remarks || '–') + '</td><td>' + (f.createdat || '–') + '</td><td>' + (f.createdby || '–') + '</td>';
+                      viewFollowupBody.appendChild(tr);
+                    });
+                  }
+                }
+                if (viewFollowupOverlay) { viewFollowupOverlay.classList.add('is-open'); viewFollowupOverlay.setAttribute('aria-hidden', 'false'); }
+              })
+              .catch(function() {
+                if (viewFollowupEmpty) { viewFollowupEmpty.textContent = 'Failed to load follow-ups.'; viewFollowupEmpty.style.display = 'block'; }
+                if (viewFollowupOverlay) { viewFollowupOverlay.classList.add('is-open'); viewFollowupOverlay.setAttribute('aria-hidden', 'false'); }
+              });
+          });
+        });
+        if (viewFollowupCloseBtn) viewFollowupCloseBtn.addEventListener('click', function() {
+          if (viewFollowupOverlay) { viewFollowupOverlay.classList.remove('is-open'); viewFollowupOverlay.setAttribute('aria-hidden', 'true'); }
+        });
+        if (viewFollowupOverlay) viewFollowupOverlay.addEventListener('click', function(e) {
+          if (e.target === viewFollowupOverlay) { viewFollowupOverlay.classList.remove('is-open'); viewFollowupOverlay.setAttribute('aria-hidden', 'true'); }
+        });
+        if (closeBtn) closeBtn.addEventListener('click', closeFollowupModal);
+        if (overlay) overlay.addEventListener('click', function(e) { if (e.target === overlay) closeFollowupModal(); });
+        if (saveBtn) {
+          saveBtn.addEventListener('click', function() {
+            var billno = billnoInput ? billnoInput.value.trim() : '';
+            if (!billno) { if (messageEl) { messageEl.textContent = 'Bill number is missing.'; messageEl.style.display = 'block'; messageEl.style.color = '#dc2626'; } return; }
+            var expecteddate = expectedDateInput ? expectedDateInput.value.trim() : '';
+            var remarks = remarksInput ? remarksInput.value.trim() : '';
+            saveBtn.disabled = true;
+            if (messageEl) { messageEl.style.display = 'none'; messageEl.textContent = ''; }
+            var followupUrl = (typeof window !== 'undefined' && window.location && window.location.pathname)
+              ? window.location.pathname.replace(/\/?$/, '') + '/update-followup'
+              : '{{ url_for("reports.employee_outstanding_details_update_followup") }}';
+            fetch(followupUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+              body: JSON.stringify({ billno: billno, expecteddate: expecteddate || null, remarks: remarks || null })
+            })
+            .then(function(r) {
+              var ct = r.headers.get('Content-Type') || '';
+              if (ct.indexOf('application/json') !== -1) {
+                return r.json().then(function(data) { return { ok: r.ok, data: data, status: r.status }; });
+              }
+              return r.text().then(function(text) { return { ok: false, data: { error: 'Server returned ' + r.status }, status: r.status }; });
+            })
+            .then(function(result) {
+              saveBtn.disabled = false;
+              if (result.ok && result.data && result.data.success) {
+                if (messageEl) { messageEl.textContent = result.data.message || 'Saved.'; messageEl.style.color = '#059669'; messageEl.style.display = 'block'; }
+                var row = document.querySelector('.scroll-table .table tbody tr.data-row[data-billno="' + billno.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]');
+                if (row) {
+                  row.setAttribute('data-expecteddate', expecteddate || '');
+                  row.setAttribute('data-remarks', remarks || '');
+                  var cells = row.querySelectorAll('td');
+                  if (cells.length >= 10) {
+                    if (expecteddate) {
+                      var d = expecteddate.split('-');
+                      if (d.length === 3) cells[9].textContent = d[2] + '-' + d[1] + '-' + d[0];
+                      else cells[9].textContent = expecteddate;
+                    } else cells[9].textContent = '-';
+                    if (cells.length >= 11) cells[10].textContent = remarks || '-';
+                  }
+                }
+                setTimeout(closeFollowupModal, 800);
+              } else {
+                if (messageEl) { messageEl.textContent = (result.data && result.data.error) ? result.data.error : ('Save failed' + (result.status ? ' (' + result.status + ')' : '') + '.'); messageEl.style.color = '#dc2626'; messageEl.style.display = 'block'; }
+              }
+            })
+            .catch(function(err) {
+              saveBtn.disabled = false;
+              if (messageEl) { messageEl.textContent = 'Request failed: ' + (err.message || 'check console'); messageEl.style.color = '#dc2626'; messageEl.style.display = 'block'; }
+            });
+          });
+        }
+      })();
+    </script>
+
+    {% else %}
+      <p class="page-po__muted">No invoice details found.</p>
+      {% if bucket == "30" %}
+        <div style="margin-top: 16px; padding: 12px; background: #f3f4f6; border-radius: 4px; font-size: 13px;">
+          <p style="margin: 0 0 8px 0; font-weight: 600;">Why no rows here?</p>
+          <ul style="margin: 0; padding-left: 20px;">
+            <li><strong>Bucket 0-30</strong> shows only invoices whose <strong>bill date</strong> is within the last 30 days. If all outstanding for this employee are older, try <a href="{{ url_for('reports.employee_outstanding_details', bucket='all', employeecode=employeecode or '') }}">All Periods</a>.</li>
+            <li>Employee filter uses <strong>tblsettlement</strong> employeecode only (e.g. employeecode = {{ employeecode or '?' }}).</li>
+            <li>Only rows with <strong>balance > 0</strong> and <strong>flag = 'B'</strong> are shown.</li>
+          </ul>
+        </div>
+      {% endif %}
+    {% endif %}
+</div>
+{% endblock %}

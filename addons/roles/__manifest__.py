@@ -1,0 +1,2 @@
+"""Addon manifest — Roles."""
+MANIFEST = {'technical_name': 'roles', 'name': 'Roles', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Migrated from blueprints/roles.py', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/roles'}, 'flask': {'blueprint': 'roles', 'blueprint_ref': 'addons.roles:bp', 'models_package': 'addons.roles.models', 'routes_module': 'addons.roles.controllers.routes'}}

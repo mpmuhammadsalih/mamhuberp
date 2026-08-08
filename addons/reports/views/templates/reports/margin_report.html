@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+{% from 'includes/global_lookup_field.html' import global_lookup_field %}
+{% block content %}
+<style>
+  .page { max-width: 98vw; margin: 0 auto; padding: 14px 10px; }
+  .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #dee2e6; padding-bottom: 10px; }
+  .title { margin: 0; font-size: 22px; font-weight: 400; color: #212529; }
+  .sub { margin: 4px 0 0; font-size: 12px; color: #6c757d; max-width: 900px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { border: 1px solid #dee2e6; border-radius: 4px; background: #fff; color: #212529; padding: 7px 12px; font-size: 12px; text-decoration: none; cursor: pointer; }
+  .btn-primary { background: #007bff; border-color: #007bff; color: #fff; }
+  .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 10px; overflow: visible; }
+  .field--lookup { min-width: 240px; flex: 0 0 auto; align-self: flex-end; }
+  .filters .field { flex: 0 0 auto; align-self: flex-end; }
+  .field label { display: block; font-size: 11px; color: #495057; margin-bottom: 3px; }
+  .input { width: 100%; border: 1px solid #dee2e6; border-radius: 4px; padding: 7px 8px; font-size: 12px; box-sizing: border-box; }
+  .field--date { width: 150px; }
+  .field--narrow { width: 110px; }
+  .field--grow { flex: 1; min-width: 180px; }
+  .field--lookup.field--grow { min-width: 280px; max-width: 420px; }
+  .field--category { min-width: 220px; }
+  .field--mode { width: 160px; }
+  .meta { margin: 8px 0 10px; font-size: 12px; color: #495057; }
+  .alert { padding: 10px 12px; border-radius: 4px; margin-bottom: 10px; font-size: 12px; }
+  .alert-warn { background: #fff3cd; border: 1px solid #ffecb5; color: #664d03; }
+  .table-wrap { overflow: auto; border: 1px solid #dee2e6; border-radius: 4px; background: #fff; max-height: 72vh; }
+  table { width: 100%; min-width: 1200px; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #dee2e6; padding: 6px 8px; text-align: left; white-space: nowrap; }
+  th { background: #f8f9fa; position: sticky; top: 0; z-index: 2; font-size: 11px; }
+  th.val-hdr { background: #ecfdf5; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tfoot td { background: #f1f5f9; font-weight: 600; border-top: 2px solid #94a3b8; }
+</style>
+
+{% set cur_mode = (filters.report_mode if filters else 'item') or 'item' %}
+{% set gt = grid_totals if grid_totals else {} %}
+
+<div class="page">
+  <div class="top">
+    <div>
+      <h1 class="title">Margin Report</h1>
+      <p class="sub">
+        Gross margin from sales in <strong>BILLHDR</strong> / <strong>BILLDTL</strong> for this location.
+        Margin = line sales − COGS; unit cost = average cost (bill line, then item master), else cost price.
+      </p>
+    </div>
+    <div class="actions">
+      <a class="btn" href="{{ url_for('reports.margin_report') }}">Clear</a>
+      <button class="btn" type="submit" form="mrFilterForm" formaction="{{ url_for('reports.margin_report_export_excel') }}">Export CSV</button>
+    </div>
+  </div>
+
+  {% if error_message %}
+  <div class="alert alert-warn">{{ error_message }}</div>
+  {% endif %}
+
+  <form id="mrFilterForm" method="get" action="{{ url_for('reports.margin_report') }}">
+    <div class="filters">
+      <div class="field field--date">
+        <label for="mrDateFrom">Date from</label>
+        <input id="mrDateFrom" class="input" type="date" name="date_from" value="{{ (filters.date_from if filters else '') or '' }}" />
+      </div>
+      <div class="field field--date">
+        <label for="mrDateTo">Date to</label>
+        <input id="mrDateTo" class="input" type="date" name="date_to" value="{{ (filters.date_to if filters else '') or '' }}" />
+      </div>
+      <div class="field field--mode">
+        <label for="mrMode">View</label>
+        <select id="mrMode" class="input" name="report_mode">
+          <option value="item" {% if cur_mode == 'item' %}selected{% endif %}>By item</option>
+          <option value="bill" {% if cur_mode == 'bill' %}selected{% endif %}>By bill</option>
+          <option value="month" {% if cur_mode == 'month' %}selected{% endif %}>By month</option>
+          <option value="year" {% if cur_mode == 'year' %}selected{% endif %}>By year</option>
+          <option value="detail" {% if cur_mode == 'detail' %}selected{% endif %}>Line detail</option>
+        </select>
+      </div>
+      {{ global_lookup_field(
+        field_id='mrItem',
+        label='Search item',
+        name='itemcode',
+        kind='item',
+        text_search_name='search',
+        value_code=(filters.itemcode if filters else ''),
+        value_label=(filters.item_label if filters else ''),
+        value_text_search=(filters.search if filters else ''),
+        placeholder='Item code or name',
+        dropdown_min_width='380',
+        field_class='field field--lookup field--grow',
+        limit=8,
+      ) }}
+      <div class="field field--narrow">
+        <label for="mrBillNo">Bill no</label>
+        <input id="mrBillNo" class="input" type="text" name="bill_no" value="{{ (filters.bill_no if filters else '') or '' }}" />
+      </div>
+      {{ global_lookup_field(
+        field_id='mrCategory',
+        label='Category',
+        name='category_code',
+        kind='category',
+        value_code=(filters.category_code if filters else ''),
+        value_label=(filters.category_label if filters else ''),
+        placeholder='Category name or code',
+        limit=6,
+      ) }}
+      {{ global_lookup_field(
+        field_id='mrCustomer',
+        label='Customer',
+        name='customer_code',
+        kind='customer',
+        value_code=(filters.customer_code if filters else ''),
+        value_label=(filters.customer_label if filters else ''),
+        no_default=true,
+        dropdown_min_width='360',
+        limit=6,
+      ) }}
+      <div class="field field--mode">
+        <label for="mrBillType">Bill type</label>
+        {% set bt = ((filters.bill_type if filters else '') or '')|trim|upper %}
+        <select id="mrBillType" class="input" name="bill_type">
+          <option value="" {% if not bt %}selected{% endif %}>All</option>
+          <option value="C" {% if bt == 'C' %}selected{% endif %}>Cash (C)</option>
+          <option value="R" {% if bt == 'R' %}selected{% endif %}>Credit (R)</option>
+          <option value="D" {% if bt == 'D' %}selected{% endif %}>Card (D)</option>
+        </select>
+      </div>
+      <div class="field field--narrow">
+        <label for="mrCap">Max rows</label>
+        <input id="mrCap" class="input" type="number" name="max_rows" min="1" max="20000" value="{{ (filters.max_rows if filters else '8000') or '8000' }}" />
+      </div>
+      <button class="btn btn-primary" type="submit">Run</button>
+    </div>
+  </form>
+
+  <div class="meta">
+    Rows: {{ rows|length }}{% if filters and filters.max_rows %} (cap {{ filters.max_rows }}){% endif %}
+    {% if filters and filters.date_from and filters.date_to %} | {{ filters.date_from }} to {{ filters.date_to }}{% endif %}
+    | View: {% if cur_mode == 'bill' %}By bill{% elif cur_mode == 'month' %}By month{% elif cur_mode == 'year' %}By year{% elif cur_mode == 'detail' %}Line detail{% else %}By item{% endif %}
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        {% if cur_mode == 'detail' %}
+        <tr>
+          <th>Sl</th>
+          <th>Bill</th>
+          <th>Date</th>
+          <th>Type</th>
+          <th>Customer</th>
+          <th>Item</th>
+          <th>Name</th>
+          <th>UOM</th>
+          <th>Category</th>
+          <th>Qty</th>
+          <th>Rate</th>
+          <th>Disc</th>
+          <th>Unit cost</th>
+          <th class="val-hdr">Sales</th>
+          <th class="val-hdr">COGS</th>
+          <th class="val-hdr">Margin</th>
+          <th class="val-hdr">Margin %</th>
+        </tr>
+        {% elif cur_mode == 'bill' %}
+        <tr>
+          <th>Sl</th>
+          <th>Bill</th>
+          <th>Date</th>
+          <th>Type</th>
+          <th>Customer</th>
+          <th>Name</th>
+          <th>Lines</th>
+          <th class="val-hdr">Sales</th>
+          <th class="val-hdr">COGS</th>
+          <th class="val-hdr">Margin</th>
+          <th class="val-hdr">Margin %</th>
+        </tr>
+        {% elif cur_mode in ('month', 'year') %}
+        <tr>
+          <th>Sl</th>
+          <th>{% if cur_mode == 'month' %}Month{% else %}Year{% endif %}</th>
+          <th>From</th>
+          <th>To</th>
+          <th>Bills</th>
+          <th>Lines</th>
+          <th>Qty</th>
+          <th class="val-hdr">Sales</th>
+          <th class="val-hdr">COGS</th>
+          <th class="val-hdr">Margin</th>
+          <th class="val-hdr">Margin %</th>
+        </tr>
+        {% else %}
+        <tr>
+          <th>Sl</th>
+          <th>Item</th>
+          <th>Name</th>
+          <th>UOM</th>
+          <th>Category</th>
+          <th>Qty</th>
+          <th>Bills</th>
+          <th class="val-hdr">Sales</th>
+          <th class="val-hdr">COGS</th>
+          <th class="val-hdr">Margin</th>
+          <th class="val-hdr">Margin %</th>
+        </tr>
+        {% endif %}
+      </thead>
+      <tbody>
+        {% if not rows %}
+        <tr><td colspan="20" style="text-align:center;color:#6c757d;padding:16px;">No rows for the selected filters.</td></tr>
+        {% elif cur_mode == 'detail' %}
+          {% for r in rows %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ r.billno or '' }}</td>
+            <td>{{ r.bill_date or '' }}</td>
+            <td>{{ r.billtype or '' }}</td>
+            <td>{{ r.customername or r.customercode or '' }}</td>
+            <td>{{ r.itemcode if r.itemcode is not none else '' }}</td>
+            <td>{{ r.itemname or '' }}</td>
+            <td>{{ r.uom or '' }}</td>
+            <td>{{ r.categoryname or '' }}</td>
+            <td class="num">{{ '%.3f'|format(r.quantity|float) if r.quantity is not none else '0.000' }}</td>
+            <td class="num">{{ '%.4f'|format(r.rate|float) if r.rate is not none else '0.0000' }}</td>
+            <td class="num">{{ '%.2f'|format(r.linediscount|float) if r.linediscount is not none else '0.00' }}</td>
+            <td class="num">{{ '%.4f'|format(r.unit_cost|float) if r.unit_cost is not none else '0.0000' }}</td>
+            <td class="num">{{ '%.2f'|format(r.line_sales|float) if r.line_sales is not none else '0.00' }}</td>
+            <td class="num">{{ '%.2f'|format(r.cogs|float) if r.cogs is not none else '0.00' }}</td>
+            <td class="num">{{ '%.2f'|format(r.gross_margin|float) if r.gross_margin is not none else '0.00' }}</td>
+            <td class="num">{% if r.margin_pct is not none %}{{ '%.2f'|format(r.margin_pct|float) }}%{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        {% elif cur_mode == 'bill' %}
+          {% for r in rows %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ r.billno or '' }}</td>
+            <td>{{ r.bill_date or '' }}</td>
+            <td>{{ r.billtype or '' }}</td>
+            <td>{{ r.customercode if r.customercode is not none else '' }}</td>
+            <td>{{ r.customername or '' }}</td>
+            <td class="num">{{ r.line_count or 0 }}</td>
+            <td class="num">{{ '%.2f'|format(r.sales|float) if r.sales is not none else '0.00' }}</td>
+            <td class="num">{{ '%.2f'|format(r.cogs|float) if r.cogs is not none else '0.00' }}</td>
+            <td class="num">{{ '%.2f'|format(r.margin|float) if r.margin is not none else '0.00' }}</td>
+            <td class="num">{% if r.margin_pct is not none %}{{ '%.2f'|format(r.margin_pct|float) }}%{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        {% elif cur_mode in ('month', 'year') %}
+          {% for r in rows %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ r.period or '' }}</td>
+            <td>{{ r.period_from or '' }}</td>
+            <td>{{ r.period_to or '' }}</td>
+            <td class="num">{{ r.bill_count or 0 }}</td>
+            <td class="num">{{ r.line_count or 0 }}</td>
+            <td class="num">{{ '%.3f'|format(r.total_qty|float) if r.total_qty is not none else '0.000' }}</td>
+            <td class="num">{{ '%.2f'|format(r.sales|float) if r.sales is not none else '0.00' }}</td>
+            <td class="num">{{ '%.2f'|format(r.cogs|float) if r.cogs is not none else '0.00' }}</td>
+            <td class="num">{{ '%.2f'|format(r.margin|float) if r.margin is not none else '0.00' }}</td>
+            <td class="num">{% if r.margin_pct is not none %}{{ '%.2f'|format(r.margin_pct|float) }}%{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          {% for r in rows %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ r.itemcode if r.itemcode is not none else '' }}</td>
+            <td>{{ r.itemname or '' }}</td>
+            <td>{{ r.uom or '' }}</td>
+            <td>{{ r.categoryname or '' }}</td>
+            <td class="num">{{ '%.3f'|format(r.total_qty|float) if r.total_qty is not none else '0.000' }}</td>
+            <td class="num">{{ r.bill_count or 0 }}</td>
+            <td class="num">{{ '%.2f'|format(r.sales|float) if r.sales is not none else '0.00' }}</td>
+            <td class="num">{{ '%.2f'|format(r.cogs|float) if r.cogs is not none else '0.00' }}</td>
+            <td class="num">{{ '%.2f'|format(r.margin|float) if r.margin is not none else '0.00' }}</td>
+            <td class="num">{% if r.margin_pct is not none %}{{ '%.2f'|format(r.margin_pct|float) }}%{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        {% endif %}
+      </tbody>
+      {% if rows %}
+      <tfoot>
+        {% if cur_mode == 'detail' %}
+        <tr>
+          <td colspan="9"><strong>Total ({{ gt.row_count|default(rows|length) }})</strong></td>
+          <td class="num">{{ '%.3f'|format(gt.total_qty|default(0)|float) }}</td>
+          <td colspan="3"></td>
+          <td class="num">{{ '%.2f'|format(gt.sales|default(0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format(gt.cogs|default(0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format(gt.margin|default(0)|float) }}</td>
+          <td class="num">{% if gt.margin_pct is not none %}{{ '%.2f'|format(gt.margin_pct|float) }}%{% else %}—{% endif %}</td>
+        </tr>
+        {% elif cur_mode == 'bill' %}
+        <tr>
+          <td colspan="7"><strong>Total ({{ gt.row_count|default(rows|length) }} bills)</strong></td>
+          <td class="num">{{ '%.2f'|format(gt.sales|default(0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format(gt.cogs|default(0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format(gt.margin|default(0)|float) }}</td>
+          <td class="num">{% if gt.margin_pct is not none %}{{ '%.2f'|format(gt.margin_pct|float) }}%{% else %}—{% endif %}</td>
+        </tr>
+        {% elif cur_mode in ('month', 'year') %}
+        <tr>
+          <td colspan="6"><strong>Total ({{ gt.row_count|default(rows|length) }} {% if cur_mode == 'month' %}months{% else %}years{% endif %})</strong></td>
+          <td class="num">{{ '%.3f'|format(gt.total_qty|default(0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format(gt.sales|default(0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format(gt.cogs|default(0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format(gt.margin|default(0)|float) }}</td>
+          <td class="num">{% if gt.margin_pct is not none %}{{ '%.2f'|format(gt.margin_pct|float) }}%{% else %}—{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5"><strong>Total ({{ gt.row_count|default(rows|length) }} items)</strong></td>
+          <td class="num">{{ '%.3f'|format(gt.total_qty|default(0)|float) }}</td>
+          <td></td>
+          <td class="num">{{ '%.2f'|format(gt.sales|default(0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format(gt.cogs|default(0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format(gt.margin|default(0)|float) }}</td>
+          <td class="num">{% if gt.margin_pct is not none %}{{ '%.2f'|format(gt.margin_pct|float) }}%{% else %}—{% endif %}</td>
+        </tr>
+        {% endif %}
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div>
+{% endblock %}

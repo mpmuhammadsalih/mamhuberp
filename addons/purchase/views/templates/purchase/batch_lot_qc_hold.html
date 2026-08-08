@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Batch lot QC hold{% endblock %}
+{% block content %}
+<style>
+  .qc-root { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+  .qc-h1 { font-size: 1.4rem; font-weight: 700; margin: 0 0 8px; color: #0f172a; }
+  .qc-meta { font-size: 13px; color: #64748b; margin-bottom: 18px; }
+  .qc-nav { margin-bottom: 14px; }
+  .qc-nav a { font-size: 13px; color: #2563eb; text-decoration: none; margin-right: 14px; }
+  .qc-panel {
+    background: #fafbfc; border: 1px solid #e2e8f0; border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 14px;
+  }
+  .qc-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .qc-filters label { font-size: 11px; font-weight: 700; color: #334155; display: block; margin-bottom: 4px; }
+  .qc-filters input { padding: 8px 10px; border-radius: 8px; border: 1px solid #cbd5e1; min-width: 220px; }
+  .qc-filters button {
+    padding: 9px 16px; border-radius: 8px; border: none; font-weight: 700; font-size: 13px;
+    background: #2563eb; color: #fff; cursor: pointer;
+  }
+  .qc-scroll { max-height: min(62vh, 720px); overflow: auto; border: 1px solid #e2e8f0;
+    border-radius: 10px; background: #fff; }
+  .qc-scroll table { width: 100%; font-size: 12px; border-collapse: collapse; }
+  .qc-scroll th {
+    position: sticky; top: 0; background: #f8fafc; padding: 10px 12px; text-align: left;
+    border-bottom: 2px solid #e2e8f0; font-weight: 700; color: #334155;
+  }
+  .qc-scroll td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  .qc-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .qc-badge--on { background: #fef2f2; color: #991b1b; }
+  .qc-badge--off { background: #ecfdf5; color: #047857; }
+  .qc-btn {
+    padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 11px;
+    font-weight: 600; cursor: pointer; background: #fff;
+  }
+  .qc-btn:hover { background: #f8fafc; }
+  #qcMsg { font-size: 13px; margin-top: 10px; color: #059669; }
+  #qcErr { font-size: 13px; margin-top: 10px; color: #dc2626; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+
+<div class="qc-root">
+  <nav class="qc-nav">
+    <a href="{{ url_for('purchase.batch_lot_inquiry') }}">← Lot inquiry</a>
+    <a href="{{ url_for('purchase.batch_stock_by_bin') }}">Stock by bin →</a>
+  </nav>
+  <h1 class="qc-h1">Lot QC hold</h1>
+  <p class="qc-meta">
+    Blocked lots are skipped by <strong>FEFO</strong> sales issue and cannot be picked explicitly on invoices.
+    Branch <code>{{ session_location }}</code>.
+  </p>
+
+  <div class="qc-panel">
+    <form method="get" class="qc-filters">
+      <div>
+        <label for="qc_search">Search item / batch</label>
+        <input type="text" name="search" id="qc_search" value="{{ filter_search or '' }}" placeholder="Optional" />
+      </div>
+      <button type="submit">Search</button>
+    </form>
+  </div>
+
+  <div id="qcMsg" style="display:none;"></div>
+  <div id="qcErr" style="display:none;"></div>
+
+  <div class="qc-scroll" role="region">
+    <table>
+      <thead>
+        <tr>
+          <th>Lot #</th>
+          <th>Item</th>
+          <th>Batch</th>
+          <th>Expiry</th>
+          <th class="num">Qty</th>
+          <th>Status</th>
+          <th>Remarks</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows or [] %}
+        <tr data-lot-id="{{ r.lot_id }}">
+          <td>{{ r.lot_id }}</td>
+          <td>{{ r.itemcode }}</td>
+          <td>{{ r.batch_no or '—' }}</td>
+          <td>{% if r.expiry_date %}{{ r.expiry_date }}{% else %}—{% endif %}</td>
+          <td class="num">{{ '%.4f'|format((r.qty or 0)|float) }}</td>
+          <td>
+            {% set lb = (r.lot_blocked or 'N')|string|upper %}
+            {% if lb == 'Y' %}
+              <span class="qc-badge qc-badge--on">Blocked</span>
+            {% else %}
+              <span class="qc-badge qc-badge--off">Open</span>
+            {% endif %}
+          </td>
+          <td style="max-width:220px;word-break:break-word;">{{ r.lot_block_remarks or '' }}</td>
+          <td>
+            <button type="button" class="qc-btn qc-toggle"
+              data-lot-id="{{ r.lot_id }}"
+              data-blocked="{{ '1' if lb == 'Y' else '0' }}">
+              {% if lb == 'Y' %}Unblock{% else %}Block{% endif %}
+            </button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" style="text-align:center;color:#64748b;padding:28px;">No lots match.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.qc-toggle').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const lotId = parseInt(btn.getAttribute('data-lot-id') || '0', 10);
+    const wasBlocked = btn.getAttribute('data-blocked') === '1';
+    const remarks = window.prompt(wasBlocked ? 'Unblock remarks (optional):' : 'Block remarks (QC / hold reason):', '');
+    if (remarks === null) return;
+    const msg = document.getElementById('qcMsg');
+    const err = document.getElementById('qcErr');
+    if (msg) { msg.style.display = 'none'; }
+    if (err) { err.style.display = 'none'; }
+    try {
+      const res = await fetch('{{ url_for("purchase.batch_lot_qc_hold_api_set") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lot_id: lotId,
+          blocked: !wasBlocked,
+          remarks: remarks || ''
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!data.ok) {
+        if (err) {
+          err.textContent = data.error || 'Update failed.';
+          err.style.display = 'block';
+        }
+        return;
+      }
+      window.location.reload();
+    } catch (e) {
+      if (err) {
+        err.textContent = String(e || 'Request failed.');
+        err.style.display = 'block';
+      }
+    }
+  });
+});
+</script>
+{% endblock %}

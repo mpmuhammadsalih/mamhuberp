@@ -1,0 +1,417 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+  #tableWrapper { overflow-x: auto; overflow-y: auto; width: 100%; max-height: 560px; }
+  #salesmanSummaryTable { width: 100%; border-collapse: collapse !important; white-space: nowrap; }
+  #salesmanSummaryTable th, #salesmanSummaryTable td {
+    border: 1px solid #cfd4da !important; padding: 7px 10px !important; font-size: 13px;
+  }
+  #salesmanSummaryTable thead th {
+    background: #eef2f7 !important; position: sticky; top: 0; z-index: 10;
+    cursor: pointer; user-select: none; font-weight: 600; color: #374151;
+  }
+  #salesmanSummaryTable thead th.sortable::after { content: " ⇅"; opacity: .35; font-size: 11px; }
+  #salesmanSummaryTable thead th.sortable.asc::after  { content: " ▲"; opacity: 1; }
+  #salesmanSummaryTable thead th.sortable.desc::after { content: " ▼"; opacity: 1; }
+  #salesmanSummaryTable tbody tr:nth-child(even) { background: #fbfcfe; }
+  #salesmanSummaryTable tbody tr:hover { background: #f0f5ff !important; }
+  #salesmanSummaryTable tfoot td {
+    background: #e9edf3 !important; font-weight: 700 !important; font-size: 13px !important;
+    border: 1px solid #cfd4da !important; position: sticky; bottom: 0; z-index: 5;
+  }
+  #salesmanSummaryTable .link { color: #1a56a4; text-decoration: none; }
+  #salesmanSummaryTable .link:hover { text-decoration: underline; }
+</style>
+<div class="page-po" style="max-width: 100%;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Salesman Summary</h1>
+      <p class="page-po__muted">Sales data by salesman and date range.</p>
+    </div>
+  </div>
+
+  <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:14px;">
+    <div>
+      <label class="label" style="font-size:12px;">From</label>
+      <input type="date" id="start_date" class="input" value="{{ today }}" style="min-width:140px;" />
+    </div>
+    <div>
+      <label class="label" style="font-size:12px;">To</label>
+      <input type="date" id="end_date" class="input" value="{{ today }}" style="min-width:140px;" />
+    </div>
+    <div>
+      <label class="label" style="font-size:12px;">Search Salesman</label>
+      <input type="text" id="salesman-search" class="input" placeholder="Code or name…" style="min-width:200px;" />
+    </div>
+    <button type="button" class="page-po__btn-primary" id="filter-btn" style="height:36px;">Filter</button>
+    <button type="button" class="page-po__btn-secondary" id="clear-btn" style="height:36px;">Clear</button>
+    <button type="button" class="page-po__btn-primary" id="report-btn" style="height:36px;">Report</button>
+  </div>
+
+  <div id="tableWrapper">
+    <table class="table" id="salesmanSummaryTable">
+      <thead>
+        <tr>
+          <th class="sortable" data-sort="slno" style="min-width: 40px; width: 40px; text-align: center;">No</th>
+          <th class="sortable" data-sort="salesmancode" style="min-width: 70px;">Code</th>
+          <th class="sortable" data-sort="salesmanname" style="min-width: 280px;">Salesman Name</th>
+          <th class="sortable" data-sort="opening" style="min-width: 80px; text-align: right;">Op.balance</th>
+          <th class="sortable" data-sort="cashsales" style="min-width: 80px; text-align: right;">Cash Sales</th>
+          <th class="sortable" data-sort="cashgrv" style="min-width: 80px; text-align: right;">Cash GRV</th>
+          <th class="sortable" data-sort="creditsales" style="min-width: 80px; text-align: right;">Credit Sales</th>
+          <th class="sortable" data-sort="creditgrv" style="min-width: 80px; text-align: right;">Credit GRV</th>
+          <th class="sortable" data-sort="temp" style="min-width: 80px; text-align: right;">Tmp Credit</th>
+          <th class="sortable" data-sort="discount" style="min-width: 70px; text-align: right;">Disc</th>
+          <th class="sortable" data-sort="short" style="min-width: 70px; text-align: right;">Short</th>
+          <th class="sortable" data-sort="tmpcollection" style="min-width: 90px; text-align: right;">Tmp.Collection</th>
+          <th class="sortable" data-sort="collection" style="min-width: 80px; text-align: right;">Collection</th>
+          <th class="sortable" data-sort="calc_col13" style="min-width: 90px; text-align: right;">Total Cash</th>
+          <th class="sortable" data-sort="calc_col14" style="min-width: 90px; text-align: right;">cl.Balance</th>
+          <th class="sortable" data-sort="voucher" style="min-width: 80px; text-align: right;">Voucher</th>
+        </tr>
+      </thead>
+      <tbody id="salesmanSummaryTableBody">
+        <tr>
+          <td colspan="16" class="muted" style="text-align:center; padding:20px;">Loading data…</td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr class="table-total">
+          <td colspan="3" style="text-align:right; font-weight:700;">Total</td>
+          <td id="total-opening" style="text-align: right;">0.00</td>
+          <td id="total-cashsales" style="text-align: right;">0.00</td>
+          <td id="total-cashgrv" style="text-align: right;">0.00</td>
+          <td id="total-creditsales" style="text-align: right;">0.00</td>
+          <td id="total-creditgrv" style="text-align: right;">0.00</td>
+          <td id="total-temp" style="text-align: right;">0.00</td>
+          <td id="total-discount" style="text-align: right;">0.00</td>
+          <td id="total-short" style="text-align: right;">0.00</td>
+          <td id="total-tmpcollection" style="text-align: right;">0.00</td>
+          <td id="total-collection" style="text-align: right;">0.00</td>
+          <td id="total-calc_col13" style="text-align: right;">0.00</td>
+          <td id="total-calc_col14" style="text-align: right;">0.00</td>
+          <td id="total-voucher" style="text-align: right;">0.00</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const today = '{{ today }}';
+  let allData = []; // Store all fetched data for sorting and filtering
+  let filteredData = []; // Store filtered data for display
+  let sortColumn = null;
+  let sortDirection = 'asc';
+
+  // Filter button event listener - only fetch from DB when dates change
+  document.getElementById('filter-btn').addEventListener('click', () => {
+    fetchSalesData(); // Fetch fresh data from DB (without salesman name filter)
+  });
+
+  // Clear button event listener
+  document.getElementById('clear-btn').addEventListener('click', () => {
+    document.getElementById('start_date').value = today;
+    document.getElementById('end_date').value = today;
+    document.getElementById('salesman-search').value = '';
+    fetchSalesData(); // Fetch fresh data from DB
+  });
+
+  // Generate PDF Report
+  function generateReport() {
+    if (allData.length === 0) {
+      alert('No data available to generate report. Please filter data first.');
+      return;
+    }
+
+    const locationCode = '{{ session.get("location_code") or session.get("tenant_id") or "HO" }}';
+    const dbkey = '{{ session.get("tenant_id") or session.get("location_code") or "HO" }}';
+    
+    const params = new URLSearchParams({
+      location_code: locationCode,
+      start_date: document.getElementById('start_date').value || today,
+      end_date: document.getElementById('end_date').value || today,
+      salesmanname: document.getElementById('salesman-search').value.trim(),
+      dbkey: dbkey
+    });
+
+    const url = `{{ url_for('salesman_summary.generate_salesman_summary_report') }}?${params.toString()}`;
+    window.open(url, '_blank');
+  }
+
+  // Report button event listener
+  document.getElementById('report-btn').addEventListener('click', () => {
+    generateReport();
+  });
+
+  // Real-time filtering on salesman input - filter from grid (client-side)
+  document.getElementById('salesman-search').addEventListener('input', (e) => {
+    const searchTerm = e.target.value.trim().toLowerCase();
+    filterTableBySalesmanName(searchTerm);
+  });
+  
+  // Client-side filter function
+  function filterTableBySalesmanName(searchTerm) {
+    if (!searchTerm) {
+      // If search is empty, show all data
+      filteredData = [...allData];
+    } else {
+      // Filter by salesman name (case-insensitive)
+      filteredData = allData.filter(row => {
+        const salesmanName = (row.salesmanname || '').toLowerCase();
+        const salesmanCode = (row.salesmancode || '').toLowerCase();
+        return salesmanName.includes(searchTerm) || salesmanCode.includes(searchTerm);
+      });
+    }
+    sortAndRenderTable();
+  }
+
+  // Sorting event listener for column headers
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const column = th.dataset.sort;
+      if (sortColumn === column) {
+        sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortColumn = column;
+        sortDirection = 'asc';
+      }
+      updateSortIndicators();
+      sortAndRenderTable();
+    });
+  });
+
+  // Update sort indicators (arrows)
+  function updateSortIndicators() {
+    document.querySelectorAll('th.sortable').forEach(th => {
+      th.classList.remove('asc', 'desc');
+      if (th.dataset.sort === sortColumn) {
+        th.classList.add(sortDirection);
+      }
+    });
+  }
+
+  // Fetch sales data (without salesman name filter - fetch all data)
+  async function fetchSalesData() {
+    // Check if we're on the login page (session expired)
+    if (window.location.pathname === '/login' || window.location.pathname === '/auth/login') {
+      console.log('[DEBUG] User not authenticated, skipping fetch');
+      return;
+    }
+
+    const locationCode = '{{ session.get("location_code") or session.get("tenant_id") or "HO" }}';
+    const dbkey = '{{ session.get("tenant_id") or session.get("location_code") or "HO" }}';
+    
+    // If session variables are empty, user might be logged out
+    if (!locationCode || locationCode === 'HO' && !dbkey) {
+      console.log('[DEBUG] Session may be expired, checking authentication');
+    }
+    
+    console.log('[DEBUG] Fetching sales data with:', { locationCode, dbkey });
+    
+    const params = new URLSearchParams({
+      location_code: locationCode,
+      start_date: document.getElementById('start_date').value || today,
+      end_date: document.getElementById('end_date').value || today,
+      // Don't send salesmanname - fetch all data for client-side filtering
+      dbkey: dbkey
+    });
+
+    const url = `{{ url_for('salesman_summary.get_sales_data') }}?${params.toString()}`;
+    console.log('[DEBUG] Fetching from URL:', url);
+
+    try {
+      const response = await fetch(url);
+      console.log('[DEBUG] Response status:', response.status);
+      
+      // Handle authentication errors (401)
+      if (response.status === 401) {
+        console.log('[DEBUG] User not authenticated, redirecting to login');
+        window.location.href = '{{ url_for("auth.login") }}';
+        return;
+      }
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[ERROR] Response not OK:', response.status, errorText);
+        // Don't show alert if user is being redirected
+        if (response.status !== 401) {
+          alert('Error fetching sales data: ' + response.status + ' - ' + errorText);
+        }
+        return;
+      }
+      
+      const result = await response.json();
+      console.log('[DEBUG] Response data:', result);
+      
+      if (result.status === 'success') {
+        console.log('[DEBUG] Data rows:', result.data?.length || 0);
+        allData = result.data.map((row, index) => ({ ...row, slno: index + 1 })); // Add SL No
+        
+        // Apply current search filter if any
+        const searchTerm = document.getElementById('salesman-search').value.trim().toLowerCase();
+        if (searchTerm) {
+          filterTableBySalesmanName(searchTerm);
+        } else {
+          filteredData = [...allData];
+          sortAndRenderTable();
+        }
+      } else {
+        console.error('Error fetching sales data:', result.error);
+        // Check if it's an authentication error
+        if (result.error && result.error.toLowerCase().includes('not authenticated')) {
+          window.location.href = '{{ url_for("auth.login") }}';
+          return;
+        }
+        alert('Error fetching sales data: ' + (result.error || 'Unknown error'));
+        // Show empty state
+        document.getElementById('salesmanSummaryTableBody').innerHTML = '<tr><td colspan="16" class="table-empty">Error: ' + (result.error || 'Unknown error') + '</td></tr>';
+      }
+    } catch (error) {
+      console.error('Error fetching sales data:', error);
+      // Don't show alert for network errors that might be due to logout
+      if (error.message && !error.message.includes('Failed to fetch')) {
+        alert('Error fetching sales data: ' + error.message);
+      }
+      // Show empty state
+      document.getElementById('salesmanSummaryTableBody').innerHTML = '<tr><td colspan="16" class="table-empty">Unable to load data. Please refresh the page.</td></tr>';
+    }
+  }
+
+  // Sort and render table
+  function sortAndRenderTable() {
+    // Use filteredData instead of allData for display
+    let sortedData = [...filteredData]; // Create a copy to sort
+
+    if (sortColumn) {
+      sortedData.sort((a, b) => {
+        let valA = a[sortColumn];
+        let valB = b[sortColumn];
+
+        // Handle numeric columns
+        const numericColumns = ['slno', 'opening', 'opcredit', 'cashsales', 'cashgrv', 'creditsales', 'creditgrv', 'temp', 'short', 'tmpcollection', 'collection', 'discount', 'cash', 'calc_col13', 'calc_col14', 'voucher'];
+        if (numericColumns.includes(sortColumn)) {
+          valA = parseFloat(valA) || 0;
+          valB = parseFloat(valB) || 0;
+        } else {
+          valA = valA.toString().toLowerCase();
+          valB = valB.toString().toLowerCase();
+        }
+
+        if (sortDirection === 'asc') {
+          return valA > valB ? 1 : valA < valB ? -1 : 0;
+        } else {
+          return valA < valB ? 1 : valA > valB ? -1 : 0;
+        }
+      });
+    }
+
+    const tbody = document.getElementById('salesmanSummaryTableBody');
+    tbody.innerHTML = '';
+    
+    if (sortedData.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="16" class="table-empty">No data available</td></tr>';
+    } else {
+      sortedData.forEach((row, index) => {
+        row.slno = index + 1; // Update SL No
+        const tempLink = row.temp > 0 ? `<a href="{{ url_for('temporary_invoices.temporary_invoices') }}?salesmancode=${row.salesmancode}" class="link">${parseFloat(row.temp || 0).toFixed(2)}</a>` : parseFloat(row.temp || 0).toFixed(2);
+        const collectionLink = row.collection > 0 ? `<a href="#" class="link">${parseFloat(row.collection || 0).toFixed(2)}</a>` : parseFloat(row.collection || 0).toFixed(2);
+        
+        const tmpcollectionLink = row.tmpcollection > 0 ? `<a href="#" class="link">${parseFloat(row.tmpcollection || 0).toFixed(2)}</a>` : parseFloat(row.tmpcollection || 0).toFixed(2);
+        tbody.innerHTML += `
+          <tr>
+            <td style="text-align:center;">${row.slno}</td>
+            <td>${row.salesmancode || '-'}</td>
+            <td>${row.salesmanname || '-'}</td>
+            <td style="text-align:right;">${parseFloat(row.opening     || 0).toFixed(2)}</td>
+            <td style="text-align:right;">${parseFloat(row.cashsales   || 0).toFixed(2)}</td>
+            <td style="text-align:right;">${parseFloat(row.cashgrv     || 0).toFixed(2)}</td>
+            <td style="text-align:right;">${parseFloat(row.creditsales || 0).toFixed(2)}</td>
+            <td style="text-align:right;">${parseFloat(row.creditgrv   || 0).toFixed(2)}</td>
+            <td style="text-align:right;">${parseFloat(row.temp        || 0).toFixed(2)}</td>
+            <td style="text-align:right;">${parseFloat(row.discount    || 0).toFixed(2)}</td>
+            <td style="text-align:right;">${parseFloat(row.short       || 0).toFixed(2)}</td>
+            <td style="text-align:right;">${tmpcollectionLink}</td>
+            <td style="text-align:right;">${collectionLink}</td>
+            <td style="text-align:right;">${parseFloat(row.calc_col13  || 0).toFixed(2)}</td>
+            <td style="text-align:right;">${parseFloat(row.calc_col14  || 0).toFixed(2)}</td>
+            <td style="text-align:right;">${parseFloat(row.voucher     || 0).toFixed(2)}</td>
+          </tr>
+        `;
+      });
+    }
+
+    // Update totals
+    updateTotals(sortedData);
+  }
+
+  // Update totals for all columns
+  function updateTotals(data) {
+    const totals = {
+      opening: data.reduce((sum, row) => sum + parseFloat(row.opening || 0), 0).toFixed(2),
+      cashsales: data.reduce((sum, row) => sum + parseFloat(row.cashsales || 0), 0).toFixed(2),
+      cashgrv: data.reduce((sum, row) => sum + parseFloat(row.cashgrv || 0), 0).toFixed(2),
+      creditsales: data.reduce((sum, row) => sum + parseFloat(row.creditsales || 0), 0).toFixed(2),
+      creditgrv: data.reduce((sum, row) => sum + parseFloat(row.creditgrv || 0), 0).toFixed(2),
+      temp: data.reduce((sum, row) => sum + parseFloat(row.temp || 0), 0).toFixed(2),
+      discount: data.reduce((sum, row) => sum + parseFloat(row.discount || 0), 0).toFixed(2),
+      short: data.reduce((sum, row) => sum + parseFloat(row.short || 0), 0).toFixed(2),
+      tmpcollection: data.reduce((sum, row) => sum + parseFloat(row.tmpcollection || 0), 0).toFixed(2),
+      collection: data.reduce((sum, row) => sum + parseFloat(row.collection || 0), 0).toFixed(2),
+      calc_col13: data.reduce((sum, row) => sum + parseFloat(row.calc_col13 || 0), 0).toFixed(2),
+      calc_col14: data.reduce((sum, row) => sum + parseFloat(row.calc_col14 || 0), 0).toFixed(2),
+      voucher: data.reduce((sum, row) => sum + parseFloat(row.voucher || 0), 0).toFixed(2)
+    };
+
+    document.getElementById('total-opening').textContent = totals.opening;
+    document.getElementById('total-cashsales').textContent = totals.cashsales;
+    document.getElementById('total-cashgrv').textContent = totals.cashgrv;
+    document.getElementById('total-creditsales').textContent = totals.creditsales;
+    document.getElementById('total-creditgrv').textContent = totals.creditgrv;
+    document.getElementById('total-temp').textContent = totals.temp;
+    document.getElementById('total-discount').textContent = totals.discount;
+    document.getElementById('total-short').textContent = totals.short;
+    document.getElementById('total-tmpcollection').textContent = totals.tmpcollection;
+    document.getElementById('total-collection').textContent = totals.collection;
+    document.getElementById('total-calc_col13').textContent = totals.calc_col13;
+    document.getElementById('total-calc_col14').textContent = totals.calc_col14;
+    document.getElementById('total-voucher').textContent = totals.voucher;
+  }
+
+  // Initial load
+  window.addEventListener('DOMContentLoaded', () => {
+    console.log('[DEBUG] Page loaded, fetching initial data...');
+    
+    // Check if user is authenticated before fetching data
+    // If we're on login page, don't fetch
+    if (window.location.pathname === '/login' || window.location.pathname === '/auth/login') {
+      console.log('[DEBUG] User not authenticated, skipping fetch');
+      return;
+    }
+    
+    // Debug: Check if thead exists
+    const thead = document.querySelector('#salesmanSummaryTable thead');
+    console.log('[DEBUG] Thead element:', thead);
+    if (thead) {
+      console.log('[DEBUG] Thead display:', window.getComputedStyle(thead).display);
+      console.log('[DEBUG] Thead visibility:', window.getComputedStyle(thead).visibility);
+      const ths = thead.querySelectorAll('th');
+      console.log('[DEBUG] Number of th elements:', ths.length);
+      ths.forEach((th, idx) => {
+        console.log(`[DEBUG] TH ${idx} display:`, window.getComputedStyle(th).display);
+        console.log(`[DEBUG] TH ${idx} visibility:`, window.getComputedStyle(th).visibility);
+      });
+    } else {
+      console.error('[ERROR] Thead element not found!');
+    }
+    
+    // Show loading state
+        document.getElementById('salesmanSummaryTableBody').innerHTML = '<tr><td colspan="16" class="table-empty">Loading...</td></tr>';
+    fetchSalesData();
+  });
+</script>
+{% endblock %}

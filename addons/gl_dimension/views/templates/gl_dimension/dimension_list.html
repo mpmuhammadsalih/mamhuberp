@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}GL dimension master{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+
+{% set ns = namespace(total=0, cc=0, dp=0, pj=0, active=0) %}
+{% for r in rows %}
+  {% set ns.total = ns.total + 1 %}
+  {% set dt = (r.dim_type or r.DIM_TYPE or '')|upper %}
+  {% if dt == 'COST_CENTER' %}{% set ns.cc = ns.cc + 1 %}{% endif %}
+  {% if dt == 'DEPARTMENT' %}{% set ns.dp = ns.dp + 1 %}{% endif %}
+  {% if dt == 'PROJECT' %}{% set ns.pj = ns.pj + 1 %}{% endif %}
+  {% if ((r.active or r.ACTIVE or '')|string|trim|upper == 'Y') %}{% set ns.active = ns.active + 1 %}{% endif %}
+{% endfor %}
+
+<div class="page-po nexa-list-page nexa-setup-list-page">
+  <section class="nexa-stat-grid" aria-label="Dimension summary">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-collection" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Total values</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.total) }}</p>
+        <p class="nexa-stat-sub">GL_DIMENSION_VALUE</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-diagram-3" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Cost centers</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.cc) }}</p>
+        <p class="nexa-stat-sub">COST_CENTER</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-building" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Departments</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.dp) }}</p>
+        <p class="nexa-stat-sub">DEPARTMENT</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-kanban" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Projects</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.pj) }}</p>
+        <p class="nexa-stat-sub">PROJECT</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--cyan"><i class="bi bi-check-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Active</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.active) }}</p>
+        <p class="nexa-stat-sub">ACTIVE = Y</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div class="page-po__title-wrap">
+      <h1 class="page-po__title">GL dimension master</h1>
+      <p class="page-po__muted">
+        Maintain codes for <strong>cost center</strong>, <strong>department</strong>, and <strong>project</strong> used on GL voucher lines
+        (<code>GL_DIMENSION_VALUE</code>).
+      </p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('gl_dimension.gl_dimension_new') }}" class="page-po__btn-primary">+ Add value</a>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <form class="nexa-list-filter-panel gdm-filters" method="get" action="{{ url_for('gl_dimension.gl_dimension_list') }}">
+    <div class="form-group" style="margin-bottom:0;">
+      <label for="dim_type" style="font-size:11px;font-weight:700;color:#64748b;">Dimension type</label>
+      <select id="dim_type" name="dim_type" class="input" style="min-width:180px;">
+        <option value="">All types</option>
+        {% for t in dim_types %}
+        <option value="{{ t }}" {% if filter_type == t %}selected{% endif %}>{{ dim_type_label(t) }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label style="font-size:11px;font-weight:700;color:#64748b;"><input type="checkbox" name="inactive" value="1" {% if include_inactive %}checked{% endif %} /> Show inactive</label>
+    </div>
+    <button type="submit" class="page-po__btn-secondary">Apply</button>
+  </form>
+
+  {% if not rows %}
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <tbody>
+        <tr>
+          <td style="text-align:center;padding:14px;color:#64748b;font-style:italic;">No dimension values. <a href="{{ url_for('gl_dimension.gl_dimension_new') }}" class="pi-link">Add value</a>.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="nexa-list-toolbar" style="margin-bottom:8px;">
+    <span class="nexa-num"><strong>{{ rows|length }}</strong> row(s)</span>
+  </div>
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th style="text-align:center;width:52px;">Sl.No</th>
+          <th>Type</th>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Active</th>
+          <th>Sort</th>
+          <th style="text-align:center;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td style="text-align:center;">{{ loop.index }}</td>
+          <td>{{ dim_type_label(r.dim_type or r.DIM_TYPE or '') }}</td>
+          <td><code>{{ r.dim_code or r.DIM_CODE or '' }}</code></td>
+          <td>{{ r.dim_name or r.DIM_NAME or '' }}</td>
+          <td>{{ r.active or r.ACTIVE or '' }}</td>
+          <td>{{ r.sort_order if r.sort_order is not none else (r.SORT_ORDER or '') }}</td>
+          <td style="text-align:center;white-space:nowrap;">
+            <a class="btn-view" href="{{ url_for('gl_dimension.gl_dimension_edit', dim_type=(r.dim_type or r.DIM_TYPE), dim_code=(r.dim_code or r.DIM_CODE)) }}">Edit</a>
+            <form method="post" action="{{ url_for('gl_dimension.gl_dimension_delete') }}" style="display:inline;margin-left:6px;" onsubmit="return confirm('Delete this dimension value?');">
+              <input type="hidden" name="dim_type" value="{{ r.dim_type or r.DIM_TYPE }}" />
+              <input type="hidden" name="dim_code" value="{{ r.dim_code or r.DIM_CODE }}" />
+              <button type="submit" class="btn-view" style="border-color:#fecaca;color:#b91c1c;">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

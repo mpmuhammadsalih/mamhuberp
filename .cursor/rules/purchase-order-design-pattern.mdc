@@ -1,0 +1,48 @@
+# Purchase Order design pattern (all pages)
+
+## Standard look
+- **Top bar**: White background, bottom border `#dee2e6`. Title as `<h1>` (24px, weight 400). Actions on the right.
+- **Primary button**: Green `#28a745`, no gradient.
+- **Secondary / link**: Transparent with border `#dee2e6`, or blue link `#007bff`.
+- **Sections**: Neutral; bottom border only, no gradient or purple.
+- **Inputs**: Underline-only (border-bottom `#dee2e6`), transparent background; focus `#80bdff`.
+- **Tables**: thead `#f8f9fa`, th text `#495057`; tbody row border `#dee2e6`, hover `#f8f9fa`; total row `#f8f9fa`.
+- **Modals**: thead same light gray, no purple gradient.
+- **No**: `#667eea`, `#764ba2`, or gradient backgrounds for headers/cards.
+
+## How to apply
+
+### Option A – Global pattern (style.css)
+Wrap the whole block content in:
+```html
+<div class="page-po">
+  <div class="page-po__topbar">
+    <h1 class="page-po__title">Page Title</h1>
+    <div class="page-po__actions">...</div>
+  </div>
+  <div class="page-po__section">...</div>
+  ...
+</div>
+```
+Remove page-specific `<style>` that use gradients, `.page-header` purple, or `.card` gradient. The global `.page-po` rules in `static/css/style.css` provide the look.
+
+Use when possible: `page-po__btn-primary`, `page-po__btn-secondary`, `page-po__link`, `page-po__section-title`, `page-po__filters`.
+
+### Option B – Page-specific scoped classes
+For complex pages (e.g. Sales, Cash Receipt New), keep a scoped wrapper (e.g. `.si-page`, `.crn-container`) and define only overrides in the template so tables, modals, and buttons match the PO look (same colors as above).
+
+## Pages already using PO-style
+- Sales Invoice (sales.html) – scoped `.si-*`
+- Temporary Invoices (temporary_invoices.html) – `.ti-*`
+- Cash Receipt List (cash_receipt_list.html) – `.crl-*`
+- Temp Settlement (temp_settlement_receipt_list.html) – `.tsrl-*`
+- New Cash Receipt (cash_receipt_new.html) – `.crn-*`
+- Temporary Pending List (temporary_pending_list.html) – `.tpl-*`
+- Temporary Pending Detail (temporary_pending_detail.html) – `.tpd-*`
+- Temporary Collection List (temporary_collection_list.html) – `.tcl-*`
+- Temporary Collection (temporary_collection.html) – `.page-po`
+- Purchase Order form/list – native PO styles
+
+## Pages still to convert
+Use Option A (wrap in `page-po`, remove gradient styles) for:
+temporary_invoice_modify, salesman_receipt, salesman_summary, dashboard, user_list, employee_*, customer_*, route_*, sales_summary*, payments, receivables, promotions, customer_ledger, notifications_outstanding_due, chart_of_accounts_*, purchase_invoice_*, goods_receipt_*, system_config_list, roles_*, sms, whatsapp, pos_billing, reports/sales_print, etc.

@@ -1,0 +1,686 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-po nexa-list-page im-productlist-page" style="max-width:1300px;" data-items-api="{{ productlist_items_api_url or url_for('itemmaster.api_productlist_items') }}" data-kpis-api="{{ productlist_kpis_api_url or url_for('itemmaster.api_productlist_kpis') }}" data-export-url="{{ url_for('itemmaster.productlist_export') }}" data-itemmaster-url="{{ url_for('itemmaster.itemmaster') }}" data-current-page="{{ current_page }}" data-total-pages="{{ total_pages }}" data-items-per-page="{{ items_per_page }}" data-total-count="{{ total_count }}">
+<style>
+  /* KPI + list tweaks; workspace canvas = static/css/style.css (.layout .content) */
+  .im-productlist-page .im-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .im-productlist-page .im-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 11px;
+    border: 1px solid #e5eaf2;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, .06);
+  }
+  .im-productlist-page .im-stat-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    border-radius: 9px;
+    color: #fff;
+    font-size: 17px;
+  }
+  .im-productlist-page .im-stat-icon--blue { background: linear-gradient(135deg, #2563eb, #38bdf8); }
+  .im-productlist-page .im-stat-icon--green { background: linear-gradient(135deg, #16a34a, #22c55e); }
+  .im-productlist-page .im-stat-icon--amber { background: linear-gradient(135deg, #f59e0b, #facc15); }
+  .im-productlist-page .im-stat-icon--purple { background: linear-gradient(135deg, #7c3aed, #a78bfa); }
+  .im-productlist-page .im-stat-icon--cyan { background: linear-gradient(135deg, #0891b2, #06b6d4); }
+  .im-productlist-page .im-stat-label { margin: 0 0 4px; color: #475569; font-size: 11px; font-weight: 700; }
+  .im-productlist-page .im-stat-value { margin: 0; color: #0f172a; font-size: clamp(16px, 1.45vw, 21px); font-weight: 850; line-height: 1.1; }
+  .im-productlist-page .im-stat-sub { margin: 3px 0 0; color: #64748b; font-size: 11px; }
+
+  .im-productlist-page .im-list-shell { display: block; position: relative; }
+
+  .im-productlist-page #itemTable tbody tr.item-row { cursor: pointer; }
+  .im-productlist-page #itemTable tbody tr.item-row:active { background: #f0f5ff !important; }
+
+  .im-productlist-page .im-stock-positive,
+  .im-productlist-page .im-stock-low,
+  .im-productlist-page .im-stock-negative { font-size: 12px !important; font-weight: 400 !important; }
+  .im-productlist-page .im-stock-positive { color: #16a34a !important; }
+  .im-productlist-page .im-stock-low { color: #f97316 !important; }
+  .im-productlist-page .im-stock-negative { color: #dc2626 !important; }
+
+  .im-productlist-page .im-row-actions { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+
+  .im-productlist-page .im-pagination {
+    margin-top: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .im-productlist-page .im-pagination-info { font-size: 12px; color: #6b7280; }
+  .im-productlist-page .im-pagination-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .im-productlist-page .im-pagination-controls a,
+  .im-productlist-page .im-pagination-controls span.pagination-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    text-decoration: none !important;
+    border: 1px solid #cfd4da !important;
+    background: #fff;
+    color: #374151 !important;
+    cursor: pointer;
+    box-sizing: border-box;
+  }
+  .im-productlist-page .im-pagination-controls a:hover { background: #eef2f7; }
+  .im-productlist-page .im-pagination-controls .pagination-btn--active {
+    background: #1a56a4 !important;
+    border-color: #1a56a4 !important;
+    color: #fff !important;
+    font-weight: 600;
+  }
+  .im-productlist-page .im-pagination-controls .pagination-btn--disabled {
+    color: #adb5bd !important;
+    cursor: default;
+    border-color: #e9ecef !important;
+    background: #fff !important;
+  }
+  .im-productlist-page .im-scroll-status {
+    margin: 10px 0 2px;
+    padding: 9px 12px;
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 12px;
+    text-align: center;
+  }
+  .im-productlist-page .im-scroll-status.is-error {
+    border-color: #fecaca;
+    background: #fff1f2;
+    color: #b91c1c;
+  }
+
+  .im-productlist-page .ti-modal-thead { background: #f8f9fa !important; }
+  .im-productlist-page .ti-modal-thead th {
+    background: #f8f9fa !important;
+    color: #495057 !important;
+    padding: 8px 12px;
+    border-bottom: 1px solid #dee2e6;
+    font-weight: 600;
+    font-size: 12px;
+  }
+  .filter-modal-content { border-radius: 4px; border: 1px solid #dee2e6; }
+  .filter-modal-header { border-bottom: 1px solid #dee2e6; padding: 12px 16px; background: #f8f9fa; }
+  #filterModal .button--primary { background: #007bff !important; border: none; color: #fff !important; }
+  #filterModal .button--secondary { background: transparent; border: 1px solid #dee2e6; color: #495057; }
+  .im-productlist-page .modal__table tbody td { border-bottom: 1px solid #dee2e6; padding: 8px 12px; font-size: 13px; }
+  .im-productlist-page .modal__table tbody tr:hover { background: #f8f9fa !important; }
+
+  .im-productlist-page .ti-toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none !important;
+    border: 1px solid transparent;
+    line-height: 1.3;
+    box-sizing: border-box;
+    font-family: inherit;
+    white-space: nowrap;
+  }
+  .im-productlist-page .ti-toolbar-btn--primary {
+    background: #28a745 !important;
+    border-color: #28a745 !important;
+    color: #fff !important;
+  }
+  .im-productlist-page .ti-toolbar-btn--primary:hover { filter: brightness(0.92); }
+  .im-productlist-page .ti-toolbar-btn--outline {
+    background: #fff;
+    border-color: #cbd5e1 !important;
+    color: #334155 !important;
+  }
+  .im-productlist-page .ti-toolbar-btn--outline:hover {
+    background: #f8fafc;
+    border-color: #94a3b8 !important;
+    color: #0f172a !important;
+  }
+
+  .page-po.nexa-list-page.im-productlist-page {
+    max-width: 1300px !important;
+    margin: 0 auto !important;
+    padding: 8px 0 20px !important;
+  }
+
+  @media (max-width: 980px) {
+    .im-productlist-page .im-stat-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+  }
+  @media (max-width: 560px) {
+    .im-productlist-page .im-stat-grid { grid-template-columns: 1fr; }
+  }
+</style>
+  {% set kpi = item_kpis or {} %}
+  {% set kpi_deferred = kpi.deferred or (kpi.active_items is none) %}
+  <section class="im-stat-grid" id="imStatGrid" aria-label="Item summary" data-kpis-deferred="{{ '1' if kpi_deferred else '0' }}">
+    <div class="im-stat-card">
+      <span class="im-stat-icon im-stat-icon--blue"><i class="bi bi-box-seam" aria-hidden="true"></i></span>
+      <div><p class="im-stat-label">Total Items</p><p class="im-stat-value" data-kpi="total_items">{{ "{:,}".format(kpi.total_items or total_count or 0) }}</p><p class="im-stat-sub">Current search</p></div>
+    </div>
+    <div class="im-stat-card">
+      <span class="im-stat-icon im-stat-icon--green"><i class="bi bi-diagram-3" aria-hidden="true"></i></span>
+      <div><p class="im-stat-label">Active Items</p><p class="im-stat-value" data-kpi="active_items">{% if kpi.active_items is none %}…{% else %}{{ "{:,}".format(kpi.active_items) }}{% endif %}</p><p class="im-stat-sub">Current search</p></div>
+    </div>
+    <div class="im-stat-card">
+      <span class="im-stat-icon im-stat-icon--amber"><i class="bi bi-box2" aria-hidden="true"></i></span>
+      <div><p class="im-stat-label">Inactive Items</p><p class="im-stat-value" data-kpi="inactive_items">{% if kpi.inactive_items is none %}…{% else %}{{ "{:,}".format(kpi.inactive_items) }}{% endif %}</p><p class="im-stat-sub">Current search</p></div>
+    </div>
+    <div class="im-stat-card">
+      <span class="im-stat-icon im-stat-icon--purple"><i class="bi bi-bar-chart-fill" aria-hidden="true"></i></span>
+      <div><p class="im-stat-label">Low Stock Items</p><p class="im-stat-value" data-kpi="low_stock_items">{% if kpi.low_stock_items is none %}…{% else %}{{ "{:,}".format(kpi.low_stock_items) }}{% endif %}</p><p class="im-stat-sub">Current search</p></div>
+    </div>
+    <div class="im-stat-card">
+      <span class="im-stat-icon im-stat-icon--cyan"><i class="bi bi-cash-stack" aria-hidden="true"></i></span>
+      <div><p class="im-stat-label">Inventory Value</p><p class="im-stat-value" data-kpi="inventory_value">{% if kpi.inventory_value is none %}…{% else %}{{ "{:,.2f}".format(kpi.inventory_value|float) }}{% endif %}</p><p class="im-stat-sub">Current search</p></div>
+    </div>
+  </section>
+
+  {% if is_admin_user %}
+  <div id="im-import-anchor"></div>
+  <div id="im-import-panel" style="display:none; border:1px solid #e2e8f0; border-radius:6px; padding:12px 14px; background:#f8fafc; margin-bottom:14px;">
+    <strong style="display:block;margin-bottom:6px;">Bulk import ITEMMASTER (.xlsx)</strong>
+    <p class="muted" style="font-size:12px; margin:0 0 10px; color:#556;">
+      Admin user only. Row 1 = headers (use the <a href="{{ url_for('itemmaster.itemmaster_import_template') }}">template</a>).
+      <strong>CREATE</strong> needs <code>ITEMNAME</code>; leave <code>ITEMCODE</code> blank for next code.
+      <strong>UPDATE</strong> needs <code>Action</code>=UPDATE, <code>ITEMCODE</code>, and <code>ITEMNAME</code>.
+      Sales, purchase, inventory, and COGS accounts are filled automatically when omitted (system defaults).
+      File must be <code>.xlsx</code> (max 50 MB, up to 50,000 data rows). Remove the sample row before importing.
+    </p>
+    <form id="imImportForm" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+      <input type="hidden" name="save_nonce" id="im-import-nonce" value="{{ im_import_nonce or '' }}" />
+      <input type="file" name="excel_file" id="im-import-file" accept=".xlsx,.xlsm" required />
+      <button type="submit" class="ti-toolbar-btn ti-toolbar-btn--primary" id="im-import-submit">Import</button>
+    </form>
+    <p id="imImportMsg" style="margin-top:8px; font-size:13px; color:#334155; white-space:pre-wrap;"></p>
+  </div>
+  {% endif %}
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Item Master</h1>
+      <p class="page-po__muted">List of all items with barcode, price, and stock details.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a class="page-po__btn-primary" href="{{ url_for('itemmaster.itemmaster', edit=1) }}">+ New Item</a>
+      <button type="button" class="page-po__btn-secondary" id="exportBtnInline">Export</button>
+      {% include 'includes/list_refresh_bar.html' %}
+      {% if is_admin_user %}
+      <a class="po-nav-link" href="{{ url_for('itemmaster.itemmaster_data_config') }}">Data Config</a>
+      <button type="button" class="po-nav-link" id="imImportBtn">Import Excel</button>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="nexa-list-toolbar">
+    <input type="text" id="itemSearch" class="input" placeholder="Search item code, name, barcode..."
+           value="{{ search }}" autocomplete="off" style="min-width:220px; max-width:320px;" />
+    <button type="button" class="page-po__btn-secondary im-open-filter" style="padding:4px 10px; font-size:11px;">Filters</button>
+    <button type="button" class="page-po__btn-secondary" id="itemSearchBtn" style="padding:4px 10px; font-size:11px;">Search</button>
+    <button type="button" class="page-po__btn-secondary" id="itemListResetInline" style="padding:4px 10px; font-size:11px;">Clear</button>
+    <span id="itemListMeta" class="nexa-num" style="margin-left:4px;">{{ total_count }} records</span>
+  </div>
+
+  <div class="im-list-shell">
+    <div class="co-table-wrap">
+      <table class="co-table" id="itemTable">
+      <thead>
+        <tr>
+          <th style="text-align:center; width:60px; cursor:default;">Sl.No<span class="sort-arrow"></span></th>
+          <th class="sortable" data-sort="itemcode" title="Item Code">Item Code<span class="sort-arrow"></span></th>
+          <th class="sortable col-manufacturerid" data-sort="manufacturerid" title="Barcode">Barcode<span class="sort-arrow"></span></th>
+          <th class="sortable col-itemname" data-sort="itemname" title="Item Name">Item Name<span class="sort-arrow"></span></th>
+          <th class="sortable col-uom" data-sort="baseuom" title="UOM">UOM<span class="sort-arrow"></span></th>
+          <th class="sortable col-costprice" data-sort="costprice" title="Cost Price" style="text-align:right;">Cost<span class="sort-arrow"></span></th>
+          <th class="sortable" data-sort="averagecost" title="Average Cost" style="text-align:right;">Avg<span class="sort-arrow"></span></th>
+          <th class="sortable" data-sort="retailprice" title="Retail Price" style="text-align:right;">Retail<span class="sort-arrow"></span></th>
+          <th class="sortable" data-sort="currentstock" title="Stock Quantity" style="text-align:right;">Stock<span class="sort-arrow"></span></th>
+          <th style="cursor:default;" title="Status">Status</th>
+          <th style="text-align:center; cursor:default;" title="Actions">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if items %}
+          {% for item in items %}
+            <tr
+              class="item-row"
+              data-item-code="{{ item.itemcode }}"
+              data-locationcode="{{ item.locationcode or '' }}"
+              data-manufacturerid="{{ item.manufacturerid or '' }}"
+              data-itemname="{{ item.itemname or '' }}"
+              data-baseuom="{{ item.baseuom or '' }}"
+              data-costprice="{{ item.costprice or 0 }}"
+              data-averagecost="{{ item.averagecost or 0 }}"
+              data-currentstock="{{ item.currentstock or 0 }}"
+              data-retailprice="{{ item.retailprice or 0 }}"
+              data-wholesaleprice="{{ item.wholesaleprice or 0 }}"
+              data-categoryname="{{ item.categoryname or '' }}"
+              data-brandname="{{ item.brandname or '' }}"
+              data-suppliername="{{ item.suppliername or '' }}"
+              data-itemflag="{{ item.itemflag or 'Y' }}"
+            >
+              <td class="sl-no">{{ loop.index }}</td>
+              {% set stock_qty = item.currentstock|float %}
+              <td><a href="{{ url_for('itemmaster.itemmaster', item_code=item.itemcode) }}" class="grn-link im-item-code-link" onclick="event.stopPropagation();">{{ item.itemcode }}</a></td>
+              <td class="col-manufacturerid">{{ item.manufacturerid or '-' }}</td>
+              <td class="col-itemname" title="{{ item.itemname or '-' }}">{{ item.itemname or '-' }}</td>
+              <td class="col-uom">{{ item.baseuom or '-' }}</td>
+              <td class="col-costprice num">{{ "%.2f"|format(item.costprice|float) }}</td>
+              <td class="num">{{ "%.2f"|format(item.averagecost|float) }}</td>
+              <td class="num">{{ "%.2f"|format(item.retailprice|float) }}</td>
+              <td class="num {% if stock_qty < 0 %}im-stock-negative{% elif stock_qty == 0 %}im-stock-low{% else %}im-stock-positive{% endif %}">{{ "%.3f"|format(stock_qty) }}</td>
+              <td>
+                {% if item.itemflag == 'N' %}
+                  <span class="co-status co-status--inactive">Inactive</span>
+                {% elif stock_qty <= 0 %}
+                  <span class="co-status co-status--low">Low Stock</span>
+                {% else %}
+                  <span class="co-status">Active</span>
+                {% endif %}
+              </td>
+              <td style="text-align:center;">
+                <span class="im-row-actions">
+                  <a href="{{ url_for('itemmaster.itemmaster', item_code=item.itemcode) }}" class="btn-view im-row-action" title="View" onclick="event.stopPropagation();">View</a>
+                  <a href="{{ url_for('itemmaster.itemmaster', item_code=item.itemcode, edit=1) }}" class="btn-view im-row-action" title="Edit" onclick="event.stopPropagation();">Edit</a>
+                </span>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr id="itemNoData">
+            <td colspan="11" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">No items found.</td>
+          </tr>
+        {% endif %}
+      </tbody>
+      </table>
+    </div>
+
+  {% if total_pages > 1 %}
+  <div class="im-pagination">
+    <div class="im-pagination-info">
+      {% set start_item = ((current_page - 1) * items_per_page) + 1 %}
+      {% set end_item = current_page * items_per_page if current_page * items_per_page < total_count else total_count %}
+      Showing {{ start_item }} to {{ end_item }} of {{ total_count }} items
+    </div>
+    <div class="im-pagination-controls">
+      {% if current_page > 1 %}
+        {% set prev_page = current_page - 1 %}
+        {% set pagination_args = {} %}
+        {% for key, value in request.args.items() %}
+          {% if key != 'page' %}
+            {% set _ = pagination_args.update({key: value}) %}
+          {% endif %}
+        {% endfor %}
+        {% set _ = pagination_args.update({'page': prev_page|string}) %}
+        <a href="{{ url_for('itemmaster.productlist', **pagination_args) }}" class="pagination-btn">« Previous</a>
+      {% else %}
+        <span class="pagination-btn pagination-btn--disabled">« Previous</span>
+      {% endif %}
+
+      {% set start_page = [1, current_page - 2]|max %}
+      {% set end_page = [total_pages + 1, current_page + 3]|min %}
+      {% for p in range(start_page, end_page) %}
+        {% if p == current_page %}
+          <span class="pagination-btn pagination-btn--active">{{ p }}</span>
+        {% else %}
+          {% set pagination_args = {} %}
+          {% for key, value in request.args.items() %}
+            {% if key != 'page' %}
+              {% set _ = pagination_args.update({key: value}) %}
+            {% endif %}
+          {% endfor %}
+          {% set _ = pagination_args.update({'page': p|string}) %}
+          <a href="{{ url_for('itemmaster.productlist', **pagination_args) }}" class="pagination-btn">{{ p }}</a>
+        {% endif %}
+      {% endfor %}
+
+      {% if current_page < total_pages %}
+        {% set next_page = current_page + 1 %}
+        {% set pagination_args = {} %}
+        {% for key, value in request.args.items() %}
+          {% if key != 'page' %}
+            {% set _ = pagination_args.update({key: value}) %}
+          {% endif %}
+        {% endfor %}
+        {% set _ = pagination_args.update({'page': next_page|string}) %}
+        <a href="{{ url_for('itemmaster.productlist', **pagination_args) }}" class="pagination-btn">Next »</a>
+      {% else %}
+        <span class="pagination-btn pagination-btn--disabled">Next »</span>
+      {% endif %}
+    </div>
+  </div>
+      {% endif %}
+      <div id="itemInfiniteScrollStatus" class="im-scroll-status" data-loaded="{{ items|length }}" data-total="{{ total_count }}">
+        Showing {{ items|length }} of {{ total_count }} items. Scroll down to load more.
+      </div>
+      <div id="itemInfiniteScrollSentinel" style="height:1px;"></div>
+
+  </div>
+
+  <!-- Filter Popup Modal -->
+  <div id="filterModal" class="filter-modal" style="display: none;">
+    <div class="filter-modal-content">
+      <div class="filter-modal-header">
+        <h2>Filter Items</h2>
+        <button type="button" class="filter-modal-close" id="closeFilterModal">&times;</button>
+      </div>
+      <div class="filter-modal-body">
+        <form id="filterForm">
+          <!-- Current Stock Filter -->
+          <div class="filter-group">
+            <label>Current Stock:</label>
+            <div class="filter-radio-group">
+              <label><input type="radio" name="stockFilter" value="all" checked> All</label>
+              <label><input type="radio" name="stockFilter" value="notzero"> &lt;&gt; 0</label>
+              <label><input type="radio" name="stockFilter" value="greater"> &gt; 0</label>
+              <label><input type="radio" name="stockFilter" value="less"> &lt; 0</label>
+            </div>
+          </div>
+
+          <!-- Brand Filter -->
+          <div class="filter-group">
+            <label for="brandFilter">Brand:</label>
+            <span class="search-field search-field--popup">
+              <input
+                type="text"
+                id="brandFilter"
+                name="brandFilter"
+                placeholder="Click to search brand..."
+                readonly
+              />
+              <button type="button" class="search-clear" id="brandClear" aria-label="Clear brand" style="display: none;">×</button>
+              <button type="button" class="search-picker" id="brandPicker" aria-label="Open brand list">▾</button>
+            </span>
+            <input type="hidden" id="brandCode" name="brandCode" value="" />
+          </div>
+
+          <!-- Category Filter -->
+          <div class="filter-group">
+            <label for="categoryFilter">Category:</label>
+            <span class="search-field search-field--popup">
+              <input
+                type="text"
+                id="categoryFilter"
+                name="categoryFilter"
+                placeholder="Click to search category..."
+                readonly
+              />
+              <button type="button" class="search-clear" id="categoryClear" aria-label="Clear category" style="display: none;">×</button>
+              <button type="button" class="search-picker" id="categoryPicker" aria-label="Open category list">▾</button>
+            </span>
+            <input type="hidden" id="categoryCode" name="categoryCode" value="" />
+          </div>
+
+          <!-- Supplier Filter -->
+          <div class="filter-group">
+            <label for="supplierFilter">Supplier:</label>
+            <span class="search-field search-field--popup">
+              <input
+                type="text"
+                id="supplierFilter"
+                name="supplierFilter"
+                placeholder="Click to search supplier..."
+                readonly
+              />
+              <button type="button" class="search-clear" id="supplierClear" aria-label="Clear supplier" style="display: none;">×</button>
+              <button type="button" class="search-picker" id="supplierPicker" aria-label="Open supplier list">▾</button>
+            </span>
+            <input type="hidden" id="supplierCode" name="supplierCode" value="" />
+          </div>
+
+          <!-- Item Codes Filter -->
+          <div class="filter-group">
+            <label for="itemCodesFilter">Item Codes (comma-separated):</label>
+            <input 
+              type="text" 
+              id="itemCodesFilter" 
+              name="itemCodesFilter" 
+              class="filter-input" 
+              placeholder="e.g., 1001, 1002, 1003"
+            />
+          </div>
+        </form>
+      </div>
+      <div class="filter-modal-footer">
+        <button type="button" class="button button--secondary" id="clearFilters">Clear All</button>
+        <button type="button" class="button button--primary" id="applyFilters">Apply Filters</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Brand Popup Modal -->
+  <div class="modal hidden" id="brandModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="brandModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Select Brand</h3>
+        <button type="button" class="modal__close" data-close="brandModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="brandModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="brandModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="brandModalTable">
+            <thead class="ti-modal-thead">
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Populated by JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Category Popup Modal -->
+  <div class="modal hidden" id="categoryModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="categoryModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Select Category</h3>
+        <button type="button" class="modal__close" data-close="categoryModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="categoryModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="categoryModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="categoryModalTable">
+            <thead class="ti-modal-thead">
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Populated by JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supplier Popup Modal -->
+  <div class="modal hidden" id="supplierModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="supplierModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Select Supplier</h3>
+        <button type="button" class="modal__close" data-close="supplierModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="supplierModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="supplierModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="supplierModalTable">
+            <thead class="ti-modal-thead">
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Populated by JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/productlist.js') }}?v=18"></script>
+  {% if is_admin_user %}
+  <script>
+  (function() {
+    var IMP_URL = {{ url_for('itemmaster.itemmaster_import_excel')|tojson }};
+    document.getElementById('imImportBtn')?.addEventListener('click', function() {
+      var p = document.getElementById('im-import-panel');
+      if (!p) return;
+      var open = p.style.display !== 'none';
+      p.style.display = open ? 'none' : 'block';
+      if (!open) {
+        document.getElementById('im-import-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+    var impForm = document.getElementById('imImportForm');
+    if (impForm && IMP_URL) {
+      impForm.addEventListener('submit', function(ev) {
+        ev.preventDefault();
+        var fileEl = document.getElementById('im-import-file');
+        var msgEl = document.getElementById('imImportMsg');
+        var nonceEl = document.getElementById('im-import-nonce');
+        var btn = document.getElementById('im-import-submit');
+        if (!fileEl || !fileEl.files || !fileEl.files.length) {
+          if (msgEl) msgEl.textContent = 'Choose an Excel file.';
+          return;
+        }
+        var nonce = (typeof window.__GLOBAL_SAVE_NONCE === 'string' && window.__GLOBAL_SAVE_NONCE.trim())
+          ? window.__GLOBAL_SAVE_NONCE.trim()
+          : ((nonceEl && nonceEl.value) ? String(nonceEl.value).trim() : '');
+        if (!nonce) {
+          if (msgEl) msgEl.textContent = 'Save token missing. Reload Item Master list and try again.';
+          return;
+        }
+        if (nonceEl) nonceEl.value = nonce;
+        var fd = new FormData();
+        fd.append('save_nonce', nonce);
+        fd.append('excel_file', fileEl.files[0]);
+        if (btn) btn.disabled = true;
+
+        function importHttpError(status) {
+          if (status === 524 || status === 504 || status === 502) {
+            return 'Import timed out (HTTP ' + status + '). The server or Cloudflare proxy stopped waiting. '
+              + 'Try a smaller file, import in off-peak hours, or ask IT to raise the proxy timeout. '
+              + 'The app now imports in batches — reload the page and try again.';
+          }
+          return 'Server returned a non-JSON response (HTTP ' + (status || '?') + ').';
+        }
+
+        function postImportBatch(formData) {
+          return fetch(IMP_URL, { method: 'POST', body: formData, credentials: 'same-origin' })
+            .then(function(r) {
+              return r.json().then(function(j) {
+                return { okHttp: r.ok, status: r.status, j: j || {} };
+              }).catch(function() {
+                return { okHttp: r.ok, status: r.status, j: { ok: false, error: importHttpError(r.status) } };
+              });
+            });
+        }
+
+        function runImportBatch(offset, importToken) {
+          var batchFd = new FormData();
+          batchFd.append('save_nonce', nonce);
+          batchFd.append('batch_offset', String(offset || 0));
+          if (importToken) batchFd.append('import_token', importToken);
+          if (offset <= 0) {
+            batchFd.append('excel_file', fileEl.files[0]);
+          }
+          return postImportBatch(batchFd).then(function(res) {
+            var j = res.j || {};
+            if (j.save_nonce) {
+              if (nonceEl) nonceEl.value = j.save_nonce;
+              window.__GLOBAL_SAVE_NONCE = j.save_nonce;
+            }
+            if (!res.okHttp || !j.ok) {
+              throw new Error(j.error || importHttpError(res.status));
+            }
+            var proc = j.processed_total || 0;
+            var total = j.row_total || proc;
+            if (msgEl) {
+              msgEl.textContent = 'Importing… ' + proc + (total ? (' / ' + total) : '') + ' rows';
+            }
+            if (!j.done) {
+              return runImportBatch(j.next_batch_offset || (offset + 250), j.import_token || importToken);
+            }
+            return j;
+          });
+        }
+
+        if (msgEl) msgEl.textContent = 'Importing…';
+        runImportBatch(0, '')
+          .then(function(j) {
+            if (btn) btn.disabled = false;
+            var line = [
+              'Created: ' + (j.created || 0),
+              'Updated: ' + (j.updated || 0),
+              'Skipped: ' + (j.skipped || 0)
+            ].join(' · ');
+            if (j.partial && j.errors && j.errors.length) {
+              if (msgEl) msgEl.textContent = line + '\nSome rows failed:\n' + j.errors.join('\n');
+              return;
+            }
+            if (msgEl) msgEl.textContent = line + ' — reloading list…';
+            window.location.reload();
+          })
+          .catch(function(err) {
+            if (btn) btn.disabled = false;
+            if (msgEl) msgEl.textContent = (err && err.message) ? err.message : 'Network error. Check login session and try again.';
+          });
+      });
+    }
+  })();
+  </script>
+  {% endif %}
+{% endblock %}

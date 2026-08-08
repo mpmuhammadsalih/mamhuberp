@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+
+<div class="page-po nexa-list-page nexa-setup-list-page">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">PDT Roles Setup</h1>
+      <p class="page-po__muted">Roles for handheld devices (stored in <code>pdt_roles</code>) — mobile stock counting and password change only.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% include 'includes/list_refresh_bar.html' %}
+      <a class="page-po__btn-secondary" href="{{ url_for('pdt.pdt_user_create') }}">PDT user</a>
+      <a class="page-po__btn-primary" href="{{ url_for('pdt.pdt_roles_create') }}">+ New PDT role</a>
+    </div>
+  </div>
+
+  {% if roles %}
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th style="text-align:center;width:52px;">Sl.No</th>
+          <th>Role ID</th>
+          <th>Role Name</th>
+          <th>Description</th>
+          <th style="text-align:center;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for role in roles %}
+          <tr>
+            <td style="text-align:center;">{{ loop.index }}</td>
+            <td><code>{{ role.role_id }}</code></td>
+            <td>{{ role.role_name }}</td>
+            <td>{{ role.description or '-' }}</td>
+            <td style="text-align:center;white-space:nowrap;">
+              <a class="btn-view" href="{{ url_for('pdt.pdt_roles_edit', role_id=role.role_id) }}">Edit</a>
+              <form method="post" action="{{ url_for('pdt.pdt_roles_delete', role_id=role.role_id) }}" style="display:inline;margin-left:6px;">
+                <button type="submit" class="btn-view" style="border-color:#fecaca;color:#b91c1c;" onclick="return confirm('Delete this PDT role?');">Delete</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="co-table-wrap">
+    <table class="co-table"><tbody><tr><td style="text-align:center;padding:14px;color:#64748b;">No PDT roles yet. <a href="{{ url_for('pdt.pdt_roles_create') }}" class="pi-link">Create your first PDT role</a>.</td></tr></tbody></table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

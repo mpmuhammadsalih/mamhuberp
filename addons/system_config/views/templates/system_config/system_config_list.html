@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="card nexa-list-page">
+    <div class="page-header">
+      <div>
+        <h1>Counter List</h1>
+        <p class="muted">All saved counter records.</p>
+      </div>
+      <a class="button" href="{{ url_for('system_config.system_config', new=1) }}" aria-label="New" title="New">＋</a>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin:8px 0;">{% include 'includes/list_refresh_bar.html' %}</div>
+    {% if config_list %}
+      <div class="scroll-table">
+        <table class="table table-fixed">
+          <thead>
+            <tr>
+              {% for col in list_columns %}
+                <th>{{ col.replace('_', ' ').title() }}</th>
+              {% endfor %}
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in config_list %}
+              <tr>
+                {% for col in list_columns %}
+                  <td>{{ row[col] or '-' }}</td>
+                {% endfor %}
+                <td>
+                  <a class="button button--small" href="{{ url_for('system_config.system_config', edit=row.rowid) }}" aria-label="Edit" title="Edit">✎</a>
+                  <form method="post" action="{{ url_for('system_config.delete_system_config') }}" style="display:inline;">
+                    <input type="hidden" name="rowid" value="{{ row.rowid }}" />
+                    <button type="submit" class="button button--small button--danger" onclick="return confirm('Delete this configuration?');" aria-label="Delete" title="Delete">
+                      🗑️
+                    </button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="muted">No counter records found.</p>
+    {% endif %}
+  </section>
+{% endblock %}

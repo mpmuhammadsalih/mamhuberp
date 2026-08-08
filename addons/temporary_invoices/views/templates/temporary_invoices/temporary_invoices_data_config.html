@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}{{ title or "Sales Invoices · Data config" }}{% endblock %}
+{% block content %}
+<style>
+  .ticfg-page { max-width: 1280px; margin: 0 auto; padding: 20px 16px 48px; font-family: system-ui, sans-serif; }
+  .ticfg-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #0d9488; }
+  .ticfg-bar h1 { margin: 0; font-size: 1.25rem; font-weight: 600; color: #134e4a; }
+  .ticfg-bar a { font-size: 0.85rem; color: #0f766e; text-decoration: none; font-weight: 600; }
+  .ticfg-bar a:hover { text-decoration: underline; }
+  .ticfg-intro { font-size: 0.85rem; color: #475569; margin-bottom: 16px; line-height: 1.5; }
+  .ticfg-panel { border: 1px solid #cbd5e1; border-radius: 10px; margin-bottom: 20px; overflow: hidden; background: #fff; }
+  .ticfg-ph { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #0f766e; padding: 10px 14px; background: #f0fdfa; border-bottom: 1px solid #99f6e4; }
+  .ticfg-pbody { padding: 12px 14px 16px; }
+  .ticfg-pbody pre { margin: 0 0 10px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.78rem; overflow: auto; max-height: 280px; white-space: pre-wrap; word-break: break-word; }
+  .ticfg-pbody label { display: block; font-size: 0.72rem; font-weight: 700; color: #64748b; margin-bottom: 6px; text-transform: uppercase; }
+  .ticfg-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 10px; }
+  .ticfg-btn { padding: 8px 16px; border-radius: 8px; border: none; font-size: 0.82rem; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .ticfg-btn--run { background: #0d9488; color: #fff; }
+  .ticfg-btn--run:hover { filter: brightness(0.95); }
+  .ticfg-grid { display: grid; gap: 12px; margin-bottom: 18px; }
+  @media (min-width: 720px) { .ticfg-grid { grid-template-columns: repeat(3, 1fr); } }
+  .ticfg-grid label { display: block; font-size: 0.75rem; font-weight: 600; color: #334155; margin-bottom: 4px; }
+  .ticfg-grid input { width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.88rem; box-sizing: border-box; }
+  .ticfg-msg { margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 0.85rem; }
+  .ticfg-msg--err { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+  .ticfg-msg--ok { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+  .ticfg-result { margin-top: 14px; overflow: auto; max-height: 420px; border: 1px solid #e2e8f0; border-radius: 8px; }
+  .ticfg-result table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  .ticfg-result th, .ticfg-result td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; text-align: left; vertical-align: top; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+  .ticfg-result thead th { position: sticky; top: 0; background: #f1f5f9; font-weight: 700; color: #334155; z-index: 1; }
+</style>
+
+<div class="ticfg-page">
+  <div class="ticfg-bar">
+    <h1>Sales Invoices · Data config</h1>
+    <a href="{{ url_for('temporary_invoices.temporary_invoices') }}">← Back to Sales Invoices</a>
+  </div>
+
+  <p class="ticfg-intro">
+    Resolved SQL for this tenant (same as list/load when filters are empty except dates). Use <strong>Execute</strong> to run a capped preview against your session database.
+    {{ wrapped_preview_hint }}
+  </p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="ticfg-msg ticfg-msg--ok" role="status">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <form method="get" action="{{ url_for('temporary_invoices.temporary_invoices_data_config') }}" class="ticfg-grid">
+    <div>
+      <label for="date_from">From date</label>
+      <input type="date" id="date_from" name="date_from" value="{{ date_from }}" />
+    </div>
+    <div>
+      <label for="date_to">To date</label>
+      <input type="date" id="date_to" name="date_to" value="{{ date_to }}" />
+    </div>
+    <div>
+      <label for="row_limit">Preview row cap</label>
+      <input type="number" id="row_limit" name="row_limit" min="1" max="5000" value="{{ row_limit }}" />
+    </div>
+    <div style="grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+      <button type="submit" class="ticfg-btn ticfg-btn--run">Reload SQL</button>
+    </div>
+  </form>
+
+  {% if exec_error %}
+  <div class="ticfg-msg ticfg-msg--err" role="alert">{{ exec_error }}</div>
+  {% endif %}
+  {% if exec_label and last_execute and last_execute != 'indexes' and not exec_error %}
+  <div class="ticfg-msg ticfg-msg--ok" role="status">{{ exec_label }} · {{ exec_rows|length }} row(s)</div>
+  {% endif %}
+
+  {% if exec_cols and last_execute and last_execute != 'indexes' and not exec_error %}
+  <div class="ticfg-result">
+    <table>
+      <thead><tr>{% for c in exec_cols %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for r in exec_rows %}
+        <tr>{% for c in exec_cols %}<td title="{{ r.get(c, '') }}">{{ r.get(c) if r.get(c) is not none else '' }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="ticfg-panel">
+    <div class="ticfg-ph">1 · Main invoice grid SQL</div>
+    <div class="ticfg-pbody">
+      <label>Binds (JSON)</label>
+      <pre>{{ main_params_json }}</pre>
+      <label>Statement</label>
+      <pre>{{ main_sql or '(BILLHDR not found or required columns missing)' }}</pre>
+      <form method="post" action="{{ url_for('temporary_invoices.temporary_invoices_data_config') }}" class="ticfg-actions">
+        <input type="hidden" name="date_from" value="{{ date_from }}" />
+        <input type="hidden" name="date_to" value="{{ date_to }}" />
+        <input type="hidden" name="row_limit" value="{{ row_limit }}" />
+        <button type="submit" class="ticfg-btn ticfg-btn--run" name="execute" value="main" {% if not main_sql %}disabled{% endif %}>Execute preview</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="ticfg-panel">
+    <div class="ticfg-ph">2 · Customer dropdown SQL</div>
+    <div class="ticfg-pbody">
+      <label>Binds (JSON)</label>
+      <pre>{{ cust_params_json }}</pre>
+      <label>Statement</label>
+      <pre>{{ cust_sql or '(could not build)' }}</pre>
+      <form method="post" action="{{ url_for('temporary_invoices.temporary_invoices_data_config') }}" class="ticfg-actions">
+        <input type="hidden" name="date_from" value="{{ date_from }}" />
+        <input type="hidden" name="date_to" value="{{ date_to }}" />
+        <input type="hidden" name="row_limit" value="{{ row_limit }}" />
+        <button type="submit" class="ticfg-btn ticfg-btn--run" name="execute" value="customers" {% if not cust_sql %}disabled{% endif %}>Execute preview</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="ticfg-panel">
+    <div class="ticfg-ph">3 · Salesman dropdown SQL</div>
+    <div class="ticfg-pbody">
+      <label>Binds (JSON)</label>
+      <pre>{{ sm_params_json }}</pre>
+      <label>Statement</label>
+      <pre>{{ sm_sql or '(could not build)' }}</pre>
+      <form method="post" action="{{ url_for('temporary_invoices.temporary_invoices_data_config') }}" class="ticfg-actions">
+        <input type="hidden" name="date_from" value="{{ date_from }}" />
+        <input type="hidden" name="date_to" value="{{ date_to }}" />
+        <input type="hidden" name="row_limit" value="{{ row_limit }}" />
+        <button type="submit" class="ticfg-btn ticfg-btn--run" name="execute" value="salesmen" {% if not sm_sql %}disabled{% endif %}>Execute preview</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="ticfg-panel">
+    <div class="ticfg-ph">4 · Performance indexes (CREATE INDEX)</div>
+    <div class="ticfg-pbody">
+      <p style="margin:0 0 10px;font-size:0.82rem;color:#475569;">DDL for BILLHDR performance indexes. Use <strong>Execute index DDL</strong> below when you want to apply them (existing indexes are skipped).</p>
+      {% if index_ddls %}
+      <pre>{% for ddl in index_ddls %}{{ ddl }};
+{% endfor %}</pre>
+      {% else %}
+      <pre>(No index DDL — BILLHDR / bill date column not detected)</pre>
+      {% endif %}
+      <form method="post" action="{{ url_for('temporary_invoices.temporary_invoices_data_config') }}" class="ticfg-actions">
+        <input type="hidden" name="date_from" value="{{ date_from }}" />
+        <input type="hidden" name="date_to" value="{{ date_to }}" />
+        <input type="hidden" name="row_limit" value="{{ row_limit }}" />
+        <button type="submit" class="ticfg-btn ticfg-btn--run" name="execute" value="indexes">Execute index DDL</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

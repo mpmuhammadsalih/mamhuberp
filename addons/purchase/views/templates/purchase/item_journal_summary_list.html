@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<style>
+  main.container:has(.ijh-flush) { padding-top: 0; }
+  .page-po.ijh-flush { padding: 10px 16px 24px; }
+  .page-po.ijh-flush form .list-refresh-toolbar { margin-left: 0 !important; }
+  .page-po.ijh-flush .page-po__topbar { margin-bottom: 10px; padding-top: 0; padding-bottom: 0; border-bottom: none; }
+  .page-po.ijh-flush .page-po__title { margin: 0; line-height: 1.2; }
+  .page-po.ijh-flush .page-po__muted { margin: 2px 0 0; }
+</style>
+{% endblock %}
+{% block content %}
+<style>
+  body { background: #fff !important; }
+  .ijh-wrap { max-width: 1400px; margin: 0 auto; }
+  .ijh-table-wrap { overflow: auto; border: 1px solid #dee2e6; border-radius: 6px; max-height: 72vh; }
+  .ijh-table { width: 100%; min-width: 1100px; border-collapse: collapse; font-size: 13px; }
+  .ijh-table th, .ijh-table td { border-bottom: 1px solid #dee2e6; padding: 8px 10px; white-space: nowrap; }
+  .ijh-table thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; }
+  .ijh-table td.num, .ijh-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .ijh-table tfoot td { font-weight: 600; background: #f1f3f5; border-top: 2px solid #ced4da; }
+  .ijh-table tfoot td.ijh-total-label { text-align: right; color: #212529; }
+  .ijh-section-title { font-size: 13px; font-weight: 600; margin: 0 0 8px; color: #212529; }
+  .ijh-doc-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; align-items: center; }
+  .ijh-doc-tab { padding: 6px 12px; border: 1px solid #dee2e6; border-radius: 4px; font-size: 13px; text-decoration: none; color: #495057; background: #fff; white-space: nowrap; }
+  .ijh-doc-tab:hover { background: #f8f9fa; color: #212529; }
+  .ijh-doc-tab.is-active { background: #0d6efd; border-color: #0d6efd; color: #fff; }
+  .ijh-doc-tab.is-active .ijh-doc-tab__count { opacity: 0.9; }
+  .ijh-doc-tab__count { font-weight: 500; opacity: 0.85; margin-left: 2px; }
+  .ijh-list-total { margin: 0 0 10px; font-size: 13px; color: #334155; font-weight: 600; }
+  .btn-view-lines { border: 1px solid #cfd4da; background: #fff; color: #1d4ed8; border-radius: 3px; font-size: 12px; padding: 3px 10px; text-decoration: none; }
+  .btn-view-lines:hover { background: #f0f9ff; }
+  .ijh-top-links { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+</style>
+<div class="page-po ijh-wrap ijh-flush nexa-list-page">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Item Journal Summary</h1>
+      <p class="page-po__muted">Posted inventory documents (ITEMJOURNAL_HDR). Showing latest {{ list_limit or 800 }}.</p>
+    </div>
+    <div class="ijh-top-links">
+      <a href="{{ url_for('purchase.item_journal_list') }}" class="page-po__btn-secondary">Item Journal Lines</a>
+    </div>
+  </div>
+
+  {% if list_totals %}
+  <p class="ijh-list-total">
+    {{ list_totals.doc_count }} document{{ 's' if list_totals.doc_count != 1 else '' }},
+    {{ list_totals.line_count }} line{{ 's' if list_totals.line_count != 1 else '' }},
+    qty {{ '%.3f'|format(list_totals.total_qty or 0) }},
+    amount {{ '%.3f'|format(list_totals.total_amount or 0) }}
+  </p>
+  {% endif %}
+
+  <form method="get" style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin-bottom:12px;">
+    <input type="hidden" name="source_doc" value="{{ selected_source_doc or '' }}" />
+    <input type="hidden" name="transtype" value="{{ selected_transtype or '' }}" />
+    <div class="form-group" style="margin:0;">
+      <label for="ijhSearch" style="font-size:11px;font-weight:700;color:#64748b;">Search</label>
+      <input id="ijhSearch" type="text" class="input" name="search" value="{{ search or '' }}" placeholder="Source doc, source no, trans type, user..." style="min-width: 280px;" />
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label for="ijhDateFrom" style="font-size:11px;font-weight:700;color:#64748b;">From</label>
+      <input id="ijhDateFrom" type="date" class="input" name="date_from" value="{{ date_from or '' }}" />
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label for="ijhDateTo" style="font-size:11px;font-weight:700;color:#64748b;">To</label>
+      <input id="ijhDateTo" type="date" class="input" name="date_to" value="{{ date_to or '' }}" />
+    </div>
+    <button type="submit" class="page-po__btn-primary">Search</button>
+    <a href="{{ url_for('purchase.item_journal_summary_list') }}" class="page-po__btn-secondary">Reset</a>
+    {% include 'includes/list_refresh_bar.html' %}
+  </form>
+
+  <div class="ijh-section-title">Source document</div>
+  <div class="ijh-doc-tabs" role="tablist" aria-label="Filter by source document">
+    <a class="ijh-doc-tab{% if not selected_source_doc %} is-active{% endif %}"
+       role="tab"
+       href="{{ url_for('purchase.item_journal_summary_list', search=(search if search else none), transtype=(selected_transtype if selected_transtype else none), date_from=(date_from if date_from else none), date_to=(date_to if date_to else none)) }}">All</a>
+    {% for s in source_doc_summary %}
+    <a class="ijh-doc-tab{% if selected_source_doc == s.source_doc %} is-active{% endif %}"
+       role="tab"
+       href="{{ url_for('purchase.item_journal_summary_list', source_doc=s.source_doc, search=(search if search else none), transtype=(selected_transtype if selected_transtype else none), date_from=(date_from if date_from else none), date_to=(date_to if date_to else none)) }}">{{ s.source_doc }}<span class="ijh-doc-tab__count">({{ s.doc_count }})</span></a>
+    {% endfor %}
+  </div>
+
+  <div class="ijh-section-title" style="margin-top:4px;">Journal headers</div>
+  <div class="ijh-table-wrap">
+    <table class="ijh-table">
+      <thead>
+        <tr>
+          <th>Posted Date</th>
+          <th>Source Doc</th>
+          <th>Source No</th>
+          <th>Trans Type</th>
+          <th>Location</th>
+          <th>Reset No</th>
+          <th>Receipt No</th>
+          <th class="num">Lines</th>
+          <th class="num">Total Qty</th>
+          <th class="num">Total Amount</th>
+          <th>Created By</th>
+          <th>Modified</th>
+          <th style="text-align:center;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.posted_date or '-' }}</td>
+          <td>{{ r.source_doc or '-' }}</td>
+          <td>{{ r.source_no or '-' }}</td>
+          <td>{{ r.transtype or '-' }}</td>
+          <td>{{ r.locationcode or '-' }}</td>
+          <td>{{ r.resetno or '-' }}</td>
+          <td>{{ r.receiptno or '-' }}</td>
+          <td class="num">{{ r.line_count or 0 }}</td>
+          <td class="num">{{ '%.3f'|format(r.total_qty or 0) }}</td>
+          <td class="num">{{ '%.3f'|format(r.total_amount or 0) }}</td>
+          <td>{{ r.created_by or '-' }}</td>
+          <td>{{ r.modified_date or '-' }}</td>
+          <td style="text-align:center;">
+            <a class="btn-view-lines"
+               href="{{ url_for('purchase.item_journal_list', source_doc=(r.source_doc if r.source_doc else none), source_no=(r.source_no if r.source_no is not none else none)) }}">View lines</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="13" class="muted">No item journal headers found.</td></tr>
+        {% endfor %}
+      </tbody>
+      {% if rows and list_totals %}
+      <tfoot>
+        <tr>
+          <td colspan="7" class="ijh-total-label">Total ({{ list_totals.doc_count }} document{{ 's' if list_totals.doc_count != 1 else '' }})</td>
+          <td class="num">{{ list_totals.line_count or 0 }}</td>
+          <td class="num">{{ '%.3f'|format(list_totals.total_qty or 0) }}</td>
+          <td class="num">{{ '%.3f'|format(list_totals.total_amount or 0) }}</td>
+          <td colspan="3"></td>
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div>
+{% endblock %}

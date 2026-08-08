@@ -1,0 +1,2 @@
+"""Addon manifest — Company Profile."""
+MANIFEST = {'technical_name': 'company_profile', 'name': 'Company Profile', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Migrated from blueprints/company_profile.py', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/company-profile'}, 'flask': {'blueprint': 'company_profile', 'blueprint_ref': 'addons.company_profile:bp', 'models_package': 'addons.company_profile.models', 'routes_module': 'addons.company_profile.controllers.routes'}}

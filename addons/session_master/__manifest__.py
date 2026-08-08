@@ -1,0 +1,2 @@
+"""Addon manifest — Session (TBLSESSION)."""
+MANIFEST = {'technical_name': 'session_master', 'name': 'Session Master', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Sessions per branch (TBLSESSION)', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/session'}, 'flask': {'blueprint': 'session_master', 'blueprint_ref': 'addons.session_master.controllers.routes:bp', 'routes_module': 'addons.session_master.controllers.routes'}}

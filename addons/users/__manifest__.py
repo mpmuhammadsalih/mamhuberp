@@ -1,0 +1,2 @@
+"""Addon manifest — Users."""
+MANIFEST = {'technical_name': 'users', 'name': 'Users', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Migrated from blueprints/users.py', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/users'}, 'flask': {'blueprint': 'users', 'blueprint_ref': 'addons.users:bp', 'models_package': 'addons.users.models', 'routes_module': 'addons.users.controllers.routes'}}

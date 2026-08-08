@@ -1,0 +1,512 @@
+{% extends "base.html" %}
+{% block title %}Visual Stock Report{% endblock %}
+
+{% macro vsp_kind_badge(kind) -%}
+  {% set k = (kind or '')|lower %}
+  {% if k == 'store' %}<span class="vsp-badge vsp-badge--store">Store</span>
+  {% elif k == 'rack' %}<span class="vsp-badge vsp-badge--rack">Rack</span>
+  {% elif k == 'shelf' %}<span class="vsp-badge vsp-badge--shelf">Shelf</span>
+  {% elif k == 'bin' %}<span class="vsp-badge vsp-badge--bin">Bin</span>
+  {% elif k == 'item' %}<span class="vsp-badge vsp-badge--item">Item</span>
+  {% elif k == 'lot' %}<span class="vsp-badge vsp-badge--lot">Lot</span>
+  {% elif k == 'wh_site' %}<span class="vsp-badge vsp-badge--wh-site">WH site</span>
+  {% else %}<span class="vsp-badge">{{ kind }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro vsp_tree_node(node, trail) %}
+  {% set t0 = (trail ~ ' ' ~ (node.label or '') ~ ' ' ~ (node.kind or ''))|trim %}
+  {% set nk = (node.kind or '') %}
+  {% set ch = node.children or [] %}
+  {% if nk == 'lot' %}
+  <div class="vsp-leaf vsp-leaf--lot vsp-hit" data-vsp-haystack="{{ t0|lower }} {{ node.batch_no or '' }} {{ node.lot_id or '' }} {{ node.expiry_date or '' }}">
+    <span class="vsp-lot-meta">{{ vsp_kind_badge('lot') }}<span class="vsp-leaf__label">{{ node.label }}</span>{% if node.expiry_date %}<span class="vsp-lot-exp">exp {{ node.expiry_date }}</span>{% endif %}</span>
+    <span class="vsp-num">{{ node.qty }}</span>
+  </div>
+  {% elif nk == 'item' and ch|length > 0 %}
+  <details class="vsp-node vsp-node--item vsp-hit" open data-vsp-haystack="{{ t0|lower }} {{ node.itemcode }} {{ node.itemname or '' }} {% for x in ch %}{{ x.label }} {{ x.batch_no }} {{ x.lot_id }}{% endfor %}">
+    <summary class="vsp-node__sum">
+      {{ vsp_kind_badge('item') }}
+      <span class="vsp-node__title">{{ node.label }}</span>
+      <span class="vsp-num vsp-node__qty">{{ node.qty }}</span>
+    </summary>
+    <div class="vsp-node__body vsp-node__body--lots">
+      {% for gc in ch %}
+        {{ vsp_tree_node(gc, t0) }}
+      {% endfor %}
+    </div>
+  </details>
+  {% elif nk == 'item' %}
+  <div class="vsp-leaf vsp-hit" data-vsp-haystack="{{ t0|lower }} {{ node.itemcode }} {{ node.itemname or '' }}">
+    <span class="vsp-leaf__label">{{ node.label }}</span>
+    <span class="vsp-num">{{ node.qty }}</span>
+  </div>
+  {% else %}
+  <details class="vsp-node vsp-hit" open data-vsp-haystack="{{ t0|lower }}">
+    <summary class="vsp-node__sum">
+      {{ vsp_kind_badge(node.kind) }}
+      <span class="vsp-node__title">{{ node.label }}</span>
+      <span class="vsp-num vsp-node__qty">{{ node.qty }}</span>
+    </summary>
+    <div class="vsp-node__body">
+      {% for c in node.children or [] %}
+        {{ vsp_tree_node(c, t0) }}
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
+{% endmacro %}
+
+{% block content %}
+<style>
+  .vsp-root { max-width: 1400px; margin: 0 auto; padding: 24px 16px 56px; }
+
+  .vsp-hero {
+    background: linear-gradient(135deg, #1e1b4b 0%, #312e81 38%, #0c4a6e 100%);
+    color: #f8fafc;
+    border-radius: 16px;
+    padding: 22px 24px;
+    margin-bottom: 22px;
+    box-shadow: 0 18px 42px -14px rgba(15, 23, 42, 0.55);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .vsp-hero h1 { margin: 0 0 8px; font-size: 1.55rem; font-weight: 800; letter-spacing: -0.02em; }
+  .vsp-hero p { margin: 0; font-size: 13px; color: rgba(248,250,252,0.88); max-width: 640px; line-height: 1.5; }
+  .vsp-hero-meta { font-size: 12px; color: rgba(248,250,252,0.7); margin-top: 10px; }
+  .vsp-hero-meta code { background: rgba(255,255,255,0.14); padding: 2px 7px; border-radius: 4px; font-size: 11px; }
+
+  .vsp-hero-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+  .vsp-hero-actions a {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 14px; border-radius: 999px;
+    font-size: 13px; font-weight: 600;
+    background: rgba(255,255,255,0.16); color: #fff; text-decoration: none;
+    border: 1px solid rgba(255,255,255,0.28);
+    transition: background 0.15s, transform 0.12s;
+  }
+  .vsp-hero-actions a:hover { background: rgba(255,255,255,0.28); transform: translateY(-1px); }
+
+  .vsp-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .vsp-kpi {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 14px 16px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  }
+  .vsp-kpi__label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; margin-bottom: 4px; }
+  .vsp-kpi__value { font-size: 1.35rem; font-weight: 800; color: #0f172a; font-variant-numeric: tabular-nums; }
+  .vsp-kpi--em .vsp-kpi__value { color: #4f46e5; }
+  .vsp-kpi--wh .vsp-kpi__value { color: #0369a1; }
+
+  .vsp-callout {
+    background: linear-gradient(90deg, #fffbeb 0%, #fff 40%);
+    border: 1px solid #fde68a;
+    border-radius: 12px;
+    padding: 12px 16px;
+    margin-bottom: 18px;
+    font-size: 12px;
+    color: #78350f;
+    line-height: 1.5;
+  }
+  .vsp-callout strong { color: #451a03; }
+
+  .vsp-panel {
+    background: #fafbfc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+  .vsp-panel__title { font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 12px; }
+
+  .vsp-wh-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; margin-bottom: 10px; }
+  .vsp-wh-row label { font-size: 11px; font-weight: 700; color: #334155; display: block; margin-bottom: 4px; }
+  .vsp-loc-picker-row { display: flex; gap: 8px; align-items: stretch; flex: 1; min-width: 220px; max-width: 440px; }
+  .vsp-loc-picker-row input[type="text"][readonly] {
+    flex: 1; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff;
+    font-size: 13px;
+  }
+  .vsp-loc-picker-btn {
+    flex-shrink: 0; padding: 9px 16px; border-radius: 8px;
+    border: none; cursor: pointer; font-weight: 700; font-size: 13px;
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    color: #fff;
+  }
+  .vsp-loc-picker-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .vsp-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-top: 8px; }
+  .vsp-tools input[type="search"] {
+    min-width: 200px; flex: 1; max-width: 360px;
+    padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px;
+    box-sizing: border-box;
+  }
+  .vsp-mini-btn {
+    padding: 8px 12px; border-radius: 8px; border: 1px solid #c7d2fe;
+    background: #fff; color: #4338ca; font-weight: 700; font-size: 12px; cursor: pointer;
+  }
+  .vsp-mini-btn:hover { background: #eef2ff; }
+
+  .vsp-split {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  @media (min-width: 1100px) {
+    .vsp-split { grid-template-columns: 1fr 1fr; align-items: start; }
+  }
+
+  .vsp-tree-wrap {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    max-height: min(62vh, 720px);
+    overflow: auto;
+    padding: 10px 12px 14px;
+  }
+  .vsp-tree-head {
+    font-size: 13px;
+    font-weight: 800;
+    color: #0f172a;
+    padding: 4px 4px 10px;
+    border-bottom: 1px solid #f1f5f9;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .vsp-tree-head span { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; }
+
+  .vsp-node { margin: 2px 0 0 6px; border-left: 2px solid #e2e8f0; padding-left: 8px; }
+  .vsp-node__sum {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    font-size: 13px;
+  }
+  .vsp-node__sum::-webkit-details-marker { display: none; }
+  .vsp-node__sum::before { content: '▸'; font-size: 10px; color: #94a3b8; width: 12px; }
+  .vsp-node[open] > .vsp-node__sum::before { content: '▾'; }
+  .vsp-node__sum:hover { background: #f8fafc; }
+  .vsp-node__title { flex: 1; min-width: 120px; font-weight: 600; color: #1e293b; }
+  .vsp-node__body { margin-top: 2px; }
+
+  .vsp-leaf {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    padding: 5px 8px 5px 22px;
+    margin-left: 6px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #334155;
+  }
+  .vsp-leaf:nth-child(even) { background: #fafafa; }
+  .vsp-leaf:hover { background: #eef2ff; }
+  .vsp-leaf__label { font-family: ui-sans-serif, system-ui, sans-serif; flex: 1; }
+
+  .vsp-num {
+    font-variant-numeric: tabular-nums;
+    font-weight: 800;
+    color: #0f172a;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .vsp-node__qty { margin-left: auto; }
+
+  .vsp-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .vsp-badge--store { background: #e0e7ff; color: #3730a3; }
+  .vsp-badge--rack { background: #cffafe; color: #155e75; }
+  .vsp-badge--shelf { background: #ecfccb; color: #365314; }
+  .vsp-badge--bin { background: #fef3c7; color: #92400e; }
+  .vsp-badge--item { background: #f1f5f9; color: #475569; }
+  .vsp-badge--lot { background: #fce7f3; color: #9d174d; }
+  .vsp-badge--wh-site { background: #ede9fe; color: #5b21b6; }
+
+  .vsp-leaf--lot { padding-left: 28px; border-left: 2px dashed #e9d5ff; margin-left: 8px; }
+  .vsp-lot-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: 1; }
+  .vsp-lot-exp { font-size: 10px; color: #64748b; font-weight: 600; }
+  .vsp-node__body--lots { border-left: 2px solid #fae8ff; margin-left: 4px; padding-left: 4px; }
+
+  .vsp-leaf.vsp-filter-hide,
+  .vsp-node.vsp-filter-hide { display: none !important; }
+
+  #vspLocationPickerModal.hidden { display: none !important; }
+  body.vsp-modal-open { overflow: hidden; }
+
+  .vsp-kpi--theory .vsp-kpi__value { color: #0d9488; }
+
+  .vsp-opts-form {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    align-items: end;
+  }
+  .vsp-opts-form label { font-size: 11px; font-weight: 700; color: #334155; display: block; margin-bottom: 4px; }
+  .vsp-opts-form select {
+    width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 13px; background: #fff;
+  }
+  .vsp-opts-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+  .vsp-empty { text-align: center; color: #94a3b8; padding: 28px 12px; font-size: 13px; }
+</style>
+
+{% set pay = vsp_payload or {} %}
+{% set summ = pay.summary|default({}, true) %}
+{% set opts = pay.options|default({}, true) %}
+{% set flags = pay.flags|default({}, true) %}
+{% set basis = summ.get('totals_basis', 'separate') if summ else 'separate' %}
+
+<div class="vsp-root">
+  <header class="vsp-hero">
+    <div>
+      <h1 class="page-po__title page-po__title--with-icon" style="font-size:22px;margin:0 0 8px;">
+        <span class="page-po__title-icon" aria-hidden="true"><i class="bi bi-diagram-3"></i></span>
+        Visual Stock Report
+      </h1>
+      <p>
+        Two complementary views for branch <strong>{{ session_location_code }}</strong>:
+        <strong>Store ledger</strong> (non-zero STOREINVENTORY by store counter) and
+        <strong>Warehouse bins</strong> (rack → shelf → bin → item) for the selected site.
+        Quantities respect your options below (<strong>include zero</strong>, <strong>theoretical basis</strong>, optional <strong>lot/batch</strong> breakdown). Export a flat CSV for audit anytime.
+      </p>
+      <div class="vsp-hero-meta">
+        {% if selected_loc_key %}Site <code>{{ selected_loc_key }}</code>{% if selected_loc_name %} · {{ selected_loc_name }}{% endif %}{% endif %}
+        {% if pay.get('loc_key') %} · Resolved <code>{{ pay.loc_key }}</code>{% endif %}
+      </div>
+    </div>
+    <div class="vsp-hero-actions">
+      {% set qs = request.query_string.decode('utf-8') if request.query_string else '' %}
+      <a href="{{ url_for('warehouse.warehouse_visual_stock_export_csv') }}{% if qs %}?{{ qs }}{% endif %}">Download CSV audit →</a>
+      <a href="{{ url_for('warehouse.warehouse_bin_stock') }}{% if selected_loc_key %}?wh={{ selected_loc_key|urlencode }}{% endif %}">Bin stock &amp; moves →</a>
+      <a href="{{ url_for('reports.stock_report') }}">Classic stock report →</a>
+    </div>
+  </header>
+
+  <div class="vsp-kpis" aria-live="polite">
+    {% if summ and summ.get('theoretical_total') is not none %}
+    <div class="vsp-kpi vsp-kpi--theory">
+      <div class="vsp-kpi__label">Theoretical total ({{ basis }})</div>
+      <div class="vsp-kpi__value">{{ summ.get('theoretical_total') }}</div>
+    </div>
+    {% endif %}
+    <div class="vsp-kpi vsp-kpi--em">
+      <div class="vsp-kpi__label">Store ledger qty</div>
+      <div class="vsp-kpi__value">{{ summ.get('store_ledger_qty', 0) }}</div>
+    </div>
+    <div class="vsp-kpi vsp-kpi--wh">
+      <div class="vsp-kpi__label">Warehouse bin qty</div>
+      <div class="vsp-kpi__value">{{ summ.get('warehouse_bin_qty', 0) }}</div>
+    </div>
+    <div class="vsp-kpi">
+      <div class="vsp-kpi__label">STOREINVENTORY rows</div>
+      <div class="vsp-kpi__value">{{ summ.get('store_line_count', 0) }}</div>
+    </div>
+    <div class="vsp-kpi">
+      <div class="vsp-kpi__label">BIN_STOCK rows</div>
+      <div class="vsp-kpi__value">{{ summ.get('warehouse_line_count', 0) }}</div>
+    </div>
+  </div>
+
+  <div class="vsp-callout">
+    <strong>Do not add</strong> store-ledger and bin quantities unless you deliberately pick a <strong>single basis</strong> below (then the highlighted “theoretical total” matches that lens only).
+    Lot lines appear under warehouse items when branch batch tracking is on, the item is batch-tracked, and “Show lot/batch” is enabled.
+  </div>
+
+  <div class="vsp-panel">
+    <p class="vsp-panel__title">Warehouse site (root of WH site → rack → shelf → bin tree)</p>
+    <div class="vsp-wh-row">
+      <div style="flex:1; min-width:240px;">
+        <label for="vspLocationDisplay">Active site</label>
+        <div class="vsp-loc-picker-row">
+          <input type="text" id="vspLocationDisplay" readonly
+            placeholder="Pick site…"
+            value="{% if selected_loc_key %}{{ selected_loc_name }} — {{ selected_loc_key }}{% endif %}" />
+          <button type="button" id="vspLocationPickBtn" class="vsp-loc-picker-btn" {% if not location_sites %}disabled title="No warehouse sites"{% endif %}>Pick…</button>
+        </div>
+      </div>
+    </div>
+    <form method="get" action="{{ url_for('warehouse.warehouse_visual_stock') }}" class="vsp-opts-form" id="vspOptsForm">
+      {% set locq = request.args.get('loc') or selected_loc_key %}
+      {% if locq %}<input type="hidden" name="loc" value="{{ locq }}"/>{% endif %}
+      <div>
+        <label for="vspIncZero">Store / bin quantities</label>
+        <select name="include_zero" id="vspIncZero">
+          <option value="0" {% if not opts.get('include_zero_qty') %}selected{% endif %}>Non-zero only</option>
+          <option value="1" {% if opts.get('include_zero_qty') %}selected{% endif %}>Include zero qty</option>
+        </select>
+      </div>
+      <div>
+        <label for="vspBasis">Theoretical total basis</label>
+        <select name="basis" id="vspBasis">
+          <option value="separate" {% if basis == 'separate' %}selected{% endif %}>Separate (no merged total)</option>
+          <option value="store" {% if basis == 'store' %}selected{% endif %}>Store ledger only</option>
+          <option value="warehouse" {% if basis == 'warehouse' %}selected{% endif %}>Warehouse bins only</option>
+        </select>
+      </div>
+      <div>
+        <label for="vspLots">Lot / batch under warehouse items</label>
+        <select name="lots" id="vspLots">
+          <option value="1" {% if opts.get('attach_bin_lots', true) %}selected{% endif %}>Show when batch-tracked</option>
+          <option value="0" {% if not opts.get('attach_bin_lots', true) %}selected{% endif %}>Hide lots</option>
+        </select>
+      </div>
+      <div class="vsp-opts-actions" style="grid-column: 1 / -1;">
+        <button type="submit" class="vsp-mini-btn" style="background:linear-gradient(135deg,#4f46e5,#4338ca);color:#fff;border-color:transparent;">Apply options</button>
+        {% set qcsv = request.query_string.decode('utf-8') if request.query_string else '' %}
+        <a href="{{ url_for('warehouse.warehouse_visual_stock_export_csv') }}{% if qcsv %}?{{ qcsv }}{% endif %}" class="vsp-mini-btn" style="text-decoration:none;display:inline-flex;align-items:center;">Download CSV (same filters)</a>
+      </div>
+    </form>
+    <div class="vsp-tools">
+      <div style="flex:1; min-width:200px;">
+        <label for="vspFilter">Filter trees</label>
+        <input type="search" id="vspFilter" placeholder="Code, name, rack, shelf, bin…" autocomplete="off" />
+      </div>
+      <button type="button" class="vsp-mini-btn" id="vspExpandAll">Expand all</button>
+      <button type="button" class="vsp-mini-btn" id="vspCollapseAll">Collapse all</button>
+    </div>
+    {% if not location_sites %}
+    <p class="vsp-note" style="margin-top:10px;font-size:12px;color:#b91c1c;">No warehouse locations configured. Warehouse tree may be empty; store ledger still uses branch inventory.</p>
+    {% endif %}
+  </div>
+
+  <div class="vsp-split">
+    <section class="vsp-tree-wrap" aria-labelledby="vsp-store-heading">
+      <div class="vsp-tree-head" id="vsp-store-heading">
+        Store → item
+        <span>{{ (pay.get('store_tree') or [])|length }} stores</span>
+      </div>
+      {% set stree = pay.get('store_tree') or [] %}
+      {% if stree %}
+        {% for root in stree %}
+          {{ vsp_tree_node(root, '') }}
+        {% endfor %}
+      {% else %}
+        <p class="vsp-empty">
+        {% if opts and opts.get('include_zero_qty') %}No STOREINVENTORY rows for this branch.{% else %}No non-zero STOREINVENTORY rows for this branch (enable “include zero qty” to see zero lines).{% endif %}
+        </p>
+      {% endif %}
+    </section>
+
+    <section class="vsp-tree-wrap" aria-labelledby="vsp-wh-heading">
+      <div class="vsp-tree-head" id="vsp-wh-heading">
+        WH site → rack → shelf → bin → item{% if flags and flags.get('batch_tracking_branch') %} → lot{% endif %}
+        <span>{% if selected_loc_key %}site {{ selected_loc_key }}{% else %}pick a site{% endif %}</span>
+      </div>
+      {% set wtree = pay.get('warehouse_tree') or [] %}
+      {% if wtree %}
+        {% for root in wtree %}
+          {{ vsp_tree_node(root, '') }}
+        {% endfor %}
+      {% else %}
+        <p class="vsp-empty">
+          {% if not selected_loc_key %}Choose a warehouse site to load bin hierarchy.{% else %}No bin stock rows for this site, or bins are outside the layout map.{% endif %}
+        </p>
+      {% endif %}
+    </section>
+  </div>
+</div>
+
+<div class="modal hidden" id="vspLocationPickerModal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="modal__overlay" data-close="vspLocationPickerModal"></div>
+  <div class="modal__content" style="max-width: 560px; width: 96vw;">
+    <div class="modal__header" style="display:flex; justify-content:space-between; align-items:center;">
+      <h3 class="modal__title" style="margin:0;">Choose warehouse site</h3>
+      <button type="button" class="modal__close" data-close="vspLocationPickerModal" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal__body">
+      <div style="max-height:52vh; overflow:auto; border-radius:8px; border:1px solid #e2e8f0;">
+        <table class="table" style="width:100%; font-size:13px;">
+          <thead><tr><th>Key</th><th>Name</th><th></th></tr></thead>
+          <tbody>
+            {% for s in location_sites %}
+            <tr>
+              <td style="font-family:monospace; font-weight:600;">{{ s.key }}</td>
+              <td>{{ s.name or '—' }}</td>
+              <td><button type="button" class="bss-btn" style="padding:6px 12px;font-size:12px;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:700;" data-vsp-pick-loc="{{ s.key }}">Select</button></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  function el(id) { return document.getElementById(id); }
+  function showLocModal(on) {
+    var m = el('vspLocationPickerModal');
+    if (!m) return;
+    m.classList.toggle('hidden', !on);
+    m.setAttribute('aria-hidden', on ? 'false' : 'true');
+    document.body.classList.toggle('vsp-modal-open', !!on);
+  }
+  el('vspLocationPickBtn') && (el('vspLocationPickBtn').onclick = function () { showLocModal(true); });
+  var mdl = el('vspLocationPickerModal');
+  if (mdl) {
+    mdl.addEventListener('click', function (e) {
+      if (e.target.getAttribute('data-close') === 'vspLocationPickerModal' || e.target.classList.contains('modal__overlay') || e.target.classList.contains('modal__close'))
+        showLocModal(false);
+    });
+  }
+  document.querySelectorAll('[data-vsp-pick-loc]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var k = b.getAttribute('data-vsp-pick-loc') || '';
+      if (!k) return;
+      var sp = new URLSearchParams(window.location.search);
+      sp.set('loc', k);
+      window.location.search = sp.toString();
+    });
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') showLocModal(false);
+  });
+
+  function setAllDetails(open) {
+    document.querySelectorAll('.vsp-tree-wrap details.vsp-node').forEach(function (d) {
+      d.open = open;
+    });
+  }
+  el('vspExpandAll') && (el('vspExpandAll').onclick = function () { setAllDetails(true); });
+  el('vspCollapseAll') && (el('vspCollapseAll').onclick = function () { setAllDetails(false); });
+
+  var fe = el('vspFilter');
+  if (fe) {
+    fe.addEventListener('input', function () {
+      var q = (fe.value || '').trim().toLowerCase();
+      document.querySelectorAll('.vsp-hit').forEach(function (node) {
+        var hay = (node.getAttribute('data-vsp-haystack') || '').toLowerCase();
+        var show = !q || hay.indexOf(q) !== -1;
+        node.classList.toggle('vsp-filter-hide', !show);
+      });
+    });
+  }
+})();
+</script>
+{% endblock %}

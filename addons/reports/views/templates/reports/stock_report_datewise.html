@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .page { max-width: 98vw; margin: 0 auto; padding: 14px 10px; }
+  .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #dee2e6; padding-bottom: 10px; }
+  .title { margin: 0; font-size: 22px; font-weight: 400; color: #212529; }
+  .sub { margin: 4px 0 0; font-size: 12px; color: #6c757d; max-width: 820px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { border: 1px solid #dee2e6; border-radius: 4px; background: #fff; color: #212529; padding: 7px 12px; font-size: 12px; text-decoration: none; cursor: pointer; }
+  .btn-primary { background: #007bff; border-color: #007bff; color: #fff; }
+  .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 10px; }
+  .field label { display: block; font-size: 11px; color: #495057; margin-bottom: 3px; }
+  .input { width: 100%; border: 1px solid #dee2e6; border-radius: 4px; padding: 7px 8px; font-size: 12px; box-sizing: border-box; }
+  .field--grow { flex: 1; min-width: 200px; }
+  .field--date { width: 150px; }
+  .field--narrow { width: 110px; }
+  .field--category { min-width: 220px; }
+  .field--mode { width: 180px; }
+  .meta { margin: 8px 0 10px; font-size: 12px; color: #495057; }
+  .alert { padding: 10px 12px; border-radius: 4px; margin-bottom: 10px; font-size: 12px; }
+  .alert-warn { background: #fff3cd; border: 1px solid #ffecb5; color: #664d03; }
+  .table-wrap { overflow: auto; border: 1px solid #dee2e6; border-radius: 4px; background: #fff; max-height: 72vh; }
+  table { width: 100%; min-width: 1400px; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #dee2e6; padding: 6px 8px; text-align: left; white-space: nowrap; }
+  th { background: #f8f9fa; position: sticky; top: 0; z-index: 2; font-size: 11px; }
+  th.val-hdr { background: #eef2ff; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tfoot td { background: #f1f5f9; font-weight: 600; border-top: 2px solid #94a3b8; }
+  tfoot td.num { color: #0f172a; }
+</style>
+
+{% set cur_mode = (filters.report_mode if filters else 'summary') or 'summary' %}
+{% set gt = grid_totals if grid_totals else {} %}
+
+<div class="page">
+  <div class="top">
+    <div>
+      <h1 class="title">Stock Report Datewise</h1>
+      <p class="sub">
+        Stock movement from {% if journal_table %}{{ journal_table }}{% else %}ITEMJOURNAL{% endif %} for this location.
+        Values: movement from journal amount/rate; opening &amp; closing stock value = qty × item cost price.
+      </p>
+    </div>
+    <div class="actions">
+      <a class="btn" href="{{ url_for('reports.stock_report_datewise') }}">Clear</a>
+      <button class="btn btn-primary" type="submit" form="srdFilterForm" onclick="document.getElementById('srdMode').value='summary_stock';">Summary Stock</button>
+      <button class="btn" type="submit" form="srdFilterForm" formaction="{{ url_for('reports.stock_report_datewise_export_excel') }}">Export CSV</button>
+    </div>
+  </div>
+
+  {% if error_message %}
+  <div class="alert alert-warn">{{ error_message }}</div>
+  {% endif %}
+
+  <form id="srdFilterForm" method="get" action="{{ url_for('reports.stock_report_datewise') }}">
+    <div class="filters">
+      <div class="field field--date">
+        <label for="srdDateFrom">Date from</label>
+        <input id="srdDateFrom" class="input" type="date" name="date_from" value="{{ (filters.date_from if filters else '') or '' }}" />
+      </div>
+      <div class="field field--date">
+        <label for="srdDateTo">Date to</label>
+        <input id="srdDateTo" class="input" type="date" name="date_to" value="{{ (filters.date_to if filters else '') or '' }}" />
+      </div>
+      <div class="field field--mode">
+        <label for="srdMode">View</label>
+        <select id="srdMode" class="input" name="report_mode">
+          <option value="summary" {% if cur_mode == 'summary' %}selected{% endif %}>Summary (by day)</option>
+          <option value="summary_stock" {% if cur_mode == 'summary_stock' %}selected{% endif %}>Summary Stock</option>
+          <option value="detail" {% if cur_mode == 'detail' %}selected{% endif %}>Detail (journal lines)</option>
+        </select>
+      </div>
+      <div class="field field--grow">
+        <label for="srdSearch">Search item</label>
+        <input id="srdSearch" class="input" type="text" name="search" placeholder="Item code or name…" value="{{ (filters.search if filters else '') or '' }}" />
+      </div>
+      <div class="field field--narrow">
+        <label for="srdItemCode">Item code</label>
+        <input id="srdItemCode" class="input" type="text" name="itemcode" value="{{ (filters.itemcode if filters else '') or '' }}" />
+      </div>
+      <div class="field field--category">
+        <label for="srdCategory">Category</label>
+        <select id="srdCategory" class="input" name="category_code">
+          <option value="">All categories</option>
+          {% set cur_cat = ((filters.category_code if filters else '') or '')|string %}
+          {% for c in category_options or [] %}
+            {% set cc = (c.categorycode|string) %}
+            <option value="{{ cc }}" {% if cur_cat == cc %}selected{% endif %}>{{ cc }}{% if c.categoryname %} - {{ c.categoryname }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field field--mode">
+        <label for="srdTransType">Transaction type</label>
+        {% set cur_tt = ((filters.transtype if filters else '') or '')|string %}
+        <select id="srdTransType" class="input" name="transtype">
+          <option value="" {% if not cur_tt %}selected{% endif %}>All types</option>
+          <option value="SALES" {% if cur_tt == 'SALES' %}selected{% endif %}>Sales</option>
+          <option value="SALES RETURN" {% if cur_tt == 'SALES RETURN' %}selected{% endif %}>Sales return</option>
+          <option value="PURCHASE" {% if cur_tt == 'PURCHASE' %}selected{% endif %}>Purchase (GRN)</option>
+          <option value="PURCHASE_RETURN" {% if cur_tt == 'PURCHASE_RETURN' %}selected{% endif %}>Purchase return</option>
+        </select>
+      </div>
+      <div class="field field--narrow">
+        <label for="srdCap">Max rows</label>
+        <input id="srdCap" class="input" type="number" name="max_rows" min="1" max="20000" value="{{ (filters.max_rows if filters else '8000') or '8000' }}" />
+      </div>
+      <button class="btn btn-primary" type="submit">Run</button>
+    </div>
+  </form>
+
+  <div class="meta">
+    Rows: {{ rows|length }}{% if filters and filters.max_rows %} (cap {{ filters.max_rows }}){% endif %}
+    {% if filters and filters.date_from and filters.date_to %}
+      | {{ filters.date_from }} to {{ filters.date_to }}
+    {% endif %}
+    | Mode:
+    {% if cur_mode == 'summary_stock' %}Summary Stock
+    {% elif cur_mode == 'detail' %}Detail
+    {% else %}Summary (by day){% endif %}
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        {% if cur_mode == 'detail' %}
+        <tr>
+          <th>Sl No</th>
+          <th>Date</th>
+          <th>Time</th>
+          <th>Item code</th>
+          <th>Item name</th>
+          <th>UOM</th>
+          <th>Cost</th>
+          <th>Trans type</th>
+          <th>Source doc</th>
+          <th>Source no</th>
+          <th>Qty in</th>
+          <th>Qty out</th>
+          <th>Net qty</th>
+          <th>Rate</th>
+          <th>Amount</th>
+          <th class="val-hdr">Line value</th>
+          <th>Warehouse code</th>
+          <th>Warehouse ID</th>
+        </tr>
+        {% elif cur_mode == 'summary_stock' %}
+        <tr>
+          <th>Sl No</th>
+          <th>Item code</th>
+          <th>Item name</th>
+          <th>UOM</th>
+          <th>Cost</th>
+          <th>Opening</th>
+          <th class="val-hdr">Opening value</th>
+          <th>Qty in</th>
+          <th class="val-hdr">Value in</th>
+          <th>Qty out</th>
+          <th class="val-hdr">Value out</th>
+          <th>Net qty</th>
+          <th class="val-hdr">Net value</th>
+          <th>Closing</th>
+          <th class="val-hdr">Closing value</th>
+        </tr>
+        {% else %}
+        <tr>
+          <th>Sl No</th>
+          <th>Date</th>
+          <th>Item code</th>
+          <th>Item name</th>
+          <th>UOM</th>
+          <th>Cost</th>
+          <th>Opening</th>
+          <th class="val-hdr">Opening value</th>
+          <th>Qty in</th>
+          <th class="val-hdr">Value in</th>
+          <th>Qty out</th>
+          <th class="val-hdr">Value out</th>
+          <th>Net qty</th>
+          <th class="val-hdr">Net value</th>
+          <th>Closing</th>
+          <th class="val-hdr">Closing value</th>
+        </tr>
+        {% endif %}
+      </thead>
+      <tbody>
+        {% if not rows %}
+        <tr><td colspan="20" style="text-align:center;color:#6c757d;padding:16px;">No rows for the selected filters.</td></tr>
+        {% elif cur_mode == 'detail' %}
+          {% for r in rows %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ r.stock_date or '' }}</td>
+            <td>{{ r.stock_time or '' }}</td>
+            <td>{{ r.itemcode if r.itemcode is not none else '' }}</td>
+            <td>{{ r.itemname or '' }}</td>
+            <td>{{ r.uom or '' }}</td>
+            <td class="num">{{ '%.4f'|format(r.costprice|float) if r.costprice is not none else '0.0000' }}</td>
+            <td>{{ r.transtype or '' }}</td>
+            <td>{{ r.source_doc or '' }}</td>
+            <td>{{ r.source_no or '' }}</td>
+            <td class="num">{{ '%.3f'|format(r.qty_in|float) if r.qty_in is not none else '0.000' }}</td>
+            <td class="num">{{ '%.3f'|format(r.qty_out|float) if r.qty_out is not none else '0.000' }}</td>
+            <td class="num">{{ '%.3f'|format(r.net_qty|float) if r.net_qty is not none else '0.000' }}</td>
+            <td class="num">{{ '%.4f'|format(r.rate|float) if r.rate is not none else '0.0000' }}</td>
+            <td class="num">{{ '%.4f'|format(r.amount|float) if r.amount is not none else '0.0000' }}</td>
+            <td class="num">{{ '%.2f'|format(r.line_value|float) if r.line_value is not none else '0.00' }}</td>
+            <td>{{ r.warehouse_code or '' }}</td>
+            <td>{{ r.warehouse_id if r.warehouse_id is not none else '' }}</td>
+          </tr>
+          {% endfor %}
+        {% elif cur_mode == 'summary_stock' %}
+          {% for r in rows %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ r.itemcode if r.itemcode is not none else '' }}</td>
+            <td>{{ r.itemname or '' }}</td>
+            <td>{{ r.uom or '' }}</td>
+            <td class="num">{{ '%.4f'|format(r.costprice|float) if r.costprice is not none else '0.0000' }}</td>
+            <td class="num">{{ '%.3f'|format(r.opening_stock|float) if r.opening_stock is not none else '0.000' }}</td>
+            <td class="num">{{ '%.2f'|format(r.opening_value|float) if r.opening_value is not none else '0.00' }}</td>
+            <td class="num">{{ '%.3f'|format(r.qty_in|float) if r.qty_in is not none else '0.000' }}</td>
+            <td class="num">{{ '%.2f'|format(r.value_in|float) if r.value_in is not none else '0.00' }}</td>
+            <td class="num">{{ '%.3f'|format(r.qty_out|float) if r.qty_out is not none else '0.000' }}</td>
+            <td class="num">{{ '%.2f'|format(r.value_out|float) if r.value_out is not none else '0.00' }}</td>
+            <td class="num">{{ '%.3f'|format(r.net_qty|float) if r.net_qty is not none else '0.000' }}</td>
+            <td class="num">{{ '%.2f'|format(r.net_value|float) if r.net_value is not none else '0.00' }}</td>
+            <td class="num">{{ '%.3f'|format(r.closing_stock|float) if r.closing_stock is not none else '0.000' }}</td>
+            <td class="num">{{ '%.2f'|format(r.closing_value|float) if r.closing_value is not none else '0.00' }}</td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          {% for r in rows %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ r.stock_date or '' }}</td>
+            <td>{{ r.itemcode if r.itemcode is not none else '' }}</td>
+            <td>{{ r.itemname or '' }}</td>
+            <td>{{ r.uom or '' }}</td>
+            <td class="num">{{ '%.4f'|format(r.costprice|float) if r.costprice is not none else '0.0000' }}</td>
+            <td class="num">{{ '%.3f'|format(r.opening_stock|float) if r.opening_stock is not none else '0.000' }}</td>
+            <td class="num">{{ '%.2f'|format(r.opening_value|float) if r.opening_value is not none else '0.00' }}</td>
+            <td class="num">{{ '%.3f'|format(r.qty_in|float) if r.qty_in is not none else '0.000' }}</td>
+            <td class="num">{{ '%.2f'|format(r.value_in|float) if r.value_in is not none else '0.00' }}</td>
+            <td class="num">{{ '%.3f'|format(r.qty_out|float) if r.qty_out is not none else '0.000' }}</td>
+            <td class="num">{{ '%.2f'|format(r.value_out|float) if r.value_out is not none else '0.00' }}</td>
+            <td class="num">{{ '%.3f'|format(r.net_qty|float) if r.net_qty is not none else '0.000' }}</td>
+            <td class="num">{{ '%.2f'|format(r.net_value|float) if r.net_value is not none else '0.00' }}</td>
+            <td class="num">{{ '%.3f'|format(r.closing_stock|float) if r.closing_stock is not none else '0.000' }}</td>
+            <td class="num">{{ '%.2f'|format(r.closing_value|float) if r.closing_value is not none else '0.00' }}</td>
+          </tr>
+          {% endfor %}
+        {% endif %}
+      </tbody>
+      {% if rows %}
+      <tfoot>
+        {% if cur_mode == 'detail' %}
+        <tr>
+          <td colspan="10"><strong>Total ({{ gt.row_count|default(rows|length) }} rows)</strong></td>
+          <td class="num">{{ '%.3f'|format(gt.qty_in|default(0)|float) }}</td>
+          <td class="num">{{ '%.3f'|format(gt.qty_out|default(0)|float) }}</td>
+          <td class="num">{{ '%.3f'|format(gt.net_qty|default(0)|float) }}</td>
+          <td></td>
+          <td class="num">{{ '%.4f'|format(gt.amount|default(0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format(gt.line_value|default(0)|float) }}</td>
+          <td></td>
+        </tr>
+        {% elif cur_mode == 'summary_stock' %}
+        <tr>
+          <td colspan="5"><strong>Total ({{ gt.row_count|default(rows|length) }} items)</strong></td>
+          <td class="num">{{ '%.3f'|format(gt.opening_stock|default(0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format(gt.opening_value|default(0)|float) }}</td>
+          <td class="num">{{ '%.3f'|format(gt.qty_in|default(0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format(gt.value_in|default(0)|float) }}</td>
+          <td class="num">{{ '%.3f'|format(gt.qty_out|default(0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format(gt.value_out|default(0)|float) }}</td>
+          <td class="num">{{ '%.3f'|format(gt.net_qty|default(0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format(gt.net_value|default(0)|float) }}</td>
+          <td class="num">{{ '%.3f'|format(gt.closing_stock|default(0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format(gt.closing_value|default(0)|float) }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6"><strong>Total ({{ gt.row_count|default(rows|length) }} rows)</strong></td>
+          <td></td>
+          <td></td>
+          <td class="num">{{ '%.3f'|format(gt.qty_in|default(0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format(gt.value_in|default(0)|float) }}</td>
+          <td class="num">{{ '%.3f'|format(gt.qty_out|default(0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format(gt.value_out|default(0)|float) }}</td>
+          <td class="num">{{ '%.3f'|format(gt.net_qty|default(0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format(gt.net_value|default(0)|float) }}</td>
+          <td></td>
+          <td></td>
+        </tr>
+        {% endif %}
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div>
+{% endblock %}

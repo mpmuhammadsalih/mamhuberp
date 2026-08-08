@@ -1,0 +1,2698 @@
+{% extends "base.html" %}
+{% block title %}POS Counter Operations{% endblock %}
+{% macro fmt_ts(ts) -%}
+{%- if not ts -%}—{%- elif ts.strftime is defined -%}{{ ts.strftime('%Y-%m-%d %H:%M:%S') }}{%- else -%}{{ ts|string }}{%- endif -%}
+{%- endmacro %}
+{% macro fmt_date(d) -%}
+{%- if not d -%}—{%- elif d is string -%}{{ d[:10] }}{%- elif d.strftime is defined -%}{{ d.strftime('%Y-%m-%d') }}{%- else -%}{{ (d|string)[:10] }}{%- endif -%}
+{%- endmacro %}
+{% macro co_op_row(r) -%}
+<tr data-search="{{ (r.slno|string ~ ' ' ~ r.countercode|string ~ ' ' ~ (fmt_date(r.posdate)|string) ~ ' ' ~ r.shiftcode|string ~ ' ' ~ r.openflag|string ~ ' ' ~ (r.openedby or '') ~ ' ' ~ (r.closedby or '') ~ ' ' ~ ((fmt_ts(r.openedtime) if r.openedtime else fmt_date(r.openeddate))|string) ~ ' ' ~ ((fmt_ts(r.closedtime) if r.closedtime else fmt_date(r.closeddate))|string))|lower }}">
+  <td class="num">{{ r.slno if r.slno is not none else '—' }}</td>
+  <td>{{ r.countercode }}</td>
+  <td>{{ fmt_date(r.posdate) }}</td>
+  <td class="num">{{ r.shiftcode }}</td>
+  <td>{{ r.openflag }}</td>
+  <td>{{ r.openedby or '—' }}</td>
+  <td>{{ fmt_ts(r.openedtime) if r.openedtime else fmt_date(r.openeddate) }}</td>
+  <td>{{ r.closedby or '—' }}</td>
+  <td>{{ fmt_ts(r.closedtime) if r.closedtime else fmt_date(r.closeddate) }}</td>
+</tr>
+{%- endmacro %}
+{% macro co_op_row_open(r, loc_code) -%}
+<tr class="co-hist-open-row"
+    data-search="{{ (r.slno|string ~ ' ' ~ r.countercode|string ~ ' ' ~ (fmt_date(r.posdate)|string) ~ ' ' ~ r.shiftcode|string ~ ' ' ~ r.openflag|string ~ ' ' ~ (r.openedby or '') ~ ' ' ~ (r.closedby or '') ~ ' ' ~ ((fmt_ts(r.openedtime) if r.openedtime else fmt_date(r.openeddate))|string) ~ ' ' ~ ((fmt_ts(r.closedtime) if r.closedtime else fmt_date(r.closeddate))|string))|lower }}"
+    data-co-location="{{ loc_code }}"
+    data-co-counter="{{ r.countercode }}"
+    data-co-posdate="{{ fmt_date(r.posdate) }}"
+    data-co-shift="{{ r.shiftcode }}">
+  <td class="num">{{ r.slno if r.slno is not none else '—' }}</td>
+  <td>{{ r.countercode }}</td>
+  <td>{{ fmt_date(r.posdate) }}</td>
+  <td class="num">{{ r.shiftcode }}</td>
+  <td>{{ r.openflag }}</td>
+  <td>{{ r.openedby or '—' }}</td>
+  <td>{{ fmt_ts(r.openedtime) if r.openedtime else fmt_date(r.openeddate) }}</td>
+  <td>{{ r.closedby or '—' }}</td>
+  <td>{{ fmt_ts(r.closedtime) if r.closedtime else fmt_date(r.closeddate) }}</td>
+  <td class="co-hist-actions">
+    <button type="button" class="co-btn-hist-report" data-co-final="0" title="X Report copy (interim)">Report</button>
+    <button type="button" class="co-btn-hist-close" title="Close this open shift">Close</button>
+  </td>
+</tr>
+{%- endmacro %}
+{% macro co_op_row_closed(r, loc_code) -%}
+<tr class="co-hist-closed-row"
+    data-search="{{ (r.slno|string ~ ' ' ~ r.countercode|string ~ ' ' ~ (fmt_date(r.posdate)|string) ~ ' ' ~ r.shiftcode|string ~ ' ' ~ r.openflag|string ~ ' ' ~ (r.openedby or '') ~ ' ' ~ (r.closedby or '') ~ ' ' ~ ((fmt_ts(r.openedtime) if r.openedtime else fmt_date(r.openeddate))|string) ~ ' ' ~ ((fmt_ts(r.closedtime) if r.closedtime else fmt_date(r.closeddate))|string))|lower }}"
+    data-co-location="{{ loc_code }}"
+    data-co-counter="{{ r.countercode }}"
+    data-co-posdate="{{ fmt_date(r.posdate) }}"
+    data-co-shift="{{ r.shiftcode }}">
+  <td class="num">{{ r.slno if r.slno is not none else '—' }}</td>
+  <td>{{ r.countercode }}</td>
+  <td>{{ fmt_date(r.posdate) }}</td>
+  <td class="num">{{ r.shiftcode }}</td>
+  <td>{{ r.openflag }}</td>
+  <td>{{ r.openedby or '—' }}</td>
+  <td>{{ fmt_ts(r.openedtime) if r.openedtime else fmt_date(r.openeddate) }}</td>
+  <td>{{ r.closedby or '—' }}</td>
+  <td>{{ fmt_ts(r.closedtime) if r.closedtime else fmt_date(r.closeddate) }}</td>
+  <td class="co-hist-actions">
+    <button type="button" class="co-btn-hist-report" data-co-final="1" title="Shift close report copy (final)">Report</button>
+  </td>
+</tr>
+{%- endmacro %}
+{% block content %}
+<style>
+  .pos-counter-ops .co-touch-shell {
+    margin-top: 12px;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    background: linear-gradient(165deg, rgba(30, 41, 59, 0.97) 0%, rgba(15, 23, 42, 0.98) 100%);
+    color: #e2e8f0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .pos-counter-ops .co-touch-head {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    flex-wrap: wrap;
+    padding: 14px 16px;
+    background: rgba(15, 118, 110, 0.42);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  }
+  .pos-counter-ops .co-touch-head h2 {
+    margin: 0 0 4px;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #f8fafc;
+  }
+  .pos-counter-ops .co-touch-head .co-touch-sub {
+    margin: 0;
+    font-size: 12px;
+    color: rgba(241, 245, 249, 0.82);
+    line-height: 1.4;
+    max-width: 560px;
+  }
+  .pos-counter-ops .co-touch-help {
+    margin: 0;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(15, 23, 42, 0.45);
+    flex-shrink: 0;
+  }
+  .pos-counter-ops .co-touch-help > summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #cbd5e1;
+    user-select: none;
+    touch-action: manipulation;
+    min-height: 44px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+  }
+  .pos-counter-ops .co-touch-help > summary::-webkit-details-marker { display: none; }
+  .pos-counter-ops .co-touch-help[open] > summary { color: #f1f5f9; }
+  .pos-counter-ops .co-touch-help-body {
+    padding: 0 14px 12px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #94a3b8;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .pos-counter-ops .co-touch-body { padding: 14px 16px 16px; }
+  .pos-counter-ops .co-status {
+    font-size: 14px;
+    font-weight: 600;
+    padding: 12px 14px;
+    border-radius: 12px;
+    margin-bottom: 14px;
+    background: rgba(51, 65, 85, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    color: #e2e8f0;
+    line-height: 1.35;
+    touch-action: manipulation;
+  }
+  .pos-counter-ops .co-status--open {
+    background: rgba(6, 95, 70, 0.42);
+    border-color: rgba(167, 243, 208, 0.45);
+    color: #d1fae5;
+  }
+  .pos-counter-ops .co-touch-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  @media (max-width: 720px) {
+    .pos-counter-ops .co-touch-grid { grid-template-columns: 1fr; }
+  }
+  .pos-counter-ops .co-touch-field-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    margin-bottom: 8px;
+  }
+  .pos-counter-ops .co-touch-active {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 13px;
+    font-weight: 700;
+    color: #f1f5f9;
+    font-variant-numeric: tabular-nums;
+  }
+  .pos-counter-ops .co-touch-active kbd {
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #64748b;
+    flex-shrink: 0;
+  }
+  .pos-counter-ops .co-touch-search {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 48px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.42);
+    background: #0f172a;
+    color: #f1f5f9;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    touch-action: manipulation;
+  }
+  .pos-counter-ops .co-touch-search::placeholder { color: #64748b; font-weight: 500; }
+  .pos-counter-ops .co-touch-search:focus {
+    outline: none;
+    border-color: rgba(45, 212, 191, 0.65);
+    box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.25);
+  }
+  .pos-counter-ops .co-touch-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: min(220px, 40vh);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 2px;
+    margin: 0 -2px;
+  }
+  .pos-counter-ops .co-touch-opt {
+    width: 100%;
+    text-align: left;
+    box-sizing: border-box;
+    min-height: 48px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    background: rgba(30, 41, 59, 0.72);
+    color: #f1f5f9;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
+  }
+  .pos-counter-ops .co-touch-opt:hover { background: rgba(51, 65, 85, 0.85); border-color: rgba(148, 163, 184, 0.35); }
+  .pos-counter-ops .co-touch-opt:active { transform: scale(0.992); }
+  .pos-counter-ops .co-touch-opt.is-selected {
+    border-color: rgba(45, 212, 191, 0.65);
+    background: rgba(15, 118, 110, 0.42);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+  .pos-counter-ops .co-touch-opt.co-touch-opt--empty {
+    opacity: 0.65;
+    cursor: default;
+    pointer-events: none;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .pos-counter-ops .co-touch-sel-hide {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .pos-counter-ops .co-touch-datetime-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 14px;
+    align-items: end;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 560px) {
+    .pos-counter-ops .co-touch-datetime-row { grid-template-columns: 1fr; }
+  }
+  .pos-counter-ops .co-touch-date-wrap label,
+  .pos-counter-ops .co-touch-shift-wrap label {
+    display: block;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: #94a3b8;
+    margin-bottom: 8px;
+  }
+  .pos-counter-ops .co-touch-date-wrap .co-date-trigger {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 52px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.42);
+    background: #0f172a;
+    color: #f1f5f9;
+    font-size: 17px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    touch-action: manipulation;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    text-align: left;
+    font-family: inherit;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+  .pos-counter-ops .co-date-trigger:hover {
+    border-color: rgba(45, 212, 191, 0.55);
+  }
+  .pos-counter-ops .co-date-trigger:focus-visible {
+    outline: none;
+    border-color: rgba(45, 212, 191, 0.75);
+    box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+  .pos-counter-ops .co-touch-date-wrap.is-readonly .co-date-trigger,
+  .pos-counter-ops .co-touch-shift-wrap.is-readonly .co-touch-step,
+  .pos-counter-ops .co-touch-shift-wrap.is-readonly #coShift {
+    opacity: 0.78;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+  .pos-counter-ops .co-touch-date-wrap.is-readonly .co-date-trigger__icon {
+    color: #94a3b8;
+  }
+  .pos-counter-ops .co-date-trigger__icon {
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    opacity: 1;
+  }
+  .pos-counter-ops .co-touch-location-note {
+    margin: 0 0 10px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: #94a3b8;
+  }
+  .pos-counter-ops #coCounterPickWrap[hidden] {
+    display: none !important;
+  }
+  .pos-counter-ops .co-date-popup {
+    position: fixed;
+    inset: 0;
+    z-index: 12000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    box-sizing: border-box;
+  }
+  .pos-counter-ops .co-date-popup[hidden] { display: none !important; }
+  .pos-counter-ops .co-date-popup__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.62);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+  .pos-counter-ops .co-date-popup__card {
+    position: relative;
+    width: 100%;
+    max-width: 380px;
+    border-radius: 16px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: linear-gradient(165deg, #1e293b 0%, #0f172a 100%);
+    box-shadow:
+      0 28px 64px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    padding: 14px 14px 12px;
+    color: #f1f5f9;
+  }
+  .pos-counter-ops .co-date-popup__nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .pos-counter-ops .co-date-popup__nav button {
+    flex: 0 0 48px;
+    height: 48px;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(51, 65, 85, 0.85);
+    color: #f8fafc;
+    font-size: 22px;
+    font-weight: 800;
+    cursor: pointer;
+    touch-action: manipulation;
+    line-height: 1;
+    padding: 0;
+  }
+  .pos-counter-ops .co-date-popup__nav button:hover { background: rgba(71, 85, 105, 0.95); }
+  .pos-counter-ops .co-date-popup__nav button:active { transform: scale(0.96); }
+  .pos-counter-ops .co-date-popup__title {
+    flex: 1;
+    text-align: center;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #cbd5e1;
+  }
+  .pos-counter-ops .co-date-popup__weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    margin-bottom: 6px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #64748b;
+    text-align: center;
+  }
+  .pos-counter-ops .co-date-popup__grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+  }
+  .pos-counter-ops .co-date-popup__grid button {
+    min-height: 44px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    background: rgba(30, 41, 59, 0.65);
+    color: #f1f5f9;
+    font-size: 15px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    touch-action: manipulation;
+    padding: 0;
+  }
+  .pos-counter-ops .co-date-popup__grid button:hover { background: rgba(51, 65, 85, 0.9); }
+  .pos-counter-ops .co-date-popup__grid button:active { transform: scale(0.97); }
+  .pos-counter-ops .co-date-popup__grid button.is-muted {
+    opacity: 0.28;
+    pointer-events: none;
+  }
+  .pos-counter-ops .co-date-popup__grid button.is-today:not(.is-selected) {
+    border-color: rgba(45, 212, 191, 0.45);
+    color: #5eead4;
+  }
+  .pos-counter-ops .co-date-popup__grid button.is-selected {
+    background: linear-gradient(145deg, #0d9488 0%, #0f766e 100%);
+    border-color: rgba(167, 243, 208, 0.55);
+    color: #fff;
+    box-shadow: 0 8px 18px rgba(13, 148, 136, 0.35);
+  }
+  .pos-counter-ops .co-date-popup__footer {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(148, 163, 184, 0.18);
+  }
+  .pos-counter-ops .co-date-popup__footer button {
+    flex: 1;
+    min-height: 48px;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+    touch-action: manipulation;
+    font-family: inherit;
+  }
+  .pos-counter-ops .co-date-popup__btn-today {
+    background: rgba(51, 65, 85, 0.75);
+    color: #e2e8f0;
+  }
+  .pos-counter-ops .co-date-popup__btn-done {
+    background: linear-gradient(145deg, #10b981 0%, #047857 100%);
+    border: none;
+    color: #fff;
+  }
+  .pos-counter-ops .co-touch-shift-wrap { min-width: 200px; }
+  .pos-counter-ops .co-touch-shift {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .pos-counter-ops .co-touch-step {
+    flex: 0 0 52px;
+    min-height: 52px;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.38);
+    background: rgba(51, 65, 85, 0.75);
+    color: #f8fafc;
+    font-size: 22px;
+    font-weight: 800;
+    line-height: 1;
+    cursor: pointer;
+    touch-action: manipulation;
+    padding: 0;
+  }
+  .pos-counter-ops .co-touch-step:hover { background: rgba(71, 85, 105, 0.92); }
+  .pos-counter-ops .co-touch-step:active { transform: scale(0.96); }
+  .pos-counter-ops #coShift {
+    flex: 1;
+    min-width: 0;
+    min-height: 52px;
+    box-sizing: border-box;
+    text-align: center;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.42);
+    background: #0f172a;
+    color: #f1f5f9;
+    font-size: 22px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    padding: 8px;
+    touch-action: manipulation;
+    -moz-appearance: textfield;
+  }
+  .pos-counter-ops #coShift::-webkit-outer-spin-button,
+  .pos-counter-ops #coShift::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .pos-counter-ops .co-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: stretch;
+  }
+  .pos-counter-ops .co-btn-timecheck {
+    flex: 1 1 140px;
+    min-height: 48px;
+    padding: 0 16px;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    background: rgba(51, 65, 85, 0.9);
+    color: #e2e8f0;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .pos-counter-ops .co-btn-timecheck:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .pos-counter-ops .co-btn-timecheck:not(:disabled):active { transform: scale(0.98); }
+  .pos-counter-ops .co-btn-shift {
+    flex: 1 1 180px;
+    width: auto;
+    min-width: 0;
+    box-sizing: border-box;
+    min-height: 56px;
+    padding: 14px 18px;
+    border-radius: 14px;
+    border: none;
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    touch-action: manipulation;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+  .pos-counter-ops .co-btn-shift:active:not(:disabled) {
+    transform: translateY(1px);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2);
+  }
+  .pos-counter-ops .co-btn-shift:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+  .pos-counter-ops .co-btn-shift--open {
+    background: linear-gradient(145deg, #10b981 0%, #047857 100%) !important;
+    color: #fff !important;
+  }
+  .pos-counter-ops .co-btn-shift--close {
+    background: linear-gradient(145deg, #ea580c 0%, #9a3412 100%) !important;
+    color: #fff !important;
+  }
+  .pos-counter-ops .co-btn-shift--close-blocked {
+    background: linear-gradient(145deg, #64748b 0%, #475569 100%) !important;
+    opacity: 0.72;
+  }
+  .pos-counter-ops .co-held-warn {
+    display: none;
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+    background: rgba(127, 29, 29, 0.45);
+    border: 1px solid rgba(252, 165, 165, 0.45);
+    color: #fecaca;
+  }
+  .pos-counter-ops .co-held-warn.is-visible { display: block; }
+  .pos-counter-ops .co-held-warn a { color: #fde68a; font-weight: 700; }
+  .pos-counter-ops .co-shift-bills {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(148, 163, 184, 0.28);
+  }
+  .pos-counter-ops .co-shift-bills__title {
+    margin: 0 0 8px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #94a3b8;
+  }
+  .pos-counter-ops .co-shift-bills__sub {
+    margin: 0 0 10px;
+    font-size: 12px;
+    color: rgba(226, 232, 240, 0.75);
+    line-height: 1.35;
+  }
+  .pos-counter-ops .co-shift-bills .po-tabs { margin-bottom: 8px; }
+  /* Override nexa-list-page .co-table light rows inside dark POS session panel */
+  .pos-counter-ops .co-touch-shell .co-shift-bills .co-table-wrap {
+    max-height: 240px;
+    border-color: rgba(148, 163, 184, 0.35) !important;
+    background: rgba(15, 23, 42, 0.55) !important;
+  }
+  .pos-counter-ops .co-touch-shell .co-shift-bills .co-table thead th {
+    background: rgba(30, 41, 59, 0.95) !important;
+    color: #e2e8f0 !important;
+    border-color: rgba(148, 163, 184, 0.28) !important;
+  }
+  .pos-counter-ops .co-touch-shell .co-shift-bills .co-table tbody tr,
+  .pos-counter-ops .co-touch-shell .co-shift-bills .co-table tbody tr:nth-child(even) {
+    background: rgba(30, 41, 59, 0.72) !important;
+  }
+  .pos-counter-ops .co-touch-shell .co-shift-bills .co-table tbody tr:hover {
+    background: rgba(51, 65, 85, 0.92) !important;
+  }
+  .pos-counter-ops .co-touch-shell .co-shift-bills .co-table td {
+    color: #f8fafc !important;
+    border-color: rgba(148, 163, 184, 0.22) !important;
+    font-weight: 500;
+  }
+  .pos-counter-ops .co-touch-shell .co-shift-bills .co-table td.co-shift-bills-empty {
+    color: #94a3b8 !important;
+    font-weight: 600;
+  }
+  .pos-counter-ops .co-touch-shell .co-shift-bills .co-shift-bills-actions {
+    white-space: nowrap;
+    text-align: right;
+  }
+  .pos-counter-ops .co-shift-bill-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: 0 10px;
+    margin-left: 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .pos-counter-ops .co-shift-bill-btn:first-child { margin-left: 0; }
+  .pos-counter-ops .co-shift-bill-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .pos-counter-ops .co-shift-bill-btn--open {
+    background: linear-gradient(145deg, #0d9488 0%, #0f766e 100%);
+    color: #fff;
+    border-color: rgba(167, 243, 208, 0.45);
+  }
+  .pos-counter-ops .co-shift-bill-btn--cancel {
+    background: rgba(127, 29, 29, 0.55);
+    color: #fecaca;
+    border-color: rgba(252, 165, 165, 0.4);
+  }
+  .pos-counter-ops #coFlash {
+    margin-top: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    min-height: 20px;
+  }
+  .pos-counter-ops #coFlash.err { color: #fecaca; }
+  .pos-counter-ops #coFlash.ok { color: #6ee7b7; }
+  .pos-counter-ops .co-section-title { margin: 18px 0 8px; font-size: 15px; font-weight: 600; color: #0f172a; }
+  .pos-counter-ops .co-table-wrap { overflow: auto; max-height: 420px; margin-top: 8px; border: 1px solid #e5e7eb; border-radius: 8px; }
+  .pos-counter-ops .co-table-wrap table { font-size: 12px; }
+  .pos-counter-ops .co-table-wrap .num { text-align: right; }
+  .pos-counter-ops .co-hist-actions { text-align: center; white-space: nowrap; }
+  .pos-counter-ops .co-btn-hist-close {
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 6px;
+    border: 1px solid #b91c1c;
+    background: #fef2f2;
+    color: #991b1b;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .pos-counter-ops .co-btn-hist-close:hover:not(:disabled) {
+    background: #fee2e2;
+  }
+  .pos-counter-ops .co-btn-hist-report {
+    font-size: 12px;
+    padding: 4px 12px;
+    margin-right: 6px;
+    border-radius: 6px;
+    border: 1px solid #0f766e;
+    background: #ecfdf5;
+    color: #065f46;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .pos-counter-ops .co-btn-hist-report:hover:not(:disabled) {
+    background: #d1fae5;
+  }
+  .pos-counter-ops .co-btn-hist-close:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .pos-counter-ops .co-recent-panel {
+    margin-top: 10px;
+    margin-bottom: 16px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    background: #fafafa;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  }
+  .pos-counter-ops #coBtnToggleRecent {
+    touch-action: manipulation;
+    min-height: 44px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .pos-counter-ops .co-open-shift-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10050;
+    background: rgba(15, 23, 42, 0.58);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    box-sizing: border-box;
+  }
+  .pos-counter-ops .co-open-shift-overlay[hidden] {
+    display: none !important;
+  }
+  .pos-counter-ops .co-open-shift-overlay__panel {
+    max-width: 360px;
+    width: 100%;
+    padding: 28px 24px;
+    border-radius: 16px;
+    background: #f8fafc;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    box-shadow: 0 24px 48px rgba(15, 23, 42, 0.35);
+    text-align: center;
+    box-sizing: border-box;
+  }
+  .pos-counter-ops .co-open-shift-overlay__spinner {
+    width: 44px;
+    height: 44px;
+    margin: 0 auto 16px;
+    border-radius: 50%;
+    border: 4px solid rgba(16, 185, 129, 0.25);
+    border-top-color: #10b981;
+    animation: co-open-shift-spin 0.75s linear infinite;
+  }
+  @keyframes co-open-shift-spin {
+    to { transform: rotate(360deg); }
+  }
+  body.co-counter-ops-loading .pos-counter-ops {
+    pointer-events: none;
+    user-select: none;
+  }
+  .pos-counter-ops .co-page-load-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10040;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+    box-sizing: border-box;
+    background: rgba(2, 6, 23, 0.78);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .pos-counter-ops .co-page-load-overlay[hidden] {
+    display: none !important;
+  }
+  .pos-counter-ops .co-page-load-overlay__panel {
+    max-width: 380px;
+    width: 100%;
+    padding: 28px 32px;
+    border-radius: 16px;
+    background: rgba(15, 23, 42, 0.94);
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    box-shadow:
+      0 28px 72px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    text-align: center;
+    box-sizing: border-box;
+    color: #f1f5f9;
+  }
+  .pos-counter-ops .co-page-load-overlay__spinner {
+    width: 44px;
+    height: 44px;
+    margin: 0 auto 16px;
+    border-radius: 50%;
+    border: 3px solid rgba(148, 163, 184, 0.35);
+    border-top-color: #34d399;
+    animation: co-open-shift-spin 0.7s linear infinite;
+  }
+  .pos-counter-ops .co-page-load-overlay__msg {
+    margin: 0 0 8px;
+    font-size: 17px;
+    font-weight: 800;
+    color: #f8fafc;
+  }
+  .pos-counter-ops .co-page-load-overlay__hint {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #94a3b8;
+    line-height: 1.4;
+  }
+  .pos-counter-ops .co-open-shift-overlay__msg {
+    margin: 0 0 8px;
+    font-size: 18px;
+    font-weight: 800;
+    color: #0f172a;
+  }
+  .pos-counter-ops .co-open-shift-overlay__hint {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #64748b;
+    line-height: 1.35;
+  }
+  .pos-counter-ops .co-assign-popup {
+    position: fixed;
+    inset: 0;
+    z-index: 12100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    box-sizing: border-box;
+  }
+  .pos-counter-ops .co-assign-popup[hidden] { display: none !important; }
+  .pos-counter-ops .co-assign-popup__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.62);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+  .pos-counter-ops .co-assign-popup__card {
+    position: relative;
+    width: 100%;
+    max-width: 400px;
+    border-radius: 16px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: linear-gradient(165deg, #1e293b 0%, #0f172a 100%);
+    box-shadow: 0 28px 64px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    padding: 20px 18px 16px;
+    color: #f1f5f9;
+    box-sizing: border-box;
+  }
+  .pos-counter-ops .co-assign-popup__title {
+    margin: 0 0 12px;
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    color: #f8fafc;
+    line-height: 1.25;
+  }
+  .pos-counter-ops .co-assign-popup__body {
+    margin: 0 0 18px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #cbd5e1;
+    line-height: 1.45;
+  }
+  .pos-counter-ops .co-assign-popup__body code {
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+  }
+  .pos-counter-ops .co-assign-popup__host {
+    font-weight: 800;
+    color: #fde68a;
+    word-break: break-all;
+  }
+  .pos-counter-ops .co-assign-popup__footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
+    align-items: center;
+    padding-top: 12px;
+    border-top: 1px solid rgba(148, 163, 184, 0.18);
+  }
+  .pos-counter-ops .co-assign-popup__footer a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0 18px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 800;
+    text-decoration: none;
+    touch-action: manipulation;
+    background: linear-gradient(145deg, #0d9488 0%, #0f766e 100%);
+    color: #fff;
+    border: 1px solid rgba(167, 243, 208, 0.45);
+    box-shadow: 0 8px 18px rgba(13, 148, 136, 0.3);
+  }
+  .pos-counter-ops .co-assign-popup__footer a:active { transform: scale(0.98); }
+  .pos-counter-ops .co-assign-popup__dismiss {
+    min-height: 44px;
+    padding: 0 18px;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    background: rgba(51, 65, 85, 0.85);
+    color: #f8fafc;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .pos-counter-ops .co-assign-popup__dismiss:active { transform: scale(0.98); }
+  .pos-counter-ops .co-preclose-popup__card {
+    max-width: 520px;
+    width: 100%;
+  }
+  .pos-counter-ops .co-preclose-popup__preview {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    max-height: 52vh;
+    overflow: auto;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #0f172a;
+    font-family: ui-monospace, 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.35;
+    white-space: pre;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+  }
+  .pos-counter-ops .co-preclose-popup__hint {
+    margin: 0 0 12px;
+    font-size: 12px;
+    color: #94a3b8;
+    line-height: 1.4;
+  }
+  .pos-counter-ops .co-preclose-popup__footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+  .pos-counter-ops .co-preclose-popup__footer button,
+  .pos-counter-ops .co-preclose-popup__footer .co-preclose-popup__link {
+    min-height: 44px;
+    padding: 0 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .pos-counter-ops .co-preclose-popup__btn-print {
+    border: 1px solid rgba(45, 212, 191, 0.45);
+    background: linear-gradient(145deg, #0d9488 0%, #0f766e 100%);
+    color: #fff;
+  }
+  .pos-counter-ops .co-preclose-popup__btn-copy {
+    border: 1px solid rgba(96, 165, 250, 0.45);
+    background: linear-gradient(145deg, #2563eb 0%, #1d4ed8 100%);
+    color: #fff;
+  }
+  .pos-counter-ops .co-preclose-popup__btn-pdf {
+    border: 1px solid rgba(167, 139, 250, 0.45);
+    background: linear-gradient(145deg, #7c3aed 0%, #6d28d9 100%);
+    color: #fff;
+  }
+  .pos-counter-ops .co-preclose-popup__btn-close-shift {
+    border: 1px solid rgba(251, 146, 60, 0.5);
+    background: linear-gradient(145deg, #ea580c 0%, #9a3412 100%);
+    color: #fff;
+  }
+  .pos-counter-ops .co-preclose-popup__btn-dismiss {
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    background: rgba(51, 65, 85, 0.85);
+    color: #f8fafc;
+  }
+</style>
+
+<div class="page-po nexa-list-page pos-counter-ops" style="max-width:1300px;">
+  <div class="page-po__topbar" style="padding-bottom: 8px;">
+    <div>
+      <h1 class="page-po__title">POS Counter Operations</h1>
+      <p class="page-po__muted">Open and close billing shifts per counter. Shifts are stored in <code>COUNTEROPERATIONS</code> (archived rows in <code>COUNTEROPERATIONS_HIST</code> when needed).</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% include 'includes/list_refresh_bar.html' %}
+      <button type="button" class="page-po__btn-secondary" id="coBtnToggleRecent"
+              aria-expanded="false" aria-controls="coRecentPanel">
+        Shift history ({{ history_opened|length + history_closed|length }}{% if history_limit %} / up to {{ history_limit }}{% endif %})
+      </button>
+      <a class="page-po__btn-secondary" href="{{ url_for('pos_billing.pos_counter_setup_list') }}">Counter setup</a>
+    </div>
+  </div>
+
+  <div id="coRecentPanel" class="co-recent-panel" hidden>
+    <h2 class="co-section-title" style="margin-top:0;">Shift history</h2>
+    <p class="page-po__muted" style="margin: -4px 0 10px;">Newest first for this location (up to {{ history_limit|default(500) }} rows, including archived shifts). Use <strong>Report</strong> for an X Report copy (open shifts) or shift-close copy (closed shifts). On the <strong>Opened</strong> tab, <strong>Close</strong> ends an open shift (held bills must be cleared first).</p>
+
+    <div class="nexa-list-toolbar">
+      <input type="text" id="coHistSearch" class="input" placeholder="Filter counter, date, shift, user…"
+             style="min-width:220px; max-width:360px;" autocomplete="off" />
+      <span id="coHistMeta" class="nexa-num"></span>
+    </div>
+
+    <div class="po-tabs">
+      <button type="button" class="po-tab active" data-tab="coTabOpened">Opened ({{ history_opened|length }})</button>
+      <button type="button" class="po-tab" data-tab="coTabClosed">Closed ({{ history_closed|length }})</button>
+    </div>
+
+    <div id="coTabOpened" class="tab-pane active">
+      <div class="co-table-wrap">
+        <table class="co-table" id="coHistOpenedTable">
+          <thead>
+            <tr>
+              <th class="num">Sl no</th>
+              <th>Counter</th>
+              <th>POS date</th>
+              <th>Shift</th>
+              <th>Open</th>
+              <th>Opened by</th>
+              <th>Opened at</th>
+              <th>Closed by</th>
+              <th>Closed at</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="coHistOpenedBody">
+            {% for r in history_opened %}
+            {{ co_op_row_open(r, location_code)|safe }}
+            {% else %}
+            <tr class="co-hist-empty"><td colspan="10" style="text-align:center; padding:16px; color:#6b7280;">No open shifts in recent history.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="coTabClosed" class="tab-pane">
+      <div class="co-table-wrap">
+        <table class="co-table" id="coHistClosedTable">
+          <thead>
+            <tr>
+              <th class="num">Sl no</th>
+              <th>Counter</th>
+              <th>POS date</th>
+              <th>Shift</th>
+              <th>Open</th>
+              <th>Opened by</th>
+              <th>Opened at</th>
+              <th>Closed by</th>
+              <th>Closed at</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="coHistClosedBody">
+            {% for r in history_closed %}
+            {{ co_op_row_closed(r, location_code)|safe }}
+            {% else %}
+            <tr class="co-hist-empty"><td colspan="10" style="text-align:center; padding:16px; color:#6b7280;">No closed rows in recent history.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="co-touch-shell">
+    <div class="co-touch-head">
+      <div>
+        <h2>POS session</h2>
+        <p class="co-touch-sub">Branch is the LOCATIONMASTER row with <code>BASELOCATIONFLAG = Y</code>. Counter defaults from <code>COUNTER.SYSTEMNAME</code> (this PC via QZ Tray when available); otherwise choose manually. Set POS date and shift, then open or close.</p>
+      </div>
+      <details class="co-touch-help">
+        <summary>About POS date &amp; shift</summary>
+        <div class="co-touch-help-body">
+          <strong>POSDATE</strong> is the <em>business trading date</em> sales attach to (often today; some stores hold the prior date until after midnight close).
+          <strong>SHIFTCODE</strong> separates shifts on the same POS date (e.g. 1 = morning, 2 = evening).
+        </div>
+      </details>
+    </div>
+    <div class="co-touch-body">
+      <div id="coStatus" class="co-status">Select a counter to see whether a shift is open.</div>
+
+      <div class="co-touch-grid">
+        <div>
+          <span class="co-touch-field-label" id="coLocFieldLbl">Location</span>
+          <p class="co-touch-location-note">Read-only: base branch from master (<code>BASELOCATIONFLAG = &apos;Y&apos;</code>).{% if locations|length > 1 %} Multiple base rows exist; this screen uses the lowest <code>LOCATIONCODE</code> ({{ location_code }}).{% endif %}</p>
+          <div class="co-touch-active"><kbd>Branch</kbd> <span id="coLocSummary">{{ location_code }} — {{ location_name or '—' }}</span></div>
+          <select id="coLocation" class="co-touch-sel-hide" tabindex="-1" aria-hidden="true">
+            <option value="{{ location_code }}" selected>{{ location_code }} — {{ location_name or '' }}</option>
+          </select>
+        </div>
+        <div>
+          <span class="co-touch-field-label" id="coCounterFieldLbl">Counter</span>
+          <div class="co-touch-active"><kbd>Counter</kbd> <span id="coCounterSummary">{% for c in counters %}{% if initial_counter_code is not none and c.countercode == initial_counter_code %}{{ c.countercode }} — {{ c.countername or 'Counter' }}{% elif initial_counter_code is none and loop.first %}{{ c.countercode }} — {{ c.countername or 'Counter' }}{% endif %}{% else %}No counters{% endfor %}</span></div>
+          <p id="coCounterAutoNote" class="co-touch-location-note" hidden>This register was matched automatically from this PC name (<code>COUNTER.SYSTEMNAME</code>). To use another counter, adjust Counter setup or open this page without QZ Tray hostname match.</p>
+          <select id="coCounter" class="co-touch-sel-hide" tabindex="-1" aria-hidden="true">
+            {% for c in counters %}
+              <option value="{{ c.countercode }}"{% if initial_counter_code is not none and c.countercode == initial_counter_code %} selected{% elif initial_counter_code is none and loop.first %} selected{% endif %}>{{ c.countercode }} — {{ c.countername or 'Counter' }}</option>
+            {% else %}
+              <option value="">—</option>
+            {% endfor %}
+          </select>
+          <div id="coCounterPickWrap">
+            <input type="search" id="coCounterSearch" class="co-touch-search" placeholder="Type to search counters or system name…" autocomplete="off" aria-labelledby="coCounterFieldLbl" />
+            <div class="co-touch-options" id="coCounterOptions" role="listbox" aria-labelledby="coCounterFieldLbl">
+              {% for c in counters %}
+                <button type="button" role="option" class="co-touch-opt {% if initial_counter_code is not none and c.countercode == initial_counter_code %}is-selected{% elif initial_counter_code is none and loop.first %}is-selected{% endif %}" data-value="{{ c.countercode }}" data-systemname="{{ (c.systemname or '')|e }}" aria-selected="{% if initial_counter_code is not none and c.countercode == initial_counter_code %}true{% elif initial_counter_code is none and loop.first %}true{% else %}false{% endif %}">{{ c.countercode }} — {{ c.countername or 'Counter' }}{% if c.systemname %} · {{ c.systemname }}{% endif %}</button>
+              {% else %}
+                <div class="co-touch-opt co-touch-opt--empty" role="presentation">No counters for this location.</div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="co-touch-datetime-row">
+        <div class="co-touch-date-wrap">
+          <span class="co-touch-field-label" id="coPosDateLbl">POS date</span>
+          <button type="button" class="co-date-trigger" id="coPosDateBtn"
+                  aria-haspopup="dialog" aria-expanded="false" aria-controls="coDatePopup"
+                  aria-labelledby="coPosDateLbl coPosDateDisplay">
+            <span id="coPosDateDisplay">—</span>
+            <span class="co-date-trigger__icon" aria-hidden="true">Pick date</span>
+          </button>
+          <input type="hidden" id="coPosDate" value="{{ today_iso }}" />
+        </div>
+        <div class="co-touch-shift-wrap">
+          <label for="coShift">Shift</label>
+          <div class="co-touch-shift">
+            <button type="button" class="co-touch-step" id="coShiftMinus" aria-label="Decrease shift">−</button>
+            <input type="number" id="coShift" min="0" max="99" value="1" inputmode="numeric" />
+            <button type="button" class="co-touch-step" id="coShiftPlus" aria-label="Increase shift">+</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="co-actions">
+        <button type="button" class="co-btn-timecheck" id="coBtnTimeCheck" disabled hidden>X Report</button>
+        <button type="button" class="co-btn-shift co-btn-shift--open" id="coBtnShift" disabled>Open shift</button>
+      </div>
+      <div id="coHeldWarn" class="co-held-warn" role="alert">
+        <span id="coHeldWarnText"></span>
+        <a href="{{ pos_billing_url }}">Open POS Billing</a> to resume or void held bills.
+      </div>
+      <section class="co-shift-bills" id="coShiftBillsPanel">
+        <h3 class="co-shift-bills__title">Counter bills on POS date</h3>
+        <p class="co-shift-bills__sub" id="coShiftBillsSub">Held and canceled carts for this counter on the POS date.</p>
+        <div class="po-tabs co-shift-bills-tabs">
+          <button type="button" class="po-tab active" data-co-bill-tab="coTabShiftHeld" id="coTabBtnHeld">Held (0)</button>
+          <button type="button" class="po-tab" data-co-bill-tab="coTabShiftCanceled" id="coTabBtnCanceled">Canceled (0)</button>
+        </div>
+        <div id="coTabShiftHeld" class="tab-pane active">
+          <div class="co-table-wrap">
+            <table class="co-table">
+              <thead>
+                <tr>
+                  <th>Bill no</th>
+                  <th>Date</th>
+                  <th>Time</th>
+                  <th style="text-align:right;">Net</th>
+                  <th>Created by</th>
+                  <th style="text-align:right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="coShiftHeldBody">
+                <tr><td colspan="6" class="co-shift-bills-empty" style="text-align:center;padding:14px;">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div id="coTabShiftCanceled" class="tab-pane">
+          <div class="co-table-wrap">
+            <table class="co-table">
+              <thead>
+                <tr>
+                  <th>Bill no</th>
+                  <th>Date</th>
+                  <th>Time</th>
+                  <th style="text-align:right;">Net</th>
+                  <th>Created by</th>
+                </tr>
+              </thead>
+              <tbody id="coShiftCanceledBody">
+                <tr><td colspan="5" class="co-shift-bills-empty" style="text-align:center;padding:14px;">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      <div id="coFlash"></div>
+    </div>
+  </div>
+
+  <div id="coDatePopup" class="co-date-popup" hidden role="dialog" aria-modal="true" aria-labelledby="coDatePopupTitle">
+    <div class="co-date-popup__backdrop" id="coDateBackdrop"></div>
+    <div class="co-date-popup__card">
+      <div class="co-date-popup__nav">
+        <button type="button" id="coDatePrevM" aria-label="Previous month">‹</button>
+        <div class="co-date-popup__title" id="coDatePopupTitle">—</div>
+        <button type="button" id="coDateNextM" aria-label="Next month">›</button>
+      </div>
+      <div class="co-date-popup__weekdays">
+        <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+      </div>
+      <div id="coDateGrid" class="co-date-popup__grid"></div>
+      <div class="co-date-popup__footer">
+        <button type="button" class="co-date-popup__btn-today" id="coDateToday">Today</button>
+        <button type="button" class="co-date-popup__btn-done" id="coDateDone">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="coPreclosePopup" class="co-assign-popup" hidden role="dialog" aria-modal="true" aria-labelledby="coPrecloseTitle">
+    <div class="co-assign-popup__backdrop" id="coPrecloseBackdrop" tabindex="-1"></div>
+    <div class="co-assign-popup__card co-preclose-popup__card">
+      <h2 id="coPrecloseTitle" class="co-assign-popup__title">Shift pre-close</h2>
+      <p id="coPrecloseHint" class="co-preclose-popup__hint">Review totals, print X Report copy, then close shift for the final print.</p>
+      <pre id="coPreclosePreview" class="co-preclose-popup__preview" aria-live="polite">Loading…</pre>
+      <div class="co-preclose-popup__footer">
+        <button type="button" class="co-preclose-popup__btn-dismiss" id="coPrecloseDismiss">Cancel</button>
+        <button type="button" class="co-preclose-popup__btn-copy" id="coPrecloseCopy">Copy</button>
+        <button type="button" class="co-preclose-popup__btn-pdf" id="coPreclosePdf">PDF</button>
+        <button type="button" class="co-preclose-popup__btn-print" id="coPreclosePrint">Print</button>
+        <button type="button" class="co-preclose-popup__btn-close-shift" id="coPrecloseConfirmClose" hidden>Close shift</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="coPageLoadOverlay" class="co-page-load-overlay" aria-hidden="false" aria-busy="true">
+    <div class="co-page-load-overlay__panel" role="status" aria-live="polite">
+      <div class="co-page-load-overlay__spinner" aria-hidden="true"></div>
+      <p class="co-page-load-overlay__msg">Loading Counter Operations…</p>
+      <p class="co-page-load-overlay__hint" id="coPageLoadOverlayHint">Starting…</p>
+    </div>
+  </div>
+
+  <div id="coOpenShiftOverlay" class="co-open-shift-overlay" hidden aria-busy="true">
+    <div class="co-open-shift-overlay__panel" role="status">
+      <div class="co-open-shift-overlay__spinner" aria-hidden="true"></div>
+      <p class="co-open-shift-overlay__msg">Opening shift…</p>
+      <p class="co-open-shift-overlay__hint">Please wait — do not tap again.</p>
+    </div>
+  </div>
+
+  <div id="coAssignCounterPopup" class="co-assign-popup" hidden role="dialog" aria-modal="true" aria-labelledby="coAssignCounterTitle">
+    <div class="co-assign-popup__backdrop" id="coAssignCounterBackdrop" tabindex="-1"></div>
+    <div class="co-assign-popup__card">
+      <h2 id="coAssignCounterTitle" class="co-assign-popup__title">Please assign counter</h2>
+      <p class="co-assign-popup__body">
+        This PC&apos;s name from QZ Tray is <span id="coAssignCounterHost" class="co-assign-popup__host">—</span>.
+        No row in <code>COUNTER</code> has <code>SYSTEMNAME</code> matching that value for this branch.
+        Add or edit a counter in Counter setup (use &quot;Fill from QZ Tray&quot; on the new-counter form to copy this name).
+      </p>
+      <div class="co-assign-popup__footer">
+        <a id="coAssignCounterSetupLink" href="{{ url_for('pos_billing.pos_counter_setup_list') }}">Counter setup</a>
+        <button type="button" class="co-assign-popup__dismiss" id="coAssignCounterDismiss">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="coSetCounterSessionPopup" class="co-assign-popup" hidden role="dialog" aria-modal="true" aria-labelledby="coSetCounterSessionTitle">
+    <div class="co-assign-popup__backdrop" id="coSetCounterSessionBackdrop" tabindex="-1" aria-hidden="true"></div>
+    <div class="co-assign-popup__card">
+      <h2 id="coSetCounterSessionTitle" class="co-assign-popup__title">Set counter</h2>
+      <p class="co-assign-popup__body">
+        Your session does not have a register counter yet. Open <strong>POS Counter Setup</strong> and save a counter for this workstation.
+      </p>
+      <div class="co-assign-popup__footer">
+        <a id="coSetCounterSessionSetupLink" href="{{ pos_counter_setup_url }}">Counter setup</a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  (function () {
+    var posNonce = {{ pos_save_nonce | default('') | tojson }};
+    if (posNonce) window.__POS_SAVE_NONCE = posNonce;
+  })();
+</script>
+<script>
+  window.__POS_QZ_URLS__ = {
+    certificate: {{ url_for('reports.qz_certificate')|tojson }},
+    sign: {{ url_for('reports.qz_sign')|tojson }}
+  };
+</script>
+<script src="{{ url_for('static', filename='js/qz_invoice_print.js') }}"></script>
+<script>
+(function () {
+  document.body.classList.add('co-counter-ops-loading');
+  var OPEN_URL = {{ open_api_url|tojson }};
+  var CLOSE_URL = {{ close_api_url|tojson }};
+  var SHIFT_BILLS_URL = {{ shift_bills_api_url|tojson }};
+  var CO_HELD_OPEN_URL = {{ held_bill_open_api_url|tojson }};
+  var CO_HELD_CANCEL_URL = {{ held_bill_cancel_api_url|tojson }};
+  var PRECLOSE_REPORT_URL = {{ preclose_report_api_url|tojson }};
+  var PRECLOSE_REPORT_PDF_URL = {{ url_for('pos_billing.pos_counter_operations_preclose_report_pdf')|tojson }};
+  var POS_BILLING_URL = {{ pos_billing_url|tojson }};
+  var coPrecloseReceiptText = '';
+  var coPrecloseMode = 'preview';
+  var coPrecloseReportParams = null;
+  var INITIAL_COUNTER_CODE = {{ initial_counter_code|tojson }};
+  var coShiftBillActionInFlight = false;
+  var coShiftHeldCount = 0;
+  var coShiftIsOpen = false;
+  var coShiftBillsReq = 0;
+  var coMinOpenPosDateIso = null;
+  var coLastClosedPosDateIso = null;
+  var selLoc = document.getElementById('coLocation');
+  var selCounter = document.getElementById('coCounter');
+  var inpDate = document.getElementById('coPosDate');
+  var inpShift = document.getElementById('coShift');
+  var btnShift = document.getElementById('coBtnShift');
+  var btnTimeCheck = document.getElementById('coBtnTimeCheck');
+  var coPreclosePopup = document.getElementById('coPreclosePopup');
+  var coPrecloseBackdrop = document.getElementById('coPrecloseBackdrop');
+  var coPreclosePreview = document.getElementById('coPreclosePreview');
+  var coPrecloseTitle = document.getElementById('coPrecloseTitle');
+  var coPrecloseHint = document.getElementById('coPrecloseHint');
+  var coPrecloseDismiss = document.getElementById('coPrecloseDismiss');
+  var coPrecloseCopy = document.getElementById('coPrecloseCopy');
+  var coPreclosePdf = document.getElementById('coPreclosePdf');
+  var coPreclosePrint = document.getElementById('coPreclosePrint');
+  var coPrecloseConfirmClose = document.getElementById('coPrecloseConfirmClose');
+  var flash = document.getElementById('coFlash');
+  var statusEl = document.getElementById('coStatus');
+  var histOpenedBody = document.getElementById('coHistOpenedBody');
+  var histClosedBody = document.getElementById('coHistClosedBody');
+  var histSearch = document.getElementById('coHistSearch');
+  var histMeta = document.getElementById('coHistMeta');
+  var counterSearch = document.getElementById('coCounterSearch');
+  var counterOpts = document.getElementById('coCounterOptions');
+  var counterPickWrap = document.getElementById('coCounterPickWrap');
+  var counterAutoNote = document.getElementById('coCounterAutoNote');
+  var counterSummary = document.getElementById('coCounterSummary');
+  var shiftMinus = document.getElementById('coShiftMinus');
+  var shiftPlus = document.getElementById('coShiftPlus');
+  var coDateWrap = document.querySelector('.pos-counter-ops .co-touch-date-wrap');
+  var coShiftWrap = document.querySelector('.pos-counter-ops .co-touch-shift-wrap');
+  var btnToggleRecent = document.getElementById('coBtnToggleRecent');
+  var recentPanel = document.getElementById('coRecentPanel');
+  var CO_RECENT_TOTAL = {{ history_opened|length + history_closed|length }};
+  var coOpenShiftOverlay = document.getElementById('coOpenShiftOverlay');
+  var coPageLoadOverlay = document.getElementById('coPageLoadOverlay');
+  var coPageLoadOverlayHint = document.getElementById('coPageLoadOverlayHint');
+  var coPageBootPending = true;
+  var coPageBootT0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+  var coShiftOpenInFlight = false;
+  var coCounterUserPicked = false;
+  var coAssignCounterPopup = document.getElementById('coAssignCounterPopup');
+  var coAssignCounterBackdrop = document.getElementById('coAssignCounterBackdrop');
+  var coAssignCounterDismiss = document.getElementById('coAssignCounterDismiss');
+  var coAssignCounterHost = document.getElementById('coAssignCounterHost');
+  var POS_NEEDS_SESSION_COUNTER = {{ pos_needs_counter_prompt|tojson }};
+  var coSetCounterSessionPopup = document.getElementById('coSetCounterSessionPopup');
+  var coSetCounterSessionSetupLink = document.getElementById('coSetCounterSessionSetupLink');
+  var btnPosDate = document.getElementById('coPosDateBtn');
+  var coPosDateDisplay = document.getElementById('coPosDateDisplay');
+  var datePopup = document.getElementById('coDatePopup');
+  var dateGrid = document.getElementById('coDateGrid');
+  var dateBackdrop = document.getElementById('coDateBackdrop');
+  var datePrevM = document.getElementById('coDatePrevM');
+  var dateNextM = document.getElementById('coDateNextM');
+  var dateTodayBtn = document.getElementById('coDateToday');
+  var dateDoneBtn = document.getElementById('coDateDone');
+  var dateTitleEl = document.getElementById('coDatePopupTitle');
+  var CO_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  var CO_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var viewYear;
+  var viewMonth;
+
+  function pad2(n) {
+    return n < 10 ? '0' + n : '' + n;
+  }
+  function isoFromDate(d) {
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+  function parseISOLocal(iso) {
+    var p = (iso || '').trim().split('-');
+    if (p.length !== 3) return new Date();
+    var y = parseInt(p[0], 10), m = parseInt(p[1], 10) - 1, day = parseInt(p[2], 10);
+    if (isNaN(y) || isNaN(m) || isNaN(day)) return new Date();
+    return new Date(y, m, day);
+  }
+  function sameDay(a, b) {
+    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  }
+  function formatPosDateDisplay(d) {
+    return pad2(d.getDate()) + '/' + CO_SHORT[d.getMonth()] + '/' + d.getFullYear();
+  }
+  function getSelectedDate() {
+    return parseISOLocal(inpDate.value);
+  }
+  function parseISODateOnly(iso) {
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(String(iso).trim())) return null;
+    return parseISOLocal(String(iso).trim());
+  }
+  function coPosDateAllowedForOpen(dt) {
+    if (!coMinOpenPosDateIso) return true;
+    var minD = parseISODateOnly(coMinOpenPosDateIso);
+    if (!minD || !dt) return true;
+    minD.setHours(0, 0, 0, 0);
+    var d = new Date(dt.getTime());
+    d.setHours(0, 0, 0, 0);
+    return d.getTime() >= minD.getTime();
+  }
+  function coApplyMinOpenPosDateFromApi(data) {
+    coMinOpenPosDateIso = (data && data.min_open_pos_date) ? String(data.min_open_pos_date).slice(0, 10) : null;
+    coLastClosedPosDateIso = (data && data.last_closed_pos_date) ? String(data.last_closed_pos_date).slice(0, 10) : null;
+    if (coMinOpenPosDateIso && inpDate && inpDate.value && inpDate.value < coMinOpenPosDateIso) {
+      inpDate.value = coMinOpenPosDateIso;
+      updatePosDateTrigger();
+    }
+  }
+  function coValidatePosDateForOpen() {
+    if (!coMinOpenPosDateIso) return '';
+    var sel = getSelectedDate();
+    if (coPosDateAllowedForOpen(sel)) return '';
+    var closedTxt = coLastClosedPosDateIso || coMinOpenPosDateIso;
+    return 'POS date must be after the last closed shift for this counter (last closed: ' + closedTxt + ').';
+  }
+  function updatePosDateTrigger() {
+    if (!coPosDateDisplay) return;
+    coPosDateDisplay.textContent = formatPosDateDisplay(getSelectedDate());
+  }
+  function renderPosDateCalendar() {
+    if (!dateGrid || !dateTitleEl) return;
+    var sel = getSelectedDate();
+    var y = viewYear;
+    var m = viewMonth;
+    dateTitleEl.textContent = CO_MONTHS[m] + ' ' + y;
+    var first = new Date(y, m, 1);
+    var startPad = first.getDay();
+    var dim = new Date(y, m + 1, 0).getDate();
+    var prevDim = new Date(y, m, 0).getDate();
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    dateGrid.innerHTML = '';
+    var i;
+    for (i = 0; i < startPad; i++) {
+      var dayNumLead = prevDim - startPad + i + 1;
+      var b0 = document.createElement('button');
+      b0.type = 'button';
+      b0.textContent = String(dayNumLead);
+      b0.className = 'is-muted';
+      b0.disabled = true;
+      dateGrid.appendChild(b0);
+    }
+    for (var d = 1; d <= dim; d++) {
+      (function (dayNum) {
+        var dt = new Date(y, m, dayNum);
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = String(dayNum);
+        if (sameDay(dt, today)) btn.classList.add('is-today');
+        if (sameDay(dt, sel)) btn.classList.add('is-selected');
+        if (!coPosDateAllowedForOpen(dt)) {
+          btn.disabled = true;
+          btn.classList.add('is-muted');
+          btn.title = 'Before last closed shift date for this counter';
+        }
+        btn.addEventListener('click', function () {
+          if (btn.disabled) return;
+          var picked = new Date(viewYear, viewMonth, dayNum);
+          inpDate.value = isoFromDate(picked);
+          updatePosDateTrigger();
+          renderPosDateCalendar();
+          loadShiftBills();
+        });
+        dateGrid.appendChild(btn);
+      })(d);
+    }
+    var cells = startPad + dim;
+    var tail = (7 - (cells % 7)) % 7;
+    for (i = 0; i < tail; i++) {
+      var b1 = document.createElement('button');
+      b1.type = 'button';
+      b1.textContent = String(i + 1);
+      b1.className = 'is-muted';
+      b1.disabled = true;
+      dateGrid.appendChild(b1);
+    }
+  }
+  function openPosDatePopup() {
+    if (coShiftIsOpen) return;
+    if (!datePopup || !btnPosDate) return;
+    var sel = getSelectedDate();
+    viewYear = sel.getFullYear();
+    viewMonth = sel.getMonth();
+    renderPosDateCalendar();
+    datePopup.removeAttribute('hidden');
+    btnPosDate.setAttribute('aria-expanded', 'true');
+  }
+  function closePosDatePopup() {
+    if (!datePopup || !btnPosDate) return;
+    datePopup.setAttribute('hidden', '');
+    btnPosDate.setAttribute('aria-expanded', 'false');
+  }
+
+  if (btnPosDate && datePopup) {
+    btnPosDate.addEventListener('click', function () {
+      if (datePopup.hasAttribute('hidden')) openPosDatePopup();
+      else closePosDatePopup();
+    });
+  }
+  if (dateBackdrop) dateBackdrop.addEventListener('click', closePosDatePopup);
+  if (dateDoneBtn) {
+    dateDoneBtn.addEventListener('click', function () {
+      closePosDatePopup();
+      loadShiftBills();
+    });
+  }
+  if (datePrevM) {
+    datePrevM.addEventListener('click', function () {
+      viewMonth -= 1;
+      if (viewMonth < 0) {
+        viewMonth = 11;
+        viewYear -= 1;
+      }
+      renderPosDateCalendar();
+    });
+  }
+  if (dateNextM) {
+    dateNextM.addEventListener('click', function () {
+      viewMonth += 1;
+      if (viewMonth > 11) {
+        viewMonth = 0;
+        viewYear += 1;
+      }
+      renderPosDateCalendar();
+    });
+  }
+  if (dateTodayBtn) {
+    dateTodayBtn.addEventListener('click', function () {
+      var t = new Date();
+      t.setHours(0, 0, 0, 0);
+      inpDate.value = isoFromDate(t);
+      viewYear = t.getFullYear();
+      viewMonth = t.getMonth();
+      updatePosDateTrigger();
+      renderPosDateCalendar();
+      loadShiftBills();
+    });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (!datePopup || datePopup.hasAttribute('hidden')) return;
+    closePosDatePopup();
+  });
+
+  updatePosDateTrigger();
+
+  function setFlash(msg, ok) {
+    flash.textContent = msg || '';
+    flash.className = ok ? 'ok' : (msg ? 'err' : '');
+  }
+
+  function currentLoc() {
+    return parseInt(selLoc.value, 10) || 0;
+  }
+
+  function currentCounter() {
+    var v = selCounter.value;
+    var n = parseInt(v, 10);
+    return isNaN(n) || n <= 0 ? null : n;
+  }
+
+  function selectCounterByCode(cc, silent) {
+    if (!selCounter || cc == null) return false;
+    var v = String(cc);
+    var hasOpt = false;
+    for (var i = 0; i < selCounter.options.length; i++) {
+      if (String(selCounter.options[i].value) === v) {
+        hasOpt = true;
+        break;
+      }
+    }
+    if (!hasOpt) return false;
+    selCounter.value = v;
+    syncPickerUi(selCounter, counterOpts, counterSummary);
+    if (!silent) {
+      selCounter.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    return true;
+  }
+
+  function activeHistPaneId() {
+    var p = document.querySelector('.pos-counter-ops .tab-pane.active');
+    return p ? p.id : 'coTabOpened';
+  }
+
+  function activeHistTbody() {
+    var id = activeHistPaneId();
+    if (id === 'coTabClosed') return document.getElementById('coHistClosedBody');
+    return histOpenedBody;
+  }
+
+  function filterCoHistRows() {
+    var q = (histSearch && histSearch.value || '').trim().toLowerCase();
+    ['coHistOpenedBody', 'coHistClosedBody'].forEach(function (bid) {
+      var tb = document.getElementById(bid);
+      if (!tb) return;
+      var rows = tb.querySelectorAll('tr[data-search]');
+      rows.forEach(function (tr) {
+        var hay = (tr.getAttribute('data-search') || '');
+        tr.style.display = (!q || hay.indexOf(q) !== -1) ? '' : 'none';
+      });
+    });
+    syncHistMeta();
+  }
+
+  function coCloseOpenShiftFromHistory(tr, btn) {
+    if (!tr || !btn) return;
+    var lc = parseInt(tr.getAttribute('data-co-location'), 10);
+    var cc = parseInt(tr.getAttribute('data-co-counter'), 10);
+    var posDate = String(tr.getAttribute('data-co-posdate') || '').trim();
+    var shift = String(tr.getAttribute('data-co-shift') || '').trim();
+    if (!cc || isNaN(lc)) {
+      setFlash('Invalid counter on this row.', false);
+      return;
+    }
+    var msg = 'Close open shift for counter ' + cc;
+    if (posDate && posDate !== '—') msg += ' on ' + posDate;
+    if (shift) msg += ' (shift ' + shift + ')';
+    msg += '?';
+    if (!window.confirm(msg)) return;
+    btn.disabled = true;
+    var heldUrl = SHIFT_BILLS_URL + '?location_code=' + encodeURIComponent(lc) +
+      '&counter_code=' + encodeURIComponent(cc) +
+      '&pos_date=' + encodeURIComponent(posDate && posDate !== '—' ? posDate : '');
+    fetch(heldUrl, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.success) {
+          btn.disabled = false;
+          setFlash(data.error || 'Could not verify shift bills', false);
+          return;
+        }
+        var heldN = parseInt(data.held_count, 10) || 0;
+        if (heldN > 0) {
+          btn.disabled = false;
+          setFlash('Cannot close: ' + heldN + ' held bill(s) for counter ' + cc + ' on ' + (data.pos_date || posDate) + '. Resume or void them in POS Billing first.', false);
+          return;
+        }
+        if (!data.shift_open) {
+          btn.disabled = false;
+          setFlash('This shift is no longer open.', false);
+          window.location.reload();
+          return;
+        }
+        return fetch(CLOSE_URL, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ location_code: lc, counter_code: cc })
+        }).then(function (r) { return r.json(); }).then(function (closeData) {
+          if (!closeData.success) {
+            btn.disabled = false;
+            setFlash(closeData.error || 'Close failed', false);
+            return;
+          }
+          setFlash('Shift closed for counter ' + cc + '.', true);
+          window.location.reload();
+        });
+      })
+      .catch(function () {
+        btn.disabled = false;
+        setFlash('Request failed', false);
+      });
+  }
+
+  if (histOpenedBody) {
+    histOpenedBody.addEventListener('click', coHistActionsClick);
+  }
+  if (histClosedBody) {
+    histClosedBody.addEventListener('click', coHistActionsClick);
+  }
+
+  function syncHistMeta() {
+    if (!histMeta) return;
+    var tb = activeHistTbody();
+    if (!tb) {
+      histMeta.textContent = '';
+      return;
+    }
+    var dataRows = tb.querySelectorAll('tr[data-search]');
+    var vis = 0;
+    var total = dataRows.length;
+    for (var i = 0; i < dataRows.length; i++) {
+      if (dataRows[i].style.display !== 'none') vis++;
+    }
+    var emptyRow = tb.querySelector('tr.co-hist-empty');
+    if (emptyRow && total === 0) {
+      emptyRow.style.display = '';
+      histMeta.textContent = '0 rows';
+      return;
+    }
+    if (emptyRow) emptyRow.style.display = 'none';
+    histMeta.textContent = vis === total
+      ? (total + ' row' + (total !== 1 ? 's' : ''))
+      : (vis + ' / ' + total + ' rows');
+  }
+
+  function setCoLoadOverlayStep(msg) {
+    if (coPageLoadOverlayHint) coPageLoadOverlayHint.textContent = msg || 'Please wait…';
+  }
+  function hideCoLoadOverlay() {
+    if (!coPageBootPending) return;
+    coPageBootPending = false;
+    document.body.classList.remove('co-counter-ops-loading');
+    if (coPageLoadOverlay) {
+      coPageLoadOverlay.setAttribute('hidden', '');
+      coPageLoadOverlay.setAttribute('aria-hidden', 'true');
+      coPageLoadOverlay.setAttribute('aria-busy', 'false');
+    }
+    try {
+      if (coPageBootT0 && typeof performance !== 'undefined') {
+        console.info(
+          '[TIMING pos_counter_ops_ui]',
+          'page_boot_total',
+          Math.round((performance.now() - coPageBootT0) * 10) / 10 + 'ms'
+        );
+      }
+    } catch (_e) { /* ignore */ }
+  }
+
+  function showOpenShiftOverlay() {
+    if (!coOpenShiftOverlay) return;
+    coOpenShiftOverlay.removeAttribute('hidden');
+  }
+  function hideOpenShiftOverlay() {
+    if (!coOpenShiftOverlay) return;
+    coOpenShiftOverlay.setAttribute('hidden', '');
+  }
+  function applySaveNonce(obj) {
+    if (typeof window.__POS_SAVE_NONCE === 'string' && window.__POS_SAVE_NONCE !== '') {
+      obj.save_nonce = window.__POS_SAVE_NONCE;
+    } else if (typeof window.__GLOBAL_SAVE_NONCE === 'string' && window.__GLOBAL_SAVE_NONCE !== '') {
+      obj.save_nonce = window.__GLOBAL_SAVE_NONCE;
+    }
+    return obj;
+  }
+  function mergeNonceFromResponse(data) {
+    if (data && data.save_nonce) {
+      window.__POS_SAVE_NONCE = data.save_nonce;
+    }
+  }
+
+  function showAssignCounterPopup(hostname) {
+    if (!coAssignCounterPopup) return;
+    if (coAssignCounterHost) coAssignCounterHost.textContent = hostname ? String(hostname) : '—';
+    coAssignCounterPopup.removeAttribute('hidden');
+    if (coAssignCounterDismiss) coAssignCounterDismiss.focus();
+  }
+  function hideAssignCounterPopup() {
+    if (coAssignCounterPopup) coAssignCounterPopup.setAttribute('hidden', '');
+  }
+
+  function showSetCounterSessionPopup() {
+    if (!coSetCounterSessionPopup) return;
+    coSetCounterSessionPopup.removeAttribute('hidden');
+    if (coSetCounterSessionSetupLink) coSetCounterSessionSetupLink.focus();
+  }
+
+  function applyShiftBillsGuard() {
+    var warn = document.getElementById('coHeldWarn');
+    var warnText = document.getElementById('coHeldWarnText');
+    var blockClose = coShiftIsOpen && coShiftHeldCount > 0;
+    if (warn) warn.classList.toggle('is-visible', blockClose);
+    if (warnText && blockClose) {
+      warnText.textContent = coShiftHeldCount + ' held bill(s) must be resumed or voided before closing shift.';
+    }
+    if (!btnShift || coShiftOpenInFlight) return;
+    if (coShiftIsOpen && blockClose) {
+      btnShift.disabled = true;
+      btnShift.classList.add('co-btn-shift--close-blocked');
+      btnShift.setAttribute('aria-label', 'Cannot close shift while held bills exist');
+    } else if (coShiftIsOpen) {
+      btnShift.disabled = false;
+      btnShift.classList.remove('co-btn-shift--close-blocked');
+      btnShift.setAttribute('aria-label', 'Close shift');
+    } else if (btnShift.classList.contains('co-btn-shift--close')) {
+      btnShift.classList.remove('co-btn-shift--close-blocked');
+    }
+  }
+
+  function fmtBillAmt(v) {
+    var n = parseFloat(v);
+    return isNaN(n) ? '—' : n.toFixed(2);
+  }
+  function fmtBillDate(v) {
+    if (v == null || v === '') return '—';
+    var s = String(v).trim();
+    return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : s.slice(0, 16);
+  }
+  function fmtBillTime(v) {
+    if (v == null || v === '') return '—';
+    return String(v).trim().slice(0, 8);
+  }
+  function escHtml(s) {
+    var d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+  function renderShiftBillTable(tbody, rows, emptyMsg, colSpan) {
+    colSpan = colSpan || 5;
+    if (!tbody) return;
+    if (!rows || !rows.length) {
+      tbody.innerHTML = '<tr><td colspan="' + colSpan + '" class="co-shift-bills-empty" style="text-align:center;padding:14px;">' + emptyMsg + '</td></tr>';
+      return;
+    }
+    var html = '';
+    rows.forEach(function (r) {
+      var billno = r.billno != null ? r.billno : r.BILLNO;
+      html += '<tr>';
+      html += '<td>' + escHtml(billno != null ? billno : '—') + '</td>';
+      html += '<td>' + escHtml(fmtBillDate(r.billdate)) + '</td>';
+      html += '<td>' + escHtml(fmtBillTime(r.billtime)) + '</td>';
+      html += '<td style="text-align:right;">' + escHtml(fmtBillAmt(r.netbillamount)) + '</td>';
+      html += '<td>' + escHtml(r.createdby != null ? String(r.createdby) : '—') + '</td>';
+      html += '</tr>';
+    });
+    tbody.innerHTML = html;
+  }
+  function renderHeldBillTable(tbody, rows, emptyMsg) {
+    if (!tbody) return;
+    if (!rows || !rows.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="co-shift-bills-empty" style="text-align:center;padding:14px;">' + emptyMsg + '</td></tr>';
+      return;
+    }
+    var html = '';
+    rows.forEach(function (r) {
+      var billno = r.billno != null ? r.billno : r.BILLNO;
+      var bn = billno != null ? String(billno) : '';
+      html += '<tr data-co-held-billno="' + escHtml(bn) + '">';
+      html += '<td>' + escHtml(bn || '—') + '</td>';
+      html += '<td>' + escHtml(fmtBillDate(r.billdate)) + '</td>';
+      html += '<td>' + escHtml(fmtBillTime(r.billtime)) + '</td>';
+      html += '<td style="text-align:right;">' + escHtml(fmtBillAmt(r.netbillamount)) + '</td>';
+      html += '<td>' + escHtml(r.createdby != null ? String(r.createdby) : '—') + '</td>';
+      html += '<td class="co-shift-bills-actions">';
+      if (bn) {
+        html += '<button type="button" class="co-shift-bill-btn co-shift-bill-btn--open" data-co-held-open="' + escHtml(bn) + '">Open</button>';
+        html += '<button type="button" class="co-shift-bill-btn co-shift-bill-btn--cancel" data-co-held-cancel="' + escHtml(bn) + '">Cancel</button>';
+      } else {
+        html += '—';
+      }
+      html += '</td></tr>';
+    });
+    tbody.innerHTML = html;
+  }
+  function coHeldBillPayload(billno) {
+    return {
+      location_code: currentLoc(),
+      counter_code: currentCounter(),
+      billno: parseInt(billno, 10)
+    };
+  }
+  function coOpenHeldBill(billno) {
+    if (coShiftBillActionInFlight) return;
+    var cc = currentCounter();
+    if (cc == null) {
+      setFlash('Select a counter first.', false);
+      return;
+    }
+    coShiftBillActionInFlight = true;
+    setFlash('Opening held bill…', true);
+    fetch(CO_HELD_OPEN_URL, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(coHeldBillPayload(billno))
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.success) {
+          coShiftBillActionInFlight = false;
+          setFlash(data.error || 'Could not open held bill', false);
+          return;
+        }
+        coShiftBillActionInFlight = false;
+        var posUrl = data.redirect_url || (POS_BILLING_URL + '?billno=' + encodeURIComponent(billno));
+        window.location.href = posUrl;
+      })
+      .catch(function () {
+        coShiftBillActionInFlight = false;
+        setFlash('Request failed', false);
+      });
+  }
+  function coCancelHeldBill(billno) {
+    if (coShiftBillActionInFlight) return;
+    var cc = currentCounter();
+    if (cc == null) {
+      setFlash('Select a counter first.', false);
+      return;
+    }
+    if (!window.confirm('Cancel held bill ' + billno + '? This moves it to canceled and cannot be undone.')) return;
+    coShiftBillActionInFlight = true;
+    setFlash('Canceling held bill…', true);
+    fetch(CO_HELD_CANCEL_URL, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(coHeldBillPayload(billno))
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        coShiftBillActionInFlight = false;
+        if (!data.success) {
+          setFlash(data.error || 'Cancel failed', false);
+          return;
+        }
+        setFlash('Held bill ' + billno + ' canceled.', true);
+        loadShiftBills();
+        pollOpenStatus();
+      })
+      .catch(function () {
+        coShiftBillActionInFlight = false;
+        setFlash('Request failed', false);
+      });
+  }
+  function updateShiftBillTabCounts(heldN, canceledN) {
+    var btnHeld = document.getElementById('coTabBtnHeld');
+    var btnCanceled = document.getElementById('coTabBtnCanceled');
+    if (btnHeld) btnHeld.textContent = 'Held (' + heldN + ')';
+    if (btnCanceled) btnCanceled.textContent = 'Canceled (' + canceledN + ')';
+  }
+  function syncPosDateShiftReadOnly(readOnly) {
+    var ro = readOnly === true;
+    if (btnPosDate) {
+      btnPosDate.disabled = ro;
+      btnPosDate.setAttribute('aria-disabled', ro ? 'true' : 'false');
+      if (ro) closePosDatePopup();
+    }
+    if (coDateWrap) coDateWrap.classList.toggle('is-readonly', ro);
+    if (coShiftWrap) coShiftWrap.classList.toggle('is-readonly', ro);
+    if (inpShift) {
+      inpShift.readOnly = ro;
+      inpShift.disabled = ro;
+    }
+    if (shiftMinus) shiftMinus.disabled = ro;
+    if (shiftPlus) shiftPlus.disabled = ro;
+    var dateIcon = btnPosDate && btnPosDate.querySelector('.co-date-trigger__icon');
+    if (dateIcon) dateIcon.textContent = ro ? 'Locked' : 'Pick date';
+  }
+
+  function applyOpenShiftFieldsFromApi(data) {
+    if (!data || !data.shift_open) return;
+    if (data.pos_date && inpDate) {
+      inpDate.value = String(data.pos_date).slice(0, 10);
+      updatePosDateTrigger();
+    }
+    if (data.shift_code != null && inpShift) {
+      inpShift.value = clampShift(data.shift_code);
+    }
+  }
+
+  function applyShiftOpenUi(isOpen, counterCode) {
+    var cc = counterCode != null ? counterCode : currentCounter();
+    if (isOpen === true && cc != null) {
+      statusEl.textContent = 'Shift OPEN for counter ' + cc + ' — POS date and shift are locked.';
+      statusEl.className = 'co-status co-status--open';
+      syncShiftToggleButton(true);
+      syncPosDateShiftReadOnly(true);
+      return;
+    }
+    if (isOpen === false && cc != null) {
+      statusEl.textContent = 'No open shift for counter ' + cc + ' — tap Open shift to start.';
+      statusEl.className = 'co-status';
+      syncShiftToggleButton(false);
+      syncPosDateShiftReadOnly(false);
+      return;
+    }
+    statusEl.textContent = 'Select a counter.';
+    statusEl.className = 'co-status';
+    syncShiftToggleButton(null);
+    syncPosDateShiftReadOnly(false);
+  }
+
+  function loadShiftBills() {
+    var cc = currentCounter();
+    var sub = document.getElementById('coShiftBillsSub');
+    var heldBody = document.getElementById('coShiftHeldBody');
+    var canceledBody = document.getElementById('coShiftCanceledBody');
+    if (cc == null) {
+      coMinOpenPosDateIso = null;
+      coLastClosedPosDateIso = null;
+      coShiftHeldCount = 0;
+      renderHeldBillTable(heldBody, [], 'Select a counter.');
+      renderShiftBillTable(canceledBody, [], 'Select a counter.');
+      updateShiftBillTabCounts(0, 0);
+      if (sub) sub.textContent = 'Held and canceled carts for this counter on the POS date.';
+      applyShiftOpenUi(null, null);
+      applyShiftBillsGuard();
+      if (coPageBootPending) hideCoLoadOverlay();
+      return;
+    }
+    if (coPageBootPending) setCoLoadOverlayStep('Loading shift and bills…');
+    var reqId = ++coShiftBillsReq;
+    var url = SHIFT_BILLS_URL + '?location_code=' + encodeURIComponent(currentLoc()) +
+      '&counter_code=' + encodeURIComponent(cc) +
+      '&pos_date=' + encodeURIComponent(inpDate.value || '');
+    if (heldBody) heldBody.innerHTML = '<tr><td colspan="6" class="co-shift-bills-empty" style="text-align:center;padding:14px;">Loading…</td></tr>';
+    if (canceledBody) canceledBody.innerHTML = '<tr><td colspan="5" class="co-shift-bills-empty" style="text-align:center;padding:14px;">Loading…</td></tr>';
+    fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (reqId !== coShiftBillsReq) return;
+        if (!data.success) {
+          var err = data.error || 'Could not load bills.';
+          renderHeldBillTable(heldBody, [], err);
+          renderShiftBillTable(canceledBody, [], err);
+          coShiftHeldCount = 0;
+          applyShiftBillsGuard();
+          return;
+        }
+        coApplyMinOpenPosDateFromApi(data);
+        applyOpenShiftFieldsFromApi(data);
+        applyShiftOpenUi(!!data.shift_open, cc);
+        coShiftHeldCount = parseInt(data.held_count, 10) || 0;
+        renderHeldBillTable(heldBody, data.held || [], 'No held bills on this POS date.');
+        renderShiftBillTable(canceledBody, data.canceled || [], 'No canceled bills on this POS date.');
+        updateShiftBillTabCounts(coShiftHeldCount, (data.canceled || []).length);
+        if (sub) {
+          sub.textContent = 'Counter ' + cc + ' on ' + (data.pos_date || inpDate.value || '') + '.';
+        }
+        applyShiftBillsGuard();
+      })
+      .catch(function () {
+        if (reqId !== coShiftBillsReq) return;
+        renderHeldBillTable(heldBody, [], 'Request failed.');
+        renderShiftBillTable(canceledBody, [], 'Request failed.');
+      })
+      .finally(function () {
+        if (reqId !== coShiftBillsReq) return;
+        if (coPageBootPending) hideCoLoadOverlay();
+      });
+  }
+
+  function syncTimeCheckButton(isOpen) {
+    if (!btnTimeCheck) return;
+    if (isOpen === true) {
+      btnTimeCheck.hidden = false;
+      btnTimeCheck.disabled = false;
+    } else {
+      btnTimeCheck.hidden = true;
+      btnTimeCheck.disabled = true;
+    }
+  }
+
+  function coPrecloseReportUrlFor(lc, cc, posDate, isFinal) {
+    if (cc == null || cc === '') return '';
+    return PRECLOSE_REPORT_URL + '?location_code=' + encodeURIComponent(lc) +
+      '&counter_code=' + encodeURIComponent(cc) +
+      '&pos_date=' + encodeURIComponent(posDate || '') +
+      '&_=' + encodeURIComponent(String(Date.now())) +
+      (isFinal ? '&final=1' : '');
+  }
+
+  function coPrecloseReportUrl(isFinal) {
+    var cc = currentCounter();
+    if (cc == null) return '';
+    return coPrecloseReportUrlFor(currentLoc(), cc, inpDate.value || '', !!isFinal);
+  }
+
+  function coSetPrecloseReportParams(lc, cc, posDate, isFinal) {
+    coPrecloseReportParams = {
+      lc: String(lc),
+      cc: String(cc),
+      posDate: String(posDate || ''),
+      isFinal: !!isFinal
+    };
+  }
+
+  function coPreclosePdfUrlFromParams(params) {
+    if (!params || !params.cc) return '';
+    return PRECLOSE_REPORT_PDF_URL + '?location_code=' + encodeURIComponent(params.lc) +
+      '&counter_code=' + encodeURIComponent(params.cc) +
+      '&pos_date=' + encodeURIComponent(params.posDate || '') +
+      (params.isFinal ? '&final=1' : '') +
+      '&_=' + encodeURIComponent(String(Date.now()));
+  }
+
+  function coOpenPreclosePdf() {
+    var url = coPreclosePdfUrlFromParams(coPrecloseReportParams);
+    if (!url) {
+      setFlash('Missing counter or POS date for PDF.', false);
+      return;
+    }
+    try {
+      window.open(url, '_blank');
+    } catch (_e) {
+      setFlash('Could not open PDF.', false);
+    }
+  }
+
+  function coFetchPrecloseReportFor(lc, cc, posDate, isFinal) {
+    coSetPrecloseReportParams(lc, cc, posDate, !!isFinal);
+    var url = coPrecloseReportUrlFor(lc, cc, posDate, !!isFinal);
+    if (!url) return Promise.reject(new Error('Missing counter or POS date.'));
+    return fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json(); });
+  }
+
+  function coFetchPrecloseReport(isFinal) {
+    var cc = currentCounter();
+    if (cc == null) return Promise.reject(new Error('Select a counter.'));
+    coSetPrecloseReportParams(currentLoc(), cc, inpDate.value || '', !!isFinal);
+    var url = coPrecloseReportUrl(!!isFinal);
+    if (!url) return Promise.reject(new Error('Select a counter.'));
+    return fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json(); });
+  }
+
+  function coShowPrecloseModal(mode, receiptText) {
+    coPrecloseMode = mode || 'preview';
+    coPrecloseReceiptText = String(receiptText || '');
+    if (coPreclosePreview) coPreclosePreview.textContent = coPrecloseReceiptText || 'No data.';
+    if (coPrecloseTitle) {
+      if (coPrecloseMode === 'close') {
+        coPrecloseTitle.textContent = 'Close shift';
+      } else if (coPrecloseMode === 'history_final') {
+        coPrecloseTitle.textContent = 'Shift close report';
+      } else if (coPrecloseMode === 'history_x') {
+        coPrecloseTitle.textContent = 'X Report copy';
+      } else {
+        coPrecloseTitle.textContent = 'X Report';
+      }
+    }
+    if (coPrecloseHint) {
+      if (coPrecloseMode === 'close') {
+        coPrecloseHint.textContent = 'Print or open PDF if needed, then confirm Close shift for the final copy.';
+      } else if (coPrecloseMode === 'history_final') {
+        coPrecloseHint.textContent = 'Final shift-close copy for this counter and POS date. Copy, PDF, or print for your records.';
+      } else if (coPrecloseMode === 'history_x') {
+        coPrecloseHint.textContent = 'Interim X Report copy for this open shift. Copy, PDF, or print for your records.';
+      } else {
+        coPrecloseHint.textContent = 'Interim report only — not final. Copy, PDF, or print; use Close shift when finished.';
+      }
+    }
+    if (coPrecloseConfirmClose) {
+      coPrecloseConfirmClose.hidden = coPrecloseMode !== 'close';
+    }
+    if (coPreclosePopup) coPreclosePopup.removeAttribute('hidden');
+  }
+
+  function coHidePrecloseModal() {
+    if (coPreclosePopup) coPreclosePopup.setAttribute('hidden', '');
+  }
+
+  function coCopyPrecloseReceipt() {
+    var text = String(coPrecloseReceiptText || '').trim();
+    if (!text) {
+      setFlash('Nothing to copy.', false);
+      return Promise.resolve(false);
+    }
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      return navigator.clipboard.writeText(text).then(function () {
+        setFlash('Report copied to clipboard.', true);
+        return true;
+      }).catch(function () {
+        setFlash('Could not copy to clipboard.', false);
+        return false;
+      });
+    }
+    if (coPreclosePreview) {
+      try {
+        var range = document.createRange();
+        range.selectNodeContents(coPreclosePreview);
+        var sel = window.getSelection();
+        if (sel) {
+          sel.removeAllRanges();
+          sel.addRange(range);
+          var ok = document.execCommand('copy');
+          sel.removeAllRanges();
+          if (ok) {
+            setFlash('Report copied to clipboard.', true);
+            return Promise.resolve(true);
+          }
+        }
+      } catch (_e) { /* ignore */ }
+    }
+    setFlash('Copy not supported in this browser.', false);
+    return Promise.resolve(false);
+  }
+
+  function coOpenHistoryShiftReport(tr, isFinal) {
+    if (!tr) return;
+    var lc = tr.getAttribute('data-co-location');
+    var cc = tr.getAttribute('data-co-counter');
+    var pd = tr.getAttribute('data-co-posdate');
+    if (!lc || !cc || !pd) {
+      setFlash('Missing shift details on this row.', false);
+      return;
+    }
+    if (coPreclosePreview) coPreclosePreview.textContent = 'Loading…';
+    coShowPrecloseModal(isFinal ? 'history_final' : 'history_x', 'Loading…');
+    coFetchPrecloseReportFor(lc, cc, pd, isFinal).then(function (data) {
+      if (!data.success) {
+        coHidePrecloseModal();
+        setFlash(data.error || 'Could not load report', false);
+        return;
+      }
+      coShowPrecloseModal(isFinal ? 'history_final' : 'history_x', data.receipt_text || '');
+    }).catch(function () {
+      coHidePrecloseModal();
+      setFlash('Request failed', false);
+    });
+  }
+
+  function coHistActionsClick(e) {
+    var reportBtn = e.target.closest('.co-btn-hist-report');
+    if (reportBtn) {
+      e.preventDefault();
+      var trReport = reportBtn.closest('tr[data-co-location]');
+      coOpenHistoryShiftReport(trReport, reportBtn.getAttribute('data-co-final') === '1');
+      return;
+    }
+    var closeBtn = e.target.closest('.co-btn-hist-close');
+    if (closeBtn) {
+      e.preventDefault();
+      var trClose = closeBtn.closest('tr.co-hist-open-row');
+      coCloseOpenShiftFromHistory(trClose, closeBtn);
+    }
+  }
+
+  function coHasArabicText(text) {
+    return /[\u0600-\u06FF]/.test(String(text || ''));
+  }
+
+  function coBuildReceiptHtml(text) {
+    var esc = String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return '<html><head><meta charset="utf-8"><style>body{font-family:Consolas,monospace;font-size:12px;margin:8px;white-space:pre-wrap;}</style></head><body dir="auto">' + esc + '</body></html>';
+  }
+
+  async function coPrintPrecloseReceipt() {
+    var text = String(coPrecloseReceiptText || '').trimEnd();
+    if (!text) throw new Error('Nothing to print.');
+    if (!window.SalesQzPrint || !window.SalesQzPrint.ensureQzSecurity) {
+      throw new Error('QZ Tray helper not loaded.');
+    }
+    await window.SalesQzPrint.ensureQzSecurity(window.__POS_QZ_URLS__ || {});
+    var printerName = '';
+    try {
+      if (window.QzPrinterPrefs && typeof window.QzPrinterPrefs.get === 'function') {
+        printerName = String(window.QzPrinterPrefs.get('pos_receipt') || '').trim();
+      }
+    } catch (e) { printerName = ''; }
+    if (!printerName) {
+      throw new Error('No POS receipt printer. Set it in Sales → Printer Setup (POS receipt).');
+    }
+    var config = qz.configs.create(printerName);
+    var escInit = '\x1B@';
+    var smallFont = '\x1BM\x01\x1B!\x01';
+    var leftMargin = '\x1DL\x30\x00';
+    var cut = '\x1DV\x01';
+    if (coHasArabicText(text)) {
+      await qz.print(config, [{ type: 'pixel', format: 'html', flavor: 'plain', data: coBuildReceiptHtml(text) }]);
+      return;
+    }
+    var raw = escInit + leftMargin + smallFont + text + '\n\n\n' + cut;
+    try {
+      await qz.print(config, [{ type: 'raw', format: 'plain', data: raw }]);
+    } catch (rawErr) {
+      await qz.print(config, [{ type: 'pixel', format: 'html', flavor: 'plain', data: coBuildReceiptHtml(text) }]);
+    }
+  }
+
+  function coBeginCloseShiftFlow() {
+    var lc = currentLoc();
+    var cc = currentCounter();
+    if (cc == null) { setFlash('Select a counter.', false); return; }
+    if (coShiftHeldCount > 0) {
+      setFlash('Cannot close shift: ' + coShiftHeldCount + ' held bill(s) for this counter on POS date. Resume or void them in POS Billing first.', false);
+      return;
+    }
+    if (coPreclosePreview) coPreclosePreview.textContent = 'Loading…';
+    coShowPrecloseModal('close', 'Loading…');
+    coFetchPrecloseReport(false).then(function (data) {
+      if (!data.success) {
+        coHidePrecloseModal();
+        setFlash(data.error || 'Could not load pre-close report', false);
+        return;
+      }
+      coShowPrecloseModal('close', data.receipt_text || '');
+    }).catch(function () {
+      coHidePrecloseModal();
+      setFlash('Request failed', false);
+    });
+  }
+
+  function coRunTimeCheckOnly() {
+    if (coPreclosePreview) coPreclosePreview.textContent = 'Loading…';
+    coShowPrecloseModal('preview', 'Loading…');
+    coFetchPrecloseReport(false).then(function (data) {
+      if (!data.success) {
+        coHidePrecloseModal();
+        setFlash(data.error || 'Could not load X Report', false);
+        return;
+      }
+      coShowPrecloseModal('preview', data.receipt_text || '');
+    }).catch(function () {
+      coHidePrecloseModal();
+      setFlash('Request failed', false);
+    });
+  }
+
+  function coConfirmCloseShiftFromModal() {
+    var lc = currentLoc();
+    var cc = currentCounter();
+    if (cc == null) return;
+    if (coPrecloseConfirmClose) coPrecloseConfirmClose.disabled = true;
+    fetch(CLOSE_URL, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ location_code: lc, counter_code: cc })
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      if (!data.success) {
+        if (coPrecloseConfirmClose) coPrecloseConfirmClose.disabled = false;
+        setFlash(data.error || 'Close failed', false);
+        return;
+      }
+      return coFetchPrecloseReport(true).then(function (finalData) {
+        if (finalData.success && finalData.receipt_text) {
+          coPrecloseReceiptText = finalData.receipt_text;
+          return coPrintPrecloseReceipt().catch(function (printErr) {
+            setFlash('Shift closed. Print failed: ' + (printErr.message || printErr), false);
+          });
+        }
+      }).then(function () {
+        coHidePrecloseModal();
+        setFlash('Shift closed.', true);
+        window.location.reload();
+      });
+    }).catch(function () {
+      if (coPrecloseConfirmClose) coPrecloseConfirmClose.disabled = false;
+      setFlash('Request failed', false);
+    });
+  }
+
+  function syncShiftToggleButton(isOpen) {
+    if (!btnShift) return;
+    coShiftIsOpen = isOpen === true;
+    syncTimeCheckButton(isOpen);
+    if (coShiftOpenInFlight) {
+      btnShift.disabled = true;
+      return;
+    }
+    if (isOpen === null) {
+      coShiftIsOpen = false;
+      syncTimeCheckButton(null);
+      btnShift.disabled = true;
+      btnShift.textContent = 'Open shift';
+      btnShift.classList.remove('co-btn-shift--close', 'co-btn-shift--close-blocked');
+      btnShift.classList.add('co-btn-shift--open');
+      btnShift.setAttribute('aria-label', 'Select a counter first');
+      applyShiftBillsGuard();
+      return;
+    }
+    btnShift.disabled = false;
+    if (isOpen) {
+      btnShift.textContent = 'Close shift';
+      btnShift.classList.remove('co-btn-shift--open');
+      btnShift.classList.add('co-btn-shift--close');
+    } else {
+      btnShift.textContent = 'Open shift';
+      btnShift.classList.remove('co-btn-shift--close', 'co-btn-shift--close-blocked');
+      btnShift.classList.add('co-btn-shift--open');
+      btnShift.setAttribute('aria-label', 'Open shift');
+      applyShiftBillsGuard();
+      return;
+    }
+    applyShiftBillsGuard();
+  }
+
+  function pollOpenStatus() {
+    loadShiftBills();
+  }
+
+  function syncPickerUi(selectEl, root, summaryEl) {
+    if (!selectEl || !root) return;
+    var v = String(selectEl.value);
+    root.querySelectorAll('.co-touch-opt[data-value]').forEach(function (b) {
+      var match = String(b.getAttribute('data-value')) === v;
+      b.classList.toggle('is-selected', match);
+      b.setAttribute('aria-selected', match ? 'true' : 'false');
+      if (match && summaryEl) summaryEl.textContent = (b.textContent || '').trim();
+    });
+  }
+
+  function wireTouchPicker(searchEl, root, selectEl, summaryEl) {
+    if (!searchEl || !root || !selectEl) return;
+    function applyFilter() {
+      var q = (searchEl.value || '').trim().toLowerCase();
+      root.querySelectorAll('.co-touch-opt[data-value]').forEach(function (btn) {
+        var t = (btn.textContent || '').trim().toLowerCase();
+        btn.style.display = (!q || t.indexOf(q) !== -1) ? '' : 'none';
+      });
+    }
+    searchEl.addEventListener('input', applyFilter);
+    root.addEventListener('click', function (e) {
+      var btn = e.target.closest('.co-touch-opt[data-value]');
+      if (!btn || btn.style.display === 'none') return;
+      selectEl.value = btn.getAttribute('data-value');
+      syncPickerUi(selectEl, root, summaryEl);
+      searchEl.value = '';
+      applyFilter();
+      searchEl.blur();
+      selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    applyFilter();
+  }
+
+  function setCounterPickerReadOnly(isAutoMatched) {
+    if (counterPickWrap) counterPickWrap.hidden = !!isAutoMatched;
+    if (counterAutoNote) counterAutoNote.hidden = !isAutoMatched;
+    if (counterSearch) counterSearch.disabled = !!isAutoMatched;
+  }
+
+  function normHostname(s) {
+    return String(s || '').trim().toUpperCase().replace(/\s+/g, '');
+  }
+  function findCounterBtnBySystemName(hostname) {
+    var h = normHostname(hostname);
+    if (!h || !counterOpts) return null;
+    var found = null;
+    counterOpts.querySelectorAll('.co-touch-opt[data-value][data-systemname]').forEach(function (btn) {
+      var sn = normHostname(btn.getAttribute('data-systemname'));
+      if (sn && sn === h) found = btn;
+    });
+    return found;
+  }
+  function tryAutoCounterFromQz() {
+    if (!window.SalesQzPrint || !window.__POS_QZ_URLS__) {
+      return Promise.resolve();
+    }
+    return window.SalesQzPrint.ensureQzSecurity(window.__POS_QZ_URLS__)
+      .then(function () {
+        if (!window.qz || !window.qz.networking) return null;
+        return window.qz.networking.hostname();
+      })
+      .then(function (hn) {
+        if (!hn) return;
+        var b = findCounterBtnBySystemName(hn);
+        if (b) {
+          var cc = parseInt(b.getAttribute('data-value'), 10);
+          if (!isNaN(cc) && selectCounterByCode(cc, true)) {
+            coCounterUserPicked = true;
+          } else {
+            b.click();
+          }
+          setCounterPickerReadOnly(true);
+        } else if (!coCounterUserPicked) {
+          setCounterPickerReadOnly(false);
+          showAssignCounterPopup(String(hn));
+        }
+      })
+      .catch(function () {});
+  }
+
+  function bootCounterOps() {
+    setCoLoadOverlayStep('Starting…');
+    if (typeof INITIAL_COUNTER_CODE === 'number' && INITIAL_COUNTER_CODE > 0) {
+      setCoLoadOverlayStep('Loading session counter…');
+      selectCounterByCode(INITIAL_COUNTER_CODE, true);
+    }
+    setCoLoadOverlayStep('Matching register from this PC…');
+    tryAutoCounterFromQz().finally(function () {
+      pollOpenStatus();
+    });
+  }
+
+  if (coAssignCounterBackdrop) {
+    coAssignCounterBackdrop.addEventListener('click', hideAssignCounterPopup);
+  }
+  if (coAssignCounterDismiss) {
+    coAssignCounterDismiss.addEventListener('click', hideAssignCounterPopup);
+  }
+
+  wireTouchPicker(counterSearch, counterOpts, selCounter, counterSummary);
+  syncPickerUi(selCounter, counterOpts, counterSummary);
+  setCounterPickerReadOnly(false);
+  if (POS_NEEDS_SESSION_COUNTER) {
+    showSetCounterSessionPopup();
+  }
+
+  function clampShift(n) {
+    n = parseInt(n, 10);
+    if (isNaN(n)) return 1;
+    return Math.max(0, Math.min(99, n));
+  }
+  if (shiftMinus && inpShift) {
+    shiftMinus.addEventListener('click', function () {
+      if (coShiftIsOpen) return;
+      inpShift.value = clampShift((parseInt(inpShift.value, 10) || 0) - 1);
+    });
+  }
+  if (shiftPlus && inpShift) {
+    shiftPlus.addEventListener('click', function () {
+      if (coShiftIsOpen) return;
+      inpShift.value = clampShift((parseInt(inpShift.value, 10) || 0) + 1);
+    });
+  }
+
+  if (btnToggleRecent && recentPanel) {
+    btnToggleRecent.addEventListener('click', function () {
+      var opening = recentPanel.hasAttribute('hidden');
+      if (opening) {
+        recentPanel.removeAttribute('hidden');
+        btnToggleRecent.setAttribute('aria-expanded', 'true');
+        btnToggleRecent.textContent = 'Hide shift history (' + CO_RECENT_TOTAL + ')';
+        filterCoHistRows();
+      } else {
+        recentPanel.setAttribute('hidden', '');
+        btnToggleRecent.setAttribute('aria-expanded', 'false');
+        btnToggleRecent.textContent = 'Shift history (' + CO_RECENT_TOTAL + ')';
+      }
+    });
+  }
+
+  document.querySelectorAll('.pos-counter-ops .po-tab[data-tab]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var section = btn.closest('.po-tabs') && btn.closest('.po-tabs').parentElement;
+      if (!section) return;
+      section.querySelectorAll('.po-tab').forEach(function (b) { b.classList.remove('active'); });
+      section.querySelectorAll('.tab-pane').forEach(function (p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+      var pane = document.getElementById(btn.getAttribute('data-tab'));
+      if (pane) pane.classList.add('active');
+      filterCoHistRows();
+    });
+  });
+  document.querySelectorAll('.co-shift-bills-tabs .po-tab[data-co-bill-tab]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var section = document.getElementById('coShiftBillsPanel');
+      if (!section) return;
+      section.querySelectorAll('.co-shift-bills-tabs .po-tab').forEach(function (b) { b.classList.remove('active'); });
+      section.querySelectorAll('.tab-pane').forEach(function (p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+      var pane = document.getElementById(btn.getAttribute('data-co-bill-tab'));
+      if (pane) pane.classList.add('active');
+    });
+  });
+
+  if (histSearch) histSearch.addEventListener('input', filterCoHistRows);
+
+  selCounter.addEventListener('change', function () {
+    coCounterUserPicked = true;
+    setFlash('');
+    pollOpenStatus();
+  });
+
+  var coShiftHeldBody = document.getElementById('coShiftHeldBody');
+  if (coShiftHeldBody) {
+    coShiftHeldBody.addEventListener('click', function (e) {
+      var openBtn = e.target.closest('[data-co-held-open]');
+      if (openBtn) {
+        e.preventDefault();
+        coOpenHeldBill(openBtn.getAttribute('data-co-held-open'));
+        return;
+      }
+      var cancelBtn = e.target.closest('[data-co-held-cancel]');
+      if (cancelBtn) {
+        e.preventDefault();
+        coCancelHeldBill(cancelBtn.getAttribute('data-co-held-cancel'));
+      }
+    });
+  }
+
+  if (coPrecloseBackdrop) coPrecloseBackdrop.addEventListener('click', coHidePrecloseModal);
+  if (coPrecloseDismiss) coPrecloseDismiss.addEventListener('click', coHidePrecloseModal);
+  if (coPrecloseCopy) {
+    coPrecloseCopy.addEventListener('click', function () {
+      coCopyPrecloseReceipt();
+    });
+  }
+  if (coPreclosePdf) {
+    coPreclosePdf.addEventListener('click', function () {
+      coOpenPreclosePdf();
+    });
+  }
+  if (coPreclosePrint) {
+    coPreclosePrint.addEventListener('click', function () {
+      coPrintPrecloseReceipt().then(function () {
+        setFlash('Sent to POS receipt printer.', true);
+      }).catch(function (err) {
+        setFlash(err.message || 'Print failed', false);
+      });
+    });
+  }
+  if (coPrecloseConfirmClose) coPrecloseConfirmClose.addEventListener('click', coConfirmCloseShiftFromModal);
+  if (btnTimeCheck) btnTimeCheck.addEventListener('click', coRunTimeCheckOnly);
+
+  if (btnShift) {
+    btnShift.addEventListener('click', function () {
+      setFlash('');
+      var lc = currentLoc();
+      var cc = currentCounter();
+      if (cc == null) { setFlash('Select a counter.', false); return; }
+      if (coShiftIsOpen) {
+        coBeginCloseShiftFlow();
+      } else {
+        var posDateErr = coValidatePosDateForOpen();
+        if (posDateErr) {
+          setFlash(posDateErr, false);
+          return;
+        }
+        if (coShiftOpenInFlight) return;
+        coShiftOpenInFlight = true;
+        syncPosDateShiftReadOnly(true);
+        syncShiftToggleButton(null);
+        showOpenShiftOverlay();
+        var openBody = applySaveNonce({
+          location_code: lc,
+          counter_code: cc,
+          pos_date: inpDate.value,
+          shift_code: parseInt(inpShift.value, 10) || 1
+        });
+        fetch(OPEN_URL, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(openBody)
+        })
+          .then(function (r) {
+            return r.json().then(function (data) {
+              mergeNonceFromResponse(data);
+              return { ok: r.ok, status: r.status, data: data };
+            });
+          })
+          .then(function (res) {
+            var data = res.data || {};
+            if (!res.ok || !data.success) {
+              var msg = data.error || 'Open failed';
+              if (data.save_session_locked || res.status === 423) {
+                msg = data.error || 'Another POS operation is in progress for this session. Please wait.';
+              }
+              if (data.replay_blocked || res.status === 409) {
+                msg = data.error || 'Duplicate or invalid request. Use the updated token and try again.';
+              }
+              setFlash(msg, false);
+              coShiftOpenInFlight = false;
+              hideOpenShiftOverlay();
+              pollOpenStatus();
+              return;
+            }
+            if (data.already_open && data.open) {
+              if (data.open.posdate) {
+                inpDate.value = String(data.open.posdate).slice(0, 10);
+                updatePosDateTrigger();
+              }
+              if (data.open.shiftcode != null) {
+                inpShift.value = clampShift(data.open.shiftcode);
+              }
+              setFlash(data.message || 'Counter already open. Existing POS date loaded.', true);
+              window.location.reload();
+              return;
+            }
+            setFlash('Shift opened.', true);
+            window.location.reload();
+          })
+          .catch(function () {
+            setFlash('Request failed', false);
+            coShiftOpenInFlight = false;
+            hideOpenShiftOverlay();
+            pollOpenStatus();
+          });
+      }
+    });
+  }
+
+  filterCoHistRows();
+  bootCounterOps();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,2 @@
+"""Addon manifest — Customer category (TBLCUSTOMERCATEGORY)."""
+MANIFEST = {'technical_name': 'customer_category', 'name': 'Customer Category', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Customer categories per branch', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/customer-category'}, 'flask': {'blueprint': 'customer_category', 'blueprint_ref': 'addons.customer_category.controllers.routes:bp', 'routes_module': 'addons.customer_category.controllers.routes'}}

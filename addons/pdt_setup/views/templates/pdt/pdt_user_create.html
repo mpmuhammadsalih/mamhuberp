@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .setup-im-page .pdt-user-details { display: grid; grid-template-columns: 1fr 1fr; gap: 0 48px; }
+  .setup-im-page .pdt-user-details .form-group { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .setup-im-page .pdt-user-details .form-group label { margin: 0; min-width: 140px; font-size: 13px; flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  .setup-im-page .pdt-user-details .form-group label > span { min-width: 140px; flex-shrink: 0; }
+  .setup-im-page .pdt-user-details .input, .setup-im-page .pdt-user-details select { flex: 1; min-width: 0; font-size: 13px; padding: 6px 0; border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; background: transparent; }
+  .setup-im-page .pdt-hint { margin: 0 0 16px; padding: 10px 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; font-size: 13px; color: #14532d; }
+  .setup-im-page .pdt-empty { color: #b45309; background: #fffbeb; border: 1px solid #fde68a; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
+</style>
+<div class="im-page setup-im-page">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>PDT User Creation / <span class="im-ref">New</span> <span class="status-badge status-badge--new">New</span></h1>
+      <div class="im-actions">
+        <button type="submit" form="pdt-user-form" class="im-btn-save" {% if not pdt_roles %}disabled{% endif %}>Create PDT user</button>
+        <a href="{{ url_for('pdt.pdt_users_list') }}" class="im-btn-secondary">PDT users</a>
+        <a href="{{ url_for('pdt.pdt_roles_list') }}" class="im-btn-secondary">PDT roles</a>
+      </div>
+    </div>
+  </div>
+
+  <section class="setup-im-shell customer-form-shell itemmaster-container">
+    <p class="pdt-hint">Creates a handheld login in <code>pdt_users</code> (separate from ERP User Management). Only PDT roles from <code>pdt_roles</code> can be assigned.</p>
+    {% if not pdt_roles %}
+      <p class="pdt-empty">No PDT roles defined. <a href="{{ url_for('pdt.pdt_roles_create') }}">Create a PDT role</a> first.</p>
+    {% endif %}
+    <form method="post" class="pdt-user-form" id="pdt-user-form" data-check-url="{{ url_for('pdt.check_username') }}">
+      <div class="cf-form-panel">
+        <h2 class="cf-section-title">Login details</h2>
+        <div class="customer-details pdt-user-details">
+          <div class="form-group">
+            <label for="username">
+              <span>Username</span>
+              <input type="text" id="username" name="username" required class="input" autocomplete="off" />
+              <small class="muted" id="usernameHint" style="display:none;width:100%;"></small>
+            </label>
+          </div>
+          <div class="form-group">
+            <label for="password">
+              <span>Password</span>
+              <input type="password" id="password" name="password" required class="input" />
+            </label>
+          </div>
+          <div class="form-group">
+            <label for="employeecode">
+              <span>Employee code</span>
+              <input type="text" id="employeecode" name="employeecode" required inputmode="numeric" pattern="[0-9]+" class="input" />
+            </label>
+          </div>
+          <div class="form-group">
+            <label for="role_id">
+              <span>PDT role</span>
+              <select id="role_id" name="role_id" required {% if not pdt_roles %}disabled{% endif %}>
+                <option value="">-- Select PDT role --</option>
+                {% for r in pdt_roles %}
+                  <option value="{{ r.role_id }}">{{ r.role_name }} ({{ r.role_id }})</option>
+                {% endfor %}
+              </select>
+            </label>
+          </div>
+          <div class="form-group form-group--full" style="grid-column: span 2;">
+            <label for="tenant_id">
+              <span>Tenant</span>
+              <select id="tenant_id" name="tenant_id">
+                <option value="">-- Default / none --</option>
+                {% for t in available_tenants %}
+                  <option value="{{ t.tenant_id }}">{{ t.tenant_id }}{% if t.tenant_name %} — {{ t.tenant_name }}{% endif %}</option>
+                {% endfor %}
+              </select>
+              <small class="muted" style="width:100%;">Tenant database used after login (recommended for multi-DB).</small>
+            </label>
+          </div>
+        </div>
+      </div>
+    </form>
+  </section>
+</div>
+<script src="{{ url_for('static', filename='js/pdt_user_create.js') }}?v=1"></script>
+{% endblock %}

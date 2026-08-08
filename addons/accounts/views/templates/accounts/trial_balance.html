@@ -1,0 +1,449 @@
+{% extends "base.html" %}
+{% block title %}Trial Balance{% endblock %}
+{% block content %}
+<style>
+  #tbTable {
+    width: 100%;
+    border-collapse: collapse !important;
+    table-layout: auto;
+  }
+  #tbTable th,
+  #tbTable td {
+    border: 1px solid #cfd4da !important;
+    padding: 8px 10px !important;
+    white-space: nowrap;
+  }
+  #tbTable thead th {
+    background: #eef2f7 !important;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  #tbTable tbody tr:nth-child(even) {
+    background: #fbfcfe;
+  }
+  #tbTable tbody tr.tb-row-clickable {
+    cursor: pointer;
+  }
+  #tbTable tbody tr.tb-row-clickable:hover {
+    background: #e8f0fe !important;
+  }
+  #tbTable tr.tb-total-row th {
+    background: #e9edf3 !important;
+    font-weight: 700;
+  }
+  #tbDetailModal .modal__content {
+    width: min(1100px, 96vw);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+  }
+  #tbDetailModal .modal__body {
+    overflow: auto;
+    flex: 1;
+    min-height: 0;
+  }
+  #tbDetailLedgerTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  #tbDetailLedgerTable th,
+  #tbDetailLedgerTable td {
+    border: 1px solid #e2e8f0;
+    padding: 6px 8px;
+  }
+  #tbDetailLedgerTable thead th {
+    background: #f1f5f9;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  #tbDetailLedgerTable td.num {
+    text-align: right;
+    font-family: ui-monospace, monospace;
+  }
+  #tbDetailLedgerTable a.tb-voucher-link {
+    color: #1d4ed8;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  #tbDetailLedgerTable a.tb-voucher-link:hover {
+    text-decoration: underline;
+  }
+  .tb-detail-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px 16px;
+    font-size: 13px;
+    margin-bottom: 12px;
+  }
+  .tb-detail-meta dt { color: #94a3b8; font-size: 11px; margin: 0; }
+  .tb-detail-meta dd { margin: 2px 0 0 0; font-weight: 600; color: #1e293b; }
+  .tb-detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .tb-detail-loading { color: #64748b; padding: 24px; text-align: center; }
+  .tb-detail-err { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
+  .tb-account-search-wrap { min-width: min(280px, 100%); flex: 1 1 220px; max-width: 360px; }
+  .tb-account-search-wrap .tb-search-field {
+    display: flex; align-items: stretch; width: 100%; min-height: 38px;
+    border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; overflow: hidden;
+  }
+  .tb-account-search-wrap .tb-search-field:focus-within {
+    border-color: #1a56a4; box-shadow: 0 0 0 2px rgba(26, 86, 164, 0.12);
+  }
+  .tb-account-search-wrap input[type="search"] {
+    flex: 1; min-width: 0; border: none; outline: none; padding: 8px 10px; font-size: 14px; background: transparent;
+  }
+  .tb-account-search-wrap .tb-search-clear {
+    width: 36px; border: none; border-left: 1px solid #e2e8f0; background: #f8fafc; color: #64748b;
+    cursor: pointer; font-size: 16px; line-height: 1;
+  }
+  .tb-account-search-wrap .tb-search-clear:hover { background: #f1f5f9; color: #0f172a; }
+  #tbTable tbody tr.tb-row-hidden { display: none; }
+  .tb-search-meta { font-size: 12px; color: #64748b; margin: 0 0 8px; min-height: 1.2em; }
+</style>
+<div class="page-po">
+  <div class="page-po__head">
+    <div>
+      <h1 class="page-po__title">Trial Balance</h1>
+      <div class="page-po__subtitle">Account balances for the selected period — click a row for GL detail</div>
+    </div>
+  </div>
+
+  <div class="page-po__section">
+    <form method="get" class="page-po__tools" style="margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: end;">
+      <div>
+        <label class="label">From</label>
+        <input type="date" class="input" name="date_from" value="{{ date_from or '' }}">
+      </div>
+      <div>
+        <label class="label">To</label>
+        <input type="date" class="input" name="date_to" value="{{ date_to or '' }}">
+      </div>
+      <div class="tb-account-search-wrap">
+        <label class="label" for="tbAccountSearch">Search accounts</label>
+        <div class="tb-search-field">
+          <input type="search" id="tbAccountSearch" placeholder="Code, name, or type…" autocomplete="off" enterkeyhint="search">
+          <button type="button" class="tb-search-clear" id="tbAccountSearchClear" title="Clear" aria-label="Clear search" style="display:none;">×</button>
+        </div>
+      </div>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#334155;padding-bottom:6px;cursor:pointer;user-select:none;" title="Omit period-closing journals (PERIOD_CLOSE) and any reopen reversal of those journals (JE_REV)">
+        <input type="checkbox" name="exclude_closing" value="1" {% if exclude_closing %}checked{% endif %}>
+        Exclude closing journal
+      </label>
+      <button class="page-po__btn-primary" type="submit">Filter</button>
+      <div style="margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+        <span style="font-size: 12px; color: #64748b;">Export</span>
+        <a class="page-po__btn-primary" style="text-decoration: none; display: inline-flex; align-items: center;" href="{{ url_for('accounts.trial_balance_pdf', date_from=date_from or none, date_to=date_to or none, exclude_closing='1' if exclude_closing else none) }}" target="_blank" rel="noopener">PDF</a>
+        <a class="page-po__btn-secondary" style="text-decoration: none; display: inline-flex; align-items: center;" href="{{ url_for('accounts.trial_balance_excel', date_from=date_from or none, date_to=date_to or none, exclude_closing='1' if exclude_closing else none) }}">Excel</a>
+      </div>
+    </form>
+
+    {% if company_name %}
+    <p class="page-po__muted" style="margin: 0 0 12px; font-family: 'Times New Roman', Times, Georgia, serif;">
+      <strong>{{ company_name|e }}</strong>
+      {% if period_display %} — {{ period_display|e }}{% endif %}
+    </p>
+    {% endif %}
+
+    <div class="page-po__section-title">Trial Balance</div>
+    <p class="tb-search-meta" id="tbSearchMeta" aria-live="polite"></p>
+    <div class="table-wrap">
+      <table class="table" id="tbTable">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Name</th>
+            <th>Type</th>
+            <th style="text-align: right;">Debit</th>
+            <th style="text-align: right;">Credit</th>
+            <th style="text-align: right;" title="Closing balance as of To date (matches account ledger Closing)">Closing</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr class="tb-row-clickable"
+              tabindex="0"
+              role="button"
+              aria-label="View ledger for {{ row.code|e }}"
+              data-code="{{ row.code|e }}"
+              data-name="{{ row.name|e }}"
+              data-type="{{ row.type|e }}"
+              data-debit="{{ row.debit or 0 }}"
+              data-credit="{{ row.credit or 0 }}"
+              data-balance="{{ row.balance or 0 }}"
+              {% if row.account_id %}data-account-id="{{ row.account_id }}"{% endif %}>
+            <td>{{ row.code }}</td>
+            <td>{{ row.name }}</td>
+            <td>{{ row.type }}</td>
+            <td style="text-align: right;">{{ '%.2f'|format(row.debit or 0) }}</td>
+            <td style="text-align: right;">{{ '%.2f'|format(row.credit or 0) }}</td>
+            <td style="text-align: right;">{{ '%.2f'|format(row.balance or 0) }}</td>
+          </tr>
+          {% else %}
+          <tr id="tbEmptyRow"><td colspan="6" class="muted">No trial balance data found.</td></tr>
+          {% endfor %}
+          <tr class="tb-no-match" id="tbNoMatchRow" style="display:none;">
+            <td colspan="6" class="muted">No accounts match your search.</td>
+          </tr>
+          <tr class="tb-total-row" id="tbTotalRow"
+              data-total-debit="{{ total_debit or 0 }}"
+              data-total-credit="{{ total_credit or 0 }}">
+            <th colspan="3" style="text-align: right;" id="tbTotalLabel">Total</th>
+            <th style="text-align: right;" id="tbTotalDebit">{{ '%.2f'|format(total_debit or 0) }}</th>
+            <th style="text-align: right;" id="tbTotalCredit">{{ '%.2f'|format(total_credit or 0) }}</th>
+            <th></th>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="tbDetailModal" role="dialog" aria-modal="true" aria-labelledby="tbDetailTitle">
+  <div class="modal__overlay" data-close="tbDetailModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3 id="tbDetailTitle">Account detail</h3>
+      <button type="button" class="modal__close" data-close="tbDetailModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body" id="tbDetailBody">
+      <div class="tb-detail-loading">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const LEDGER_API = {{ url_for('accounts.trial_balance_ledger_api')|tojson }};
+  const LEDGER_PAGE = {{ url_for('accounts.account_ledger_page')|tojson }};
+  const JOURNAL_VOUCHER_TMPL = {{ url_for('accounts.journal_voucher_view', voucher_no='__VNO__')|tojson }};
+  const DATE_FROM = {{ (date_from or '')|tojson }};
+  const DATE_TO = {{ (date_to or '')|tojson }};
+  const EXCLUDE_CLOSING = {{ (exclude_closing or false)|tojson }};
+
+  function journalVoucherUrl(vno) {
+    const v = String(vno || '').trim();
+    if (!v) return '';
+    return JOURNAL_VOUCHER_TMPL.replace('__VNO__', encodeURIComponent(v));
+  }
+
+  function filterDates() {
+    const f = document.querySelector('input[name="date_from"]');
+    const t = document.querySelector('input[name="date_to"]');
+    const excl = document.querySelector('input[name="exclude_closing"]');
+    return {
+      from: (f && f.value) || DATE_FROM || '',
+      to: (t && t.value) || DATE_TO || '',
+      excludeClosing: excl ? !!excl.checked : !!EXCLUDE_CLOSING,
+    };
+  }
+
+  const modal = document.getElementById('tbDetailModal');
+  const bodyEl = document.getElementById('tbDetailBody');
+  const titleEl = document.getElementById('tbDetailTitle');
+
+  function openModal() {
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeModal() {
+    if (!modal) return;
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+  document.querySelectorAll('[data-close="tbDetailModal"]').forEach(function (el) {
+    el.addEventListener('click', closeModal);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) closeModal();
+  });
+
+  function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+  function fmtNum(n) {
+    const v = parseFloat(n);
+    if (isNaN(v) || Math.abs(v) < 0.005) return '—';
+    return v.toFixed(2);
+  }
+
+  function renderLedger(data) {
+    const acc = data.account || {};
+    const led = data.ledger || {};
+    const lines = led.lines || [];
+    const dates = filterDates();
+    let fullLedgerUrl = LEDGER_PAGE;
+    const q = new URLSearchParams();
+    if (acc.account_id) q.set('account_id', String(acc.account_id));
+    if (dates.from) q.set('date_from', dates.from);
+    if (dates.to) q.set('date_to', dates.to);
+    if (q.toString()) fullLedgerUrl += '?' + q.toString();
+
+    let html = '<div class="tb-detail-actions">';
+    html += '<a class="page-po__btn-primary" style="text-decoration:none;display:inline-flex;align-items:center;" href="' + esc(fullLedgerUrl) + '">Open full account ledger</a>';
+    html += '</div>';
+    html += '<dl class="tb-detail-meta">';
+    html += '<div><dt>Code</dt><dd>' + esc(acc.code) + '</dd></div>';
+    html += '<div><dt>Name</dt><dd>' + esc(acc.name) + '</dd></div>';
+    html += '<div><dt>Type</dt><dd>' + esc(acc.type || '—') + '</dd></div>';
+    html += '<div><dt>Period</dt><dd>' + esc((led.date_from || dates.from || '…') + ' → ' + (led.date_to || dates.to || '…')) + '</dd></div>';
+    html += '<div><dt>Opening</dt><dd>' + fmtNum(led.opening_balance) + '</dd></div>';
+    html += '<div><dt>Period debit</dt><dd>' + fmtNum(led.total_debit) + '</dd></div>';
+    html += '<div><dt>Period credit</dt><dd>' + fmtNum(led.total_credit) + '</dd></div>';
+    html += '<div><dt>Closing</dt><dd>' + fmtNum(led.closing_balance) + '</dd></div>';
+    html += '</dl>';
+
+    html += '<div class="table-wrap"><table id="tbDetailLedgerTable"><thead><tr>';
+    html += '<th>Sl.</th><th>Date</th><th>Voucher</th><th>Reference</th><th>Narration</th><th>Source</th><th>Remarks</th><th>Party</th>';
+    html += '<th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th></tr></thead><tbody>';
+    html += '<tr><td>—</td><td colspan="7">Opening balance (before period)</td><td class="num">—</td><td class="num">—</td><td class="num">' + fmtNum(led.opening_balance) + '</td></tr>';
+    if (!lines.length) {
+      html += '<tr><td colspan="11" style="text-align:center;color:#94a3b8;padding:20px;">No GL lines in this date range.</td></tr>';
+    } else {
+      lines.forEach(function (row, i) {
+        const party = (row.party_type || row.party_code)
+          ? [row.party_type, row.party_code].filter(Boolean).join(' ')
+          : '—';
+        html += '<tr>';
+        const vno = String(row.voucher_no || '').trim();
+        const vUrl = journalVoucherUrl(vno);
+        html += '<td>' + (i + 1) + '</td>';
+        html += '<td>' + esc(row.voucher_date) + '</td>';
+        html += '<td>' + (vUrl
+          ? '<a class="tb-voucher-link" href="' + esc(vUrl) + '" target="_blank" rel="noopener" title="Open journal">' + esc(vno) + '</a>'
+          : esc(vno || '—')) + '</td>';
+        html += '<td>' + esc(row.reference_no) + '</td>';
+        html += '<td>' + esc(row.narration) + '</td>';
+        html += '<td>' + esc(row.source) + '</td>';
+        html += '<td>' + esc(row.remarks) + '</td>';
+        html += '<td>' + esc(party) + '</td>';
+        html += '<td class="num">' + fmtNum(row.debit) + '</td>';
+        html += '<td class="num">' + fmtNum(row.credit) + '</td>';
+        html += '<td class="num">' + fmtNum(row.running_balance) + '</td>';
+        html += '</tr>';
+      });
+      html += '<tr style="font-weight:600;background:#eff6ff;">';
+      html += '<td colspan="8">Period totals / closing</td>';
+      html += '<td class="num">' + fmtNum(led.total_debit) + '</td>';
+      html += '<td class="num">' + fmtNum(led.total_credit) + '</td>';
+      html += '<td class="num">' + fmtNum(led.closing_balance) + '</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table></div>';
+    bodyEl.innerHTML = html;
+  }
+
+  function loadDetail(code, name) {
+    titleEl.textContent = (code ? code + ' — ' : '') + (name || 'Account detail');
+    bodyEl.innerHTML = '<div class="tb-detail-loading">Loading ledger…</div>';
+    openModal();
+    const dates = filterDates();
+    const params = new URLSearchParams({ account_code: code });
+    if (dates.from) params.set('date_from', dates.from);
+    if (dates.to) params.set('date_to', dates.to);
+    if (dates.excludeClosing) params.set('exclude_closing', '1');
+    fetch(LEDGER_API + '?' + params.toString(), { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.j || !res.j.success) {
+          const err = (res.j && res.j.error) ? res.j.error : 'Could not load ledger.';
+          bodyEl.innerHTML = '<div class="tb-detail-err">' + esc(err) + '</div>';
+          return;
+        }
+        renderLedger(res.j);
+      })
+      .catch(function () {
+        bodyEl.innerHTML = '<div class="tb-detail-err">Network error loading ledger.</div>';
+      });
+  }
+
+  document.querySelectorAll('#tbTable tbody tr.tb-row-clickable').forEach(function (tr) {
+    function activate() {
+      const code = tr.getAttribute('data-code');
+      const name = tr.getAttribute('data-name');
+      if (code) loadDetail(code, name);
+    }
+    tr.addEventListener('click', activate);
+    tr.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        activate();
+      }
+    });
+  });
+
+  (function setupAccountSearch() {
+    const input = document.getElementById('tbAccountSearch');
+    const clearBtn = document.getElementById('tbAccountSearchClear');
+    const meta = document.getElementById('tbSearchMeta');
+    const noMatch = document.getElementById('tbNoMatchRow');
+    const totalRow = document.getElementById('tbTotalRow');
+    const totalLabel = document.getElementById('tbTotalLabel');
+    const totalDebitEl = document.getElementById('tbTotalDebit');
+    const totalCreditEl = document.getElementById('tbTotalCredit');
+    const rows = Array.prototype.slice.call(document.querySelectorAll('#tbTable tbody tr.tb-row-clickable'));
+    if (!input || !rows.length) return;
+
+    const fullDebit = parseFloat((totalRow && totalRow.getAttribute('data-total-debit')) || '0') || 0;
+    const fullCredit = parseFloat((totalRow && totalRow.getAttribute('data-total-credit')) || '0') || 0;
+
+    function fmt2(n) {
+      return (Math.round((n + Number.EPSILON) * 100) / 100).toFixed(2);
+    }
+
+    function applySearch() {
+      const q = String(input.value || '').trim().toLowerCase();
+      if (clearBtn) clearBtn.style.display = q ? 'block' : 'none';
+      let visible = 0;
+      let sumDr = 0;
+      let sumCr = 0;
+      rows.forEach(function (tr) {
+        const hay = [
+          tr.getAttribute('data-code') || '',
+          tr.getAttribute('data-name') || '',
+          tr.getAttribute('data-type') || '',
+        ].join(' ').toLowerCase();
+        const show = !q || hay.indexOf(q) !== -1;
+        tr.classList.toggle('tb-row-hidden', !show);
+        if (show) {
+          visible += 1;
+          sumDr += parseFloat(tr.getAttribute('data-debit') || '0') || 0;
+          sumCr += parseFloat(tr.getAttribute('data-credit') || '0') || 0;
+        }
+      });
+      if (noMatch) noMatch.style.display = q && visible === 0 ? '' : 'none';
+      if (totalLabel) totalLabel.textContent = q ? 'Filtered total' : 'Total';
+      if (totalDebitEl) totalDebitEl.textContent = fmt2(q ? sumDr : fullDebit);
+      if (totalCreditEl) totalCreditEl.textContent = fmt2(q ? sumCr : fullCredit);
+      if (meta) {
+        meta.textContent = q
+          ? ('Showing ' + visible + ' of ' + rows.length + ' accounts matching “' + input.value.trim() + '”.')
+          : '';
+      }
+    }
+
+    input.addEventListener('input', applySearch);
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        input.value = '';
+        applySearch();
+        input.blur();
+      }
+      // Don't submit the date Filter form when pressing Enter in search
+      if (e.key === 'Enter') e.preventDefault();
+    });
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        input.value = '';
+        applySearch();
+        input.focus();
+      });
+    }
+  })();
+})();
+</script>
+{% endblock %}

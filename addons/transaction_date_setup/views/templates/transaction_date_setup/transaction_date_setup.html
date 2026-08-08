@@ -1,0 +1,823 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .setup-im-page.tds-page .setup-im-shell.customer-form-shell.itemmaster-container {
+    max-width: min(1200px, 100%);
+  }
+  .setup-im-page.tds-page .tds-details .form-group.form-group--full { grid-column: 1 / -1; }
+  .setup-im-page.tds-page .tds-mode-options {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 18px;
+    flex: 1;
+    min-width: 0;
+  }
+  .setup-im-page.tds-page .tds-mode-options label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #495057;
+    cursor: pointer;
+    margin: 0;
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+  .setup-im-page.tds-page .tds-table-panel {
+    margin: 0 0 6px;
+    padding: 8px 12px 10px;
+    border: 1px solid #b8c8d4;
+    border-top: none;
+    border-radius: 0 0 2px 2px;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(15, 35, 55, 0.08);
+  }
+  .setup-im-page.tds-page .scroll-table {
+    border: 1px solid #e5eaf2;
+    border-radius: 6px;
+    overflow: auto;
+    background: var(--im-table-surface, rgba(255, 255, 255, 0.55));
+  }
+  .setup-im-page.tds-page .table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+    font-size: 13px;
+  }
+  .setup-im-page.tds-page .table thead {
+    background: #f8fafc !important;
+  }
+  .setup-im-page.tds-page .table thead th {
+    background: #f8fafc !important;
+    color: #0f172a !important;
+    padding: 8px 10px;
+    border-bottom: 1px solid #dee2e6;
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    text-align: left;
+    white-space: nowrap;
+  }
+  .setup-im-page.tds-page .table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid #e5eaf2;
+    color: #334155;
+    vertical-align: middle;
+    line-height: 1.35;
+  }
+  .setup-im-page.tds-page .table tbody tr:hover td {
+    background: #f8fafc;
+  }
+  .setup-im-page.tds-page .table .num { text-align: right; }
+  .setup-im-page.tds-page .table input[type="date"] {
+    width: 100%;
+    max-width: 160px;
+    min-height: 28px;
+    padding: 4px 8px;
+    font-size: 13px;
+    border: 1px solid #dbe3ef;
+    border-radius: 4px;
+    background: var(--im-field-fill, rgba(255, 255, 255, 0.52));
+    box-sizing: border-box;
+  }
+  .setup-im-page.tds-page .tds-flag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+  .setup-im-page.tds-page .tds-flag--open {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+  }
+  .setup-im-page.tds-page .tds-flag--closed {
+    background: #f1f5f9;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+  }
+  .setup-im-page.tds-page .status-badge--open {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+  }
+  .setup-im-page.tds-page .status-badge--separate {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeeba;
+  }
+  .setup-im-page.tds-page .tds-flash {
+    margin: 8px 12px 4px;
+    min-height: 18px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .setup-im-page.tds-page .tds-flash.ok { color: #047857; }
+  .setup-im-page.tds-page .tds-flash.err { color: #b91c1c; }
+  .setup-im-page.tds-page .tds-note {
+    margin: 0 12px 10px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    font-size: 12px;
+    color: #475569;
+    line-height: 1.45;
+  }
+  .setup-im-page.tds-page .tds-admin-note {
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    font-size: 12px;
+    color: #1e40af;
+    line-height: 1.45;
+  }
+  .setup-im-page.tds-page .im-btn-close {
+    background: #fff5f5 !important;
+    border: 1px solid #fecaca !important;
+    color: #b91c1c !important;
+  }
+  .setup-im-page.tds-page .im-btn-close:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .setup-im-page.tds-page .tds-row-close {
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 4px;
+    border: 1px solid #fecaca;
+    background: #fff5f5;
+    color: #b91c1c;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .setup-im-page.tds-page .tds-row-close:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .setup-im-page.tds-page #tdsAllPanel[hidden],
+  .setup-im-page.tds-page #tdsAllPanelTo[hidden],
+  .setup-im-page.tds-page #tdsSeparatePanel[hidden] { display: none !important; }
+  .setup-im-page.tds-page .tds-range-cell {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .setup-im-page.tds-page .table input.tds-date-from,
+  .setup-im-page.tds-page .table input.tds-date-to {
+    max-width: 140px;
+  }
+  .setup-im-page.tds-page .tds-empty {
+    text-align: center;
+    padding: 16px;
+    color: #64748b;
+  }
+  @media (max-width: 1024px) {
+    .setup-im-page.tds-page .tds-details .form-group.form-group--full { grid-column: span 1; }
+  }
+</style>
+
+<div class="im-page setup-im-page setup-im-extra-wide tds-page">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>
+        Transaction Date Setup /
+        <span class="im-ref" id="tdsTitleRef">{{ location_code }}</span>
+        <span class="status-badge status-badge--open" id="tdsModeBadge">All dates</span>
+      </h1>
+      <div class="im-actions">
+        <button type="button" class="im-btn-save" id="tdsSaveBtn">Save</button>
+        <button type="button" class="im-btn-secondary im-btn-close" id="tdsCloseBtn" title="Close open business day(s)">Close day</button>
+        <button type="button" class="im-btn-secondary" id="tdsRefreshBtn">Refresh</button>
+      </div>
+    </div>
+  </div>
+
+  <section class="setup-im-shell customer-form-shell itemmaster-container">
+    {% if is_txn_date_admin %}
+    <div class="tds-admin-note">
+      <strong>Extended date access:</strong> You may open past dates and days previously closed here
+      (admin, or role permission <em>Transaction Date — change any date</em>).
+      Months closed via <strong>Period Closing</strong> cannot be opened from this screen — reopen them from Period Closing first.
+    </div>
+    {% endif %}
+    <div class="tds-admin-note" id="tdsClosedPeriodsNote" style="display:none;margin-top:8px;"></div>
+    <div class="cf-form-stack">
+      <div class="cf-form-panel">
+        <h2 class="cf-section-title">Branch &amp; date mode</h2>
+        <div class="customer-details tds-details">
+          <div class="form-group">
+            <label for="tdsLocation">
+              <span>Location</span>
+              <select id="tdsLocation" class="input">
+                {% for loc in locations %}
+                <option value="{{ loc.code }}"{% if loc.code == location_code %} selected{% endif %}>{{ loc.label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          </div>
+          <div class="form-group form-group--full">
+            <label>
+              <span>Date mode</span>
+              <span class="tds-mode-options">
+                <label>
+                  <input type="radio" name="tdsMode" value="all" checked />
+                  Same date range for all transaction types
+                </label>
+                <label>
+                  <input type="radio" name="tdsMode" value="separate" />
+                  Separate date range per transaction type
+                </label>
+              </span>
+            </label>
+          </div>
+          <div class="form-group" id="tdsAllPanel">
+            <label for="tdsAllDateFrom">
+              <span>From date</span>
+              <input type="date" id="tdsAllDateFrom" class="input" />
+            </label>
+          </div>
+          <div class="form-group" id="tdsAllPanelTo">
+            <label for="tdsAllDateTo">
+              <span>To date</span>
+              <input type="date" id="tdsAllDateTo" class="input" />
+            </label>
+          </div>
+        </div>
+        <p class="field-hint-inline" id="tdsDateHint">
+          {% if is_txn_date_admin %}
+          Sets an open business date range (From → To) in <code>TBLTRANSACTIONDATE</code> per branch. With extended date access, any range may be selected.
+          {% else %}
+          Sets an open business date range (From → To) in <code>TBLTRANSACTIONDATE</code> per branch.
+          Previous days and closed business dates cannot be selected for the From date.
+          {% endif %}
+          Documents may post on any date between From and To (inclusive).
+          Default codes: Sales 1, Purchase 2, Sales Return 3, Purchase Return 4, GRN 5, Transfer 6.
+        </p>
+      </div>
+
+      <div class="cf-form-panel" id="tdsSeparatePanel" hidden>
+        <h2 class="cf-section-title">Per transaction type</h2>
+        <div class="tds-table-panel">
+          <p class="field-hint-inline" style="margin: 0 0 10px 0;">
+            Transaction codes are fixed per module (see defaults below). Names come from <code>TBLTRANSACTIONS</code> when available.
+          </p>
+          <div class="scroll-table">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Module</th>
+                  <th class="num">Trans. code</th>
+                  <th>Master name</th>
+                  <th>Current range</th>
+                  <th>Status</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="tdsModuleBody">
+                <tr><td colspan="8" class="tds-empty">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="cf-form-panel">
+        <h2 class="cf-section-title">Database rows</h2>
+        <div class="tds-table-panel">
+          <div class="scroll-table">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th class="num">Code</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th>Flag</th>
+                  <th>Opened by</th>
+                  <th>Closed by</th>
+                </tr>
+              </thead>
+              <tbody id="tdsDbBody">
+                <tr><td colspan="6" class="tds-empty">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="tds-note" id="tdsSaveNote">
+          <strong>Save</strong> sets <code>OPENFLAG = O</code>, updates <code>DATEOFOPEN</code> (From) and <code>DATEOFTO</code> (To), and clears close fields.
+          <strong>Close day</strong> sets <code>OPENFLAG = C</code> with <code>CLOSEDBY</code> / <code>CLOSEDDATE</code> on open rows — posting in that range is blocked until you open the next range.
+          {% if not is_txn_date_admin %}
+          You cannot roll back before the current open From date or pick a closed business day when opening.
+          {% endif %}
+        </div>
+        <div id="tdsFlash" class="tds-flash" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  var locEl = document.getElementById('tdsLocation');
+  var allFromEl = document.getElementById('tdsAllDateFrom');
+  var allToEl = document.getElementById('tdsAllDateTo');
+  var allPanel = document.getElementById('tdsAllPanel');
+  var allPanelTo = document.getElementById('tdsAllPanelTo');
+  var sepPanel = document.getElementById('tdsSeparatePanel');
+  var moduleBody = document.getElementById('tdsModuleBody');
+  var dbBody = document.getElementById('tdsDbBody');
+  var flashEl = document.getElementById('tdsFlash');
+  var saveBtn = document.getElementById('tdsSaveBtn');
+  var closeBtn = document.getElementById('tdsCloseBtn');
+  var refreshBtn = document.getElementById('tdsRefreshBtn');
+  var titleRef = document.getElementById('tdsTitleRef');
+  var modeBadge = document.getElementById('tdsModeBadge');
+  var bootstrapUrl = {{ api_bootstrap_url|tojson }};
+  var saveUrl = {{ api_save_url|tojson }};
+  var closeUrl = {{ api_close_url|tojson }};
+  var state = {
+    modules: [], mode: 'all',
+    all_date_from: '', all_date_to: '',
+    min_date: '', today: '',
+    allow_any_date: {{ is_txn_date_admin|tojson }},
+    closed_periods: []
+  };
+
+  function rangeLabel(fromIso, toIso) {
+    var a = fromIso || '';
+    var b = toIso || a;
+    if (!a && !b) return '—';
+    if (!b || a === b) return a || b || '—';
+    return a + ' → ' + b;
+  }
+
+  function openModulesSummary() {
+    return (state.modules || []).filter(function (m) {
+      return String(m.open_flag || '').trim().toUpperCase() === 'O' && (m.date_from || m.date_of_open);
+    });
+  }
+
+  function updateCloseBtn() {
+    if (!closeBtn) return;
+    var open = openModulesSummary();
+    closeBtn.disabled = open.length === 0;
+    closeBtn.title = open.length
+      ? 'Close ' + open.length + ' open transaction type(s)'
+      : 'No open dates to close';
+  }
+
+  function reloadAfterAction(msg) {
+    try {
+      sessionStorage.setItem('tdsSaveMsg', msg);
+    } catch (e) {}
+    var params = new URLSearchParams(window.location.search);
+    if (locEl && locEl.value) {
+      params.set('location_code', locEl.value);
+    }
+    var qs = params.toString();
+    window.location.href = window.location.pathname + (qs ? '?' + qs : '');
+  }
+
+  function postClose(moduleKeys) {
+    if (!closeUrl || !locEl) return;
+    if (closeBtn) closeBtn.disabled = true;
+    setFlash('Closing…', true);
+    fetch(closeUrl, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        location_code: parseInt(locEl.value, 10),
+        mode: currentMode(),
+        module_keys: moduleKeys || null,
+      }),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.data.success) {
+          if (closeBtn) updateCloseBtn();
+          setFlash((res.data && res.data.error) || 'Close failed', false);
+          return;
+        }
+        var msg = res.data.message || 'Closed.';
+        if (res.data.warnings && res.data.warnings.length) {
+          msg += ' ' + res.data.warnings.join(' ');
+        }
+        reloadAfterAction(msg);
+      })
+      .catch(function () {
+        if (closeBtn) updateCloseBtn();
+        setFlash('Request failed', false);
+      });
+  }
+
+  function confirmCloseDay(moduleKeys) {
+    var open = moduleKeys && moduleKeys.length
+      ? (state.modules || []).filter(function (m) {
+          return moduleKeys.indexOf(m.key) >= 0 && String(m.open_flag || '').trim().toUpperCase() === 'O';
+        })
+      : openModulesSummary();
+    if (!open.length) {
+      setFlash('No open dates to close.', false);
+      return;
+    }
+    var lines = open.map(function (m) {
+      return '• ' + (m.label || m.key) + ' — ' + rangeLabel(m.date_from || m.date_of_open, m.date_to || m.date_of_to);
+    }).join('\n');
+    var prompt = moduleKeys && moduleKeys.length === 1
+      ? 'Close this open business date range?\n\n' + lines + '\n\nPosting in this range will be blocked until you open the next range.'
+      : 'Close all open business date ranges for this branch?\n\n' + lines + '\n\nPosting in these ranges will be blocked until you open the next range.';
+    if (!window.confirm(prompt)) return;
+    postClose(moduleKeys && moduleKeys.length ? moduleKeys : null);
+  }
+
+  function setFlash(msg, ok) {
+    if (!flashEl) return;
+    flashEl.textContent = msg || '';
+    flashEl.className = 'tds-flash' + (ok ? ' ok' : msg ? ' err' : '');
+  }
+
+  function currentMode() {
+    var r = document.querySelector('input[name="tdsMode"]:checked');
+    return r ? r.value : 'all';
+  }
+
+  function updateTitleRef() {
+    if (!titleRef || !locEl) return;
+    var opt = locEl.options[locEl.selectedIndex];
+    titleRef.textContent = opt ? (opt.textContent || locEl.value) : locEl.value;
+  }
+
+  function updateModeBadge() {
+    if (!modeBadge) return;
+    var m = currentMode();
+    if (m === 'separate') {
+      modeBadge.textContent = 'Separate ranges';
+      modeBadge.className = 'status-badge status-badge--separate';
+    } else {
+      modeBadge.textContent = 'All ranges';
+      modeBadge.className = 'status-badge status-badge--open';
+    }
+  }
+
+  function syncModePanels() {
+    var m = currentMode();
+    var showAll = m === 'all';
+    if (allPanel) allPanel.hidden = !showAll;
+    if (allPanelTo) allPanelTo.hidden = !showAll;
+    if (sepPanel) sepPanel.hidden = m !== 'separate';
+    updateModeBadge();
+  }
+
+  document.querySelectorAll('input[name="tdsMode"]').forEach(function (el) {
+    el.addEventListener('change', syncModePanels);
+  });
+
+  function esc(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  }
+
+  function clampDateInput(input, minIso) {
+    if (!input || !minIso || state.allow_any_date) return;
+    input.min = minIso;
+    if (input.value && input.value < minIso) {
+      input.value = minIso;
+    }
+  }
+
+  function syncToMinFrom(fromEl, toEl) {
+    if (!fromEl || !toEl || !fromEl.value) return;
+    toEl.min = fromEl.value;
+    if (toEl.value && toEl.value < fromEl.value) toEl.value = fromEl.value;
+  }
+
+  function applyMinDates() {
+    if (state.allow_any_date) {
+      if (allFromEl) allFromEl.removeAttribute('min');
+      if (allToEl) allToEl.removeAttribute('min');
+      if (moduleBody) {
+        moduleBody.querySelectorAll('.tds-date-from, .tds-date-to').forEach(function (inp) {
+          inp.removeAttribute('min');
+        });
+      }
+      return;
+    }
+    clampDateInput(allFromEl, state.min_date);
+    syncToMinFrom(allFromEl, allToEl);
+    if (!moduleBody) return;
+    moduleBody.querySelectorAll('tr[data-module]').forEach(function (tr) {
+      var key = tr.getAttribute('data-module');
+      var mod = (state.modules || []).find(function (m) { return m.key === key; });
+      var fromInp = tr.querySelector('.tds-date-from');
+      var toInp = tr.querySelector('.tds-date-to');
+      clampDateInput(fromInp, (mod && mod.min_date) || state.min_date);
+      syncToMinFrom(fromInp, toInp);
+    });
+  }
+
+  function rangeOverlapsClosedPeriod(fromV, toV) {
+    var periods = state.closed_periods || [];
+    for (var i = 0; i < periods.length; i++) {
+      var p = periods[i] || {};
+      var ps = String(p.start_date || '').slice(0, 10);
+      var pe = String(p.end_date || ps).slice(0, 10);
+      if (!ps || !fromV || !toV) continue;
+      if (fromV <= pe && toV >= ps) {
+        return p.period_label || (ps + (pe !== ps ? ' → ' + pe : ''));
+      }
+    }
+    return '';
+  }
+
+  function renderClosedPeriodsNote() {
+    var el = document.getElementById('tdsClosedPeriodsNote');
+    if (!el) return;
+    var periods = state.closed_periods || [];
+    if (!periods.length) {
+      el.style.display = 'none';
+      el.innerHTML = '';
+      return;
+    }
+    var labels = periods.slice(0, 12).map(function (p) {
+      var lab = p.period_label || '';
+      var rng = (p.start_date || '') + (p.end_date && p.end_date !== p.start_date ? ' → ' + p.end_date : '');
+      return lab ? (lab + ' (' + rng + ')') : rng;
+    }).filter(Boolean);
+    el.style.display = 'block';
+    el.innerHTML = '<strong>Period Closing:</strong> these months are locked and cannot be opened here — ' +
+      esc(labels.join('; ')) +
+      (periods.length > 12 ? '; …' : '') +
+      '. Reopen from Period Closing if needed.';
+  }
+
+  function validateDatesClient() {
+    function checkPair(fromV, toV, min, label) {
+      if (!fromV || !toV) return (label ? label + ': ' : '') + 'enter both From and To dates.';
+      if (toV < fromV) return (label ? label + ': ' : '') + 'To date must be on or after From date.';
+      if (!state.allow_any_date && min && fromV < min) {
+        return (label ? label + ': ' : '') + 'From date must be ' + min + ' or later.';
+      }
+      var closedLab = rangeOverlapsClosedPeriod(fromV, toV);
+      if (closedLab) {
+        return (label ? label + ': ' : '') +
+          'cannot open a range that includes closed period ' + closedLab +
+          '. Reopen from Period Closing first.';
+      }
+      return '';
+    }
+    if (currentMode() === 'all') {
+      return checkPair(
+        allFromEl ? allFromEl.value : '',
+        allToEl ? allToEl.value : '',
+        state.min_date,
+        ''
+      );
+    }
+    var msgs = [];
+    if (moduleBody) {
+      moduleBody.querySelectorAll('tr[data-module]').forEach(function (tr) {
+        var key = tr.getAttribute('data-module');
+        var mod = (state.modules || []).find(function (m) { return m.key === key; });
+        var fromInp = tr.querySelector('.tds-date-from');
+        var toInp = tr.querySelector('.tds-date-to');
+        var err = checkPair(
+          fromInp ? fromInp.value : '',
+          toInp ? toInp.value : '',
+          (mod && mod.min_date) || state.min_date,
+          mod && mod.label ? mod.label : key
+        );
+        if (err) msgs.push(err);
+      });
+    }
+    return msgs.join(' ');
+  }
+
+  function renderModules(modules) {
+    if (!moduleBody) return;
+    if (!modules || !modules.length) {
+      moduleBody.innerHTML = '<tr><td colspan="8" class="tds-empty">No modules.</td></tr>';
+      return;
+    }
+    moduleBody.innerHTML = modules.map(function (m) {
+      var flag = String(m.open_flag || '').trim().toUpperCase();
+      var isOpen = flag === 'O';
+      var flagCls = isOpen ? 'tds-flag tds-flag--open' : 'tds-flag tds-flag--closed';
+      var flagTxt = isOpen ? 'Open' : (flag || '—');
+      var curFrom = m.date_from || m.date_of_open || '';
+      var curTo = m.date_to || m.date_of_to || curFrom;
+      var cur = rangeLabel(curFrom, curTo);
+      var minDt = state.allow_any_date ? '' : (m.min_date || state.min_date || '');
+      var fromVal = curFrom || state.all_date_from || minDt || '';
+      var toVal = curTo || state.all_date_to || fromVal || '';
+      if (!state.allow_any_date && minDt && fromVal && fromVal < minDt) fromVal = minDt;
+      if (toVal && fromVal && toVal < fromVal) toVal = fromVal;
+      var actionCell = isOpen && curFrom
+        ? '<button type="button" class="tds-row-close" data-close-module="' + esc(m.key) + '">Close</button>'
+        : '—';
+      return '<tr data-module="' + esc(m.key) + '">' +
+        '<td><strong>' + esc(m.label) + '</strong></td>' +
+        '<td class="num">' + esc(m.transaction_code) + '</td>' +
+        '<td>' + esc(m.transaction_name || '—') + '</td>' +
+        '<td>' + esc(cur) + '</td>' +
+        '<td><span class="' + flagCls + '">' + esc(flagTxt) + '</span></td>' +
+        '<td><input type="date" class="tds-date-from input"' +
+          (!state.allow_any_date && minDt ? ' min="' + esc(minDt) + '"' : '') +
+          ' value="' + esc(fromVal) + '" /></td>' +
+        '<td><input type="date" class="tds-date-to input"' +
+          (fromVal ? ' min="' + esc(fromVal) + '"' : '') +
+          ' value="' + esc(toVal) + '" /></td>' +
+        '<td>' + actionCell + '</td>' +
+        '</tr>';
+    }).join('');
+    moduleBody.querySelectorAll('[data-close-module]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var key = btn.getAttribute('data-close-module');
+        if (key) confirmCloseDay([key]);
+      });
+    });
+    moduleBody.querySelectorAll('.tds-date-from').forEach(function (inp) {
+      inp.addEventListener('change', function () {
+        var tr = inp.closest('tr');
+        var toInp = tr ? tr.querySelector('.tds-date-to') : null;
+        syncToMinFrom(inp, toInp);
+      });
+    });
+  }
+
+  function renderDbRows(rows) {
+    if (!dbBody) return;
+    if (!rows || !rows.length) {
+      dbBody.innerHTML = '<tr><td colspan="6" class="tds-empty">No rows for this branch.</td></tr>';
+      return;
+    }
+    dbBody.innerHTML = rows.map(function (r) {
+      var flag = String(r.open_flag || '').trim().toUpperCase();
+      var flagCls = flag === 'O' ? 'tds-flag tds-flag--open' : 'tds-flag tds-flag--closed';
+      var closedBy = flag === 'C' ? (r.closed_by || '—') : '—';
+      var dFrom = r.date_from || r.date_of_open || '—';
+      var dTo = r.date_to || r.date_of_to || dFrom;
+      return '<tr>' +
+        '<td class="num">' + esc(r.transaction_code) + '</td>' +
+        '<td>' + esc(dFrom) + '</td>' +
+        '<td>' + esc(dTo) + '</td>' +
+        '<td><span class="' + flagCls + '">' + esc(flag || '—') + '</span></td>' +
+        '<td>' + esc(r.opened_by || '—') + '</td>' +
+        '<td>' + esc(closedBy) + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function applyPayload(data) {
+    state.modules = data.modules || [];
+    state.all_date_from = data.all_date_from || data.all_date || '';
+    state.all_date_to = data.all_date_to || state.all_date_from || '';
+    state.mode = data.mode || 'all';
+    state.allow_any_date = !!data.allow_any_date;
+    state.min_date = data.min_date || data.today || '';
+    state.today = data.today || '';
+    state.closed_periods = Array.isArray(data.closed_periods) ? data.closed_periods : [];
+    if (allFromEl) {
+      allFromEl.value = state.all_date_from || '';
+      if (state.allow_any_date) allFromEl.removeAttribute('min');
+      else clampDateInput(allFromEl, state.min_date);
+    }
+    if (allToEl) {
+      allToEl.value = state.all_date_to || state.all_date_from || '';
+      syncToMinFrom(allFromEl, allToEl);
+    }
+    document.querySelectorAll('input[name="tdsMode"]').forEach(function (el) {
+      el.checked = el.value === state.mode;
+    });
+    syncModePanels();
+    renderModules(state.modules);
+    applyMinDates();
+    renderDbRows(data.rows || []);
+    renderClosedPeriodsNote();
+    updateCloseBtn();
+  }
+
+  function loadBootstrap() {
+    if (!locEl) return;
+    updateTitleRef();
+    setFlash('Loading…', true);
+    var url = bootstrapUrl + '?location_code=' + encodeURIComponent(locEl.value || '');
+    fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.success) throw new Error(data.error || 'Load failed');
+        applyPayload(data);
+        try {
+          var savedMsg = sessionStorage.getItem('tdsSaveMsg');
+          if (savedMsg) {
+            sessionStorage.removeItem('tdsSaveMsg');
+            setFlash(savedMsg, true);
+          } else {
+            setFlash('', false);
+          }
+        } catch (e) {
+          setFlash('', false);
+        }
+      })
+      .catch(function (err) {
+        setFlash(err.message || 'Load failed', false);
+      });
+  }
+
+  function collectSavePayload() {
+    var mode = currentMode();
+    var fromV = allFromEl ? allFromEl.value : '';
+    var toV = allToEl ? allToEl.value : fromV;
+    var payload = {
+      location_code: parseInt(locEl.value, 10),
+      mode: mode,
+      all_date: fromV,
+      all_date_from: fromV,
+      all_date_to: toV,
+      module_dates: {},
+      module_date_from: {},
+      module_date_to: {},
+      module_codes: {},
+    };
+    (state.modules || []).forEach(function (m) {
+      if (m.key) payload.module_codes[m.key] = m.transaction_code;
+    });
+    if (moduleBody) {
+      moduleBody.querySelectorAll('tr[data-module]').forEach(function (tr) {
+        var key = tr.getAttribute('data-module');
+        var fromInp = tr.querySelector('.tds-date-from');
+        var toInp = tr.querySelector('.tds-date-to');
+        var f = fromInp ? fromInp.value || '' : '';
+        var t = toInp ? toInp.value || f : f;
+        payload.module_date_from[key] = f;
+        payload.module_date_to[key] = t;
+        payload.module_dates[key] = { from: f, to: t };
+      });
+    }
+    return payload;
+  }
+
+  if (allFromEl) {
+    allFromEl.addEventListener('change', function () { syncToMinFrom(allFromEl, allToEl); });
+  }
+  if (locEl) locEl.addEventListener('change', loadBootstrap);
+  if (refreshBtn) refreshBtn.addEventListener('click', loadBootstrap);
+
+  if (saveBtn) {
+    saveBtn.addEventListener('click', function () {
+      var clientErr = validateDatesClient();
+      if (clientErr) {
+        setFlash(clientErr, false);
+        return;
+      }
+      saveBtn.disabled = true;
+      setFlash('Saving…', true);
+      fetch(saveUrl, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(collectSavePayload()),
+      })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+          if (!res.ok || !res.data.success) {
+            saveBtn.disabled = false;
+            setFlash((res.data && res.data.error) || 'Save failed', false);
+            return;
+          }
+          var msg = res.data.message || 'Saved.';
+          if (res.data.warnings && res.data.warnings.length) {
+            msg += ' ' + res.data.warnings.join(' ');
+          }
+          reloadAfterAction(msg);
+        })
+        .catch(function () {
+          saveBtn.disabled = false;
+          setFlash('Request failed', false);
+        });
+    });
+  }
+
+  if (closeBtn) {
+    closeBtn.addEventListener('click', function () {
+      confirmCloseDay(null);
+    });
+  }
+
+  syncModePanels();
+  loadBootstrap();
+})();
+</script>
+{% endblock %}

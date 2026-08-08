@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block title %}Purchase Return Posting{% endblock %}
+{% block content %}
+<style>
+  .pr-posting-page .prp-modal { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; }
+  .pr-posting-page .prp-modal.show { display: flex; }
+  .pr-posting-page .prp-modal__overlay { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.45); }
+  .pr-posting-page .prp-modal__card {
+    position: relative; background: #fff; border-radius: 12px; width: min(460px, 92vw);
+    box-shadow: 0 24px 70px rgba(0,0,0,0.28); padding: 16px 18px;
+  }
+  .pr-posting-page .prp-modal__title { margin: 0 0 8px; font-size: 16px; color: #0f172a; }
+  .pr-posting-page .prp-modal__msg { margin: 0; color: #334155; font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
+  .pr-posting-page .prp-modal__actions { margin-top: 14px; display: flex; justify-content: flex-end; gap: 8px; }
+  .pr-posting-page .prp-spinner {
+    width: 18px; height: 18px; border: 2px solid #cbd5e1; border-top-color: #1a56a4;
+    border-radius: 50%; animation: prp-spin 0.8s linear infinite; display: inline-block; vertical-align: -4px; margin-right: 8px;
+  }
+  @keyframes prp-spin { to { transform: rotate(360deg); } }
+  .pr-posting-page .prp-status-pill {
+    display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase;
+  }
+  .pr-posting-page .prp-status-pill--approved { background: #dcfce7; color: #166534; }
+  .pr-posting-page .prp-section { margin-bottom: 20px; }
+  .pr-posting-page .prp-hint {
+    margin: 0 0 10px; padding: 8px 12px; font-size: 13px; color: #1d4ed8;
+    background: #f0f9ff; border: 1px solid #bfdbfe; border-radius: 4px;
+  }
+  .pr-posting-page .prp-pagination {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 10px; margin: 12px 0 4px; font-size: 12px; color: #475569;
+  }
+  .pr-posting-page .prp-pagination-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .pr-posting-page .prp-pagination-controls button,
+  .pr-posting-page .prp-pagination-controls span {
+    padding: 5px 12px; border: 1px solid #dee2e6; border-radius: 4px; background: #fff;
+    color: #374151; font-size: 12px; cursor: pointer;
+  }
+  .pr-posting-page .prp-pagination-controls button:disabled { color: #adb5bd; cursor: default; background: #f8f9fa; }
+  .pr-posting-page .prp-pagination-controls .prp-page-active {
+    background: #1a56a4; border-color: #1a56a4; color: #fff; font-weight: 600;
+  }
+  #prpActionModal.hidden { display: none !important; }
+</style>
+
+<div class="page-po nexa-list-page pr-posting-page" style="max-width:1300px;"
+  data-pr-posting-api="{{ pr_posting_api_url or url_for('purchase.api_pr_posting_list') }}"
+  data-bulk-post-api="{{ bulk_post_api_url or '' }}"
+  data-change-date-api="{{ url_for('purchase.api_pr_change_posting_date') }}"
+  data-reverse-pending-api="{{ url_for('purchase.api_pr_reverse_pending') }}"
+  data-return-order-query-url-tpl="{{ return_order_query_url_tpl or url_for('purchase.purchase_return_order_query', goods_return_no=999999999) }}"
+  data-return-query-url-tpl="{{ return_query_url_tpl or url_for('purchase.purchase_return_query', goods_return_no=999999999) }}"
+  data-pr-new-url-tpl="{{ pr_new_url_tpl or (url_for('purchase.purchase_return_new') ~ '?return_order_no=999999999') }}"
+  data-items-per-page="{{ items_per_page or 50 }}"
+  data-login-user="{{ session.get('user') or '' }}">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Purchase Return Posting</h1>
+      <p class="page-po__muted">Approved return requests appear here until stock is posted; saved returns then await GL posting. Pending: reverse undoes stock and removes the return.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% include 'includes/list_refresh_bar.html' %}
+      <button type="button" id="btnPostSelected" class="page-po__btn-primary">Post Selected (GL)</button>
+      <span id="pendingSelInfo" class="mini-muted">0 selected for GL</span>
+      <a href="{{ list_url or url_for('purchase.purchase_return_list') }}" class="po-nav-link">Return list</a>
+    </div>
+  </div>
+
+  <form class="nexa-list-toolbar" role="search" autocomplete="off" onsubmit="return false;">
+    <input type="text" name="nexa_username_trap" tabindex="-1" aria-hidden="true" autocomplete="username"
+           style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px;" />
+    <input type="search" id="prpSearch" name="prp_list_q" class="input" placeholder="Search return no, supplier, voucher..."
+           style="min-width:220px; max-width:320px;" autocomplete="off" autocapitalize="off" spellcheck="false"
+           data-lpignore="true" data-1p-ignore readonly />
+    <label style="font-size:12px; color:#6b7280; white-space:nowrap;">From</label>
+    <input type="date" id="prpDateFrom" class="input" style="width:150px;" autocomplete="off" />
+    <label style="font-size:12px; color:#6b7280; white-space:nowrap;">To</label>
+    <input type="date" id="prpDateTo" class="input" style="width:150px;" autocomplete="off" />
+    <button type="button" class="page-po__btn-secondary" id="prpSearchClear" style="padding:4px 10px; font-size:11px;">Clear</button>
+  </form>
+
+  <div class="po-tabs">
+    <button type="button" class="po-tab active" data-tab="pendingTab">Posting Pending</button>
+    <button type="button" class="po-tab" data-tab="postedTab">Posted Returns</button>
+  </div>
+
+  <div id="pendingTab" class="tab-pane active">
+    <div class="prp-section" id="prpApprovedSection" style="display:none;">
+      <div class="page-po__section-title" id="prpApprovedTitle">Step 1 — Approved return requests</div>
+      <p class="prp-hint">Approved requests that could not post stock (retry <strong>Post stock</strong>). Normally approve posts inventory automatically; then the return appears in Step 2.</p>
+      <div class="co-table-wrap">
+        <table class="co-table" id="approvedTable">
+          <thead>
+            <tr>
+              <th>Request No</th>
+              <th>Date</th>
+              <th>Supplier</th>
+              <th class="num">Discount</th>
+              <th class="num">Amount</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="prpApprovedBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="prp-section">
+      <div class="page-po__section-title" id="prpGlTitle">Step 2 — GL posting pending</div>
+      <p class="prp-hint" id="prpGlHint">Loading…</p>
+      <div class="co-table-wrap">
+        <table class="co-table" id="glPendingTable">
+          <thead>
+            <tr>
+              <th style="text-align:center; width:42px; cursor:default;"><input type="checkbox" id="pendingSelectAll" title="Select all GL pending"></th>
+              <th>Return No</th>
+              <th>Return Date</th>
+              <th>Posting Date</th>
+              <th>Supplier Code</th>
+              <th>Supplier Name</th>
+              <th class="num">Discount</th>
+              <th class="num">Total Amount</th>
+              <th>Expected Voucher</th>
+              <th style="cursor:default;">Action</th>
+            </tr>
+          </thead>
+          <tbody id="prpGlBody">
+            <tr><td colspan="10" style="text-align:center;padding:20px;color:#6b7280;">Loading…</td></tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="7" style="text-align:right; padding-right:12px;">Total (loaded)</td>
+              <td class="num" id="pendingTotalAmt">0.00</td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="postedTab" class="tab-pane">
+    <div class="co-table-wrap">
+      <table class="co-table" id="postedTable">
+        <thead>
+          <tr>
+            <th>Return No</th>
+            <th>Return Date</th>
+            <th>Posting Date</th>
+            <th>Supplier Code</th>
+            <th>Supplier Name</th>
+            <th class="num">Discount</th>
+            <th class="num">Total Amount</th>
+            <th>Voucher No</th>
+            <th>Voucher Date</th>
+            <th>Created By</th>
+          </tr>
+        </thead>
+        <tbody id="prpPostedBody">
+          <tr><td colspan="10" style="text-align:center;padding:20px;color:#6b7280;">Loading…</td></tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="6" style="text-align:right; padding-right:12px;">Total (loaded)</td>
+            <td class="num" id="postedTotalAmt">0.00</td>
+            <td colspan="3"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div id="prpPagination" class="prp-pagination" style="display:none;">
+    <div id="prpPaginationInfo" class="prp-pagination-info"></div>
+    <div class="prp-pagination-controls">
+      <button type="button" id="prpPrevPage">« Previous</button>
+      <span id="prpPageLabel" class="prp-page-active">1</span>
+      <button type="button" id="prpNextPage">Next »</button>
+    </div>
+  </div>
+</div>
+
+<div class="prp-modal" id="prpPostModal" aria-hidden="true">
+  <div class="prp-modal__overlay"></div>
+  <div class="prp-modal__card">
+    <h3 class="prp-modal__title" id="prpPostModalTitle">Posting Returns</h3>
+    <p class="prp-modal__msg" id="prpPostModalMsg"></p>
+    <div class="prp-modal__actions" id="prpPostModalActions" style="display:none;">
+      <button type="button" class="page-po__btn-secondary" id="prpPostModalClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="prpActionModal" aria-hidden="true">
+  <div class="modal__overlay" id="prpActionModalOverlay"></div>
+  <div class="modal__content" style="max-width:420px;">
+    <h3 id="prpActionModalTitle" style="margin:0 0 8px;font-size:16px;">Change posting date</h3>
+    <p id="prpActionModalMsg" style="margin:0 0 10px;color:#475569;font-size:13px;"></p>
+    <div id="prpActionDateWrap">
+      <label for="prpActionNewDate" style="display:block;font-size:12px;color:#475569;margin-bottom:4px;">New posting date</label>
+      <input type="date" id="prpActionNewDate" class="input" style="width:100%;box-sizing:border-box;margin-bottom:8px;" />
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#475569;margin-bottom:10px;">
+        <input type="checkbox" id="prpActionAlsoReturn" />
+        Also change Return Date
+      </label>
+    </div>
+    <label for="prpActionPassword" style="display:block;font-size:12px;color:#475569;margin-bottom:4px;">Your password</label>
+    <input type="password" id="prpActionPassword" class="input" style="width:100%;box-sizing:border-box;" autocomplete="off" />
+    <p id="prpActionPasswordError" style="display:none;margin:8px 0 0;color:#b91c1c;font-size:12px;"></p>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+      <button type="button" class="page-po__btn-secondary" id="prpActionCancel">Cancel</button>
+      <button type="button" class="page-po__btn-primary" id="prpActionConfirm">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script type="application/json" id="prpClosedPeriodsJson">{{ (closed_periods or [])|tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/period_date_guard.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='js/list_search_autofill_guard.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='js/pr_posting_list.js') }}?v=3"></script>
+{% endblock %}

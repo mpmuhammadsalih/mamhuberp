@@ -1,0 +1,436 @@
+{% extends "base.html" %}
+{% from 'includes/global_lookup_field.html' import global_lookup_field %}
+{% set fa_cost = fa_cost|default(0)|float %}
+{% set fa_accum = fa_accum|default(0)|float %}
+{% set fa_nbv = fa_nbv|default(0)|float %}
+{% set fa_proceeds = fa_proceeds|default(0)|float %}
+{% set fa_gain_loss = fa_gain_loss|default(0)|float %}
+{% block title %}{% if edit_mode %}Fixed Asset Sale{% else %}New Fixed Asset Sale{% endif %}{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/im_form_shell.css') }}?v=2" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/fixed_assets_pages.css') }}?v=6" />
+<style>
+  main.container:has(> .im-page.im-form-shell-page.fas-sale-page) { padding-top: 0; }
+</style>
+
+<div class="im-page im-form-shell-page si-page si-form-page fas-sale-page" id="fasSaleApp">
+  {% include 'fixed_assets/_fa_nav.html' %}
+
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>Fixed Asset Sale / <span class="im-ref">{% if row.sale_no %}{{ row.sale_no }}{% else %}New sale{% endif %}</span>
+        {% if posted %}<span class="status-badge" style="margin-left:8px;background:#dbeafe;color:#1d4ed8;">Posted</span>
+        {% elif edit_mode %}<span class="status-badge" style="margin-left:8px;background:#fef3c7;color:#92400e;">Draft</span>{% endif %}
+      </h1>
+      <div class="im-actions">
+        {% if not posted %}
+        <button type="submit" form="faSaleForm" class="im-btn-save" id="fasBtnSave">Save</button>
+        {% endif %}
+        {% if edit_mode and not posted and row.sale_id %}
+        <button type="submit" form="faSalePostForm" class="im-btn-secondary"
+          onclick="return confirm('Post this multi-asset sale to GL? All listed assets will be marked disposed.');">Post</button>
+        {% endif %}
+        {% if posted and row.sale_id %}
+        <a href="{{ url_for('fixed_assets.fa_sale_pdf', sale_id=row.sale_id) }}" class="im-btn-secondary" target="_blank" rel="noopener">PDF</a>
+        {% endif %}
+        <a href="{{ url_for('fixed_assets.fa_sale_form') }}" class="im-btn-secondary">New</a>
+        <a href="{{ url_for('fixed_assets.fa_sale_list') }}" class="im-btn-secondary">List</a>
+      </div>
+    </div>
+  </div>
+
+  <section class="itemmaster-container si-form-body">
+    <form id="faSaleForm" method="post" action="{{ url_for('fixed_assets.fa_sale_form') }}" class="form" autocomplete="off">
+      {% if row.sale_id %}<input type="hidden" name="sale_id" value="{{ row.sale_id }}" />{% endif %}
+      <input type="hidden" id="faProceedsPartyType" name="proceeds_party_type" value="{{ row.proceeds_party_type or '' }}" />
+      <input type="hidden" id="faProceedsPartyCode" name="proceeds_party_code" value="{{ row.proceeds_party_code or '' }}" />
+      <div id="fasHiddenLines"></div>
+
+      <h2 class="im-section-title">Sale details</h2>
+      <div class="tab-content tab-content--active form-section im-panel-body">
+        <div class="form-grid--2cols po-details">
+          <div class="form-group">
+            <label>Sale No</label>
+            <input type="text" class="input" readonly value="{{ row.sale_no or 'Auto' }}" />
+          </div>
+          <div class="form-group">
+            <label for="sale_date">Sale Date</label>
+            <input id="sale_date" name="sale_date" type="date" class="input" required
+              value="{{ row.sale_date or '' }}" {% if posted %}readonly{% endif %} />
+          </div>
+          <div class="form-group">
+            <label for="remarks">Remarks</label>
+            <input id="remarks" name="remarks" type="text" class="input" maxlength="500"
+              value="{{ row.remarks or '' }}" {% if posted %}readonly{% endif %} placeholder="Sale remarks…" />
+          </div>
+          <div class="form-group form-group--full fa-credit-lookup-row">
+            <label for="faProceedsLookupDisplay">Proceeds account (cash / bank / customer)</label>
+            <div class="fa-credit-lookup-wrap">
+              {{ global_lookup_field(
+                field_id='faProceedsLookup',
+                label='',
+                name='proceeds_account',
+                kind='gl_account',
+                value_code=row.proceeds_account or '',
+                value_label=proceeds_lookup_label or '',
+                placeholder='Select cash, bank, or customer…',
+                no_default=true,
+                inline=true,
+                field_class='fa-credit-lookup-field',
+                input_class='global-lookup__input odoo-lookup__input input',
+                readonly=posted,
+                disabled=posted,
+                dropdown_min_width='420',
+              ) }}
+            </div>
+          </div>
+        </div>
+
+        <div class="si-summary-strip fas-summary-strip">
+          <div class="sf"><label>Assets</label><input type="text" id="fasCount" readonly value="{{ lines|length }}" /></div>
+          <div class="sf"><label>Cost</label><input type="text" id="fasCost" readonly value="{{ '%.2f'|format(fa_cost) }}" /></div>
+          <div class="sf"><label>Accum. Dep</label><input type="text" id="fasAccum" readonly value="{{ '%.2f'|format(fa_accum) }}" /></div>
+          <div class="sf"><label>NBV</label><input type="text" id="fasNbv" readonly value="{{ '%.2f'|format(fa_nbv) }}" /></div>
+          <div class="sf"><label>Proceeds</label><input type="text" id="fasProceedsTotal" readonly value="{{ '%.2f'|format(fa_proceeds) }}" /></div>
+          <div class="sf"><label>Gain / Loss</label><input type="text" id="fasGainLoss" readonly value="{{ '%.2f'|format(fa_gain_loss) }}" /></div>
+        </div>
+      </div>
+
+      <h2 class="im-section-title">Asset lines</h2>
+      <div class="tab-content tab-content--active form-section im-panel-body si-lines-panel">
+        {% if not posted %}
+        <div class="fas-add-line-bar">
+          <div class="fas-add-line-fields">
+            <label for="fasPickAsset">Asset</label>
+            <select id="fasPickAsset" class="input">
+              <option value="">— Select asset to add —</option>
+              {% for a in eligible_assets %}
+              <option value="{{ a.asset_id }}"
+                data-no="{{ a.asset_no }}"
+                data-name="{{ a.name }}"
+                data-cost="{{ a.acquisition_cost }}"
+                data-accum="{{ a.accum_dep }}"
+                data-nbv="{{ a.nbv }}">{{ a.asset_no }} — {{ a.name }} (NBV {{ '%.2f'|format(a.nbv|float) }})</option>
+              {% endfor %}
+            </select>
+            <label for="fasPickProceeds">Proceeds</label>
+            <input type="number" id="fasPickProceeds" class="input" step="0.01" min="0.01" placeholder="0.00" />
+            <button type="button" class="im-btn-save" id="fasBtnAddLine">+ Add line</button>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="si-products fas-line-wrap">
+          <div class="scroll-table">
+            <table id="fasSaleTable" class="fas-sale-table">
+              <thead>
+                <tr>
+                  <th style="width:48px;">Sl</th>
+                  <th style="width:120px;">Asset No</th>
+                  <th>Asset Name</th>
+                  <th style="width:100px; text-align:right;">Cost</th>
+                  <th style="width:100px; text-align:right;">Accum</th>
+                  <th style="width:100px; text-align:right;">NBV</th>
+                  <th style="width:120px; text-align:right;">Proceeds</th>
+                  <th style="width:110px; text-align:right;">Gain/Loss</th>
+                  {% if not posted %}<th style="width:64px; text-align:center;">Action</th>{% endif %}
+                </tr>
+              </thead>
+              <tbody id="fasLinesBody">
+                {% if not lines %}
+                <tr class="fas-empty-row"><td colspan="{% if posted %}8{% else %}9{% endif %}" style="text-align:center;color:#64748b;padding:16px;">No assets added yet. Select an asset and click + Add line.</td></tr>
+                {% else %}
+                {% for ln in lines %}
+                <tr data-asset-id="{{ ln.asset_id }}"
+                    data-cost="{{ ln.acquisition_cost }}"
+                    data-accum="{{ ln.accum_dep }}"
+                    data-nbv="{{ ln.nbv }}"
+                    data-proceeds="{{ ln.proceeds_amount }}">
+                  <td class="fas-sl">{{ loop.index }}</td>
+                  <td>{{ ln.asset_no }}</td>
+                  <td>{{ ln.asset_name }}</td>
+                  <td class="fas-num">{{ '%.2f'|format(ln.acquisition_cost|float) }}</td>
+                  <td class="fas-num">{{ '%.2f'|format(ln.accum_dep|float) }}</td>
+                  <td class="fas-num">{{ '%.2f'|format(ln.nbv|float) }}</td>
+                  <td class="fas-num">
+                    {% if posted %}
+                    {{ '%.2f'|format(ln.proceeds_amount|float) }}
+                    {% else %}
+                    <input type="number" class="input fas-line-proceeds" step="0.01" min="0.01" value="{{ '%.2f'|format(ln.proceeds_amount|float) }}" style="width:100%;text-align:right;" />
+                    {% endif %}
+                  </td>
+                  <td class="fas-num fas-line-gain">{{ '%.2f'|format(ln.gain_loss_amount|float) }}</td>
+                  {% if not posted %}
+                  <td style="text-align:center;"><button type="button" class="im-link fas-remove-line" title="Remove">×</button></td>
+                  {% endif %}
+                </tr>
+                {% endfor %}
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="si-totals-row fas-totals-row">
+          <div class="tf"><label>Total NBV</label><input type="text" id="fasTotalNbv" readonly value="{{ '%.2f'|format(fa_nbv) }}" /></div>
+          <div class="tf"><label>Total Proceeds</label><input type="text" id="fasTotalProceeds" readonly value="{{ '%.2f'|format(fa_proceeds) }}" /></div>
+          <div class="tf"><label>Gain / (Loss)</label><input type="text" id="fasTotalGain" readonly value="{{ '%.2f'|format(fa_gain_loss) }}" /></div>
+        </div>
+
+        {% if not posted %}
+        <div class="fas-post-bar">
+          <label class="checkbox-inline">
+            <input type="checkbox" name="post_sale" value="1" />
+            Post sale to GL on save
+          </label>
+          <span class="fas-post-hint">Posts all asset lines in one journal — clears cost &amp; accum. dep., books proceeds, and gain/loss.</span>
+        </div>
+        {% else %}
+        <div class="fas-post-bar fas-post-bar--done">
+          <strong>Sale posted</strong>
+          {% if row.gl_voucher_no %} — voucher <code>{{ row.gl_voucher_no }}</code>{% endif %}
+          · {{ lines|length }} asset(s) · Gain/loss: {{ '%.2f'|format(fa_gain_loss) }}
+        </div>
+        {% endif %}
+      </div>
+    </form>
+
+    {% if edit_mode and not posted and row.sale_id %}
+    <form id="faSalePostForm" method="post" action="{{ url_for('fixed_assets.fa_sale_post') }}" style="display:none;">
+      <input type="hidden" name="sale_id" value="{{ row.sale_id }}" />
+    </form>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var posted = {{ 'true' if posted else 'false' }};
+  var body = document.getElementById('fasLinesBody');
+  var pickAsset = document.getElementById('fasPickAsset');
+  var pickProceeds = document.getElementById('fasPickProceeds');
+  var btnAdd = document.getElementById('fasBtnAddLine');
+  var hidden = document.getElementById('fasHiddenLines');
+  var form = document.getElementById('faSaleForm');
+  var partyType = document.getElementById('faProceedsPartyType');
+  var partyCode = document.getElementById('faProceedsPartyCode');
+  var lookup = document.querySelector('#faProceedsLookupDisplay') &&
+    document.querySelector('#faProceedsLookupDisplay').closest('.global-lookup, .odoo-lookup');
+
+  function money(n) {
+    var x = Number(n);
+    if (!isFinite(x)) return '0.00';
+    return x.toFixed(2);
+  }
+
+  function lineRows() {
+    return Array.prototype.slice.call(body.querySelectorAll('tr[data-asset-id]'));
+  }
+
+  function syncTotals() {
+    var rows = lineRows();
+    var cost = 0, accum = 0, nbv = 0, proceeds = 0;
+    rows.forEach(function (tr) {
+      cost += Number(tr.getAttribute('data-cost') || 0);
+      accum += Number(tr.getAttribute('data-accum') || 0);
+      nbv += Number(tr.getAttribute('data-nbv') || 0);
+      var inp = tr.querySelector('.fas-line-proceeds');
+      var pr = inp ? Number(inp.value || 0) : Number(tr.getAttribute('data-proceeds') || 0);
+      proceeds += pr;
+      var gl = pr - Number(tr.getAttribute('data-nbv') || 0);
+      tr.setAttribute('data-proceeds', String(pr));
+      var gEl = tr.querySelector('.fas-line-gain');
+      if (gEl) {
+        gEl.textContent = money(gl);
+        gEl.style.color = gl < 0 ? '#b91c1c' : (gl > 0 ? '#15803d' : '');
+      }
+    });
+    var glTotal = proceeds - nbv;
+    var set = function (id, v) { var el = document.getElementById(id); if (el) el.value = v; };
+    set('fasCount', String(rows.length));
+    set('fasCost', money(cost));
+    set('fasAccum', money(accum));
+    set('fasNbv', money(nbv));
+    set('fasProceedsTotal', money(proceeds));
+    set('fasGainLoss', money(glTotal));
+    set('fasTotalNbv', money(nbv));
+    set('fasTotalProceeds', money(proceeds));
+    set('fasTotalGain', money(glTotal));
+    var gainEl = document.getElementById('fasGainLoss');
+    var totalGain = document.getElementById('fasTotalGain');
+    [gainEl, totalGain].forEach(function (el) {
+      if (!el) return;
+      el.style.color = glTotal < 0 ? '#b91c1c' : (glTotal > 0 ? '#15803d' : '');
+    });
+    rows.forEach(function (tr, i) {
+      var sl = tr.querySelector('.fas-sl');
+      if (sl) sl.textContent = String(i + 1);
+    });
+  }
+
+  function clearEmpty() {
+    var empty = body.querySelector('.fas-empty-row');
+    if (empty) empty.remove();
+  }
+
+  function ensureEmpty() {
+    if (lineRows().length) return;
+    body.innerHTML = '<tr class="fas-empty-row"><td colspan="' + (posted ? 8 : 9) + '" style="text-align:center;color:#64748b;padding:16px;">No assets added yet. Select an asset and click + Add line.</td></tr>';
+  }
+
+  function assetAlreadyAdded(aid) {
+    return lineRows().some(function (tr) { return String(tr.getAttribute('data-asset-id')) === String(aid); });
+  }
+
+  function addLineFromPicker() {
+    if (!pickAsset || !pickAsset.value) {
+      alert('Select an asset.');
+      return;
+    }
+    if (assetAlreadyAdded(pickAsset.value)) {
+      alert('This asset is already on the sale.');
+      return;
+    }
+    var opt = pickAsset.options[pickAsset.selectedIndex];
+    var pr = Number((pickProceeds && pickProceeds.value) || 0);
+    if (!(pr > 0)) {
+      alert('Enter sale proceeds for this asset.');
+      if (pickProceeds) pickProceeds.focus();
+      return;
+    }
+    clearEmpty();
+    var cost = Number(opt.getAttribute('data-cost') || 0);
+    var accum = Number(opt.getAttribute('data-accum') || 0);
+    var nbv = Number(opt.getAttribute('data-nbv') || (cost - accum));
+    var gl = pr - nbv;
+    var tr = document.createElement('tr');
+    tr.setAttribute('data-asset-id', opt.value);
+    tr.setAttribute('data-cost', String(cost));
+    tr.setAttribute('data-accum', String(accum));
+    tr.setAttribute('data-nbv', String(nbv));
+    tr.setAttribute('data-proceeds', String(pr));
+    tr.innerHTML =
+      '<td class="fas-sl"></td>' +
+      '<td></td><td></td>' +
+      '<td class="fas-num"></td><td class="fas-num"></td><td class="fas-num"></td>' +
+      '<td class="fas-num"><input type="number" class="input fas-line-proceeds" step="0.01" min="0.01" style="width:100%;text-align:right;" /></td>' +
+      '<td class="fas-num fas-line-gain"></td>' +
+      '<td style="text-align:center;"><button type="button" class="im-link fas-remove-line" title="Remove">×</button></td>';
+    tr.children[1].textContent = opt.getAttribute('data-no') || '';
+    tr.children[2].textContent = opt.getAttribute('data-name') || '';
+    tr.children[3].textContent = money(cost);
+    tr.children[4].textContent = money(accum);
+    tr.children[5].textContent = money(nbv);
+    tr.querySelector('.fas-line-proceeds').value = money(pr);
+    tr.querySelector('.fas-line-gain').textContent = money(gl);
+    body.appendChild(tr);
+    // remove from picker so it cannot be re-added easily
+    opt.disabled = true;
+    pickAsset.value = '';
+    if (pickProceeds) pickProceeds.value = '';
+    syncTotals();
+  }
+
+  function buildHiddenFields() {
+    if (!hidden) return;
+    hidden.innerHTML = '';
+    lineRows().forEach(function (tr) {
+      var aid = tr.getAttribute('data-asset-id');
+      var inp = tr.querySelector('.fas-line-proceeds');
+      var pr = inp ? inp.value : tr.getAttribute('data-proceeds');
+      var a = document.createElement('input');
+      a.type = 'hidden';
+      a.name = 'line_asset_id[]';
+      a.value = aid;
+      var p = document.createElement('input');
+      p.type = 'hidden';
+      p.name = 'line_proceeds[]';
+      p.value = pr;
+      hidden.appendChild(a);
+      hidden.appendChild(p);
+    });
+  }
+
+  if (btnAdd) btnAdd.addEventListener('click', addLineFromPicker);
+  if (pickProceeds) {
+    pickProceeds.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addLineFromPicker();
+      }
+    });
+  }
+  if (body) {
+    body.addEventListener('click', function (e) {
+      var btn = e.target.closest('.fas-remove-line');
+      if (!btn) return;
+      var tr = btn.closest('tr');
+      var aid = tr && tr.getAttribute('data-asset-id');
+      if (tr) tr.remove();
+      if (pickAsset && aid) {
+        Array.prototype.slice.call(pickAsset.options).forEach(function (opt) {
+          if (String(opt.value) === String(aid)) opt.disabled = false;
+        });
+      }
+      ensureEmpty();
+      syncTotals();
+    });
+    body.addEventListener('input', function (e) {
+      if (e.target && e.target.classList.contains('fas-line-proceeds')) syncTotals();
+    });
+  }
+  if (form) {
+    form.addEventListener('submit', function (e) {
+      buildHiddenFields();
+      if (!posted && !lineRows().length) {
+        e.preventDefault();
+        alert('Add at least one asset line.');
+      }
+    });
+  }
+
+  // Disable picker options already on lines
+  if (pickAsset) {
+    lineRows().forEach(function (tr) {
+      var aid = tr.getAttribute('data-asset-id');
+      Array.prototype.slice.call(pickAsset.options).forEach(function (opt) {
+        if (String(opt.value) === String(aid)) opt.disabled = true;
+      });
+    });
+  }
+
+  if (lookup && partyType && partyCode) {
+    lookup.addEventListener('global-lookup:select', function (e) {
+      var row = (e.detail && e.detail.row) || {};
+      partyType.value = row.party_type || '';
+      partyCode.value = row.party_code || '';
+    });
+    lookup.addEventListener('change', function () {
+      var h = lookup.querySelector('.global-lookup__value, .odoo-lookup__value');
+      if (h && !h.value) {
+        partyType.value = '';
+        partyCode.value = '';
+      }
+    });
+  }
+
+  syncTotals();
+
+  // After post: open sale PDF in a new tab
+  try {
+    var qs = new URLSearchParams(window.location.search || '');
+    var pdfUrl = {% if row.sale_id %}{{ url_for('fixed_assets.fa_sale_pdf', sale_id=row.sale_id)|tojson }}{% else %}null{% endif %};
+    if (qs.get('pdf') === '1' && posted && pdfUrl) {
+      window.open(pdfUrl, '_blank');
+      if (window.history && window.history.replaceState) {
+        qs.delete('pdf');
+        var next = window.location.pathname + (qs.toString() ? ('?' + qs.toString()) : '');
+        window.history.replaceState({}, '', next);
+      }
+    }
+  } catch (e) {}
+})();
+</script>
+{% endblock %}

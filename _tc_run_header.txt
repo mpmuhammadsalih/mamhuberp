@@ -1,0 +1,80 @@
+
+def _bill_date_collection_value_to_iso(val: Any) -> Optional[str]:
+    """Normalize bill date from grouped list rows to YYYY-MM-DD."""
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        return val.strftime("%Y-%m-%d")
+    if isinstance(val, str):
+        vs = val.strip()
+        if len(vs) >= 10 and vs[4] == "-":
+            return vs[:10]
+        try:
+            return datetime.strptime(vs[:10], "%d/%m/%Y").strftime("%Y-%m-%d")
+        except Exception:
+            pass
+    return None
+
+
+def _online_rows_to_bulk_collection_items(
+    invoices: List[Dict[str, Any]],
+    salesman_code: str,
+    transaction_iso_hint: str,
+) -> List[Dict[str, Any]]:
+    """Same eligibility rules as the collection screen Save (positive amount, skip over-collected rows)."""
+    out: List[Dict[str, Any]] = []
+    for item in invoices or []:
+        try:
+            coll = float(item.get("finalcollection") if item.get("finalcollection") is not None else item.get("collection") or 0)
+        except (TypeError, ValueError):
+            coll = 0.0
+        try:
+            balance = float(item.get("balance") or 0)
+        except (TypeError, ValueError):
+            balance = 0.0
+        if coll > 0 and balance < coll:
+            continue
+        if coll <= 0:
+            continue
+        bid = str(item.get("id") or "").strip()
+        bn = str(item.get("billno") or "").strip()
+        cc = str(item.get("customercode") or "").strip()
+        if not bid or not bn or not cc:
+            continue
+        try:
+            outst = float(item.get("outstanding") if item.get("outstanding") not in (None, "") else coll)
+        except (TypeError, ValueError):
+            outst = coll
+        out.append(
+            {
+                "invoice_no": bn,
+                "customer_code": cc,
+                "customer_name": item.get("customername") or "",
+                "amount": coll,
+                "id": bid,
+                "salesman_code": str(item.get("salesmancode") or salesman_code).strip(),
+                "bill_date": item.get("billdate"),
+                "bill_amount": outst,
+            }
+        )
+    return out
+
+
+def _temporary_collection_save_run(data: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
+    """Execute temporary-collection save POST payload; returns (body dict, HTTP status). No nonce rotation."""
+    voucherno = data.get("voucherno", "").strip()
+    transaction_date = data.get("transaction_date", "").strip()
+    salesman_code = data.get("salesman_code", "").strip()
+    remark = data.get("remark", "Pending Amount").strip() or "Pending Amount"
+    collection_items = data.get("collection_items", [])
+    generate_voucher_per_customer = data.get("generate_voucher_per_customer", False)
+
+    if not transaction_date or not salesman_code:
+        return ({"success": False, "error": "Date and salesman code are required"}, 400)
+
+    if not collection_items:
+        return ({"success": False, "error": "No collection items provided"}, 400)
+
+    location_code = _resolve_location_code()
+    current_user = session.get("user", "")
+

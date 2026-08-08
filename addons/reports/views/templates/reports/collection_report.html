@@ -1,0 +1,659 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body { background: #fff !important; font-size: 12px; }
+  .cr-page { max-width: 1280px; margin: 0 auto; padding: 16px 12px; }
+  .cr-topbar { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #dee2e6; }
+  .cr-topbar h1 { margin: 0; font-size: 18px; font-weight: 600; color: #212529; }
+  .cr-desc { color: #6c757d; font-size: 11px; margin-top: 2px; }
+  .cr-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 20px; margin-bottom: 16px; padding: 12px; background: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6; }
+  .cr-form .form-group label { font-weight: 600; font-size: 11px; color: #495057; }
+  .cr-form .form-group label.cr-checkbox-label { font-weight: normal; display: inline-flex; align-items: center; gap: 6px; }
+  .cr-form .form-group label.cr-checkbox-label input[type="checkbox"] { margin: 0; flex-shrink: 0; }
+  .cr-form .form-group input[type="date"] { padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 12px; }
+  .cr-form .form-group .hint { font-size: 10px; color: #6c757d; }
+  .cr-form .btn-go { padding: 6px 16px; background: #0d6efd; color: #fff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 12px; }
+  .cr-form .btn-go:hover { background: #0b5ed7; }
+  .cr-table-wrap { border: 1px solid #dee2e6; border-radius: 6px; overflow: hidden; background: #fff; }
+  .cr-table { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: auto; }
+  .cr-table thead { background: #f8f9fa; }
+  .cr-table thead th { padding: 6px 8px; text-align: left; font-weight: 600; font-size: 11px; color: #495057; border-bottom: 1px solid #dee2e6; }
+  .cr-table thead th.num { text-align: right; min-width: 90px; width: 90px; }
+  .cr-table tbody td { padding: 5px 8px; border-bottom: 1px solid #eee; font-size: 11px; word-wrap: break-word; overflow-wrap: break-word; }
+  .cr-table tbody td.num { text-align: right; font-variant-numeric: tabular-nums; min-width: 90px; width: 90px; box-sizing: border-box; }
+  .cr-table tbody tr:last-child td { border-bottom: none; }
+  .cr-table tbody tr:hover { background: #f8f9fa; }
+  .cr-table tfoot { background: #f1f3f5; font-weight: 700; font-size: 11px; }
+  .cr-table tfoot td { padding: 6px 8px; border-top: 1px solid #dee2e6; }
+  .cr-table tfoot td.num { min-width: 90px; width: 90px; text-align: right; box-sizing: border-box; }
+  .cr-empty { padding: 32px 16px; font-size: 12px; text-align: center; color: #6c757d; }
+  .cr-section-label { font-size: 10px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+  .cr-summary-section { margin-top: 20px; }
+  .cr-summary-section h2 { margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #212529; }
+  .cr-detail-scroll { max-height: 320px; overflow-y: auto; overflow-x: auto; border: 1px solid #dee2e6; border-radius: 6px; }
+  .cr-detail-scroll .cr-table thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
+  .cr-detail-scroll .cr-table tfoot tr { position: sticky; bottom: 0; z-index: 2; background: #f1f3f5; box-shadow: 0 -1px 0 #dee2e6; }
+  .cr-detail-scroll .cr-table tfoot td { background: #f1f3f5; }
+  .cr-summary-scroll { max-height: 320px; overflow-y: auto; overflow-x: auto; border: 1px solid #dee2e6; border-radius: 6px; }
+  .cr-summary-scroll .cr-table thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
+  .cr-summary-scroll .cr-table tfoot tr { position: sticky; bottom: 0; z-index: 2; background: #f1f3f5; box-shadow: 0 -1px 0 #dee2e6; }
+  .cr-summary-scroll .cr-table tfoot td { background: #f1f3f5; }
+  .cr-report-block .cr-table-wrap .cr-table thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
+  .cr-report-section { margin-top: 20px; }
+  .cr-report-section h2 { margin: 0 0 10px 0; font-size: 14px; font-weight: 600; color: #212529; padding-bottom: 6px; border-bottom: 1px solid #dee2e6; }
+  .cr-report-section-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .cr-report-section-grid { grid-template-columns: 1fr; } }
+  .cr-report-block { min-width: 0; }
+  .cr-report-block h3 { margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #495057; }
+  .cr-report-block .cr-table-wrap { overflow-x: auto; }
+  .cr-report-block .cr-table { table-layout: auto; min-width: 100%; }
+  .cr-table .cr-col-billdate { min-width: 110px; width: 110px; }
+  .cr-table .cr-col-accuracy { min-width: 72px; width: 72px; text-align: right; }
+  .cr-table .cr-col-accuracy.cr-acc-high { color: #198754; font-weight: 600; }
+  .cr-table .cr-col-accuracy.cr-acc-mid { color: #b8860b; font-weight: 600; }
+  .cr-table .cr-col-accuracy.cr-acc-low { color: #dc3545; font-weight: 600; }
+  .cr-filter-row { cursor: pointer; }
+  .cr-filter-row:hover { background: #e7f1ff !important; }
+  .cr-filter-row.cr-filter-active { background: #cfe2ff !important; }
+  .cr-detail-filter-hint { font-size: 11px; color: #0d6efd; margin-bottom: 4px; }
+  .cr-detail-filter-hint a { color: #0d6efd; text-decoration: underline; cursor: pointer; }
+  .cr-quick-days { font-size: 11px; color: #0d6efd; text-decoration: none; margin-right: 8px; white-space: nowrap; }
+  .cr-quick-days:hover { text-decoration: underline; }
+  .cr-quick-days-wrap { margin-top: 6px; }
+  .cr-table thead th.cr-sortable { cursor: pointer; user-select: none; padding-right: 16px; position: relative; }
+  .cr-table thead th.cr-sortable:hover { background: #e9ecef !important; }
+  .cr-table thead th.cr-sortable::after { content: '\00a0\2195'; font-size: 10px; color: #adb5bd; position: absolute; right: 4px; }
+  .cr-table thead th.cr-sortable.cr-sort-asc::after { content: '\00a0\2191'; color: #495057; }
+  .cr-table thead th.cr-sortable.cr-sort-desc::after { content: '\00a0\2193'; color: #495057; }
+  .cr-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .cr-section-header h3 { margin: 0; font-size: 12px; font-weight: 600; color: #495057; }
+  .cr-section-header2 { display: flex; align-items: center; justify-content: space-between; margin: 0 0 10px 0; padding-bottom: 6px; border-bottom: 1px solid #dee2e6; }
+  .cr-section-header2 h2 { margin: 0; font-size: 14px; font-weight: 600; color: #212529; }
+  .btn-xl-export { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px;
+    font-size: 11px; font-weight: 600; color: #1d6f42; background: #fff;
+    border: 1px solid #1d6f42; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+  .btn-xl-export:hover { background: #e8f5ee; }
+  .btn-xl-export svg { flex-shrink: 0; }
+</style>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<div class="cr-page">
+  <div class="cr-topbar">
+    <h1>Collection Report</h1>
+    <p class="cr-desc">Bill amount (tblsettlement flag = 'B', BILLDATE, BILLAMOUNT) vs paid amount (tbltempsettlement flag = 'R', AGAINSTNO, PAIDDATE, PAIDAMOUNT). Use two date ranges: one for BILLDATE, one for PAIDDATE.</p>
+  </div>
+
+  <form method="get" action="{{ url_for('reports.collection_report') }}" class="cr-form" id="cr-form">
+    <div class="form-group">
+      <span class="cr-section-label">1. Bill date range (tblsettlement)</span>
+      <label for="billdate_from">Bill Date From</label>
+      <input type="date" id="billdate_from" name="billdate_from" value="{{ billdate_from }}" />
+    </div>
+    <div class="form-group">
+      <span class="cr-section-label">&nbsp;</span>
+      <label for="billdate_to">Bill Date To</label>
+      <input type="date" id="billdate_to" name="billdate_to" value="{{ billdate_to }}" />
+    </div>
+    <div class="form-group">
+      <span class="cr-section-label">Quick</span>
+      <label>&nbsp;</label>
+      <div class="cr-quick-days-wrap">
+        <a href="#" class="cr-quick-days" data-days="30">30 days</a>
+        <a href="#" class="cr-quick-days" data-days="60">60 days</a>
+        <a href="#" class="cr-quick-days" data-days="90">90 days</a>
+        <a href="#" class="cr-quick-days" data-days="120">120 days</a>
+        <a href="#" class="cr-quick-days" data-days="120" data-above="1">Above 120</a>
+      </div>
+    </div>
+    <div class="form-group">
+      <span class="cr-section-label">2. Paid date range (tbltempsettlement)</span>
+      <label for="paiddate_from">Paid Date From</label>
+      <input type="date" id="paiddate_from" name="paiddate_from" value="{{ paiddate_from }}" />
+    </div>
+    <div class="form-group">
+      <span class="cr-section-label">&nbsp;</span>
+      <label for="paiddate_to">Paid Date To</label>
+      <input type="date" id="paiddate_to" name="paiddate_to" value="{{ paiddate_to }}" />
+    </div>
+    <div class="form-group">
+      <span class="cr-section-label">&nbsp;</span>
+      <label>&nbsp;</label>
+      <button type="submit" class="btn-go">Get Report</button>
+    </div>
+    <div class="form-group">
+      <span class="cr-section-label">&nbsp;</span>
+      <label class="cr-checkbox-label">
+        <input type="checkbox" name="pending_only" value="1" {% if pending_only %}checked{% endif %} />
+        <span>Pending only</span>
+      </label>
+      <span class="hint" style="display: block; margin-top: 2px;">Filter bills with balance ≠ 0 (bill amount − paid amount)</span>
+    </div>
+  </form>
+
+  <script>
+  (function() {
+    var form = document.getElementById('cr-form');
+    if (!form) return;
+    var billFrom = document.getElementById('billdate_from');
+    var billTo = document.getElementById('billdate_to');
+    var paidFrom = document.getElementById('paiddate_from');
+    var paidTo = document.getElementById('paiddate_to');
+    function toYMD(d) {
+      var y = d.getFullYear();
+      var m = String(d.getMonth() + 1).padStart(2, '0');
+      var day = String(d.getDate()).padStart(2, '0');
+      return y + '-' + m + '-' + day;
+    }
+    document.querySelectorAll('.cr-quick-days').forEach(function(a) {
+      a.addEventListener('click', function(e) {
+        e.preventDefault();
+        var days = parseInt(this.dataset.days, 10) || 30;
+        var above = this.dataset.above === '1';
+        var today = new Date();
+        var fromDate, toDate;
+        if (above) {
+          fromDate = new Date(today);
+          fromDate.setFullYear(today.getFullYear() - 10);
+          toDate = new Date(today);
+          toDate.setDate(toDate.getDate() - days);
+        } else {
+          toDate = new Date(today);
+          fromDate = new Date(today);
+          fromDate.setDate(fromDate.getDate() - days);
+        }
+        billFrom.value = toYMD(fromDate);
+        billTo.value = toYMD(toDate);
+        paidFrom.value = toYMD(fromDate);
+        paidTo.value = toYMD(toDate);
+        form.submit();
+      });
+    });
+  })();
+  </script>
+
+  {% if billdate_from and billdate_to and paiddate_from and paiddate_to %}
+    {% if rows %}
+      <div class="cr-report-section">
+        <div class="cr-section-header2">
+          <h2>Section 2 – Salesman wise & Customer wise</h2>
+        </div>
+        <div class="cr-report-section-grid">
+          <div class="cr-report-block">
+            <div class="cr-section-header">
+              <h3>Summary – Salesman wise</h3>
+              <button class="btn-xl-export" onclick="exportCrTable('tbl-salesman', 'salesman_wise')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                Excel
+              </button>
+            </div>
+            <div class="cr-table-wrap">
+            <div class="cr-summary-scroll">
+              <table class="cr-table" id="tbl-salesman">
+                <thead>
+                  <tr>
+                    <th>Salesman Code</th>
+                    <th>Salesman Name</th>
+                    <th class="num">Bill Amount</th>
+                    <th class="num">Paid Amount</th>
+                    <th class="num">Variance</th>
+                    <th class="num cr-col-accuracy">Accuracy</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for s in (summary_by_salesman or []) %}
+                    <tr class="cr-filter-row" data-filter-type="salesman" data-salesman-code="{{ (s.salesman_code or '')|e }}" data-label="{{ (s.salesmanname or s.salesman_code or '')|e }}">
+                      <td>{{ s.salesman_code }}</td>
+                      <td>{{ s.salesmanname or '—' }}</td>
+                      <td class="num">{{ "%.2f"|format(s.billamount) }}</td>
+                      <td class="num">{{ "%.2f"|format(s.paid_amount) }}</td>
+                      <td class="num">{{ "%.2f"|format(s.variance) }}</td>
+                      <td class="num cr-col-accuracy {% if s.billamount and s.billamount != 0 %}{% set _p = (s.paid_amount / s.billamount) * 100 %}{% if _p >= 80 %}cr-acc-high{% elif _p >= 50 %}cr-acc-mid{% else %}cr-acc-low{% endif %}{% endif %}">{% if s.billamount and s.billamount != 0 %}{{ "%.1f"|format((s.paid_amount / s.billamount) * 100) }}%{% else %}—{% endif %}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colspan="2">Total</td>
+                    <td class="num">{{ "%.2f"|format((summary_by_salesman or [])|sum(attribute='billamount')) }}</td>
+                    <td class="num">{{ "%.2f"|format((summary_by_salesman or [])|sum(attribute='paid_amount')) }}</td>
+                    <td class="num">{{ "%.2f"|format((summary_by_salesman or [])|sum(attribute='variance')) }}</td>
+                    <td class="num cr-col-accuracy {% set _sb = (summary_by_salesman or [])|sum(attribute='billamount') %}{% set _sp = (summary_by_salesman or [])|sum(attribute='paid_amount') %}{% if _sb and _sb != 0 %}{% set _p = (_sp / _sb) * 100 %}{% if _p >= 80 %}cr-acc-high{% elif _p >= 50 %}cr-acc-mid{% else %}cr-acc-low{% endif %}{% endif %}">{% set _sb = (summary_by_salesman or [])|sum(attribute='billamount') %}{% set _sp = (summary_by_salesman or [])|sum(attribute='paid_amount') %}{% if _sb and _sb != 0 %}{{ "%.1f"|format((_sp / _sb) * 100) }}%{% else %}—{% endif %}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            </div>
+          </div>
+          <div class="cr-report-block">
+            <div class="cr-section-header">
+              <h3>Summary – Customer wise</h3>
+              <button class="btn-xl-export" onclick="exportCrTable('tbl-customer', 'customer_wise')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                Excel
+              </button>
+            </div>
+            <div class="cr-table-wrap">
+            <div class="cr-summary-scroll">
+              <table class="cr-table" id="tbl-customer">
+                <thead>
+                  <tr>
+                    <th>Customer Code</th>
+                    <th>Customer Name</th>
+                    <th class="num">Bill Amount</th>
+                    <th class="num">Paid Amount</th>
+                    <th class="num">Variance</th>
+                    <th class="num cr-col-accuracy">Accuracy</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for s in (summary_by_customer or []) %}
+                    <tr class="cr-filter-row" data-filter-type="customer" data-customer-code="{{ (s.customer_code or '')|e }}" data-label="{{ (s.customername or s.customer_code or '')|e }}">
+                      <td>{{ s.customer_code }}</td>
+                      <td>{{ s.customername or '—' }}</td>
+                      <td class="num">{{ "%.2f"|format(s.billamount) }}</td>
+                      <td class="num">{{ "%.2f"|format(s.paid_amount) }}</td>
+                      <td class="num">{{ "%.2f"|format(s.variance) }}</td>
+                      <td class="num cr-col-accuracy {% if s.billamount and s.billamount != 0 %}{% set _p = (s.paid_amount / s.billamount) * 100 %}{% if _p >= 80 %}cr-acc-high{% elif _p >= 50 %}cr-acc-mid{% else %}cr-acc-low{% endif %}{% endif %}">{% if s.billamount and s.billamount != 0 %}{{ "%.1f"|format((s.paid_amount / s.billamount) * 100) }}%{% else %}—{% endif %}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colspan="2">Total</td>
+                    <td class="num">{{ "%.2f"|format((summary_by_customer or [])|sum(attribute='billamount')) }}</td>
+                    <td class="num">{{ "%.2f"|format((summary_by_customer or [])|sum(attribute='paid_amount')) }}</td>
+                    <td class="num">{{ "%.2f"|format((summary_by_customer or [])|sum(attribute='variance')) }}</td>
+                    <td class="num cr-col-accuracy {% set _cb = (summary_by_customer or [])|sum(attribute='billamount') %}{% set _cp = (summary_by_customer or [])|sum(attribute='paid_amount') %}{% if _cb and _cb != 0 %}{% set _p = (_cp / _cb) * 100 %}{% if _p >= 80 %}cr-acc-high{% elif _p >= 50 %}cr-acc-mid{% else %}cr-acc-low{% endif %}{% endif %}">{% set _cb = (summary_by_customer or [])|sum(attribute='billamount') %}{% set _cp = (summary_by_customer or [])|sum(attribute='paid_amount') %}{% if _cb and _cb != 0 %}{{ "%.1f"|format((_cp / _cb) * 100) }}%{% else %}—{% endif %}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cr-report-section">
+        <div class="cr-section-header2">
+          <h2>Section 3 – Employee wise</h2>
+        </div>
+        <div class="cr-report-section-grid">
+          <div class="cr-report-block">
+            <div class="cr-section-header">
+              <h3>Summary – Employee wise</h3>
+              <button class="btn-xl-export" onclick="exportCrTable('tbl-employee', 'employee_wise')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                Excel
+              </button>
+            </div>
+            <div class="cr-table-wrap">
+            <div class="cr-summary-scroll">
+              <table class="cr-table" id="tbl-employee">
+                <thead>
+                  <tr>
+                    <th>Employee Code</th>
+                    <th>Employee Name</th>
+                    <th class="num">Bill Amount</th>
+                    <th class="num">Paid Amount</th>
+                    <th class="num">Variance</th>
+                    <th class="num cr-col-accuracy">Accuracy</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for s in (summary_by_employee or []) %}
+                    <tr class="cr-filter-row" data-filter-type="employee" data-employee-code="{{ (s.employee_code or '')|e }}" data-label="{{ (s.employeename or s.employee_code or '')|e }}">
+                      <td>{{ s.employee_code }}</td>
+                      <td>{{ s.employeename or '—' }}</td>
+                      <td class="num">{{ "%.2f"|format(s.billamount) }}</td>
+                      <td class="num">{{ "%.2f"|format(s.paid_amount) }}</td>
+                      <td class="num">{{ "%.2f"|format(s.variance) }}</td>
+                      <td class="num cr-col-accuracy {% if s.billamount and s.billamount != 0 %}{% set _p = (s.paid_amount / s.billamount) * 100 %}{% if _p >= 80 %}cr-acc-high{% elif _p >= 50 %}cr-acc-mid{% else %}cr-acc-low{% endif %}{% endif %}">{% if s.billamount and s.billamount != 0 %}{{ "%.1f"|format((s.paid_amount / s.billamount) * 100) }}%{% else %}—{% endif %}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colspan="2">Total</td>
+                    <td class="num">{{ "%.2f"|format((summary_by_employee or [])|sum(attribute='billamount')) }}</td>
+                    <td class="num">{{ "%.2f"|format((summary_by_employee or [])|sum(attribute='paid_amount')) }}</td>
+                    <td class="num">{{ "%.2f"|format((summary_by_employee or [])|sum(attribute='variance')) }}</td>
+                    <td class="num cr-col-accuracy {% set _eb = (summary_by_employee or [])|sum(attribute='billamount') %}{% set _ep = (summary_by_employee or [])|sum(attribute='paid_amount') %}{% if _eb and _eb != 0 %}{% set _p = (_ep / _eb) * 100 %}{% if _p >= 80 %}cr-acc-high{% elif _p >= 50 %}cr-acc-mid{% else %}cr-acc-low{% endif %}{% endif %}">{% set _eb = (summary_by_employee or [])|sum(attribute='billamount') %}{% set _ep = (summary_by_employee or [])|sum(attribute='paid_amount') %}{% if _eb and _eb != 0 %}{{ "%.1f"|format((_ep / _eb) * 100) }}%{% else %}—{% endif %}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cr-report-section">
+        <div class="cr-section-header2">
+          <h2>Section 1 – Bill wise & Month wise</h2>
+        </div>
+        <div class="cr-report-section-grid">
+          <div class="cr-report-block">
+            <div class="cr-section-header">
+              <h3>Detail – Bill wise</h3>
+              <button class="btn-xl-export" onclick="exportCrTable('tbl-billwise', 'bill_wise', true)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                Excel
+              </button>
+            </div>
+            <p id="cr-detail-filter-hint" class="cr-detail-filter-hint" style="display: none;">Showing bills for: <span id="cr-detail-filter-label"></span> <a id="cr-detail-show-all" href="#">Show all</a></p>
+            <div class="cr-table-wrap">
+            <div class="cr-detail-scroll">
+            <table class="cr-table" id="tbl-billwise">
+              <thead>
+                <tr>
+                  <th>Bill No</th>
+                  <th class="cr-col-billdate">Bill Date</th>
+                  <th>Customer Name</th>
+                  <th>Salesman Name</th>
+                  <th>Employee Name</th>
+                  <th class="num">Bill Amount</th>
+                  <th class="num">Paid Amount</th>
+                  <th class="num">Variance</th>
+                  <th class="num cr-col-accuracy">Accuracy</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for r in rows %}
+                  {% set bill_amt = r.billamount or 0 %}
+                  {% set paid_amt = r.paid_amount or 0 %}
+                  {% set var = bill_amt - paid_amt %}
+                  {% set acc = (paid_amt / bill_amt * 100) if bill_amt and bill_amt != 0 else none %}
+                  <tr class="cr-detail-row" data-salesman-code="{{ (r.salesman_code or '')|e }}" data-customer-code="{{ (r.customer_code or '')|e }}" data-employee-code="{{ (r.employee_code or '')|e }}" data-bill-amount="{{ bill_amt }}" data-paid-amount="{{ paid_amt }}" data-variance="{{ var }}">
+                    <td>{{ r.billno }}</td>
+                    <td class="cr-col-billdate">{% if r.billdate %}{{ r.billdate }}{% else %}—{% endif %}</td>
+                    <td>{{ r.customername or '—' }}</td>
+                    <td>{{ r.salesmanname or '—' }}</td>
+                    <td>{{ r.employeename or '—' }}</td>
+                    <td class="num">{{ "%.2f"|format(bill_amt) }}</td>
+                    <td class="num">{{ "%.2f"|format(paid_amt) }}</td>
+                    <td class="num">{{ "%.2f"|format(var) }}</td>
+                    <td class="num cr-col-accuracy {% if acc is not none %}{% if acc >= 80 %}cr-acc-high{% elif acc >= 50 %}cr-acc-mid{% else %}cr-acc-low{% endif %}{% endif %}">{% if acc is not none %}{{ "%.1f"|format(acc) }}%{% else %}—{% endif %}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+              <tfoot>
+                {% set _tb = rows|sum(attribute='billamount') %}
+                {% set _tp = rows|sum(attribute='paid_amount') %}
+                {% set _tacc = (_tp / _tb * 100) if _tb and _tb != 0 else none %}
+                <tr id="cr-detail-tfoot" data-total-bill="{{ "%.2f"|format(_tb) }}" data-total-paid="{{ "%.2f"|format(_tp) }}" data-total-var="{{ "%.2f"|format(_tb - _tp) }}" data-total-acc="{% if _tacc is not none %}{{ "%.1f"|format(_tacc) }}%{% endif %}" data-total-acc-class="{% if _tacc is not none %}{% if _tacc >= 80 %}cr-acc-high{% elif _tacc >= 50 %}cr-acc-mid{% else %}cr-acc-low{% endif %}{% endif %}">
+                  {% set total_bill = _tb %}
+                  {% set total_paid = _tp %}
+                  {% set total_var = total_bill - total_paid %}
+                  {% set total_acc = _tacc %}
+                  <td>Total</td>
+                  <td class="cr-col-billdate"></td>
+                  <td colspan="3"></td>
+                  <td class="num" id="cr-detail-total-bill">{{ "%.2f"|format(total_bill) }}</td>
+                  <td class="num" id="cr-detail-total-paid">{{ "%.2f"|format(total_paid) }}</td>
+                  <td class="num" id="cr-detail-total-var">{{ "%.2f"|format(total_var) }}</td>
+                  <td class="num cr-col-accuracy {% if total_acc is not none %}{% if total_acc >= 80 %}cr-acc-high{% elif total_acc >= 50 %}cr-acc-mid{% else %}cr-acc-low{% endif %}{% endif %}" id="cr-detail-total-acc">{% if total_acc is not none %}{{ "%.1f"|format(total_acc) }}%{% else %}—{% endif %}</td>
+                </tr>
+              </tfoot>
+            </table>
+            </div>
+            </div>
+          </div>
+          <div class="cr-report-block">
+            <div class="cr-section-header">
+              <h3>Summary – Month wise</h3>
+              <button class="btn-xl-export" onclick="exportCrTable('tbl-monthwise', 'month_wise')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                Excel
+              </button>
+            </div>
+            <div class="cr-table-wrap">
+            <div class="cr-summary-scroll">
+              <table class="cr-table" id="tbl-monthwise">
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th class="num">Bill Amount</th>
+                    <th class="num">Paid Amount</th>
+                    <th class="num">Variance</th>
+                    <th class="num cr-col-accuracy">Accuracy</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for s in (summary_by_month or []) %}
+                    <tr>
+                      <td>{{ s.month_label }}</td>
+                      <td class="num">{{ "%.2f"|format(s.billamount) }}</td>
+                      <td class="num">{{ "%.2f"|format(s.paid_amount) }}</td>
+                      <td class="num">{{ "%.2f"|format(s.variance) }}</td>
+                      <td class="num cr-col-accuracy {% if s.billamount and s.billamount != 0 %}{% set _p = (s.paid_amount / s.billamount) * 100 %}{% if _p >= 80 %}cr-acc-high{% elif _p >= 50 %}cr-acc-mid{% else %}cr-acc-low{% endif %}{% endif %}">{% if s.billamount and s.billamount != 0 %}{{ "%.1f"|format((s.paid_amount / s.billamount) * 100) }}%{% else %}—{% endif %}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td>Total</td>
+                    <td class="num">{{ "%.2f"|format((summary_by_month or [])|sum(attribute='billamount')) }}</td>
+                    <td class="num">{{ "%.2f"|format((summary_by_month or [])|sum(attribute='paid_amount')) }}</td>
+                    <td class="num">{{ "%.2f"|format((summary_by_month or [])|sum(attribute='variance')) }}</td>
+                    <td class="num cr-col-accuracy {% set _mb = (summary_by_month or [])|sum(attribute='billamount') %}{% set _mp = (summary_by_month or [])|sum(attribute='paid_amount') %}{% if _mb and _mb != 0 %}{% set _p = (_mp / _mb) * 100 %}{% if _p >= 80 %}cr-acc-high{% elif _p >= 50 %}cr-acc-mid{% else %}cr-acc-low{% endif %}{% endif %}">{% set _mb = (summary_by_month or [])|sum(attribute='billamount') %}{% set _mp = (summary_by_month or [])|sum(attribute='paid_amount') %}{% if _mb and _mb != 0 %}{{ "%.1f"|format((_mp / _mb) * 100) }}%{% else %}—{% endif %}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% else %}
+      <div class="cr-empty">
+        {% if bills_in_range_count and bills_in_range_count > 0 %}
+          <strong>{{ bills_in_range_count }} bill(s)</strong> found in tblsettlement with BILLDATE between {{ billdate_from }} and {{ billdate_to }} (flag = 'B'), but none have payments in tbltempsettlement with PAIDDATE between {{ paiddate_from }} and {{ paiddate_to }} (flag = 'R') linked by AGAINSTNO = BILLNO.
+          <p style="margin-top: 12px;">Check that payment rows exist and AGAINSTNO matches the bill numbers.</p>
+          {% if diagnostic %}
+            <div class="cr-diagnostic" style="margin-top: 16px; padding: 12px; background: #f8f9fa; border-radius: 8px; text-align: left; max-width: 560px;">
+              <strong>Diagnostic:</strong>
+              <ul style="margin: 8px 0 0 0; padding-left: 20px;">
+                <li>In <strong>tbltempsettlement</strong> (flag = 'R'), PAIDDATE between {{ paiddate_from }} and {{ paiddate_to }}: <strong>{{ diagnostic.get('temp_count', 0) }}</strong> row(s).</li>
+                {% if diagnostic.get('sample_againstno') %}
+                  <li>Sample AGAINSTNO from those payments: <code>{{ diagnostic.sample_againstno|join(', ') }}</code></li>
+                {% endif %}
+                {% if diagnostic.get('sample_billno') %}
+                  <li>Sample BILLNO from bills in range: <code>{{ diagnostic.sample_billno|join(', ') }}</code></li>
+                {% endif %}
+              </ul>
+              <p style="margin: 8px 0 0 0; font-size: 12px; color: #6c757d;">If the formats differ (e.g. leading zeros, number vs text), AGAINSTNO must match BILLNO exactly when compared as trimmed strings.</p>
+            </div>
+          {% endif %}
+        {% else %}
+          No bills found in <strong>tblsettlement</strong> with FLAG = 'B' and BILLDATE between {{ billdate_from }} and {{ billdate_to }}. Check that the table has data for this period and that the BILLDATE column is a date type (TRUNC is used for comparison).
+        {% endif %}
+      </div>
+    {% endif %}
+  {% else %}
+    <div class="cr-empty">Select both date ranges (Bill Date From/To and Paid Date From/To) and click Get Report.</div>
+  {% endif %}
+</div>
+<script>
+(function() {
+  var detailRows = document.querySelectorAll('.cr-detail-row');
+  var tfoot = document.getElementById('cr-detail-tfoot');
+  var totalBillEl = document.getElementById('cr-detail-total-bill');
+  var totalPaidEl = document.getElementById('cr-detail-total-paid');
+  var totalVarEl = document.getElementById('cr-detail-total-var');
+  var totalAccEl = document.getElementById('cr-detail-total-acc');
+  var hintEl = document.getElementById('cr-detail-filter-hint');
+  var labelEl = document.getElementById('cr-detail-filter-label');
+  var showAllEl = document.getElementById('cr-detail-show-all');
+  if (!detailRows.length || !tfoot) return;
+
+  function norm(v) { return (v == null ? '' : String(v)).trim(); }
+  function showAll() {
+    detailRows.forEach(function(tr) { tr.style.display = ''; });
+    if (tfoot.dataset.totalBill !== undefined) totalBillEl.textContent = tfoot.dataset.totalBill;
+    if (tfoot.dataset.totalPaid !== undefined) totalPaidEl.textContent = tfoot.dataset.totalPaid;
+    if (tfoot.dataset.totalVar !== undefined) totalVarEl.textContent = tfoot.dataset.totalVar;
+    if (totalAccEl && tfoot.dataset.totalAcc !== undefined) totalAccEl.textContent = tfoot.dataset.totalAcc || '—';
+    if (totalAccEl && tfoot.dataset.totalAccClass) {
+      totalAccEl.classList.remove('cr-acc-high', 'cr-acc-mid', 'cr-acc-low');
+      totalAccEl.classList.add(tfoot.dataset.totalAccClass);
+    }
+    hintEl.style.display = 'none';
+    document.querySelectorAll('.cr-filter-row.cr-filter-active').forEach(function(r) { r.classList.remove('cr-filter-active'); });
+  }
+  function updateTotals(visibleRows) {
+    var bill = 0, paid = 0;
+    visibleRows.forEach(function(tr) {
+      bill += parseFloat(tr.dataset.billAmount || 0);
+      paid += parseFloat(tr.dataset.paidAmount || 0);
+    });
+    totalBillEl.textContent = bill.toFixed(2);
+    totalPaidEl.textContent = paid.toFixed(2);
+    totalVarEl.textContent = (bill - paid).toFixed(2);
+    if (totalAccEl) {
+      var pct = bill !== 0 ? (paid / bill * 100) : null;
+      totalAccEl.textContent = (pct !== null ? pct.toFixed(1) + '%' : '—');
+      totalAccEl.classList.remove('cr-acc-high', 'cr-acc-mid', 'cr-acc-low');
+      if (pct !== null) {
+        if (pct >= 80) totalAccEl.classList.add('cr-acc-high');
+        else if (pct >= 50) totalAccEl.classList.add('cr-acc-mid');
+        else totalAccEl.classList.add('cr-acc-low');
+      }
+    }
+  }
+  function filterDetail(filterType, code, row) {
+    code = norm(code);
+    var visible = [];
+    detailRows.forEach(function(tr) {
+      var match = filterType === 'salesman'
+        ? norm(tr.dataset.salesmanCode) === code
+        : filterType === 'employee'
+          ? norm(tr.dataset.employeeCode) === code
+          : norm(tr.dataset.customerCode) === code;
+      tr.style.display = match ? '' : 'none';
+      if (match) visible.push(tr);
+    });
+    updateTotals(visible);
+    hintEl.style.display = 'block';
+    labelEl.textContent = (row && row.dataset.label) ? row.dataset.label : (code || '(Blank)');
+  }
+
+  document.querySelectorAll('.cr-filter-row').forEach(function(row) {
+    row.addEventListener('click', function() {
+      var type = this.dataset.filterType;
+      var code = type === 'salesman' ? this.dataset.salesmanCode
+               : type === 'employee' ? this.dataset.employeeCode
+               : this.dataset.customerCode;
+      var isActive = this.classList.contains('cr-filter-active');
+      document.querySelectorAll('.cr-filter-row.cr-filter-active').forEach(function(r) { r.classList.remove('cr-filter-active'); });
+      if (isActive) {
+        showAll();
+        return;
+      }
+      this.classList.add('cr-filter-active');
+      filterDetail(type, code, this);
+    });
+  });
+  if (showAllEl) showAllEl.addEventListener('click', function(e) { e.preventDefault(); showAll(); });
+})();
+
+(function() {
+  function parseSortValue(cell, type) {
+    if (!cell) return type === 'number' ? NaN : '';
+    var t = (cell.textContent || '').trim();
+    if (type === 'number') {
+      var s = t.replace(/,/g, '').replace(/%/g, '');
+      var n = parseFloat(s);
+      return isNaN(n) ? NaN : n;
+    }
+    if (type === 'date') return t;
+    return t.toLowerCase();
+  }
+  function getSortType(th) {
+    var text = (th.textContent || '').toLowerCase();
+    if (th.classList.contains('num') || th.classList.contains('cr-col-accuracy')) return 'number';
+    if (text.indexOf('date') !== -1) return 'date';
+    return 'text';
+  }
+  document.querySelectorAll('.cr-report-block .cr-table').forEach(function(table) {
+    var thead = table.querySelector('thead');
+    var tbody = table.querySelector('tbody');
+    if (!thead || !tbody) return;
+    var headers = thead.querySelectorAll('th');
+    headers.forEach(function(th, colIndex) {
+      th.classList.add('cr-sortable');
+      th.addEventListener('click', function() {
+        var sortType = getSortType(th);
+        var isAsc = th.classList.contains('cr-sort-asc');
+        headers.forEach(function(h) { h.classList.remove('cr-sort-asc', 'cr-sort-desc'); });
+        th.classList.add(isAsc ? 'cr-sort-desc' : 'cr-sort-asc');
+        var dir = isAsc ? -1 : 1;
+        var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+        rows.sort(function(a, b) {
+          var cellA = a.cells[colIndex];
+          var cellB = b.cells[colIndex];
+          var va = parseSortValue(cellA, sortType);
+          var vb = parseSortValue(cellB, sortType);
+          if (sortType === 'number') {
+            if (isNaN(va) && isNaN(vb)) return 0;
+            if (isNaN(va)) return 1;
+            if (isNaN(vb)) return -1;
+            return (va - vb) * dir;
+          }
+          if (sortType === 'date') return (va < vb ? -1 : va > vb ? 1 : 0) * dir;
+          return (va < vb ? -1 : va > vb ? 1 : 0) * dir;
+        });
+        rows.forEach(function(tr) { tbody.appendChild(tr); });
+      });
+    });
+  });
+})();
+
+/* ── Excel Export ── */
+function exportCrTable(tableId, filename, visibleOnly) {
+  var table = document.getElementById(tableId);
+  if (!table || typeof XLSX === 'undefined') { alert('Export not available.'); return; }
+
+  var wb = XLSX.utils.book_new();
+  var headers = [];
+  table.querySelectorAll('thead tr:first-child th').forEach(function(th) {
+    headers.push((th.textContent || '').trim());
+  });
+
+  var data = [headers];
+
+  /* body rows */
+  table.querySelectorAll('tbody tr').forEach(function(tr) {
+    if (visibleOnly && tr.style.display === 'none') return;
+    if (tr.querySelector('td[colspan]') && tr.querySelectorAll('td').length === 1) return; /* empty placeholder */
+    var row = [];
+    tr.querySelectorAll('td').forEach(function(td) {
+      var txt = (td.textContent || '').trim().replace(/%$/, '');
+      var num = parseFloat(txt.replace(/,/g, ''));
+      row.push(isNaN(num) || txt === '' || txt === '—' ? txt : num);
+    });
+    data.push(row);
+  });
+
+  /* footer row */
+  var tfootRow = table.querySelector('tfoot tr');
+  if (tfootRow) {
+    var frow = [];
+    tfootRow.querySelectorAll('td').forEach(function(td) {
+      var txt = (td.textContent || '').trim().replace(/%$/, '');
+      var num = parseFloat(txt.replace(/,/g, ''));
+      frow.push(isNaN(num) || txt === '' || txt === '—' ? txt : num);
+    });
+    data.push(frow);
+  }
+
+  var ws = XLSX.utils.aoa_to_sheet(data);
+
+  /* column widths */
+  ws['!cols'] = headers.map(function(h) {
+    return { wch: Math.max(h.length + 2, 14) };
+  });
+
+  XLSX.utils.book_append_sheet(wb, ws, filename.replace(/_/g, ' '));
+  XLSX.writeFile(wb, filename + '_' + new Date().toISOString().slice(0,10) + '.xlsx');
+}
+</script>
+{% endblock %}

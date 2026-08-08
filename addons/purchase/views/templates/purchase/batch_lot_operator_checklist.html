@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Batch / lot — operator checklist{% endblock %}
+{% block content %}
+<style>
+  .opck { max-width: 880px; margin: 0 auto; padding: 20px 16px 40px; font-size: 14px; line-height: 1.55; color: #1e293b; }
+  .opck h1 { font-size: 1.35rem; font-weight: 600; margin: 0 0 8px; color: #0f172a; }
+  .opck__lead { color: #64748b; margin: 0 0 20px; font-size: 13px; }
+  .opck__flow { counter-reset: step; list-style: none; padding: 0; margin: 0; }
+  .opck__flow > li { position: relative; padding: 0 0 18px 44px; border-left: 2px solid #e2e8f0; margin-left: 14px; }
+  .opck__flow > li:last-child { border-left-color: transparent; padding-bottom: 0; }
+  .opck__flow > li::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: -15px; top: 0; width: 28px; height: 28px; border-radius: 50%;
+    background: #2563eb; color: #fff; font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .opck__flow h2 { font-size: 1rem; font-weight: 600; margin: 0 0 6px; color: #0f172a; }
+  .opck__flow p { margin: 0 0 6px; }
+  .opck__flow .muted { color: #64748b; font-size: 12.5px; }
+  .opck__btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .opck__btns a {
+    display: inline-block; padding: 6px 12px; border-radius: 6px; font-size: 12.5px; font-weight: 500;
+    text-decoration: none; background: #f1f5f9; color: #1d4ed8; border: 1px solid #e2e8f0;
+  }
+  .opck__btns a:hover { background: #e2e8f0; }
+  .opck__box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-top: 16px; }
+  .opck__box h3 { font-size: 0.9rem; margin: 0 0 8px; color: #334155; }
+  .opck__box ul { margin: 0; padding-left: 1.1rem; }
+  .opck__box li { margin: 4px 0; font-size: 13px; }
+  .opck__top { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
+  .opck__back { font-size: 13px; color: #2563eb; text-decoration: none; }
+  .opck__back:hover { text-decoration: underline; }
+</style>
+<div class="opck">
+  <div class="opck__top">
+    <h1>Operator checklist: batch &amp; expiry (lots)</h1>
+    <a class="opck__back" href="{{ url_for('purchase.batch_lot_inquiry') }}">← Back to lot inquiry</a>
+  </div>
+  <p class="opck__lead">
+    Use this order for <strong>batch-tracked</strong> items. Session store / location is respected everywhere below.
+  </p>
+
+  <ol class="opck__flow">
+    <li>
+      <h2>1. Mark the item (once)</h2>
+      <p>On <strong>Batch / Expiry (lots)</strong>, enter the item code and turn on <em>Require batch + expiry on GRN; FEFO on sales</em>, then Save.</p>
+      <p class="muted">After this, GRN will expect batch and expiry for that item; sales will issue by FEFO (bins first, then unallocated stock).</p>
+      <div class="opck__btns">
+        <a href="{{ url_for('purchase.batch_lot_inquiry') }}">Open Batch / Expiry (lots)</a>
+      </div>
+    </li>
+    <li>
+      <h2>2. Receive goods (GRN)</h2>
+      <p>Post a <strong>goods receipt</strong> from the purchase flow. For each batch line, enter <strong>batch number</strong> and <strong>expiry</strong> (and optional mfg). Posting creates a <strong>lot</strong> and adds quantity to <strong>unallocated</strong> lot balance.</p>
+      <p class="muted">If the same batch already exists for that item/location, quantity is added to the same lot.</p>
+      <div class="opck__btns">
+        <a href="{{ url_for('purchase.goods_receipt_list') }}">GRN list / new receipt</a>
+      </div>
+    </li>
+    <li>
+      <h2>3. Put away to bins (optional but recommended)</h2>
+      <p>On <strong>Batch / Expiry (lots)</strong>, pick the <strong>warehouse site</strong> and click Apply. For a lot with <strong>Unalloc</strong> quantity, choose a <strong>bin</strong>, enter <strong>Qty</strong>, and click <strong>Go</strong>. That moves stock from unallocated into <strong>ITEM_LOT_BIN</strong> and updates <strong>BIN_STOCK</strong> for the same item and bin.</p>
+      <p class="muted">Use <strong>Binned</strong> to see per-bin lot quantities. Bin stock screens stay item+bin; lot detail lives on this page.</p>
+      <div class="opck__btns">
+        <a href="{{ url_for('purchase.batch_lot_inquiry') }}">Put away (lot inquiry)</a>
+        <a href="{{ url_for('warehouse.warehouse_bin_stock') }}">Bin stock (warehouse)</a>
+        <a href="{{ url_for('warehouse.warehouse_storage_list') }}">Storage / bin setup</a>
+      </div>
+    </li>
+    <li>
+      <h2>4. Sell or pick (FEFO)</h2>
+      <p>On the <strong>sales</strong> invoice screen, add batch-tracked items as usual. The system issues by <strong>FEFO</strong> (earliest expiry first), taking from <strong>bins first</strong>, then <strong>unallocated</strong> lot balance.</p>
+      <p class="muted">You do not have to type a lot on the sales line for normal sales.</p>
+      <div class="opck__btns">
+        <a href="{{ url_for('sales.sales_invoice') }}">Sales invoice</a>
+      </div>
+    </li>
+    <li>
+      <h2>5. Stock adjustment (if needed)</h2>
+      <p>On <strong>Stock adjustment</strong>, set store and quantities as today. For batch items, use <strong>Lot (opt.)</strong> to take from a specific lot on <strong>decreases</strong>; leave it blank to use FEFO. <strong>Increases</strong> post into a system adjustment lot when the item is batch-tracked.</p>
+      <div class="opck__btns">
+        <a href="{{ url_for('purchase.stock_adjustment_list') }}">Stock adjustment</a>
+      </div>
+    </li>
+    <li>
+      <h2>6. Purchase return to supplier</h2>
+      <p>On <strong>Purchase return</strong>, add lines and quantities. For batch items, you can enter <strong>Lot ID</strong> to return a specific lot; leave it blank to issue by FEFO. Set <strong>inventory location</strong> when the document requires it.</p>
+      <div class="opck__btns">
+        <a href="{{ url_for('purchase.purchase_return_list') }}">Purchase return list</a>
+        <a href="{{ url_for('purchase.purchase_return_new') }}">New purchase return</a>
+      </div>
+    </li>
+  </ol>
+
+  <div class="opck__box">
+    <h3>Quick reference</h3>
+    <ul>
+      <li><strong>Unallocated</strong> = lot quantity not yet in a bin (<code>ITEM_LOT_BALANCE</code>).</li>
+      <li><strong>Binned</strong> = that lot in a specific storage bin (<code>ITEM_LOT_BIN</code>); <strong>Total</strong> = unalloc + binned.</li>
+      <li><strong>BIN_STOCK</strong> is by item + bin; putaway keeps it in sync with lot bins for the same move.</li>
+      <li><strong>Movements</strong> (and <strong>Mov</strong> on the lot grid) show IN/OUT and document references (GRN, sales, putaway, returns, etc.).</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}

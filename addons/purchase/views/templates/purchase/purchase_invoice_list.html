@@ -1,0 +1,852 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  /* Prefer visibility/pointer-events so closed modals never intercept clicks (some browsers keep hit-testing quirks with display toggles). */
+  .pi-modal {
+    position: fixed; inset: 0; top: 0; right: 0; bottom: 0; left: 0;
+    z-index: 4000; display: flex !important; align-items: center; justify-content: center; padding: 16px;
+    visibility: hidden; opacity: 0; pointer-events: none;
+  }
+  .pi-modal.show { visibility: visible; opacity: 1; pointer-events: auto; }
+  .pi-modal__overlay { position: absolute; inset: 0; top: 0; right: 0; bottom: 0; left: 0; background: rgba(15, 23, 42, 0.45); }
+  .pi-modal__card {
+    position: relative; z-index: 1; background: #fff; border-radius: 12px; width: min(460px, 92vw);
+    box-shadow: 0 24px 70px rgba(0,0,0,0.28); padding: 16px 18px;
+  }
+  .pi-modal__title { margin: 0 0 8px; font-size: 16px; color: #0f172a; }
+  .pi-modal__msg { margin: 0; color: #334155; font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
+  .pi-modal__actions { margin-top: 14px; display: flex; justify-content: flex-end; gap: 8px; }
+  .pi-amt-mismatch { background: #fff1f2 !important; }
+  .pi-amt-mismatch td { color: #9f1239; }
+  .pi-amt-badge {
+    display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+    background: #fee2e2; color: #991b1b; font-size: 10px; font-weight: 700;
+  }
+  .pi-amt-hint { font-size: 11px; color: #64748b; margin: 0 0 8px; line-height: 1.45; }
+  .pi-spinner {
+    width: 18px; height: 18px; border: 2px solid #cbd5e1; border-top-color: #1a56a4;
+    border-radius: 50%; animation: pi-spin 0.8s linear infinite; display: inline-block; vertical-align: -4px; margin-right: 8px;
+  }
+  @keyframes pi-spin { to { transform: rotate(360deg); } }
+  #pendingTable tbody tr[data-href],
+  #postedTable tbody tr[data-href] { cursor: pointer; }
+  #pendingTable tbody tr[data-href]:hover,
+  #postedTable tbody tr[data-href]:hover { background: rgba(26, 86, 164, 0.06); }
+  /*
+   * Chrome/Edge paint bug: sticky thead + border-collapse:collapse can blank the grid on row click.
+   * separate + own layer avoids the disappear-until-scroll glitch.
+   */
+  .nexa-list-page .co-table-wrap {
+    transform: translateZ(0);
+    -webkit-overflow-scrolling: touch;
+  }
+  #pendingTable,
+  #postedTable {
+    border-collapse: separate !important;
+    border-spacing: 0;
+  }
+  #pendingTable thead th,
+  #postedTable thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--nexa-grid-head, #eef2f7) !important;
+  }
+</style>
+
+<div class="page-po nexa-list-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Purchase Invoice</h1>
+      <p class="page-po__muted">Post GRNs to accounts. Pending: reverse undoes stock and removes the GRN. Posted: change posting date.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% include 'includes/list_refresh_bar.html' %}
+      <button type="button" id="btnPostSelected" class="page-po__btn-primary">Post Selected</button>
+      <span id="pendingSelInfo" class="mini-muted">0 selected</span>
+      <a href="{{ url_for('purchase.purchase_order_list') }}" class="po-nav-link">Purchase Order</a>
+      <a href="{{ url_for('purchase.goods_receipt_list') }}" class="po-nav-link">Goods Receipt (GRN)</a>
+    </div>
+  </div>
+
+  <div class="nexa-list-toolbar">
+    <input type="text" id="piSearch" class="input" placeholder="Search GRN/Supplier/Voucher..."
+           style="min-width:220px; max-width:320px;" oninput="filterPostingRows()">
+    <label style="font-size:12px; color:#6b7280; white-space:nowrap;">Date</label>
+    <select id="piDateField" class="input" style="width:130px;" onchange="filterPostingRows()">
+      <option value="receiptdate">GRN Date</option>
+      <option value="postingdate" selected>Posted Date</option>
+      <option value="invoicedate">Invoice Date</option>
+    </select>
+    <label style="font-size:12px; color:#6b7280; white-space:nowrap;">From</label>
+    <input type="date" id="piDateFrom" class="input" style="width:150px;" onchange="filterPostingRows()">
+    <label style="font-size:12px; color:#6b7280; white-space:nowrap;">To</label>
+    <input type="date" id="piDateTo" class="input" style="width:150px;" onchange="filterPostingRows()">
+    <button type="button" class="page-po__btn-secondary" onclick="clearPiFilters()" style="padding:4px 10px; font-size:11px;">Clear</button>
+    <button type="button" class="page-po__btn-primary" onclick="openPiSummaryPdf()" style="padding:4px 10px; font-size:11px;">&#128196; Summary PDF</button>
+    <button type="button" class="page-po__btn-secondary" onclick="openPiExportExcel()" style="padding:4px 10px; font-size:11px;">Export Excel</button>
+  </div>
+
+  <div class="po-tabs">
+    <button type="button" class="po-tab active" data-tab="pendingTab">Posting Pending ({{ pending_rows|length }})</button>
+    <button type="button" class="po-tab" data-tab="postedTab">Posted Invoices ({{ posted_rows|length }})</button>
+  </div>
+
+  <div id="pendingTab" class="tab-pane active">
+    <div class="co-table-wrap">
+      <table class="co-table" id="pendingTable">
+        <thead>
+          <tr>
+            <th style="text-align:center; width:42px; cursor:default;"><input type="checkbox" id="pendingSelectAll" title="Select all"></th>
+            <th data-sort="receiptno">GRN No<span class="sort-arrow"></span></th>
+            <th data-sort="receiptdate">GRN Date<span class="sort-arrow"></span></th>
+            <th data-sort="invoicedate">Invoice Date<span class="sort-arrow"></span></th>
+            <th data-sort="postingdate">Posting Date<span class="sort-arrow"></span></th>
+            <th data-sort="suppliercode">Supplier Code<span class="sort-arrow"></span></th>
+            <th data-sort="suppliername">Supplier Name<span class="sort-arrow"></span></th>
+            <th data-sort="discount" class="num">Discount<span class="sort-arrow"></span></th>
+            <th data-sort="totalamount" class="num">Total Amount<span class="sort-arrow"></span></th>
+            <th data-sort="voucher_no">Expected Voucher<span class="sort-arrow"></span></th>
+            <th style="cursor:default; width:90px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in pending_rows %}
+          {% set rno = r.receiptno %}
+          {% set pdata = (r.postingdate or r.receiptdate or '')|string %}
+          {% set idata = (r.invoicedate or '')|string %}
+          <tr
+            data-search="{{ (rno|string ~ ' ' ~ (r.suppliercode or '') ~ ' ' ~ (r.suppliername or '') ~ ' ' ~ (r.voucher_no or '') ~ ' ' ~ pdata[:10] ~ ' ' ~ idata[:10])|lower }}"
+            data-receiptno="{{ rno }}"
+            data-receiptdate="{{ (r.receiptdate|string)[:10] if r.receiptdate else '' }}"
+            data-invoicedate="{{ idata[:10] }}"
+            data-postingdate="{{ pdata[:10] }}"
+            data-suppliercode="{{ r.suppliercode or '' }}"
+            data-suppliername="{{ r.suppliername or '' }}"
+            data-discount="{{ (r.discount or 0)|float }}"
+            data-totalamount="{{ (r.totalamount or 0)|float }}"
+            data-voucher_no="{{ r.voucher_no or '' }}"
+            data-href="{{ url_for('purchase.goods_receipt_query', receipt_no=rno) }}"
+          >
+            <td style="text-align:center;" onclick="event.stopPropagation();"><input type="checkbox" class="pending-check" value="{{ rno }}"></td>
+            <td><a class="pi-link" href="{{ url_for('purchase.goods_receipt_query', receipt_no=rno) }}" onclick="event.stopPropagation();">{{ rno or '-' }}</a></td>
+            <td>{{ (r.receiptdate|string)[:10] if r.receiptdate else '-' }}</td>
+            <td>{{ idata[:10] if idata else '-' }}</td>
+            <td>{{ pdata[:10] if pdata else '-' }}</td>
+            <td>{{ r.suppliercode or '-' }}</td>
+            <td>{{ r.suppliername or '-' }}</td>
+            <td class="num">{{ '{:,.2f}'.format((r.discount or 0)|float) }}</td>
+            <td class="num">{{ '{:,.2f}'.format((r.totalamount or 0)|float) }}</td>
+            <td>{{ r.voucher_no or '-' }}</td>
+            <td onclick="event.stopPropagation();" style="white-space:nowrap;">
+              <a class="page-po__btn-secondary" style="padding:3px 8px; font-size:11px; text-decoration:none; display:inline-block;"
+                 href="{{ url_for('purchase.goods_receipt_query', receipt_no=rno) }}">View</a>
+              <button type="button" class="page-po__btn-secondary pi-btn-reverse-pending" style="padding:3px 8px; font-size:11px; color:#991b1b; border-color:#fecaca;"
+                      data-receiptno="{{ rno }}"
+                      data-receiptdate="{{ (r.receiptdate|string)[:10] if r.receiptdate else '' }}"
+                      data-postingdate="{{ pdata[:10] }}">Reverse</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="11" style="text-align:center; padding:10px; color:#6b7280; font-style:italic;">No pending posting invoices.</td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="8" style="text-align:right; padding-right:8px;">Total</td>
+            <td class="num" id="pendingTotalAmt">0.00</td>
+            <td colspan="2"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div id="postedTab" class="tab-pane">
+    <p class="pi-amt-hint">
+      <strong>GRN invoice</strong> is the amount on the goods receipt (line total, usually ex-VAT).
+      <strong>Posted total</strong> is what was posted to accounts (subtotal + VAT). Rows highlighted in pink differ by more than 2%.
+    </p>
+    <div class="nexa-list-toolbar" style="margin-bottom:8px;">
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#475569;">
+        <input type="checkbox" id="piMismatchOnly" value="1" onchange="filterPostingRows()" />
+        Show amount mismatches only
+      </label>
+      <span id="piMismatchCount" class="nexa-num" style="margin-left:8px;"></span>
+    </div>
+    <div class="co-table-wrap">
+      <table class="co-table" id="postedTable">
+        <thead>
+          <tr>
+            <th data-sort="receiptno">GRN No<span class="sort-arrow"></span></th>
+            <th data-sort="receiptdate">GRN Date<span class="sort-arrow"></span></th>
+            <th data-sort="invoicedate">Invoice Date<span class="sort-arrow"></span></th>
+            <th data-sort="postingdate">Posting Date<span class="sort-arrow"></span></th>
+            <th data-sort="suppliercode">Supplier Code<span class="sort-arrow"></span></th>
+            <th data-sort="suppliername">Supplier Name<span class="sort-arrow"></span></th>
+            <th data-sort="discount" class="num">Discount<span class="sort-arrow"></span></th>
+            <th data-sort="totalamount" class="num">GRN Invoice<span class="sort-arrow"></span></th>
+            <th data-sort="posted_total" class="num">Posted Total<span class="sort-arrow"></span></th>
+            <th data-sort="variance" class="num">Variance<span class="sort-arrow"></span></th>
+            <th data-sort="voucher_no">Voucher No<span class="sort-arrow"></span></th>
+            <th data-sort="voucher_date">Voucher Date<span class="sort-arrow"></span></th>
+            <th data-sort="created_by">Created By<span class="sort-arrow"></span></th>
+            <th style="cursor:default; width:170px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in posted_rows %}
+          {% set rno = r.receiptno %}
+          {% set pdata = (r.postingdate or r.receiptdate or '')|string %}
+          {% set idata = (r.invoicedate or '')|string %}
+          <tr
+            class="{% if r.amount_mismatch %}pi-amt-mismatch{% endif %}"
+            data-search="{{ (rno|string ~ ' ' ~ (r.suppliercode or '') ~ ' ' ~ (r.suppliername or '') ~ ' ' ~ (r.voucher_no or '') ~ ' ' ~ (r.created_by or '') ~ ' ' ~ (r.amount_mismatch_note or '') ~ ' ' ~ pdata[:10] ~ ' ' ~ idata[:10])|lower }}"
+            data-receiptno="{{ rno }}"
+            data-receiptdate="{{ (r.receiptdate|string)[:10] if r.receiptdate else '' }}"
+            data-invoicedate="{{ idata[:10] }}"
+            data-postingdate="{{ pdata[:10] }}"
+            data-suppliercode="{{ r.suppliercode or '' }}"
+            data-suppliername="{{ r.suppliername or '' }}"
+            data-discount="{{ (r.discount or 0)|float }}"
+            data-totalamount="{{ (r.invoice_amount or r.totalamount or 0)|float }}"
+            data-posted_total="{{ (r.posted_total or 0)|float }}"
+            data-variance="{{ (r.variance or 0)|float }}"
+            data-amount_mismatch="{{ '1' if r.amount_mismatch else '0' }}"
+            data-voucher_no="{{ r.voucher_no or '' }}"
+            data-voucher_date="{{ (r.voucher_date|string)[:10] if r.voucher_date else '' }}"
+            data-created_by="{{ r.created_by or '' }}"
+            data-href="{{ url_for('purchase.goods_receipt_query', receipt_no=rno) }}"
+            {% if r.amount_mismatch_note %}title="{{ r.amount_mismatch_note }}"{% endif %}
+          >
+            <td>
+              <a class="pi-link" href="{{ url_for('purchase.goods_receipt_query', receipt_no=rno) }}" onclick="event.stopPropagation();">{{ rno or '-' }}</a>
+              {% if r.amount_mismatch %}<span class="pi-amt-badge">Mismatch</span>{% endif %}
+            </td>
+            <td>{{ (r.receiptdate|string)[:10] if r.receiptdate else '-' }}</td>
+            <td>{{ idata[:10] if idata else '-' }}</td>
+            <td>{{ pdata[:10] if pdata else '-' }}</td>
+            <td>{{ r.suppliercode or '-' }}</td>
+            <td>{{ r.suppliername or '-' }}</td>
+            <td class="num">{{ '{:,.2f}'.format((r.discount or 0)|float) }}</td>
+            <td class="num">{{ '{:,.2f}'.format((r.invoice_amount or r.totalamount or 0)|float) }}</td>
+            <td class="num" title="Subtotal {{ '{:,.2f}'.format((r.posted_subtotal or 0)|float) }}{% if r.posted_vat %} + VAT {{ '{:,.2f}'.format((r.posted_vat or 0)|float) }}{% endif %}">
+              {{ '{:,.2f}'.format((r.posted_total or 0)|float) }}
+            </td>
+            <td class="num">{{ '{:,.2f}'.format((r.variance or 0)|float) }}</td>
+            <td>
+              {% if r.voucher_no %}
+              <a class="pi-link" href="{{ url_for('accounts.journal_voucher_view', voucher_no=r.voucher_no) }}" onclick="event.stopPropagation();">{{ r.voucher_no }}</a>
+              {% else %}-{% endif %}
+            </td>
+            <td>{{ (r.voucher_date|string)[:10] if r.voucher_date else '-' }}</td>
+            <td>{{ r.created_by or '-' }}</td>
+            <td onclick="event.stopPropagation();" style="white-space:nowrap;">
+              <a class="page-po__btn-secondary" style="padding:3px 8px; font-size:11px; text-decoration:none; display:inline-block;"
+                 href="{{ url_for('purchase.goods_receipt_query', receipt_no=rno) }}">View</a>
+              <button type="button" class="page-po__btn-secondary pi-btn-change-date" style="padding:3px 8px; font-size:11px;"
+                      data-receiptno="{{ rno }}"
+                      data-receiptdate="{{ (r.receiptdate|string)[:10] if r.receiptdate else '' }}"
+                      data-postingdate="{{ pdata[:10] }}"
+                      data-voucher="{{ r.voucher_no or '' }}">Change Date</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="14" style="text-align:center; padding:10px; color:#6b7280; font-style:italic;">No posted invoices found.</td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="7" style="text-align:right; padding-right:8px;">Total (visible GRN invoice)</td>
+            <td class="num" id="postedTotalAmt">0.00</td>
+            <td colspan="6"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="pi-modal" id="piPostModal" aria-hidden="true">
+  <div class="pi-modal__overlay"></div>
+  <div class="pi-modal__card">
+    <h3 class="pi-modal__title" id="piPostModalTitle">Posting Invoices</h3>
+    <p class="pi-modal__msg" id="piPostModalMsg"></p>
+    <div class="pi-modal__actions" id="piPostModalActions" style="display:none;">
+      <button type="button" class="page-po__btn-secondary" id="piPostModalClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="pi-modal" id="piActionModal" aria-hidden="true">
+  <div class="pi-modal__overlay" id="piActionModalOverlay"></div>
+  <div class="pi-modal__card">
+    <h3 class="pi-modal__title" id="piActionModalTitle">Confirm</h3>
+    <p class="pi-modal__msg" id="piActionModalMsg"></p>
+    <div id="piActionDateWrap" style="display:none; margin-top:10px;">
+      <label for="piActionNewDate" style="display:block; font-size:12px; color:#475569; margin-bottom:4px;">New GRN / posting date</label>
+      <input type="date" id="piActionNewDate" class="input" style="width:100%;" />
+    </div>
+    <div style="margin-top:10px;">
+      <label for="piActionPassword" style="display:block; font-size:12px; color:#475569; margin-bottom:4px;">Your password</label>
+      <input type="password" id="piActionPassword" class="input" style="width:100%;" autocomplete="current-password" />
+      <p id="piActionPasswordError" style="display:none; color:#b91c1c; font-size:12px; margin:6px 0 0;"></p>
+    </div>
+    <div class="pi-modal__actions">
+      <button type="button" class="page-po__btn-secondary" id="piActionCancel">Cancel</button>
+      <button type="button" class="page-po__btn-primary" id="piActionConfirm">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script type="application/json" id="piClosedPeriodsJson">{{ (closed_periods or [])|tojson }}</script>
+<script src="{{ url_for('static', filename='js/period_date_guard.js') }}?v=1"></script>
+<script>
+  const PI_BULK_POST_URL = {{ url_for('purchase.api_pi_post_selected')|tojson }};
+  const PI_REVERSE_URL = {{ url_for('purchase.api_pi_reverse_posting')|tojson }};
+  const PI_REVERSE_PENDING_URL = {{ url_for('purchase.api_pi_reverse_pending_grn')|tojson }};
+  const PI_CHANGE_DATE_URL = {{ url_for('purchase.api_pi_change_posting_date')|tojson }};
+  const PI_SUMMARY_PDF_URL = {{ url_for('purchase.purchase_invoice_summary_pdf')|tojson }};
+  const PI_EXPORT_EXCEL_URL = {{ url_for('purchase.purchase_invoice_export_excel')|tojson }};
+  window.__activePiTab = 'pending';
+
+  function getActivePiTab() {
+    const activeBtn = document.querySelector('.po-tab.active');
+    const tabId = activeBtn ? activeBtn.getAttribute('data-tab') : 'pendingTab';
+    return tabId === 'postedTab' ? 'posted' : 'pending';
+  }
+
+  function piExportParams() {
+    const params = new URLSearchParams();
+    params.set('tab', getActivePiTab());
+    const search = (document.getElementById('piSearch').value || '').trim();
+    const dateField = document.getElementById('piDateField') ? document.getElementById('piDateField').value : 'postingdate';
+    const dateFrom = (document.getElementById('piDateFrom').value || '').trim();
+    const dateTo = (document.getElementById('piDateTo').value || '').trim();
+    const mismatchOnly = document.getElementById('piMismatchOnly') && document.getElementById('piMismatchOnly').checked;
+    if (search) params.set('search', search);
+    if (dateField) params.set('date_field', dateField);
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
+    if (mismatchOnly) params.set('mismatch_only', '1');
+    return params;
+  }
+
+  function openPiSummaryPdf() {
+    const params = piExportParams();
+    const url = PI_SUMMARY_PDF_URL + (params.toString() ? '?' + params.toString() : '');
+    window.open(url, '_blank');
+  }
+
+  function openPiExportExcel() {
+    const params = piExportParams();
+    const url = PI_EXPORT_EXCEL_URL + (params.toString() ? '?' + params.toString() : '');
+    window.location.href = url;
+  }
+
+  (function () {
+    const closedPeriods = (window.PeriodDateGuard && window.PeriodDateGuard.fromJsonScript)
+      ? window.PeriodDateGuard.fromJsonScript('piClosedPeriodsJson')
+      : [];
+    const tabs = document.querySelectorAll('.po-tab');
+    const panes = document.querySelectorAll('.tab-pane');
+    let pendingSort = { key: '', asc: true };
+    let postedSort = { key: '', asc: true };
+    let piAction = null; // { type: 'reverse'|'reverse-pending'|'change-date', receiptNo, voucher, currentDate }
+    tabs.forEach(btn => {
+      btn.addEventListener('click', function () {
+        tabs.forEach(b => b.classList.remove('active'));
+        panes.forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        const pane = document.getElementById(btn.dataset.tab);
+        if (pane) pane.classList.add('active');
+        window.__activePiTab = btn.dataset.tab === 'postedTab' ? 'posted' : 'pending';
+      });
+    });
+
+    const selAll = document.getElementById('pendingSelectAll');
+    const selInfo = document.getElementById('pendingSelInfo');
+    const btnPost = document.getElementById('btnPostSelected');
+    const postModal = document.getElementById('piPostModal');
+    const postModalTitle = document.getElementById('piPostModalTitle');
+    const postModalMsg = document.getElementById('piPostModalMsg');
+    const postModalActions = document.getElementById('piPostModalActions');
+    const postModalClose = document.getElementById('piPostModalClose');
+
+    function pendingChecks() {
+      return Array.from(document.querySelectorAll('#pendingTable tbody .pending-check'));
+    }
+    function visibleRows(tableId) {
+      return Array.from(document.querySelectorAll('#' + tableId + ' tbody tr[data-search]')).filter(r => r.style.display !== 'none');
+    }
+    function refreshTotals() {
+      const pTotal = visibleRows('pendingTable').reduce((s, r) => s + (parseFloat(r.dataset.totalamount || '0') || 0), 0);
+      const poTotal = visibleRows('postedTable').reduce((s, r) => s + (parseFloat(r.dataset.totalamount || '0') || 0), 0);
+      const pEl = document.getElementById('pendingTotalAmt');
+      const poEl = document.getElementById('postedTotalAmt');
+      if (pEl) pEl.textContent = pTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (poEl) poEl.textContent = poTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function sortTable(tableId, state) {
+      if (!state.key) return;
+      const table = document.getElementById(tableId);
+      if (!table) return;
+      const tbody = table.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr[data-search]'));
+      const isNumeric = state.key === 'receiptno' || state.key === 'totalamount' || state.key === 'posted_total' || state.key === 'variance' || state.key === 'discount';
+      rows.sort((a, b) => {
+        let av = a.dataset[state.key] || '';
+        let bv = b.dataset[state.key] || '';
+        if (isNumeric) {
+          const an = parseFloat(av || '0') || 0;
+          const bn = parseFloat(bv || '0') || 0;
+          return state.asc ? (an - bn) : (bn - an);
+        }
+        av = String(av).toLowerCase();
+        bv = String(bv).toLowerCase();
+        return state.asc ? av.localeCompare(bv) : bv.localeCompare(av);
+      });
+      rows.forEach(r => tbody.appendChild(r));
+    }
+    function bindSort(tableId, state) {
+      const table = document.getElementById(tableId);
+      if (!table) return;
+      const heads = table.querySelectorAll('thead th[data-sort]');
+      heads.forEach(th => {
+        th.addEventListener('click', function () {
+          const key = th.getAttribute('data-sort');
+          if (!key) return;
+          if (state.key === key) state.asc = !state.asc;
+          else { state.key = key; state.asc = true; }
+          heads.forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+          th.classList.add(state.asc ? 'sort-asc' : 'sort-desc');
+          sortTable(tableId, state);
+          refreshTotals();
+        });
+      });
+    }
+    bindSort('pendingTable', pendingSort);
+    bindSort('postedTable', postedSort);
+    let postModalBusy = false;
+    function openPostModal(title, message, showActions) {
+      if (postModalTitle) postModalTitle.textContent = title || 'Posting Invoices';
+      if (postModalMsg) postModalMsg.innerHTML = message || '';
+      postModalBusy = !showActions;
+      if (postModalActions) postModalActions.style.display = showActions ? '' : 'none';
+      if (postModal) {
+        postModal.classList.add('show');
+        postModal.setAttribute('aria-hidden', 'false');
+      }
+      // Never leave the page stuck behind a busy overlay with no Close button.
+      if (!showActions) {
+        setTimeout(function () {
+          if (postModal && postModal.classList.contains('show') && postModalActions) {
+            postModalActions.style.display = '';
+            postModalBusy = false;
+          }
+        }, 4000);
+      }
+    }
+    function closePostModal() {
+      if (postModalBusy) return;
+      if (postModal) {
+        postModal.classList.remove('show');
+        postModal.setAttribute('aria-hidden', 'true');
+      }
+      postModalBusy = false;
+    }
+    function updateSelInfo() {
+      const checks = pendingChecks().filter(c => c.checked);
+      pendingChecks().forEach(c => {
+        const tr = c.closest('tr');
+        if (tr) tr.classList.toggle('row-selected', c.checked);
+      });
+      if (selInfo) selInfo.textContent = checks.length + ' selected';
+      if (selAll) {
+        const all = pendingChecks();
+        selAll.checked = all.length > 0 && checks.length === all.length;
+      }
+    }
+    if (selAll) {
+      selAll.addEventListener('change', function () {
+        pendingChecks().forEach(c => { if (c.closest('tr').style.display !== 'none') c.checked = selAll.checked; });
+        updateSelInfo();
+      });
+    }
+    document.querySelectorAll('#pendingTable tbody .pending-check').forEach(c => c.addEventListener('change', updateSelInfo));
+    updateSelInfo();
+    refreshTotals();
+    if (postModalClose) postModalClose.addEventListener('click', function () {
+      postModalBusy = false;
+      closePostModal();
+    });
+    const postModalOverlay = postModal ? postModal.querySelector('.pi-modal__overlay') : null;
+    if (postModalOverlay) postModalOverlay.addEventListener('click', closePostModal);
+
+    document.querySelectorAll('#pendingTable tbody tr[data-href], #postedTable tbody tr[data-href]').forEach(function (row) {
+      row.addEventListener('click', function (ev) {
+        var t = ev.target;
+        if (t && t.nodeType === 3) t = t.parentElement;
+        if (t && typeof t.closest === 'function' && t.closest('a, input, button, label, td:last-child')) return;
+        var href = row.getAttribute('data-href');
+        if (!href) return;
+        // Keep the list visible: open GRN in a new tab (avoids "grid disappeared" when navigation fails/stalls).
+        try {
+          var w = window.open(href, '_blank', 'noopener,noreferrer');
+          if (!w) window.location.href = href;
+        } catch (eOpen) {
+          window.location.href = href;
+        }
+      });
+    });
+
+    // If a modal was left open from bfcache / soft navigation, force-close on show.
+    window.addEventListener('pageshow', function () {
+      document.querySelectorAll('.pi-modal.show').forEach(function (el) {
+        el.classList.remove('show');
+        el.setAttribute('aria-hidden', 'true');
+      });
+      postModalBusy = false;
+      if (typeof window.hideLoadingOverlay === 'function') window.hideLoadingOverlay();
+    });
+
+    let piBulkPostInFlight = false;
+
+    async function postSelected() {
+      if (piBulkPostInFlight) return;
+      const selectedChecks = pendingChecks()
+        .filter(c => c.checked && c.closest('tr').style.display !== 'none');
+      const selected = selectedChecks
+        .map(c => String(c.value || '').trim())
+        .filter(n => n && n !== '0');
+      if (!selected.length) {
+        openPostModal('No Selection', 'Select at least one pending invoice.', true);
+        return;
+      }
+      if (window.PeriodDateGuard) {
+        const closedRows = [];
+        selectedChecks.forEach(function (c) {
+          const tr = c.closest('tr');
+          const rd = tr
+            ? ((tr.getAttribute('data-postingdate') || tr.getAttribute('data-receiptdate') || ''))
+            : '';
+          const msg = window.PeriodDateGuard.messageForDate(rd, closedPeriods);
+          if (msg) closedRows.push('Receipt ' + c.value + ': ' + msg);
+        });
+        if (closedRows.length) {
+          openPostModal(
+            'Closed Period',
+            'Cannot post invoices dated in a closed accounting period:<br>' +
+              closedRows.slice(0, 8).map(function (s) { return '• ' + s; }).join('<br>') +
+              (closedRows.length > 8 ? '<br>…' : ''),
+            true
+          );
+          return;
+        }
+      }
+      if (!confirm('Post ' + selected.length + ' selected invoice(s)?')) return;
+      piBulkPostInFlight = true;
+      let reloadScheduled = false;
+      if (btnPost) btnPost.disabled = true;
+      openPostModal('Posting Invoices', '<span class="pi-spinner"></span>Posting ' + selected.length + ' selected invoice(s). Please wait...', false);
+      try {
+        const res = await fetch(PI_BULK_POST_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ receipt_nos: selected }),
+        });
+        let data = {};
+        try {
+          data = await res.json();
+        } catch (eJson) {
+          data = {};
+        }
+        if (typeof data.save_nonce === 'string' && data.save_nonce !== '') {
+          window.__GLOBAL_SAVE_NONCE = data.save_nonce;
+        }
+        if (res.status === 409 && data.busy) {
+          openPostModal('Please wait', data.error || 'Another post is already in progress.', true);
+          return;
+        }
+        if (data.replay_blocked || (res.status === 409 && !data.busy)) {
+          openPostModal('Duplicate request', data.error || 'Duplicate or invalid request. Refresh the page if this continues.', true);
+          return;
+        }
+        if (!data.success && !data.posted_count) {
+          openPostModal('Posting Failed', (data.error || data.message || 'Posting failed'), true);
+          return;
+        }
+        if (data.failed_count) {
+          const msg = (data.message || '') + '\n\nFailed:\n' + (data.failed || []).map(f => (f.receipt_no + ': ' + (f.error || 'Error'))).join('\n');
+          openPostModal('Posting Completed With Errors', msg, true);
+        } else {
+          openPostModal('Posting Completed', (data.message || 'Posted successfully.') + '\nRefreshing list...', false);
+          reloadScheduled = true;
+          setTimeout(function () { window.location.reload(); }, 900);
+          return;
+        }
+        reloadScheduled = true;
+        setTimeout(function () { window.location.reload(); }, 1400);
+      } catch (ePost) {
+        openPostModal('Posting Failed', 'Posting failed due to unexpected error.', true);
+      } finally {
+        piBulkPostInFlight = false;
+        if (btnPost && !reloadScheduled) btnPost.disabled = false;
+      }
+    }
+    if (btnPost) btnPost.addEventListener('click', function () {
+      postSelected();
+    });
+
+    const actionModal = document.getElementById('piActionModal');
+    const actionTitle = document.getElementById('piActionModalTitle');
+    const actionMsg = document.getElementById('piActionModalMsg');
+    const actionDateWrap = document.getElementById('piActionDateWrap');
+    const actionNewDate = document.getElementById('piActionNewDate');
+    const actionPassword = document.getElementById('piActionPassword');
+    const actionPasswordError = document.getElementById('piActionPasswordError');
+    const actionCancel = document.getElementById('piActionCancel');
+    const actionConfirm = document.getElementById('piActionConfirm');
+    const actionOverlay = document.getElementById('piActionModalOverlay');
+
+    function openActionModal(action) {
+      piAction = action || null;
+      if (!piAction || !actionModal) return;
+      if (actionPassword) actionPassword.value = '';
+      if (actionPasswordError) {
+        actionPasswordError.style.display = 'none';
+        actionPasswordError.textContent = '';
+      }
+      const isChange = piAction.type === 'change-date';
+      const isPendingRev = piAction.type === 'reverse-pending';
+      if (actionTitle) {
+        actionTitle.textContent = isChange
+          ? ('Change Date — GRN #' + piAction.receiptNo)
+          : (isPendingRev
+            ? ('Reverse GRN — #' + piAction.receiptNo)
+            : ('Reverse Posting — GRN #' + piAction.receiptNo));
+      }
+      if (actionMsg) {
+        actionMsg.textContent = isChange
+          ? ('Update posting date' + (piAction.voucher ? (' and voucher date for ' + piAction.voucher) : '') + '. Receipt Date stays unless you change it from the GRN screen. Stock is not changed.')
+          : (isPendingRev
+            ? 'Undo stock for this GRN. ITEMJOURNAL keeps original + reverse entries. This GRN number is reserved — the next GRN gets a new number.'
+            : ('Remove accounts posting' + (piAction.voucher ? (' (' + piAction.voucher + ')') : '') + ' and return this GRN to Posting Pending. Stock stays posted.'));
+      }
+      if (actionDateWrap) actionDateWrap.style.display = isChange ? '' : 'none';
+      if (actionNewDate) {
+        actionNewDate.value = piAction.currentDate || '';
+      }
+      actionModal.classList.add('show');
+      actionModal.setAttribute('aria-hidden', 'false');
+      if (actionPassword) setTimeout(function () { actionPassword.focus(); }, 50);
+    }
+    function closeActionModal() {
+      piAction = null;
+      if (actionModal) {
+        actionModal.classList.remove('show');
+        actionModal.setAttribute('aria-hidden', 'true');
+      }
+    }
+    if (actionCancel) actionCancel.addEventListener('click', closeActionModal);
+    if (actionOverlay) actionOverlay.addEventListener('click', closeActionModal);
+
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Escape') return;
+      if (actionModal && actionModal.classList.contains('show')) {
+        ev.preventDefault();
+        closeActionModal();
+        return;
+      }
+      if (postModal && postModal.classList.contains('show') && !postModalBusy) {
+        ev.preventDefault();
+        closePostModal();
+      }
+    });
+
+    document.querySelectorAll('.pi-btn-reverse-pending').forEach(function (btn) {
+      btn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        openActionModal({
+          type: 'reverse-pending',
+          receiptNo: String(btn.getAttribute('data-receiptno') || '').trim(),
+          voucher: '',
+          currentDate: btn.getAttribute('data-receiptdate') || '',
+        });
+      });
+    });
+    document.querySelectorAll('.pi-btn-change-date').forEach(function (btn) {
+      btn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        openActionModal({
+          type: 'change-date',
+          receiptNo: String(btn.getAttribute('data-receiptno') || '').trim(),
+          voucher: btn.getAttribute('data-voucher') || '',
+          currentDate: btn.getAttribute('data-postingdate') || btn.getAttribute('data-receiptdate') || '',
+        });
+      });
+    });
+
+    async function submitPiAction() {
+      if (!piAction || !piAction.receiptNo) return;
+      const pwd = actionPassword ? actionPassword.value : '';
+      if (!pwd) {
+        if (actionPasswordError) {
+          actionPasswordError.textContent = 'Password is required.';
+          actionPasswordError.style.display = '';
+        }
+        return;
+      }
+      const isChange = piAction.type === 'change-date';
+      const isPendingRev = piAction.type === 'reverse-pending';
+      let newDate = '';
+      if (isChange) {
+        newDate = actionNewDate ? (actionNewDate.value || '').trim() : '';
+        if (!newDate) {
+          if (actionPasswordError) {
+            actionPasswordError.textContent = 'New date is required.';
+            actionPasswordError.style.display = '';
+          }
+          return;
+        }
+        if (window.PeriodDateGuard) {
+          const msg = window.PeriodDateGuard.messageForDate(newDate, closedPeriods);
+          if (msg) {
+            if (actionPasswordError) {
+              actionPasswordError.textContent = msg;
+              actionPasswordError.style.display = '';
+            }
+            return;
+          }
+        }
+      }
+      if (actionConfirm) actionConfirm.disabled = true;
+      const payload = {
+        receipt_no: piAction.receiptNo,
+        password: pwd,
+      };
+      if (typeof window.__GLOBAL_SAVE_NONCE === 'string' && window.__GLOBAL_SAVE_NONCE) {
+        payload.save_nonce = window.__GLOBAL_SAVE_NONCE;
+      }
+      if (isChange) payload.new_date = newDate;
+      const url = isChange
+        ? PI_CHANGE_DATE_URL
+        : (isPendingRev ? PI_REVERSE_PENDING_URL : PI_REVERSE_URL);
+      const busyMsg = isChange
+        ? 'Updating GRN date…'
+        : (isPendingRev ? 'Reversing GRN…' : 'Reversing posting…');
+      const savedAction = piAction;
+      closeActionModal();
+      if (typeof window.showLoadingOverlay === 'function') {
+        window.showLoadingOverlay(busyMsg);
+      } else {
+        openPostModal(busyMsg.replace(/…$/, ''), '<span class="pi-spinner"></span>' + busyMsg + ' Please wait...', false);
+      }
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(payload),
+        });
+        let data = {};
+        try { data = await res.json(); } catch (e) { data = {}; }
+        if (typeof data.save_nonce === 'string' && data.save_nonce) {
+          window.__GLOBAL_SAVE_NONCE = data.save_nonce;
+        }
+        if (!res.ok || !data.success) {
+          if (typeof window.hideLoadingOverlay === 'function') window.hideLoadingOverlay();
+          openActionModal(savedAction);
+          if (actionPasswordError) {
+            actionPasswordError.textContent = data.error || 'Request failed.';
+            actionPasswordError.style.display = '';
+          }
+          return;
+        }
+        if (typeof window.hideLoadingOverlay === 'function') window.hideLoadingOverlay();
+        openPostModal(
+          isChange ? 'Date Updated' : (isPendingRev ? 'GRN Reversed' : 'Posting Reversed'),
+          (data.message || 'Done.') + '\nRefreshing list...',
+          false
+        );
+        setTimeout(function () { window.location.reload(); }, 900);
+      } catch (e) {
+        if (typeof window.hideLoadingOverlay === 'function') window.hideLoadingOverlay();
+        openActionModal(savedAction);
+        if (actionPasswordError) {
+          actionPasswordError.textContent = 'Request failed.';
+          actionPasswordError.style.display = '';
+        }
+      } finally {
+        if (actionConfirm) actionConfirm.disabled = false;
+      }
+    }
+    if (actionConfirm) actionConfirm.addEventListener('click', function () { submitPiAction(); });
+    if (actionPassword) {
+      actionPassword.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          submitPiAction();
+        }
+      });
+    }
+  })();
+
+  function filterPostingRows() {
+    const q = (document.getElementById('piSearch').value || '').trim().toLowerCase();
+    const dateFieldEl = document.getElementById('piDateField');
+    const dateField = dateFieldEl ? dateFieldEl.value : 'postingdate';
+    const dateFrom = document.getElementById('piDateFrom') ? document.getElementById('piDateFrom').value : '';
+    const dateTo = document.getElementById('piDateTo') ? document.getElementById('piDateTo').value : '';
+    const mismatchOnly = document.getElementById('piMismatchOnly') && document.getElementById('piMismatchOnly').checked;
+    let mismatchTotal = 0;
+    document.querySelectorAll('#postedTable tbody tr[data-search]').forEach(function (row) {
+      if (row.getAttribute('data-amount_mismatch') === '1') mismatchTotal += 1;
+    });
+    document.querySelectorAll('#pendingTable tbody tr[data-search], #postedTable tbody tr[data-search]').forEach(function (row) {
+      const hay = row.getAttribute('data-search') || '';
+      const rowDate = row.getAttribute('data-' + dateField) || '';
+      const matchQ = (!q || hay.includes(q));
+      const matchFrom = (!dateFrom || (rowDate && rowDate >= dateFrom));
+      const matchTo = (!dateTo || (rowDate && rowDate <= dateTo));
+      const isPosted = row.closest('#postedTable');
+      const matchMismatch = !mismatchOnly || !isPosted || row.getAttribute('data-amount_mismatch') === '1';
+      row.style.display = (matchQ && matchFrom && matchTo && matchMismatch) ? '' : 'none';
+    });
+    const mcEl = document.getElementById('piMismatchCount');
+    if (mcEl) mcEl.textContent = mismatchTotal ? (mismatchTotal + ' amount mismatch' + (mismatchTotal === 1 ? '' : 'es')) : '';
+    const selInfo = document.getElementById('pendingSelInfo');
+    if (selInfo) {
+      const checks = Array.from(document.querySelectorAll('#pendingTable tbody .pending-check')).filter(c => c.checked && c.closest('tr').style.display !== 'none');
+      selInfo.textContent = checks.length + ' selected';
+    }
+    const pTotal = Array.from(document.querySelectorAll('#pendingTable tbody tr[data-search]'))
+      .filter(r => r.style.display !== 'none')
+      .reduce((s, r) => s + (parseFloat(r.getAttribute('data-totalamount') || '0') || 0), 0);
+    const poTotal = Array.from(document.querySelectorAll('#postedTable tbody tr[data-search]'))
+      .filter(r => r.style.display !== 'none')
+      .reduce((s, r) => s + (parseFloat(r.getAttribute('data-totalamount') || '0') || 0), 0);
+    const pEl = document.getElementById('pendingTotalAmt');
+    const poEl = document.getElementById('postedTotalAmt');
+    if (pEl) pEl.textContent = pTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (poEl) poEl.textContent = poTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const selAll = document.getElementById('pendingSelectAll');
+    if (selAll) {
+      const visibleChecks = Array.from(document.querySelectorAll('#pendingTable tbody .pending-check')).filter(c => c.closest('tr').style.display !== 'none');
+      selAll.checked = visibleChecks.length > 0 && visibleChecks.every(c => c.checked);
+    }
+  }
+
+  function clearPiFilters() {
+    const q = document.getElementById('piSearch');
+    const df = document.getElementById('piDateField');
+    const dFrom = document.getElementById('piDateFrom');
+    const dTo = document.getElementById('piDateTo');
+    if (q) q.value = '';
+    if (df) df.value = 'postingdate';
+    if (dFrom) dFrom.value = '';
+    if (dTo) dTo.value = '';
+    filterPostingRows();
+  }
+</script>
+{% endblock %}

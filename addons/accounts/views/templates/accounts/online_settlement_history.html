@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Online Settlement History{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Online Settlement — Upload History</h1>
+      <p class="page-po__muted">Audit trail of marketplace settlement batches.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('accounts.online_settlement_page') }}" class="page-po__btn-primary">New Upload</a>
+      <a href="{{ url_for('accounts.online_settlement_reports') }}" class="page-po__btn-secondary">Reports</a>
+    </div>
+  </div>
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th>Batch No</th>
+          <th>Marketplace</th>
+          <th>Customer</th>
+          <th>Settlement Date</th>
+          <th>File</th>
+          <th>Uploaded</th>
+          <th>User</th>
+          <th class="num">Total</th>
+          <th class="num">Matched</th>
+          <th class="num">Posted</th>
+          <th class="num">Failed</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in batches %}
+        <tr>
+          <td><a class="pi-link" href="{{ url_for('accounts.online_settlement_page', batch=b.batch_no) }}">{{ b.batch_no }}</a></td>
+          <td>{{ b.marketplace_name or '—' }}</td>
+          <td>{{ b.customer_code or '—' }}</td>
+          <td>{{ b.settlement_date or '—' }}</td>
+          <td>{{ b.file_name or '—' }}</td>
+          <td>{{ (b.uploaded_at|string)[:16] if b.uploaded_at else '—' }}</td>
+          <td>{{ b.uploaded_by or '—' }}</td>
+          <td class="num">{{ b.total_rows or 0 }}</td>
+          <td class="num">{{ b.matched_rows or 0 }}</td>
+          <td class="num">{{ b.posted_rows or 0 }}</td>
+          <td class="num">{{ b.failed_rows or 0 }}</td>
+          <td>{{ b.status or '—' }}</td>
+          <td><a class="page-po__btn-secondary" href="{{ url_for('accounts.online_settlement_page', batch=b.batch_no) }}">Open</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="13" style="text-align:center;padding:20px;color:#64748b;">No settlement batches yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

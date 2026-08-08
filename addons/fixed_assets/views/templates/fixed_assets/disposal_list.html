@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}{% if sale_mode %}Fixed Asset Sale{% else %}Fixed Asset Disposal{% endif %}{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/fixed_assets_pages.css') }}?v=4" />
+
+{% set kpi = fa_kpis or {} %}
+{% set form_ep = 'fixed_assets.fa_sale_form' if sale_mode else 'fixed_assets.fa_disposal_form' %}
+{% set list_label = 'sale' if sale_mode else 'disposal' %}
+<div class="page-po nexa-list-page fa-list-page">
+  {% include 'fixed_assets/_fa_nav.html' %}
+
+  <section class="fa-stat-grid" aria-label="{% if sale_mode %}Sale{% else %}Disposal{% endif %} summary">
+    <div class="fa-stat-card">
+      <span class="fa-stat-icon fa-stat-icon--blue"><i class="bi {% if sale_mode %}bi-cash-coin{% else %}bi-trash3{% endif %}" aria-hidden="true"></i></span>
+      <div>
+        <p class="fa-stat-label">Total {% if sale_mode %}sales{% else %}disposals{% endif %}</p>
+        <p class="fa-stat-value">{{ "{:,}".format(kpi.total or 0) }}</p>
+      </div>
+    </div>
+    <div class="fa-stat-card">
+      <span class="fa-stat-icon fa-stat-icon--green"><i class="bi bi-check2-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="fa-stat-label">Posted</p>
+        <p class="fa-stat-value">{{ "{:,}".format(kpi.posted or 0) }}</p>
+      </div>
+    </div>
+    <div class="fa-stat-card">
+      <span class="fa-stat-icon fa-stat-icon--amber"><i class="bi bi-pencil-square" aria-hidden="true"></i></span>
+      <div>
+        <p class="fa-stat-label">Draft</p>
+        <p class="fa-stat-value">{{ "{:,}".format(kpi.draft or 0) }}</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">{% if sale_mode %}Fixed asset sale{% else %}Asset disposal{% endif %}</h1>
+      <p class="page-po__muted">
+        {% if sale_mode %}
+        Sell posted assets — enter sale proceeds, clear cost / accum. dep., and post gain or loss to GL.
+        {% else %}
+        Sell or scrap posted assets — GL removes cost, clears accum. dep., and records gain/loss.
+        {% endif %}
+      </p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for(form_ep) }}" class="page-po__btn-primary">+ New {{ list_label }}</a>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div class="co-table-wrap">
+    <table class="co-table" id="faDisposalTable">
+      <thead>
+        <tr>
+          <th style="text-align:center; width:52px;">Sl.No</th>
+          <th style="width:120px;">{% if sale_mode %}Sale no{% else %}Disposal no{% endif %}</th>
+          <th style="width:120px;">Asset no</th>
+          <th>Asset name</th>
+          <th style="width:96px;">Date</th>
+          {% if not sale_mode %}<th style="width:72px;">Type</th>{% endif %}
+          <th style="text-align:right; width:88px;">Proceeds</th>
+          <th style="text-align:right; width:88px;">NBV</th>
+          <th style="text-align:right; width:88px;">Gain/loss</th>
+          <th style="width:88px;">Status</th>
+          <th style="text-align:center; width:72px;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if not rows %}
+        <tr><td colspan="{% if sale_mode %}10{% else %}11{% endif %}" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">No {{ list_label }}s yet. <a href="{{ url_for(form_ep) }}">Create one</a>.</td></tr>
+        {% else %}
+        {% for r in rows %}
+        {% set st = (r.status or 'DRAFT')|upper %}
+        {% set gl = r.gain_loss_amount|float %}
+        <tr class="fa-row-clickable" data-edit-url="{{ url_for(form_ep, id=r.disposal_id) }}">
+          <td style="text-align:center;">{{ loop.index }}</td>
+          <td><span class="fa-code">{{ r.disposal_no }}</span></td>
+          <td><span class="fa-code">{{ r.asset_no }}</span></td>
+          <td>{{ r.asset_name }}</td>
+          <td>{{ r.disposal_date }}</td>
+          {% if not sale_mode %}<td>{{ r.disposal_type }}</td>{% endif %}
+          <td class="fa-num">{{ '%.2f'|format(r.proceeds_amount|float) }}</td>
+          <td class="fa-num">{{ '%.2f'|format(r.nbv|float) }}</td>
+          <td class="fa-num">{% if gl > 0 %}+{% endif %}{{ '%.2f'|format(gl) }}</td>
+          <td>
+            {% if st == 'POSTED' %}<span class="fa-status-badge fa-status-badge--posted">Posted</span>
+            {% else %}<span class="fa-status-badge fa-status-badge--draft">Draft</span>{% endif %}
+          </td>
+          <td style="text-align:center;"><a class="btn-view" href="{{ url_for(form_ep, id=r.disposal_id) }}">Open</a></td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function () {
+  var tbody = document.querySelector('#faDisposalTable tbody');
+  if (!tbody) return;
+  tbody.addEventListener('click', function (e) {
+    if (e.target.closest('a, button')) return;
+    var tr = e.target.closest('tr[data-edit-url]');
+    if (tr) window.location.href = tr.getAttribute('data-edit-url');
+  });
+})();
+</script>
+{% endblock %}

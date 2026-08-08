@@ -1,0 +1,447 @@
+{% extends "base.html" %}
+{% block title %}Repacking{% endblock %}
+{% block content %}
+<style>
+  body { overflow-x: auto; min-height: 100vh; background: #fff; color: #212529; }
+  .rp-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px 16px;
+    --rp-field-fill: rgba(255, 255, 255, 0.52);
+    --rp-field-readonly: rgba(226, 236, 247, 0.92);
+  }
+  .rp-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #dee2e6;
+  }
+  .rp-title { margin: 0; font-size: 24px; font-weight: 400; color: #212529; }
+  .rp-sub { margin: 4px 0 0; color: #6c757d; font-size: 13px; line-height: 1.45; max-width: 720px; }
+  .rp-top-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .rp-link { color: #007bff; text-decoration: none; font-size: 13px; }
+  .rp-link:hover { text-decoration: underline; }
+  .rp-btn {
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .rp-btn--primary { background: #28a745; color: #fff; }
+  .rp-btn--primary:disabled { opacity: .55; cursor: not-allowed; }
+  .rp-btn--plain { background: transparent; color: #495057; border: 1px solid #dee2e6; text-decoration: none; display: inline-flex; align-items: center; }
+  .rp-btn--plain:hover { background: #f8f9fa; }
+  .rp-section { margin-bottom: 18px; }
+  .rp-section-title {
+    margin: 0 0 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #495057;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .rp-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(140px, 1fr));
+    gap: 12px 16px;
+    align-items: end;
+  }
+  .rp-grid--wide { grid-template-columns: 160px 180px 200px 1fr; }
+  @media (max-width: 900px) {
+    .rp-grid, .rp-grid--wide { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+  }
+  .rp-field label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 12px;
+    color: #495057;
+    font-weight: 400;
+  }
+  .rp-input {
+    width: 100%;
+    box-sizing: border-box;
+    border: none;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 0;
+    padding: 6px 0;
+    font-size: 13px;
+    background: var(--rp-field-fill);
+    color: #212529;
+  }
+  .rp-input:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .rp-input[readonly] { background: var(--rp-field-readonly); color: #6c757d; }
+  .rp-items-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: stretch;
+  }
+  @media (max-width: 960px) {
+    .rp-items-row { grid-template-columns: 1fr; }
+  }
+  .rp-item-panel {
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 14px 14px 12px;
+    background: #fff;
+    min-width: 0;
+  }
+  .rp-item-panel--src { border-top: 3px solid #dc3545; }
+  .rp-item-panel--dst { border-top: 3px solid #28a745; }
+  .rp-item-panel__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e9ecef;
+  }
+  .rp-item-panel__head h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #212529;
+  }
+  .rp-item-panel__tag {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    padding: 3px 8px;
+    border-radius: 999px;
+  }
+  .rp-item-panel--src .rp-item-panel__tag { background: #f8d7da; color: #721c24; }
+  .rp-item-panel--dst .rp-item-panel__tag { background: #d4edda; color: #155724; }
+  .rp-item-fields { display: grid; gap: 10px; }
+  .rp-search-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-bottom: 1px solid #dee2e6;
+    background: var(--rp-field-fill);
+  }
+  .rp-search-wrap:focus-within { border-bottom-color: var(--nexa-focus-color); }
+  .rp-search-wrap .rp-input { border: none; background: transparent; flex: 1; min-width: 0; }
+  .rp-picker-btn {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    background: #f8f9fa;
+    color: #007bff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+  }
+  .rp-picker-btn:hover { background: #e9ecef; }
+  .rp-qty-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .rp-opt-row {
+    display: none;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed #e9ecef;
+  }
+  .rp-batch-enabled .rp-item-panel--src .rp-opt-row,
+  .rp-bin-enabled .rp-item-panel--src .rp-opt-row,
+  .rp-batch-enabled .rp-item-panel--dst .rp-opt-row,
+  .rp-bin-enabled .rp-item-panel--dst .rp-opt-row { display: grid; }
+  .rp-tracking-hidden { display: none !important; }
+  .rp-select {
+    width: 100%;
+    box-sizing: border-box;
+    border: none;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 0;
+    padding: 6px 0;
+    font-size: 13px;
+    background: var(--rp-field-fill);
+    color: #212529;
+  }
+  .rp-select:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .rp-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 12px 14px;
+    background: #f8f9fa;
+  }
+  @media (max-width: 700px) {
+    .rp-summary { grid-template-columns: 1fr; }
+  }
+  .rp-kpi small {
+    display: block;
+    color: #6c757d;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: .04em;
+  }
+  .rp-kpi strong {
+    display: block;
+    margin-top: 4px;
+    color: #212529;
+    font-size: 1.15rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+  .rp-note { font-size: 12px; color: #6c757d; line-height: 1.45; margin: 10px 0 0; }
+  .rp-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .rp-wh-modal-bg {
+    position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45);
+    display: none; align-items: center; justify-content: center; z-index: 3000; padding: 16px;
+  }
+  .rp-wh-modal-bg.show { display: flex; }
+  .rp-wh-modal {
+    width: min(520px, 92vw); background: #fff; border-radius: 8px;
+    border: 1px solid #dee2e6; box-shadow: 0 20px 45px rgba(15, 23, 42, 0.18);
+  }
+  .rp-wh-modal-head {
+    padding: 10px 12px; border-bottom: 1px solid #dee2e6;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 14px; font-weight: 600;
+  }
+  .rp-wh-modal-body { padding: 10px 12px; }
+  .rp-wh-list { max-height: 280px; overflow: auto; border: 1px solid #dee2e6; border-radius: 4px; margin-top: 8px; }
+  .rp-wh-btn {
+    width: 100%; text-align: left; border: 0; border-bottom: 1px solid #e9ecef;
+    background: #fff; padding: 8px 10px; font-size: 13px; cursor: pointer;
+  }
+  .rp-wh-btn:hover { background: #f1f5f9; }
+  .rp-wh-btn:last-child { border-bottom: none; }
+  .rp-field-hint { font-size: 11px; color: #6c757d; margin-top: 2px; }
+  .modal.hidden { display: none !important; }
+  #rpItemModal .modal__content { max-width: 900px; width: 96vw; }
+  .rp-table-wrap { border: 1px solid #dee2e6; border-radius: 4px; max-height: 56vh; overflow: auto; background: #fff; }
+  .rp-item-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .rp-item-table th, .rp-item-table td { border-bottom: 1px solid #dee2e6; padding: 8px 10px; text-align: left; }
+  .rp-item-table thead th { position: sticky; top: 0; background: #f8f9fa; z-index: 1; font-size: 12px; font-weight: 600; color: #495057; }
+  .rp-item-table tbody tr:hover { background: #f1f5f9; cursor: pointer; }
+  .num { text-align: right !important; font-variant-numeric: tabular-nums; }
+</style>
+
+<div class="rp-page{% if rp_batch_enabled %} rp-batch-enabled{% endif %}{% if rp_bin_enabled %} rp-bin-enabled{% endif %}"
+     data-transaction-audit="Repacking"
+     data-transaction-no-selector="#rpDocNo"
+     data-save-button="#rpSave"
+     data-track-root=".rp-page"
+     data-save-url-pattern="/purchase/repacking/api/save">
+  <div class="rp-top">
+    <div>
+      <h1 class="rp-title">Repacking{% if query_mode %} <span style="font-size:0.72em; color:#64748b; font-weight:500;">(View)</span>{% endif %}</h1>
+      <p class="rp-sub">Convert stock from one item to another in the same warehouse. Posts stock, item journal, and GL on save.</p>
+    </div>
+    <div class="rp-top-actions">
+      {% if not query_mode %}
+      <button type="button" class="rp-btn rp-btn--primary" id="rpSave">Save Repacking</button>
+      {% elif pdf_url %}
+      <a class="rp-btn rp-btn--plain" href="{{ pdf_url }}" target="_blank" rel="noopener noreferrer">PDF</a>
+      {% endif %}
+      <a class="rp-btn rp-btn--plain" href="{{ list_url or url_for('purchase.repacking_list') }}">Repacking list</a>
+    </div>
+  </div>
+
+  <div class="rp-section">
+    <div class="rp-grid rp-grid--wide">
+      <div class="rp-field">
+        <label for="rpDocNo">Document No</label>
+        <input class="rp-input" id="rpDocNo" value="{{ next_repack_no or '' }}" readonly />
+      </div>
+      <div class="rp-field">
+        <label for="rpDate">Date</label>
+        <input class="rp-input" id="rpDate" type="date" value="{{ default_doc_date or '' }}" {% if query_mode %}readonly{% endif %} />
+      </div>
+      <div class="rp-field">
+        <label for="rpStore">Warehouse</label>
+        <div class="rp-search-wrap">
+          <input class="rp-input" id="rpStore" placeholder="Press F1 to pick warehouse" readonly />
+          <button type="button" class="rp-picker-btn" id="rpStorePick" title="Pick warehouse">▾</button>
+        </div>
+        <div class="rp-field-hint" id="rpStoreHint">Loading warehouses…</div>
+      </div>
+      <div class="rp-field">
+        <label for="rpRemarks">Remarks</label>
+        <input class="rp-input" id="rpRemarks" placeholder="Optional notes for repacking" {% if query_mode %}readonly{% endif %} />
+      </div>
+    </div>
+  </div>
+
+  <div class="rp-section">
+    <p class="rp-section-title">Items</p>
+    <div class="rp-items-row">
+      <div class="rp-item-panel rp-item-panel--src">
+        <div class="rp-item-panel__head">
+          <h3>Source item</h3>
+          <span class="rp-item-panel__tag">Stock out</span>
+        </div>
+        <div class="rp-item-fields">
+          <div class="rp-field">
+            <label for="rpSrcCode">Item code</label>
+            <div class="rp-search-wrap">
+              <input class="rp-input" id="rpSrcCode" placeholder="Code — F1 to pick" />
+              <button type="button" class="rp-picker-btn" data-rp-pick="src" title="Pick item">▾</button>
+            </div>
+          </div>
+          <div class="rp-field">
+            <label for="rpSrcName">Item name</label>
+            <input class="rp-input" id="rpSrcName" readonly />
+          </div>
+          <div class="rp-field">
+            <label for="rpSrcUom">UOM</label>
+            <input class="rp-input" id="rpSrcUom" value="NOS" />
+          </div>
+          <div class="rp-qty-grid">
+            <div class="rp-field">
+              <label for="rpSrcCurrent">Current stock</label>
+              <input class="rp-input" id="rpSrcCurrent" type="number" step="0.001" readonly />
+            </div>
+            <div class="rp-field">
+              <label for="rpSrcQty">Qty to consume</label>
+              <input class="rp-input" id="rpSrcQty" type="number" step="0.001" min="0" />
+            </div>
+            <div class="rp-field">
+              <label for="rpSrcAfter">After repack</label>
+              <input class="rp-input" id="rpSrcAfter" type="number" step="0.001" readonly />
+            </div>
+          </div>
+          <div class="rp-opt-row">
+            <div class="rp-field rp-tracking-batch rp-tracking-hidden" id="rpSrcLotWrap">
+              <label for="rpSrcLot">Batch / Lot <span class="rp-field-hint">(FEFO if blank)</span></label>
+              <select id="rpSrcLot" class="rp-select" title="Pick lot for batch-tracked source item">
+                <option value="">— FEFO / auto —</option>
+              </select>
+            </div>
+            <div class="rp-field rp-tracking-bin rp-tracking-hidden" id="rpSrcBinWrap">
+              <label for="rpSrcBin">From bin</label>
+              <select id="rpSrcBin" class="rp-select" title="Issue from bin in selected warehouse">
+                <option value="">—</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rp-item-panel rp-item-panel--dst">
+        <div class="rp-item-panel__head">
+          <h3>Output item</h3>
+          <span class="rp-item-panel__tag">Stock in</span>
+        </div>
+        <div class="rp-item-fields">
+          <div class="rp-field">
+            <label for="rpDstCode">Item code</label>
+            <div class="rp-search-wrap">
+              <input class="rp-input" id="rpDstCode" placeholder="Code — F1 to pick" />
+              <button type="button" class="rp-picker-btn" data-rp-pick="dst" title="Pick item">▾</button>
+            </div>
+          </div>
+          <div class="rp-field">
+            <label for="rpDstName">Item name</label>
+            <input class="rp-input" id="rpDstName" readonly />
+          </div>
+          <div class="rp-field">
+            <label for="rpDstUom">UOM</label>
+            <input class="rp-input" id="rpDstUom" value="NOS" />
+          </div>
+          <div class="rp-qty-grid">
+            <div class="rp-field">
+              <label for="rpDstCurrent">Current stock</label>
+              <input class="rp-input" id="rpDstCurrent" type="number" step="0.001" readonly />
+            </div>
+            <div class="rp-field">
+              <label for="rpDstQty">Output qty</label>
+              <input class="rp-input" id="rpDstQty" type="number" step="0.001" min="0" />
+            </div>
+            <div class="rp-field">
+              <label for="rpDstAfter">After repack</label>
+              <input class="rp-input" id="rpDstAfter" type="number" step="0.001" readonly />
+            </div>
+          </div>
+          <div class="rp-opt-row">
+            <div class="rp-field rp-tracking-batch rp-tracking-hidden" id="rpDstBatchWrap">
+              <label for="rpDstBatchHint">Output batch</label>
+              <input class="rp-input" id="rpDstBatchHint" readonly value="Auto-created on save when batch tracking is on" />
+            </div>
+            <div class="rp-field rp-tracking-bin rp-tracking-hidden" id="rpDstBinWrap">
+              <label for="rpDstBin">To bin</label>
+              <select id="rpDstBin" class="rp-select" title="Putaway bin in same warehouse">
+                <option value="">—</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rp-section">
+    <div class="rp-summary">
+      <div class="rp-kpi"><small>Source movement</small><strong id="rpSrcMove">0.000</strong></div>
+      <div class="rp-kpi"><small>Output movement</small><strong id="rpDstMove">0.000</strong></div>
+      <div class="rp-kpi"><small>Warehouse</small><strong id="rpStoreView">-</strong></div>
+    </div>
+    <p class="rp-note">For different packing ratios, enter different source and output quantities. Example: consume 1 carton item and produce 12 piece items.</p>
+  </div>
+</div>
+
+<div id="rpWhModalBg" class="rp-wh-modal-bg" aria-hidden="true">
+  <div class="rp-wh-modal" role="dialog" aria-modal="true" aria-labelledby="rpWhModalTitle">
+    <div class="rp-wh-modal-head">
+      <span id="rpWhModalTitle">Select warehouse</span>
+      <button type="button" class="rp-btn rp-btn--plain" id="rpWhModalClose" style="padding:4px 10px;font-size:12px;">Close</button>
+    </div>
+    <div class="rp-wh-modal-body">
+      <input class="rp-input" id="rpWhSearch" type="text" placeholder="Search warehouse code or name…" style="border:1px solid #dee2e6;border-radius:4px;padding:8px 10px;" />
+      <div id="rpWhList" class="rp-wh-list"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="rpItemModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="rpItemModal"></div>
+  <div class="modal__content">
+    <div class="modal__header" style="display:flex;justify-content:space-between;align-items:center;">
+      <h3 style="margin:0;font-size:14px;font-weight:600;">Select item</h3>
+      <button class="modal__close" type="button" data-close="rpItemModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <input class="rp-input" id="rpItemSearch" placeholder="Search item code/name..." autocomplete="off" style="margin-bottom:10px;border:1px solid #dee2e6;border-radius:4px;padding:8px 10px;" />
+      <div class="rp-table-wrap">
+        <table class="rp-item-table">
+          <thead><tr><th>Code</th><th>Name</th><th>UOM</th><th class="num">Stock</th><th>Warehouse</th></tr></thead>
+          <tbody id="rpItemBody"><tr><td colspan="5">Search items...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.RP_BATCH_ENABLED = {{ (rp_batch_enabled|default(false))|tojson }};
+  window.RP_BIN_ENABLED = {{ (rp_bin_enabled|default(false))|tojson }};
+  window.RP_INITIAL_DATA = {{ initial_data|tojson if initial_data else 'null' }};
+  window.RP_QUERY_MODE = {{ 'true' if query_mode else 'false' }};
+  window.RP_LIST_URL = {{ (list_url or url_for('purchase.repacking_list'))|tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/repacking.js') }}?v=9"></script>
+<script src="{{ url_for('static', filename='js/transaction_recording_client.js') }}?v=7"></script>
+{% endblock %}

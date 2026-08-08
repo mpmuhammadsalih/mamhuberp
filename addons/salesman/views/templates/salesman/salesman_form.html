@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Salesman{% else %}New Salesman{% endif %}{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .setup-im-page.sm-setup .customer-details.sm-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; row-gap: 4px; }
+  @media (max-width: 1024px) {
+    .setup-im-page.sm-setup .customer-details.sm-grid { grid-template-columns: 1fr; }
+  }
+  .setup-im-page .sm-setup-actions { display: none; }
+</style>
+
+<div class="im-page setup-im-page sm-setup">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>Salesman / <span class="im-ref">{{ next_salesman_code }}</span> {% if not is_edit %}<span class="status-badge status-badge--new">New</span>{% endif %}</h1>
+      <div class="im-actions">
+        <button type="submit" form="salesmanForm" class="im-btn-save">{% if is_edit %}Save{% else %}Create{% endif %}</button>
+        <a href="{{ url_for('salesman.salesman_list') }}" class="im-btn-secondary">List</a>
+      </div>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, msg in messages %}
+        <p class="flash flash--{{ category }}" style="margin-bottom:12px;">{{ msg }}</p>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <section class="setup-im-shell customer-form-shell itemmaster-container">
+    <div class="cf-form-stack">
+      <div class="cf-form-panel">
+        <h2 class="cf-section-title">Salesman details</h2>
+  <form id="salesmanForm" method="post" autocomplete="off" class="form-enter-focus-only" action="
+    {%- if is_edit -%}
+      {{ url_for('salesman.salesman_edit', location_code=location_code, salesman_code=next_salesman_code) }}
+    {%- else -%}
+      {{ url_for('salesman.salesman_create') }}
+    {%- endif -%}
+  ">
+    <input type="hidden" name="save_nonce" value="{{ global_save_nonce | default('') }}" />
+    <input type="hidden" name="locationcode" id="locHidden" value="{{ location_code }}" />
+    <div class="customer-details sm-grid">
+    {% if not is_edit %}
+    <input type="hidden" name="salesman_create_once" value="{{ salesman_create_once }}" />
+    <div class="form-group" style="grid-column: 1 / -1;">
+      <label for="location_pick"><span>Branch</span></label>
+      <select class="input" id="location_pick" aria-label="Branch">
+        {% for loc in locations %}
+          <option value="{{ loc.code }}" {% if loc.code|string == location_code|string %}selected{% endif %}>
+            {{ loc.code }} — {{ loc.name or loc.code }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    {% else %}
+    <input type="hidden" name="salesman_edit_once" value="{{ salesman_edit_once }}" />
+    <div class="form-group" style="grid-column: 1 / -1;">
+      <label><span>Branch</span></label>
+      <span class="muted" style="flex:1;font-size:13px;">{{ location_code }}{% if location_name %} — {{ location_name }}{% endif %} · Salesman <strong>{{ next_salesman_code }}</strong></span>
+    </div>
+    {% endif %}
+
+      <div class="form-group">
+        <label for="salesmancode_disp">Salesman code</label>
+        <input class="input" id="salesmancode_disp" type="text" readonly value="{{ next_salesman_code }}" />
+      </div>
+      <div></div>
+
+      <div class="form-group" style="grid-column: 1 / -1;">
+        <label for="salesmanname"><span>Name</span> <span style="color:#b45309">*</span></label>
+        <input class="input" id="salesmanname" name="salesmanname" type="text" maxlength="80" required
+          value="{{ (salesman_norm.salesmanname or '')|default('', true)|trim }}" />
+      </div>
+
+      <div class="form-group">
+        <label for="telephone">Telephone</label>
+        <input class="input" id="telephone" name="telephone" type="text" maxlength="30"
+          value="{{ (salesman_norm.telephone or '')|default('', true) }}" />
+      </div>
+      <div class="form-group">
+        <label for="type">Type</label>
+        <input class="input" id="type" name="type" type="text" maxlength="1" placeholder="1 char"
+          value="{{ (salesman_norm.type or '')|default('', true) }}" />
+      </div>
+
+      <div class="form-group">
+        <label for="helpercode1">Helper code 1</label>
+        <input class="input" id="helpercode1" name="helpercode1" type="number"
+          value="{{ salesman_norm.helpercode1 if salesman_norm.helpercode1 is not none else '' }}" />
+      </div>
+      <div class="form-group">
+        <label for="helpercode2">Helper code 2</label>
+        <input class="input" id="helpercode2" name="helpercode2" type="number"
+          value="{{ salesman_norm.helpercode2 if salesman_norm.helpercode2 is not none else '' }}" />
+      </div>
+
+      <div class="form-group">
+        <label for="outstandingamount">Outstanding</label>
+        <input class="input" id="outstandingamount" name="outstandingamount" type="text" inputmode="decimal"
+          value="{{ salesman_norm.outstandingamount if salesman_norm.outstandingamount is not none else '' }}" />
+      </div>
+      <div class="form-group">
+        <label for="opening">Opening</label>
+        <input class="input" id="opening" name="opening" type="text" inputmode="decimal"
+          value="{{ salesman_norm.opening if salesman_norm.opening is not none else '' }}" />
+      </div>
+
+      <div class="form-group">
+        <label for="routecode">Route code</label>
+        <input class="input" id="routecode" name="routecode" type="number"
+          value="{{ salesman_norm.routecode if salesman_norm.routecode is not none else '' }}" />
+      </div>
+      <div class="form-group">
+        <label for="employeecode">Employee code</label>
+        <input class="input" id="employeecode" name="employeecode" type="number"
+          value="{{ salesman_norm.employeecode if salesman_norm.employeecode is not none else '' }}" />
+      </div>
+
+      <div class="form-group">
+        <label for="morepaid">More paid</label>
+        <input class="input" id="morepaid" name="morepaid" type="text" inputmode="decimal"
+          value="{{ salesman_norm.morepaid if salesman_norm.morepaid is not none else '' }}" />
+      </div>
+      <div class="form-group">
+        <label for="flag">Flag</label>
+        <select class="input" id="flag" name="flag">
+          <option value="N" {% if (salesman_norm.flag or 'N')|string|upper|trim != 'Y' %}selected{% endif %}>N</option>
+          <option value="Y" {% if (salesman_norm.flag or '')|string|upper|trim == 'Y' %}selected{% endif %}>Y</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="unadjusted">Unadjusted</label>
+        <input class="input" id="unadjusted" name="unadjusted" type="text" inputmode="decimal"
+          value="{{ salesman_norm.unadjusted if salesman_norm.unadjusted is not none else '' }}" />
+      </div>
+      {% if is_edit %}
+      <div class="form-group">
+        <label for="version">Version</label>
+        <input class="input" id="version" name="version" type="number"
+          value="{{ salesman_norm.version if salesman_norm.version is not none else 1 }}" />
+      </div>
+      {% endif %}
+
+      <div class="form-group">
+        <label for="store">Store</label>
+        <input class="input" id="store" name="store" type="text" maxlength="40"
+          value="{{ (salesman_norm.store or '')|default('', true) }}" />
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input class="input" id="password" name="password" type="password" maxlength="80" autocomplete="new-password"
+          placeholder="{% if is_edit %}Leave blank to keep current{% endif %}" />
+      </div>
+    </div>
+
+    <div class="sm-setup-actions sm-actions">
+      <button type="submit" class="page-po__btn-primary">{% if is_edit %}Save{% else %}Create{% endif %}</button>
+    </div>
+  </form>
+
+  {% if is_edit %}
+  <form method="post" class="sm-actions form-enter-focus-only" style="border-top:none;padding-top:12px;margin-top:0;"
+        action="{{ url_for('salesman.salesman_delete', location_code=location_code, salesman_code=next_salesman_code) }}"
+        onsubmit="return confirm('Delete this salesman row?');">
+    <input type="hidden" name="salesman_delete_once" value="{{ salesman_delete_once }}" />
+    <button type="submit" class="page-po__btn-secondary" style="background:#fecaca;color:#991b1b;border-color:#f87171;">Delete</button>
+  </form>
+  {% endif %}
+      </div>
+    </div>
+  </section>
+</div>
+
+{% if not is_edit %}
+<script>
+(function() {
+  var pick = document.getElementById('location_pick');
+  var hidden = document.getElementById('locHidden');
+  if (!pick || !hidden) return;
+  pick.addEventListener('change', function() {
+    hidden.value = pick.value;
+    window.location = '{{ url_for("salesman.salesman_create") }}'.split('?')[0] + '?pref_loc=' + encodeURIComponent(pick.value);
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

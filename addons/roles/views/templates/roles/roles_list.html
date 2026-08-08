@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+
+{% set ns = namespace(total=roles|length, with_desc=0) %}
+{% for role in roles %}
+  {% if role.description and role.description|string|trim %}{% set ns.with_desc = ns.with_desc + 1 %}{% endif %}
+{% endfor %}
+{% set ns_undoc = ns.total - ns.with_desc %}
+
+<div class="page-po nexa-list-page nexa-setup-list-page">
+  <section class="nexa-stat-grid" aria-label="Roles summary" style="grid-template-columns: repeat(5, minmax(120px, 1fr));">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-shield-lock" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Total roles</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.total) }}</p>
+        <p class="nexa-stat-sub">Defined profiles</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-card-text" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">With description</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.with_desc) }}</p>
+        <p class="nexa-stat-sub">Documented</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-chat-square-text" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">No description</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns_undoc) }}</p>
+        <p class="nexa-stat-sub">Blank help text</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-person-badge" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Assigned in</p>
+        <p class="nexa-stat-value">Users</p>
+        <p class="nexa-stat-sub">User Management</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--cyan"><i class="bi bi-list-check" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Menus</p>
+        <p class="nexa-stat-value">Per role</p>
+        <p class="nexa-stat-sub">Edit to configure</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Roles & Permissions</h1>
+      <p class="page-po__muted">Create roles and choose which menus each role can access.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% include 'includes/list_refresh_bar.html' %}
+      <a class="page-po__btn-primary" href="{{ url_for('roles.roles_create') }}">+ New role</a>
+    </div>
+  </div>
+
+  {% if roles %}
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th style="text-align:center;width:52px;">Sl.No</th>
+          <th>Role ID</th>
+          <th>Role Name</th>
+          <th>Description</th>
+          <th style="text-align:center;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for role in roles %}
+          <tr>
+            <td style="text-align:center;">{{ loop.index }}</td>
+            <td>{{ role.role_id }}</td>
+            <td>{{ role.role_name }}</td>
+            <td>{{ role.description or '-' }}</td>
+            <td style="text-align:center;white-space:nowrap;">
+              <a class="btn-view" href="{{ url_for('roles.roles_edit', role_id=role.role_id) }}">Edit</a>
+              <form method="post" action="{{ url_for('roles.roles_delete', role_id=role.role_id) }}" style="display:inline;margin-left:6px;">
+                <button type="submit" class="btn-view" style="border-color:#fecaca;color:#b91c1c;" onclick="return confirm('Delete this role?');">Delete</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="co-table-wrap">
+    <table class="co-table"><tbody><tr><td style="text-align:center;padding:14px;color:#64748b;">No roles found. <a href="{{ url_for('roles.roles_create') }}" class="pi-link">Create your first role</a>.</td></tr></tbody></table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

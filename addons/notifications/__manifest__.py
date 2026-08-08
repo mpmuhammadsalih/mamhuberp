@@ -1,0 +1,2 @@
+"""Addon manifest — Notifications."""
+MANIFEST = {'technical_name': 'notifications', 'name': 'Notifications', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Migrated from blueprints/notifications.py', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/notifications'}, 'flask': {'blueprint': 'notifications', 'blueprint_ref': 'addons.notifications:bp', 'models_package': 'addons.notifications.models', 'routes_module': 'addons.notifications.controllers.routes'}}

@@ -1,0 +1,3107 @@
+{% extends "base.html" %}
+{% block title %}{{ doc_label or 'Purchase Return' }}{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/im_form_shell.css') }}?v=2" />
+{% set _is_dn = return_type_value == 'D' %}
+{% set _is_vn = _is_dn %}
+{% set _is_dn_post = _is_dn and show_load_return_order is defined and show_load_return_order %}
+{% set _is_vn_post = _is_dn_post %}
+{% if _is_dn_post %}
+{% set _details_title = 'Debit note details' %}
+{% set _lines_title = 'Debit note lines' %}
+{% set _no_label = 'Debit note no' %}
+{% set _date_label = 'Debit note date' %}
+{% elif _is_dn %}
+{% set _details_title = 'Request details' %}
+{% set _lines_title = 'Request lines' %}
+{% set _no_label = 'Request no' %}
+{% set _date_label = 'Request date' %}
+{% else %}
+{% set _details_title = 'Return details' %}
+{% set _lines_title = 'Return items' %}
+{% set _no_label = 'Return no' %}
+{% set _date_label = 'Return date' %}
+{% endif %}
+{% set _rr_status = (load_header.approval_status if load_header is defined and load_header else 'DRAFT') %}
+{% set _display_status = (_rr_status or 'DRAFT') if (load_header is defined and load_header) else none %}
+<style>
+  .grn-doc-nav {
+    display: inline-flex; align-items: center; gap: 2px; margin-left: 8px; vertical-align: middle;
+  }
+  .grn-doc-nav__btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; padding: 0; border: 1px solid #cbd5e1; border-radius: 6px;
+    background: #fff; color: #334155; font-size: 18px; line-height: 1; cursor: pointer;
+  }
+  .grn-doc-nav__btn:hover:not(:disabled) { background: #f0f9ff; border-color: var(--nexa-focus-color); color: #1d4ed8; }
+  .grn-doc-nav__btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .grn-doc-nav__hint { font-size: 11px; color: #64748b; padding: 0 4px; white-space: nowrap; }
+  main.container:has(> .pr-form-page.im-form-shell-page) { padding-top: 0; }
+  .pr-form-page.im-form-shell-page .scroll-table.pro-scroll-table,
+  .pr-form-page.im-form-shell-page .scroll-table.lines-scroll,
+  .pr-form-page.im-form-shell-page .pr-lines-scroll {
+    overflow: auto;
+    max-height: 50vh;
+    width: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+  .pr-form-page .status-badge { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; vertical-align: middle; }
+  .pr-form-page .status-draft { background: #eef2ff; color: #4338ca; }
+  .pr-form-page .status-approved { background: #ecfdf5; color: #047857; }
+  .pr-form-page .status-posted { background: #dbeafe; color: #1d4ed8; }
+  .pr-form-page .status-cancelled { background: #f4f4f5; color: #52525b; border: 1px solid #d4d4d8; }
+  #prDeleteModal { position: fixed; inset: 0; z-index: 9999; align-items: center; justify-content: center; padding: 16px; }
+  #prDeleteModal.hidden { display: none !important; }
+  #prDeleteModal:not(.hidden) { display: flex; }
+  #prDeleteModal .modal__panel { position: relative; z-index: 1; background: #fff; border-radius: 8px; max-width: 420px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,0.18); }
+  #prDeleteModal .modal__overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
+  #linesTable { width: 100%; min-width: 1100px; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+  #linesTable thead { position: sticky; top: 0; z-index: 1; background: #f8f9fa !important; }
+  #linesTable thead th, #linesTable tbody td { overflow: hidden; text-overflow: ellipsis; }
+  #linesTable thead th { background: #f8f9fa !important; color: #000 !important; padding: 5px 8px !important; font-weight: 600; font-size: 12px; line-height: 1.25; text-align: left; white-space: nowrap; border-bottom: 1px solid #dee2e6; vertical-align: middle; }
+  #linesTable tbody td { padding: 3px 6px !important; border: none; border-bottom: 1px solid #dee2e6; vertical-align: middle; color: #000; }
+  #linesTable tbody tr { transition: background 0.15s; }
+  #linesTable tbody tr:hover { background: #f8f9fa !important; }
+  /* Line grid column widths — match goods_receipt_form.html (GRN) */
+  #linesTable .pr-col-action { width: 52px; text-align: center !important; white-space: nowrap; }
+  #linesTable .pr-col-slno { width: 40px; text-align: center !important; }
+  #linesTable .pr-col-barcode { width: 88px; }
+  #linesTable .pr-col-itemcode { width: 88px; }
+  #linesTable .pr-col-itemname { width: 22%; min-width: 120px; }
+  #linesTable .pr-col-uom { width: 56px; }
+  #linesTable .pr-col-conv { width: 72px; }
+  #linesTable .pr-col-qty, #linesTable .pr-col-rate, #linesTable .pr-col-discount, #linesTable .pr-col-amount { width: 76px; }
+  #linesTable .pr-col-store, #linesTable .pr-col-wh { width: 96px; }
+  #linesTable .pr-col-bin { width: 100px; }
+  #linesTable .pr-col-lot { width: 88px; }
+  .pr-form-page.is-vendor-note #linesTable { min-width: 800px; }
+  #linesTable thead th.pr-col-conv, #linesTable thead th.pr-col-qty, #linesTable thead th.pr-col-rate,
+  #linesTable thead th.pr-col-discount, #linesTable thead th.pr-col-amount { text-align: right; }
+  #linesTable tbody td.pr-col-conv, #linesTable tbody td.pr-col-qty, #linesTable tbody td.pr-col-rate,
+  #linesTable tbody td.pr-col-discount, #linesTable tbody td.pr-col-amount { text-align: right; }
+  #linesTable tbody td.pr-col-itemname { color: #000; font-weight: 500; }
+  #linesTable tbody td.pr-col-itemname .input { color: #000; font-weight: 400; }
+  #linesTable tbody td.pr-col-slno, #linesTable tbody td.pr-col-action { text-align: center; }
+  #linesTable .input, #linesTable select.input { width: 100%; max-width: 100%; display: block; margin: 0; border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; padding: 2px 0; font-size: 12px; line-height: 1.3; min-height: 22px; box-sizing: border-box; background: transparent; }
+  #linesTable tbody td.pr-col-conv .input, #linesTable tbody td.pr-col-qty .input, #linesTable tbody td.pr-col-rate .input,
+  #linesTable tbody td.pr-col-discount .input, #linesTable tbody td.pr-col-amount .input { text-align: right; }
+  #linesTable .input:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  /* GRN/PO-style inline grid editing on existing data rows */
+  #linesTable tbody tr[data-line="1"] td.pr-col-barcode,
+  #linesTable tbody tr[data-line="1"] td.pr-col-itemcode,
+  #linesTable tbody tr[data-line="1"] td.pr-col-uom,
+  #linesTable tbody tr[data-line="1"] td.pr-col-rate,
+  #linesTable tbody tr[data-line="1"] td.pr-col-qty,
+  #linesTable tbody tr[data-line="1"] td.pr-col-discount,
+  #linesTable tbody tr[data-line="1"] td.pr-col-amount { cursor: cell; }
+  #linesTable tbody tr[data-line="1"] td.pr-col-itemname { cursor: pointer; }
+  #linesTable tbody tr[data-line="1"]:hover td.pr-col-barcode,
+  #linesTable tbody tr[data-line="1"]:hover td.pr-col-itemcode,
+  #linesTable tbody tr[data-line="1"]:hover td.pr-col-uom,
+  #linesTable tbody tr[data-line="1"]:hover td.pr-col-rate,
+  #linesTable tbody tr[data-line="1"]:hover td.pr-col-qty,
+  #linesTable tbody tr[data-line="1"]:hover td.pr-col-discount,
+  #linesTable tbody tr[data-line="1"]:hover td.pr-col-amount { box-shadow: inset 0 0 0 1px #c7d2fe; }
+  #linesTable .pr-inline-input { width: 100%; box-sizing: border-box; border: 1px solid #2563eb; border-radius: 3px; padding: 1px 3px; font-size: 12px; line-height: 1.3; min-height: 22px; background: #fff; }
+  #linesTable td.pr-col-rate .pr-inline-input, #linesTable td.pr-col-qty .pr-inline-input, #linesTable td.pr-col-discount .pr-inline-input, #linesTable td.pr-col-amount .pr-inline-input { text-align: right; }
+  #linesTable tbody td.pr-cell-invalid { background: #fee2e2 !important; color: #991b1b; font-weight: 600; box-shadow: inset 0 0 0 1px #ef4444; cursor: cell; }
+  #linesTable tbody td.pr-cell-checking { background: #fef9c3 !important; }
+  #prToastHost { position: fixed; top: 16px; right: 16px; z-index: 4000; display: flex; flex-direction: column; gap: 8px; max-width: 360px; }
+  .pr-toast { background: #1f2937; color: #fff; padding: 11px 12px; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.28); display: flex; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.45; }
+  .pr-toast--error { background: #b91c1c; }
+  .pr-toast--warn { background: #b45309; }
+  .pr-toast--success { background: #15803d; }
+  .pr-toast__msg { flex: 1; }
+  .pr-toast__close { background: transparent; border: 0; color: inherit; font-size: 17px; cursor: pointer; line-height: 1; opacity: .85; padding: 0; }
+  .pr-toast__close:hover { opacity: 1; }
+  .pr-toast--out { opacity: 0; transform: translateY(-6px); transition: opacity .2s, transform .2s; }
+  .pr-form-page .pro-totals { display: flex; justify-content: flex-end; gap: 12px; align-items: center; margin-top: 12px; padding-top: 4px; flex-wrap: wrap; }
+  .pr-form-page .pro-totals .input { width: 140px; text-align: right; }
+  .pr-form-page .pro-totals__label { font-size: 13px; color: #374151; white-space: nowrap; }
+  /* Purchase Return Save-as modal (GRN-style) */
+  #prSaveAsModal .modal__content.pr-save-as-dialog { max-width: 520px; width: 96vw; border-radius: 14px; overflow: hidden; }
+  #prSaveAsModal .pr-save-as-dialog__header { padding: 16px 18px 14px; border-bottom: 1px solid #e2e8f0; align-items: flex-start; }
+  #prSaveAsModal .pr-save-as-dialog__header h4 { margin: 0; font-size: 17px; font-weight: 700; color: #0f172a; line-height: 1.25; }
+  #prSaveAsModal .pr-save-as-dialog__sub { margin: 4px 0 0; font-size: 12px; color: #64748b; line-height: 1.4; font-weight: 400; }
+  #prSaveAsModal .pr-save-as-dialog__body { padding: 14px 18px 18px; }
+  #prSaveAsModal .pr-save-as-cards { display: flex; flex-direction: column; gap: 10px; }
+  #prSaveAsModal .pr-save-as-card { display: flex; align-items: center; gap: 12px; margin: 0; padding: 12px 14px; border: 2px solid #e2e8f0; border-radius: 10px; cursor: pointer; background: #fff; transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease; position: relative; user-select: none; }
+  #prSaveAsModal .pr-save-as-card:hover { border-color: #93c5fd; background: #f8fafc; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06); }
+  #prSaveAsModal .pr-save-as-card input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+  #prSaveAsModal .pr-save-as-card__badge { flex-shrink: 0; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #475569; background: #f1f5f9; }
+  #prSaveAsModal .pr-save-as-card__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  #prSaveAsModal .pr-save-as-card__title { font-size: 14px; font-weight: 600; color: #0f172a; line-height: 1.3; }
+  #prSaveAsModal .pr-save-as-card__desc { font-size: 12px; color: #64748b; line-height: 1.4; }
+  #prSaveAsModal .pr-save-as-card__check { flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; border: 2px solid #cbd5e1; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: transparent; background: #fff; }
+  #prSaveAsModal .pr-save-as-card:has(input:checked) { border-color: #2563eb; background: #eff6ff; }
+  #prSaveAsModal .pr-save-as-card:has(input:checked) .pr-save-as-card__badge { background: #2563eb; color: #fff; }
+  #prSaveAsModal .pr-save-as-card:has(input:checked) .pr-save-as-card__check { border-color: #2563eb; background: #2563eb; color: #fff; }
+  #prSaveAsModal .pr-save-as-card--accounts:has(input:checked) { border-color: #059669; background: #ecfdf5; }
+  #prSaveAsModal .pr-save-as-card--accounts:has(input:checked) .pr-save-as-card__badge,
+  #prSaveAsModal .pr-save-as-card--accounts:has(input:checked) .pr-save-as-card__check { border-color: #059669; background: #059669; color: #fff; }
+  #prSaveAsModal .pr-save-as-dialog__footer { padding: 12px 18px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px; background: #f8fafc; }
+  .pr-form-page .pro-details-totals {
+    display: flex;
+    justify-content: flex-end;
+    gap: 14px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    grid-column: 1 / -1;
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid #e2e8f0;
+  }
+  .pr-form-page .pro-details-totals__item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    min-width: 100px;
+  }
+  .pr-form-page .pro-details-totals__label {
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .pr-form-page .pro-details-totals .input {
+    width: 120px;
+    text-align: right;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    background: #f1f5f9;
+  }
+  .pr-form-page .pro-details .search-field--popup { flex: 1; min-width: 0; width: 100%; max-width: none; }
+  .pr-form-page .pro-details .search-field--popup input[readonly] { cursor: pointer; }
+  .btnRemove, .btnAddInline { border: 1px solid #dee2e6; background: #fff; cursor: pointer; border-radius: 4px; padding: 2px 8px; }
+  .modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal.hidden { display: none; }
+  .modal__overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.4); }
+  .modal__content { position: relative; background: #fff; border-radius: 16px; max-width: 520px; width: 100%; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+  .modal__header { padding: 12px 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+  .modal__body { padding: 12px; overflow: auto; max-height: 360px; }
+  #supplierTable { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
+  #supplierTable th { background: #334155; color: #fff; text-align: left; padding: 8px 10px; font-size: 12px; }
+  #supplierTable td { padding: 8px 10px; border: 1px solid #e2e8f0; }
+  .save-overlay { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.35); }
+  .save-overlay.active { display: flex; }
+  .save-overlay__box { min-width: 230px; background: #fff; border-radius: 10px; padding: 16px 18px; box-shadow: 0 18px 48px rgba(0, 0, 0, 0.25); display: flex; align-items: center; gap: 10px; color: #1f2937; font-size: 13px; font-weight: 600; }
+  .save-overlay__spinner { width: 16px; height: 16px; border: 2px solid #cbd5e1; border-top-color: #2563eb; border-radius: 50%; animation: saveSpin 0.8s linear infinite; }
+  @keyframes saveSpin { to { transform: rotate(360deg); } }
+  .button--secondary { background: transparent; border: 1px solid #dee2e6; color: #000; padding: 8px 14px; border-radius: 4px; font-size: 13px; cursor: pointer; }
+  .button--secondary:hover { background: #f8f9fa; }
+  #linesTable th.pr-col-conv, #linesTable td.pr-col-conv,
+  #linesTable th.pr-col-discount, #linesTable td.pr-col-discount,
+  #linesTable th.pr-col-store, #linesTable td.pr-col-store,
+  #linesTable th.pr-col-wh, #linesTable td.pr-col-wh,
+  #linesTable th.pr-col-bin, #linesTable td.pr-col-bin,
+  #linesTable th.pr-col-lot, #linesTable td.pr-col-lot { display: none !important; }
+  body.pr-show-conv #linesTable th.pr-col-conv, body.pr-show-conv #linesTable td.pr-col-conv,
+  body.pr-show-discount #linesTable th.pr-col-discount, body.pr-show-discount #linesTable td.pr-col-discount,
+  body.pr-show-store #linesTable th.pr-col-store, body.pr-show-store #linesTable td.pr-col-store,
+  body.pr-show-wh #linesTable th.pr-col-wh, body.pr-show-wh #linesTable td.pr-col-wh,
+  body.pr-show-bin #linesTable th.pr-col-bin, body.pr-show-bin #linesTable td.pr-col-bin,
+  body.pr-show-lot #linesTable th.pr-col-lot, body.pr-show-lot #linesTable td.pr-col-lot { display: table-cell !important; }
+  body.pr-show-store.is-vendor-note.hide-store-col #linesTable th.pr-col-store,
+  body.pr-show-store.is-vendor-note.hide-store-col #linesTable td.pr-col-store { display: table-cell !important; }
+  .pr-form-page.pr-warehouse-always #linesTable th.pr-col-wh,
+  .pr-form-page.pr-warehouse-always #linesTable td.pr-col-wh { display: table-cell !important; }
+  #supplierTable thead, #warehouseTable thead, #uomTable thead { background: #334155 !important; }
+  #supplierTable thead th, #warehouseTable thead th, #uomTable thead th {
+    background: #334155 !important; color: #fff !important; padding: 8px 10px; font-size: 12px; font-weight: 600;
+  }
+  #supplierModal .modal__header, #warehouseModal .modal__header, #itemModal .modal__header { padding: 6px 12px; }
+  #supplierModal .modal__header h3, #warehouseModal .modal__header h3, #itemModal .modal__header h3 { margin: 0; font-size: 15px; font-weight: 600; color: #0f172a; }
+  #supplierModal .modal__body, #warehouseModal .modal__body, #itemModal .modal__body { padding: 6px 12px 10px; display: flex; flex-direction: column; min-height: 0; }
+  #supplierModal #supplierSearch, #warehouseModal #warehouseSearch, #itemModal #itemSearch {
+    width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 6px 10px; font-size: 13px;
+    border: 1px solid #cbd5e1; border-radius: 8px;
+  }
+  #supplierModal .scroll-table.modal__table, #warehouseModal .scroll-table.modal__table,
+  #itemModal .scroll-table.modal__table { flex: 1; min-height: 120px; max-height: 50vh; overflow: auto; }
+  #itemModal .item-list { border: 1px solid #e2e8f0; border-radius: 8px; }
+  #itemModal .item-row { display: block; padding: 6px 10px; border-bottom: 1px solid #e2e8f0; cursor: pointer; outline: none; }
+  #itemModal .item-row:hover, #itemModal .item-row:focus { background: #f0f9ff; }
+  #itemModal .item-row .item-line1 { font-weight: 600; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #itemModal .item-row .item-line2 { font-size: 12px; color: #64748b; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #itemModal .item-row.item-empty { color: #94a3b8; font-style: italic; text-align: center; cursor: default; }
+  #linesTable .search-field { display: flex; align-items: stretch; gap: 2px; width: 100%; min-width: 0; }
+  #linesTable .search-field .itemcode { flex: 1; min-width: 0; }
+  .pr-form-page.im-form-shell-page #linesTable .search-picker.pr-item-picker {
+    flex: 0 0 auto; background: #334155; color: #fff; border: none; padding: 6px 8px; cursor: pointer;
+    font-size: 12px; line-height: 1; border-radius: 0 2px 2px 0;
+  }
+  .pr-form-page .po-save-as-opts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; color: #495057; }
+  .pr-form-page .po-save-as-opts .po-save-as-label { font-weight: 600; }
+  .pr-form-page .po-save-as-opts label { cursor: pointer; display: inline-flex; align-items: center; gap: 4px; margin: 0; font-weight: 400; }
+  .pr-form-page .po-save-as-opts input { margin: 0; }
+  .pr-txn-date-block {
+    margin: 0 0 10px;
+    padding: 12px 14px;
+    border: 1px solid #f5c6cb;
+    border-radius: 6px;
+    background: #fff5f5;
+    color: #842029;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .pr-txn-date-block a { color: #0d6efd; font-weight: 600; }
+</style>
+<div class="im-page im-form-shell-page pro-page pr-form-page pr-post-page {% if _is_vn %}is-vendor-note hide-store-col{% endif %}{% if warehouse_enabled %} pr-warehouse-always{% endif %}"
+     data-transaction-audit="PurchaseReturn"
+     data-transaction-no-selector="#returnNo"
+     data-save-button="#btnSave"
+     data-track-root=".pr-form-page"
+     data-save-url-pattern="/purchase/return/api/save|purchase_return_save|debit_note">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>{{ doc_label or 'Purchase Return' }} / <span class="im-ref" id="prTitleRef">{{ return_no or 'New' }}</span>
+        {% if pr_posted_nav is defined and pr_posted_nav %}
+        <span class="grn-doc-nav" id="prPostedNav" title="Browse posted returns (← previous · → next opens new when no more)">
+          <button type="button" id="prNavPrev" class="grn-doc-nav__btn" aria-label="Previous posted return">‹</button>
+          <span class="grn-doc-nav__hint">Posted ← →</span>
+          <button type="button" id="prNavNext" class="grn-doc-nav__btn" aria-label="Next posted return or new">›</button>
+        </span>
+        {% endif %}
+        {% if _display_status %}
+        <span class="status-badge status-{{ (_display_status|string)|lower }}">{{ _display_status }}</span>
+        {% endif %}
+      </h1>
+      <div class="im-actions">
+        {% if not query_mode %}
+        <button type="button" class="im-btn-save" id="btnSave">Save</button>
+        {% endif %}
+        {% if query_mode and can_edit_request is defined and can_edit_request and return_no and _is_dn %}
+        <a class="im-btn-secondary po-toolbar-btn" href="{{ url_for('purchase.purchase_debit_note_request_edit', goods_return_no=return_no) }}">Edit</a>
+        {% endif %}
+        {% if query_mode and _is_dn and not _is_dn_post and return_no %}
+        <a class="im-btn-secondary po-toolbar-btn" target="_blank" rel="noopener"
+           href="{{ url_for('purchase.api_debit_note_request_pdf', goods_return_no=return_no) }}">Print PDF</a>
+        {% elif query_mode and _is_dn_post and return_no %}
+        <a class="im-btn-secondary po-toolbar-btn" target="_blank" rel="noopener"
+           href="{{ url_for('purchase.api_debit_note_pdf', dr_no=return_no) }}">Print PDF</a>
+        {% endif %}
+        {% if not query_mode %}
+        <button type="button" class="im-btn-secondary po-toolbar-btn" id="btnDiscard">Discard</button>
+        {% endif %}
+        {% if load_header is defined and load_header and not _is_dn and (accounts_posted is not defined or not accounts_posted) and ((inventory_posted is defined and inventory_posted) or query_mode) %}
+        <button type="button" class="im-btn-secondary" id="btnChangePostingDate" title="Change posting date used for Purchase Return / GL">Change Posting Date</button>
+        {% endif %}
+        {% if load_header is defined and load_header and accounts_posted is defined and not accounts_posted and not (inventory_posted is defined and inventory_posted) and show_load_return_order is defined and show_load_return_order and not _is_dn %}
+        <button type="button" class="im-btn-secondary" id="btnDelete" style="border-color:#dc3545;color:#dc3545;" title="Delete this draft purchase return">Delete</button>
+        {% endif %}
+        <a href="{{ list_url or url_for('purchase.purchase_return_list') }}" class="im-btn-secondary">{{ list_label or 'Return List' }}</a>
+        <button type="button" id="btnTools" class="im-btn-secondary po-toolbar-btn">Tools</button>
+      </div>
+    </div>
+  </div>
+
+  <section class="itemmaster-container pro-form-body">
+  {% if transaction_date_blocked|default(false) and not query_mode %}
+  <div class="pr-txn-date-block">
+    {{ transaction_date_error or 'No open transaction date. Set it in Transaction Date Setup before posting.' }}
+    {% if transaction_date_setup_url %}
+    <a href="{{ transaction_date_setup_url }}">Open Transaction Date Setup</a>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% if accounts_posted is defined and accounts_posted %}
+  <div class="alert alert-warning" style="margin:0 0 12px;padding:10px 14px;font-size:13px;border:1px solid #ffc107;background:#fff8e1;">
+    This purchase return is <strong>posted to accounts</strong>. View only — changes are not allowed.
+  </div>
+  {% elif inventory_posted is defined and inventory_posted %}
+  <div class="alert alert-info" style="margin:0 0 12px;padding:10px 14px;font-size:13px;border:1px solid #93c5fd;background:#eff6ff;">
+    <strong>Stock posted</strong> — view only. Use <strong>Change Posting Date</strong> before GL posting, or open Accounts Posting when ready.
+  </div>
+  {% elif load_header is defined and load_header and show_load_return_order is defined and show_load_return_order %}
+  <div class="alert alert-info" style="margin:0 0 12px;padding:10px 14px;font-size:13px;border:1px solid #fcd34d;background:#fffbeb;">
+    <strong>Draft purchase return</strong> — click <strong>Save</strong> and choose Draft, Approve &amp; post Inventory Only, or POST inventory and Accounts (same as GRN).
+  </div>
+  {% elif not query_mode and show_load_return_order is defined and show_load_return_order %}
+  <div class="alert alert-info" style="margin:0 0 12px;padding:10px 14px;font-size:13px;border:1px solid #fcd34d;background:#fffbeb;">
+    Click <strong>Save</strong> and choose how to save: Draft, Approve &amp; post Inventory Only, or POST inventory and Accounts.
+  </div>
+  {% endif %}
+  <h2 class="im-section-title">{{ _details_title }}</h2>
+  <div class="form-section im-panel-body">
+  <div class="form-grid--2cols pro-details">
+    <div class="form-group"><label>{{ _no_label }}</label><input type="text" class="input" id="returnNo" value="{{ return_no or '' }}" readonly /></div>
+    <div class="form-group"><label>{{ _date_label }}</label>
+      <input type="date" class="input" id="returnDate"
+             value="{% if load_header is defined and load_header and load_header.returndate %}{{ load_header.returndate }}{% else %}{{ open_transaction_date or '' }}{% endif %}"
+             {% if open_transaction_date_from %}min="{{ open_transaction_date_from }}"{% endif %}
+             {% if open_transaction_date_to %}max="{{ open_transaction_date_to }}"{% endif %}
+             {% if query_mode or (not open_transaction_date_from or open_transaction_date_from == open_transaction_date_to) %}readonly{% endif %}
+             title="Date must be within the open range from Transaction Date Setup" />
+    </div>
+    <div class="form-group"><label>Posting Date</label>
+      <input type="date" class="input" id="postingDate"
+             value="{% if load_header is defined and load_header and load_header.postingdate %}{{ load_header.postingdate }}{% elif load_header is defined and load_header and load_header.returndate %}{{ load_header.returndate }}{% else %}{{ open_transaction_date or '' }}{% endif %}"
+             {% if open_transaction_date_from %}min="{{ open_transaction_date_from }}"{% endif %}
+             {% if open_transaction_date_to %}max="{{ open_transaction_date_to }}"{% endif %}
+             {% if query_mode or (inventory_posted is defined and inventory_posted) or (accounts_posted is defined and accounts_posted) or (not open_transaction_date_from or open_transaction_date_from == open_transaction_date_to) %}readonly{% endif %}
+             title="Accounts / GL posting date (may differ from Return Date)" />
+    </div>
+    <div class="form-group">
+      <label for="supplierDisplay">Supplier</label>
+      <span class="search-field search-field--popup pr-supplier-popup" role="button" tabindex="-1" title="F1 or click: supplier list">
+        <input type="text" id="supplierDisplay" class="input" placeholder="F1 supplier list · click to open" title="F1 or click: supplier list" readonly autocomplete="off" tabindex="0" {% if query_mode %}disabled{% endif %} />
+        <button type="button" class="search-clear" id="supplierClear" aria-label="Clear supplier" style="display: none;">×</button>
+      </span>
+      <input type="hidden" id="supplierCode" value="" />
+    </div>
+    <div class="form-group"><label>Receipt No</label><input type="text" class="input" id="refInvoiceNo" placeholder="Receipt no" {% if query_mode %}readonly{% endif %} /></div>
+    {% if warehouse_enabled %}
+    <div class="form-group">
+      <label for="headerWarehouseDisplay">Warehouse</label>
+      <span class="search-field search-field--popup pr-warehouse-popup" role="button" tabindex="-1" title="F1 or click: warehouse list">
+        <input type="text" id="headerWarehouseDisplay" class="input" placeholder="F1 warehouse list · Enter next field" title="F1: warehouse list. Enter: move to next field." readonly autocomplete="off" tabindex="0" {% if query_mode %}disabled{% endif %} />
+        <button type="button" class="search-clear" id="headerWarehouseClear" aria-label="Clear warehouse" style="display: none;">×</button>
+      </span>
+      <input type="hidden" id="headerWarehouseId" value="" />
+    </div>
+    {% endif %}
+    <div class="form-group"><label>Remarks</label><input type="text" class="input" id="remarks" placeholder="Remarks" {% if query_mode %}readonly{% endif %} /></div>
+    {% if not _is_vn %}
+    <div class="form-group">
+      <label for="headerDiscount">Discount</label>
+      <input type="number" id="headerDiscount" class="input" step="0.01" value="0" {% if query_mode %}readonly{% endif %} title="Document-level discount — split proportionally to return lines on save" />
+    </div>
+    {% endif %}
+    {% if show_load_return_order is not defined or show_load_return_order %}
+    <div class="form-group">
+      <label>{% if _is_dn %}Load debit note request{% else %}Load return order{% endif %}</label>
+      <span class="search-field">
+        <input type="number" class="input" id="returnOrderNoLoad" placeholder="Request no" min="0" value="{{ initial_return_order_no or '' }}" {% if query_mode %}readonly{% endif %} />
+        {% if not query_mode %}<button type="button" class="search-picker" id="btnLoadReturnOrder">Load</button>{% endif %}
+      </span>
+    </div>
+    {% endif %}
+    {% if not _is_dn and (show_load_return_order is not defined or show_load_return_order) %}
+    <div class="form-group">
+      <label>Load from GRN</label>
+      <span class="search-field">
+        <input type="number" class="input" id="grnNoLoad" placeholder="Receipt no" min="0" value="{{ initial_receipt_no or '' }}" {% if query_mode %}readonly{% endif %} />
+        {% if not query_mode %}<button type="button" class="search-picker" id="btnLoadGrn">Load</button>{% endif %}
+      </span>
+    </div>
+    {% endif %}
+    <div class="pro-details-totals" aria-label="Document totals">
+      <div class="pro-details-totals__item">
+        <span class="pro-details-totals__label">Subtotal</span>
+        <input type="number" id="subtotalAmount" class="input" readonly value="0.00" title="Sum of quantity × rate before discount" />
+      </div>
+      {% if not _is_vn %}
+      <div class="pro-details-totals__item">
+        <span class="pro-details-totals__label">Discount</span>
+        <input type="number" id="totalsDiscount" class="input" readonly value="0.00" title="Total discount on this return" />
+      </div>
+      {% endif %}
+      <div class="pro-details-totals__item">
+        <span class="pro-details-totals__label">Net Total</span>
+        <input type="number" id="netTotal" class="input" readonly value="0.00" title="Subtotal minus discount (saved as return amount)" />
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <h2 class="im-section-title">{{ _lines_title }}</h2>
+  <div class="form-section im-panel-body">
+  <div class="pr-lines-scroll scroll-table lines-scroll pro-scroll-table">
+    <table id="linesTable">
+      <thead><tr><th class="pr-col-slno">Sl.No</th><th class="pr-col-barcode">Barcode</th><th class="pr-col-itemcode">Item Code</th><th class="pr-col-itemname">Item Name</th><th class="pr-col-uom">UOM</th><th class="pr-col-conv">Conv. Factor</th><th class="pr-col-rate">Rate</th><th class="pr-col-qty">Qty</th>{% if not _is_vn %}<th class="pr-col-discount">Discount</th>{% endif %}<th class="pr-col-store">Inventory Location</th>{% if warehouse_enabled %}<th class="pr-col-wh">Warehouse / Store</th>{% endif %}<th class="pr-col-bin">Bin</th><th class="pr-col-lot">Lot</th><th class="pr-col-amount">Amount</th><th class="pr-col-action">Action</th></tr></thead>
+      <tbody id="linesBody"></tbody>
+    </table>
+  </div>
+  {% if not query_mode %}<div style="margin-top:8px;"><button type="button" class="im-link" id="btnAddRow">+ Add a line</button></div>{% endif %}
+  </div>
+  </section>
+</div>
+<style>
+  #linesTable select.pr-bin-sel, #linesTable select.bin_storage, #linesTable select.pr-lot-sel {
+    border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; font-size: 12px;
+    padding: 2px 0; background: transparent; width: 100%; max-width: 100%; min-width: 0;
+    display: block; margin: 0; min-height: 22px; box-sizing: border-box;
+  }
+</style>
+<div class="modal hidden" id="lotPickModal"><div class="modal__overlay" data-close="lotPickModal"></div><div class="modal__content" style="max-width:560px;"><div class="modal__header"><h4>Select Lot / Batch</h4><button type="button" data-close="lotPickModal">×</button></div><div class="modal__body"><table class="table" style="width:100%;font-size:13px;"><thead><tr><th>Lot ID</th><th>Batch</th><th>Expiry</th><th style="text-align:right;">Qty</th><th></th></tr></thead><tbody id="lotPickBody"></tbody></table></div></div></div>
+<div class="modal hidden" id="supplierModal" role="dialog" aria-modal="true" aria-labelledby="supplierModalTitle">
+  <div class="modal__overlay" data-close="supplierModal"></div>
+  <div class="modal__content">
+    <div class="modal__header"><h3 id="supplierModalTitle">Supplier</h3><button type="button" class="modal__close" data-close="supplierModal">×</button></div>
+    <div class="modal__body">
+      <input type="text" id="supplierSearch" placeholder="Search by code or name..." autocomplete="off" />
+      <div class="scroll-table modal__table">
+        <table class="table table-fixed" id="supplierTable"><thead><tr><th>Code</th><th>Name</th></tr></thead><tbody id="supplierBody"></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+{% if warehouse_enabled %}
+<div class="modal hidden" id="warehouseModal" role="dialog" aria-modal="true" aria-labelledby="warehouseModalTitle">
+  <div class="modal__overlay" data-close="warehouseModal"></div>
+  <div class="modal__content">
+    <div class="modal__header"><h3 id="warehouseModalTitle">Warehouse</h3><button type="button" class="modal__close" data-close="warehouseModal">×</button></div>
+    <div class="modal__body">
+      <label class="search">
+        Search
+        <span class="search-field search-field--wide">
+          <input type="text" id="warehouseSearch" placeholder="Search by code or name..." autocomplete="off" />
+          <button type="button" class="search-clear" id="warehouseModalSearchClear" aria-label="Clear search">×</button>
+        </span>
+      </label>
+      <div class="scroll-table modal__table">
+        <table class="table table-fixed" id="warehouseTable"><thead><tr><th>Code</th><th>Name</th></tr></thead><tbody id="warehouseBody"></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+<div class="modal hidden" id="itemModal" role="dialog" aria-modal="true" aria-labelledby="itemModalTitle">
+  <div class="modal__overlay" data-close="itemModal"></div>
+  <div class="modal__content">
+    <div class="modal__header"><h3 id="itemModalTitle">Item</h3><button type="button" class="modal__close" data-close="itemModal">×</button></div>
+    <div class="modal__body">
+      <input type="text" id="itemSearch" placeholder="Search by code, barcode or name..." autocomplete="off" />
+      <div class="scroll-table modal__table">
+        <div id="itemBody" class="item-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal hidden" id="uomModal"><div class="modal__overlay" data-close="uomModal"></div><div class="modal__content"><div class="modal__header"><h4>Select UOM</h4><button type="button" data-close="uomModal">x</button></div><div class="modal__body"><table id="uomTable"><thead><tr><th>UOM</th><th>Cost</th></tr></thead><tbody id="uomBody"></tbody></table></div></div></div>
+<div class="modal hidden" id="toolsModal">
+  <div class="modal__overlay" data-close="toolsModal"></div>
+  <div class="modal__content" style="max-width: 360px;">
+    <div class="modal__header"><h4>Line options</h4><button type="button" data-close="toolsModal">×</button></div>
+    <div class="modal__body" style="padding: 16px;">
+      <p style="margin: 0 0 12px 0; color: #64748b; font-size: 13px;">Show these columns (unchecked = hidden):</p>
+      <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer;"><input type="checkbox" id="toolsShowConv" /> Conv. Factor</label>
+      {% if not _is_vn %}<label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer;"><input type="checkbox" id="toolsShowDiscount" /> Discount</label>{% endif %}
+      <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer;"><input type="checkbox" id="toolsShowStore" /> Inventory Location</label>
+      <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer;"><input type="checkbox" id="toolsShowWh" /> Warehouse</label>
+      <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer;"><input type="checkbox" id="toolsShowBin" /> Bin</label>
+      <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 0; cursor: pointer;"><input type="checkbox" id="toolsShowLot" /> Lot / Batch</label>
+    </div>
+  </div>
+</div>
+<div class="save-overlay" id="saveOverlay"><div class="save-overlay__box"><span class="save-overlay__spinner"></span><span>Saving, please wait...</span></div></div>
+{% if not _is_dn %}
+<div class="modal hidden" id="prSaveAsModal" aria-labelledby="prSaveAsModalTitle" role="dialog" aria-modal="true">
+  <div class="modal__overlay" id="prSaveAsModalOverlay"></div>
+  <div class="modal__content pr-save-as-dialog">
+    <div class="modal__header pr-save-as-dialog__header">
+      <div>
+        <h4 id="prSaveAsModalTitle">Save Purchase Return</h4>
+        <p class="pr-save-as-dialog__sub">Choose how to save this purchase return (same options as GRN).</p>
+      </div>
+      <button type="button" class="modal__close" id="prSaveAsModalClose" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body pr-save-as-dialog__body">
+      {% set pr_am = 'pr_draft' if (load_header is defined and load_header and not (inventory_posted is defined and inventory_posted)) else 'pr_posting' %}
+      <div class="pr-save-as-cards" role="radiogroup" aria-label="Save as">
+        <label class="pr-save-as-card">
+          <input type="radio" name="prApprovalSaveAs" value="draft" {% if pr_am == 'pr_draft' %}checked{% endif %}>
+          <span class="pr-save-as-card__badge" aria-hidden="true">1</span>
+          <span class="pr-save-as-card__body">
+            <span class="pr-save-as-card__title">Draft</span>
+            <span class="pr-save-as-card__desc">Save only. Stock and accounts are not posted.</span>
+          </span>
+          <span class="pr-save-as-card__check" aria-hidden="true">✓</span>
+        </label>
+        <label class="pr-save-as-card">
+          <input type="radio" name="prApprovalSaveAs" value="inventory_only" {% if pr_am == 'pr_only' %}checked{% endif %}>
+          <span class="pr-save-as-card__badge" aria-hidden="true">2</span>
+          <span class="pr-save-as-card__body">
+            <span class="pr-save-as-card__title">Approve &amp; post Inventory Only</span>
+            <span class="pr-save-as-card__desc">Deduct stock, lots, and item journal. No GL posting.</span>
+          </span>
+          <span class="pr-save-as-card__check" aria-hidden="true">✓</span>
+        </label>
+        <label class="pr-save-as-card pr-save-as-card--accounts">
+          <input type="radio" name="prApprovalSaveAs" value="inventory_accounts" {% if pr_am == 'pr_posting' %}checked{% endif %}>
+          <span class="pr-save-as-card__badge" aria-hidden="true">3</span>
+          <span class="pr-save-as-card__body">
+            <span class="pr-save-as-card__title">POST inventory and Accounts</span>
+            <span class="pr-save-as-card__desc">Post stock and create supplier payable / GL voucher for the return.</span>
+          </span>
+          <span class="pr-save-as-card__check" aria-hidden="true">✓</span>
+        </label>
+      </div>
+    </div>
+    <div class="modal__footer pr-save-as-dialog__footer">
+      <button type="button" class="im-btn-secondary" id="prSaveAsModalCancel">Cancel</button>
+      <button type="button" class="im-btn-save" id="prSaveAsModalContinue">Save</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+<div class="modal hidden" id="prDeleteModal" aria-labelledby="prDeleteModalTitle">
+  <div class="modal__overlay" id="prDeleteModalOverlay"></div>
+  <div class="modal__panel">
+    <div class="modal__header" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #e2e8f0;">
+      <h4 id="prDeleteModalTitle" style="margin:0;font-size:15px;">Delete Purchase Return</h4>
+      <button type="button" id="prDeleteModalClose" aria-label="Close" style="border:none;background:none;font-size:20px;cursor:pointer;">×</button>
+    </div>
+    <div class="modal__body" style="padding:16px;">
+      <p id="prDeleteModalMessage" style="margin:0 0 12px;color:#475569;font-size:13px;"></p>
+      <label for="prDeletePassword" style="display:block;margin-bottom:6px;font-size:12px;font-weight:600;color:#334155;">Your password</label>
+      <input type="password" id="prDeletePassword" class="input" placeholder="Enter your login password" autocomplete="current-password" style="width:100%;box-sizing:border-box;" />
+      <p id="prDeletePasswordError" style="display:none;margin:10px 0 0;color:#dc3545;font-size:12px;"></p>
+    </div>
+    <div class="modal__footer" style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid #e2e8f0;">
+      <button type="button" id="prDeleteCancel" class="im-btn-secondary" style="background:transparent;border:1px solid #dee2e6;color:#495057;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;">Cancel</button>
+      <button type="button" id="prDeleteSubmit" style="background:#dc3545;border:1px solid #dc3545;color:#fff;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;">Delete</button>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  const apiSave = {{ (save_api_url or url_for('purchase.api_purchase_return_save'))|tojson }};
+  const apiNextNo = {{ (next_no_api_url or url_for('purchase.api_purchase_return_next_no'))|tojson }};
+  const apiPrAdjacentPosted = {{ (url_for('purchase.api_purchase_return_adjacent_posted') if pr_posted_nav is defined and pr_posted_nav else '')|tojson }};
+  const prQueryUrlTpl = {{ (pr_query_url_tpl or url_for('purchase.purchase_return_query', goods_return_no=999999999) if pr_posted_nav is defined and pr_posted_nav else '')|tojson }};
+  const prNewUrl = {{ (pr_new_url or url_for('purchase.purchase_return_new') if pr_posted_nav is defined and pr_posted_nav else '')|tojson }};
+  const apiLoadFromOrder = {{ url_for('purchase.api_purchase_return_load_from_order', goods_return_no=0)|tojson }}.replace('/0', '');
+  const apiLoadFromGrn = {{ url_for('purchase.api_purchase_return_load_from_grn', receipt_no=0)|tojson }}.replace('/0', '');
+  const apiRefreshSaveNonce = {{ (refresh_save_nonce_url or url_for('purchase.api_purchase_debit_note_refresh_save_nonce'))|tojson }};
+  const apiDelete = {{ (pr_delete_api_url or '')|tojson }};
+  const listUrl = {{ (list_url or url_for('purchase.purchase_return_list'))|tojson }};
+  const accountsPosted = {{ 'true' if accounts_posted is defined and accounts_posted else 'false' }};
+  const inventoryPosted = {{ 'true' if inventory_posted is defined and inventory_posted else 'false' }};
+  const returnTypeValue = {{ (return_type_value or 'P')|tojson }};
+  const docLabel = {{ (doc_label or 'Purchase Return')|tojson }};
+  const isDebitNote = String(returnTypeValue || '') === 'D';
+  const isVendorNote = isDebitNote;
+  const isDraftRequestMode = String(apiSave || '').indexOf('/return-order/api/save') !== -1;
+  const pageEl = document.querySelector('.pro-page');
+  const stockTypeToggle = document.getElementById('stockTypeToggle');
+  const apiReceiveLocationsBase = {{ url_for('purchase.api_purchase_return_receive_locations', itemcode='0')|tojson }}.replace(/\/0\/?$/, '');
+  const apiItemUoms = {{ url_for('purchase.api_lpo_item_uoms', item_code=0)|tojson }}.replace('/0', '');
+  const apiWarehouseBins = {{ url_for('purchase.api_grn_warehouse_bins')|tojson }};
+  const apiItemLots = {{ url_for('purchase.api_purchase_return_item_lots', itemcode=0)|tojson }}.replace('/0', '');
+  const apiWarehouses = {{ (url_for('purchase.api_lpo_warehouses') if warehouse_enabled else '')|tojson }};
+  const apiItems = {{ url_for('purchase.api_lpo_items')|tojson }};
+  const queryMode = {{ 'true' if query_mode else 'false' }};
+  const openTxnDate = {{ (open_transaction_date or '')|tojson }};
+  const openTxnDateFrom = {{ (open_transaction_date_from or open_transaction_date or '')|tojson }};
+  const openTxnDateTo = {{ (open_transaction_date_to or open_transaction_date_from or open_transaction_date or '')|tojson }};
+  const txnDateBlocked = {{ transaction_date_blocked|default(false)|tojson }};
+  const txnDateError = {{ (transaction_date_error or '')|tojson }};
+  const warehouseEnabled = {{ 'true' if warehouse_enabled else 'false' }};
+  let warehousesList = {{ warehouse_options|tojson if warehouse_options is defined and warehouse_options else '[]' }};
+  let suppliersList = {{ suppliers|tojson if suppliers else '[]' }};
+  const suppliers = suppliersList;
+  const items = {{ items|tojson if items else '[]' }};
+  let itemsList = Array.isArray(items) ? items : [];
+  let itemFetchAbort = null;
+  let itemSearchDebounce = null;
+  let suppressItemSearchInput = false;
+  const loadHeader = {% if load_header is defined and load_header %}{{ load_header|tojson }}{% else %}null{% endif %};
+  const loadDetails = {% if load_details is defined and load_details %}{{ load_details|tojson }}{% else %}[]{% endif %};
+  const returnNoEl = document.getElementById('returnNo');
+  const returnDateEl = document.getElementById('returnDate');
+  const postingDateEl = document.getElementById('postingDate');
+  if (returnDateEl && postingDateEl) {
+    returnDateEl.addEventListener('change', function () {
+      var invPosted = !!(window.__prInventoryPosted);
+      var acctPosted = !!(window.__prAccountsPosted);
+      if (!invPosted && !acctPosted) postingDateEl.value = returnDateEl.value || '';
+    });
+  }
+
+  const supplierDisplay = document.getElementById('supplierDisplay');
+  const supplierCode = document.getElementById('supplierCode');
+  const supplierClear = document.getElementById('supplierClear');
+  const headerWarehouseDisplay = document.getElementById('headerWarehouseDisplay');
+  const headerWarehouseId = document.getElementById('headerWarehouseId');
+  const headerWarehouseClear = document.getElementById('headerWarehouseClear');
+  const warehouseModal = document.getElementById('warehouseModal');
+  const warehouseBody = document.getElementById('warehouseBody');
+  const warehouseSearch = document.getElementById('warehouseSearch');
+  const warehouseTable = document.getElementById('warehouseTable');
+  const warehouseModalSearchClear = document.getElementById('warehouseModalSearchClear');
+  let suppressWarehouseSearchInput = false;
+  const prBinsCache = {};
+  const prBinsByStorageId = {};
+  const refInvoiceNo = document.getElementById('refInvoiceNo');
+  const returnOrderNoLoad = document.getElementById('returnOrderNoLoad');
+  const btnLoadReturnOrder = document.getElementById('btnLoadReturnOrder');
+  const grnNoLoad = document.getElementById('grnNoLoad');
+  const btnLoadGrn = document.getElementById('btnLoadGrn');
+  const remarksEl = document.getElementById('remarks');
+  const linesBody = document.getElementById('linesBody');
+  const subtotalAmount = document.getElementById('subtotalAmount');
+  const totalsDiscountEl = document.getElementById('totalsDiscount');
+  const netTotal = document.getElementById('netTotal');
+  const headerDiscountEl = document.getElementById('headerDiscount');
+  const supplierModal = document.getElementById('supplierModal');
+  const itemModal = document.getElementById('itemModal');
+  const uomModal = document.getElementById('uomModal');
+  const saveOverlay = document.getElementById('saveOverlay');
+  const btnSave = document.getElementById('btnSave');
+  const supplierBody = document.getElementById('supplierBody');
+  const supplierSearch = document.getElementById('supplierSearch');
+  const supplierTable = document.getElementById('supplierTable');
+  const itemBody = document.getElementById('itemBody');
+  const itemSearch = document.getElementById('itemSearch');
+  const uomBody = document.getElementById('uomBody');
+  const uomTable = document.getElementById('uomTable');
+  const btnTools = document.getElementById('btnTools');
+  const toolsModal = document.getElementById('toolsModal');
+  const toolsShowConv = document.getElementById('toolsShowConv');
+  const toolsShowDiscount = document.getElementById('toolsShowDiscount');
+  const toolsShowStore = document.getElementById('toolsShowStore');
+  const toolsShowWh = document.getElementById('toolsShowWh');
+  const toolsShowBin = document.getElementById('toolsShowBin');
+  const toolsShowLot = document.getElementById('toolsShowLot');
+  let warehousesLoaded = !!(warehousesList && warehousesList.length);
+  let warehouseFetchAbort = null;
+  let currentEntryRow = null;
+  let currentUomRow = null;
+  let currentItemRow = null;
+  let rowSeq = 0;
+  let isSaving = false;
+  const btnSaveDefaultText = btnSave ? (btnSave.textContent || 'Save') : 'Save';
+  function prSaveNonce() {
+    var n = (typeof window.__GLOBAL_SAVE_NONCE === 'string') ? window.__GLOBAL_SAVE_NONCE.trim() : '';
+    if (!n) {
+      n = {{ (global_save_nonce | default('')) | tojson }};
+      if (n) window.__GLOBAL_SAVE_NONCE = n;
+    }
+    return n;
+  }
+  function prApplySaveNonceFromResponse(d) {
+    if (d && typeof d.save_nonce === 'string' && d.save_nonce) {
+      window.__GLOBAL_SAVE_NONCE = d.save_nonce;
+    }
+  }
+  function prRefreshSaveNonce() {
+    if (!apiRefreshSaveNonce) return Promise.resolve(prSaveNonce());
+    return fetch(apiRefreshSaveNonce, { method: 'GET', credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        prApplySaveNonceFromResponse(d);
+        return prSaveNonce();
+      })
+      .catch(function () { return prSaveNonce(); });
+  }
+  function setSavingOverlay(show){
+    if(!saveOverlay || !btnSave) return;
+    isSaving = !!show;
+    if(show){
+      saveOverlay.classList.add('active');
+      btnSave.disabled = true;
+      btnSave.textContent = 'Saving...';
+      btnSave.style.opacity = '0.7';
+      btnSave.style.cursor = 'not-allowed';
+    } else {
+      saveOverlay.classList.remove('active');
+      btnSave.disabled = !!txnDateBlocked;
+      btnSave.textContent = btnSaveDefaultText;
+      btnSave.style.opacity = txnDateBlocked ? '0.7' : '';
+      btnSave.style.cursor = txnDateBlocked ? 'not-allowed' : '';
+      if (txnDateBlocked) btnSave.title = txnDateError || 'No open transaction date';
+    }
+  }
+  function isLocationEnabled(){ return !isVendorNote || !!(stockTypeToggle && stockTypeToggle.checked); }
+  function refreshStoreColumnVisibility(){
+    if (!isVendorNote || !pageEl) return;
+    if (isLocationEnabled()) pageEl.classList.remove('hide-store-col');
+    else pageEl.classList.add('hide-store-col');
+  }
+  function applyToolsVisibility() {
+    if (toolsShowConv && toolsShowConv.checked) document.body.classList.add('pr-show-conv'); else document.body.classList.remove('pr-show-conv');
+    if (toolsShowDiscount && toolsShowDiscount.checked) document.body.classList.add('pr-show-discount'); else document.body.classList.remove('pr-show-discount');
+    if (toolsShowStore && toolsShowStore.checked) document.body.classList.add('pr-show-store'); else document.body.classList.remove('pr-show-store');
+    if (toolsShowWh && toolsShowWh.checked) document.body.classList.add('pr-show-wh'); else document.body.classList.remove('pr-show-wh');
+    if (toolsShowBin && toolsShowBin.checked) document.body.classList.add('pr-show-bin'); else document.body.classList.remove('pr-show-bin');
+    if (toolsShowLot && toolsShowLot.checked) document.body.classList.add('pr-show-lot'); else document.body.classList.remove('pr-show-lot');
+    try {
+      if (sessionStorage) {
+        sessionStorage.setItem('pr_tools_conv', (toolsShowConv && toolsShowConv.checked) ? '1' : '0');
+        sessionStorage.setItem('pr_tools_discount', (toolsShowDiscount && toolsShowDiscount.checked) ? '1' : '0');
+        sessionStorage.setItem('pr_tools_store', (toolsShowStore && toolsShowStore.checked) ? '1' : '0');
+        sessionStorage.setItem('pr_tools_wh', (toolsShowWh && toolsShowWh.checked) ? '1' : '0');
+        sessionStorage.setItem('pr_tools_bin', (toolsShowBin && toolsShowBin.checked) ? '1' : '0');
+        sessionStorage.setItem('pr_tools_lot', (toolsShowLot && toolsShowLot.checked) ? '1' : '0');
+      }
+    } catch (e) {}
+  }
+  (function initTools() {
+    try {
+      if (sessionStorage) {
+        if (sessionStorage.getItem('pr_tools_conv') === '1' && toolsShowConv) { toolsShowConv.checked = true; document.body.classList.add('pr-show-conv'); }
+        if (sessionStorage.getItem('pr_tools_discount') === '1' && toolsShowDiscount) { toolsShowDiscount.checked = true; document.body.classList.add('pr-show-discount'); }
+        if (sessionStorage.getItem('pr_tools_store') === '1' && toolsShowStore) { toolsShowStore.checked = true; document.body.classList.add('pr-show-store'); }
+        if (sessionStorage.getItem('pr_tools_wh') === '1' && toolsShowWh) { toolsShowWh.checked = true; document.body.classList.add('pr-show-wh'); }
+        if (sessionStorage.getItem('pr_tools_bin') === '1' && toolsShowBin) { toolsShowBin.checked = true; document.body.classList.add('pr-show-bin'); }
+        if (sessionStorage.getItem('pr_tools_lot') === '1' && toolsShowLot) { toolsShowLot.checked = true; document.body.classList.add('pr-show-lot'); }
+      }
+    } catch (e) {}
+  })();
+  if (warehouseEnabled) document.body.classList.add('pr-show-wh');
+  if (btnTools) btnTools.addEventListener('click', function () { if (toolsModal) toolsModal.classList.remove('hidden'); });
+  if (toolsModal) toolsModal.addEventListener('click', function (e) { if (e.target.dataset.close === 'toolsModal' || e.target === toolsModal.querySelector('.modal__overlay')) toolsModal.classList.add('hidden'); });
+  [toolsShowConv, toolsShowDiscount, toolsShowStore, toolsShowWh, toolsShowBin, toolsShowLot].forEach(function (cb) { if (cb) cb.addEventListener('change', applyToolsVisibility); });
+  function prApplyTxnDateBounds() {
+    if (!returnDateEl) return;
+    if (openTxnDateFrom) returnDateEl.min = openTxnDateFrom;
+    else returnDateEl.removeAttribute('min');
+    if (openTxnDateTo) returnDateEl.max = openTxnDateTo;
+    else returnDateEl.removeAttribute('max');
+    var multiDay = openTxnDateFrom && openTxnDateTo && openTxnDateFrom !== openTxnDateTo;
+    if (queryMode) {
+      returnDateEl.setAttribute('readonly', 'readonly');
+    } else if (multiDay) {
+      returnDateEl.removeAttribute('readonly');
+    } else if (openTxnDateFrom) {
+      returnDateEl.setAttribute('readonly', 'readonly');
+    }
+    var cur = (returnDateEl.value || '').trim();
+    if (!cur && openTxnDate) returnDateEl.value = openTxnDate;
+    else if (cur && openTxnDateFrom && cur < openTxnDateFrom) returnDateEl.value = openTxnDate || openTxnDateFrom;
+    else if (cur && openTxnDateTo && cur > openTxnDateTo) returnDateEl.value = openTxnDate || openTxnDateTo;
+  }
+  prApplyTxnDateBounds();
+  if (txnDateBlocked && !queryMode) {
+    if (btnSave) {
+      btnSave.disabled = true;
+      btnSave.title = txnDateError || 'No open transaction date';
+    }
+  }
+
+  function warehousePickerCode(row) {
+    if (!row) return '';
+    return String(row.warehouse_code || row.code || '').trim();
+  }
+
+  function whLabelForId(whId) {
+    const hit = (warehousesList || []).find(function (w) { return String(w.warehouse_id || w.code) === String(whId); });
+    return hit ? warehousePickerLabel(hit) : (whId ? String(whId) : '—');
+  }
+
+  function warehousePickerLabel(row) {
+    if (!row) return '';
+    const code = warehousePickerCode(row);
+    const name = String(row.name || row.warehouse_name || '').trim();
+    if (code && name) return code + ' - ' + name;
+    return code || name || String(row.warehouse_id || row.code || '');
+  }
+
+  function normalizeWarehouseRow(w) {
+    if (!w) return null;
+    const id = String(w.warehouse_id != null ? w.warehouse_id : (w.code != null ? w.code : '')).trim();
+    if (!id) return null;
+    return {
+      warehouse_id: id,
+      warehouse_code: String(w.warehouse_code || w.code || id).trim(),
+      name: String(w.name || w.warehouse_name || '').trim(),
+      code: id,
+    };
+  }
+
+  function getHeaderWarehouseId() {
+    return headerWarehouseId && headerWarehouseId.value ? String(headerWarehouseId.value).trim() : '';
+  }
+
+  function getHeaderWarehouseCode() {
+    if (!warehouseEnabled || !headerWarehouseDisplay) return '';
+    const v = String(headerWarehouseDisplay.value || '').trim();
+    if (!v) return '';
+    const i = v.indexOf(' - ');
+    return i >= 0 ? v.slice(0, i).trim() : v;
+  }
+
+  function getHeaderWarehouseContext() {
+    if (!warehouseEnabled || !headerWarehouseId) return null;
+    const wid = parseInt(headerWarehouseId.value || '', 10) || 0;
+    if (wid <= 0) return null;
+    return { id: String(wid), code: getHeaderWarehouseCode() };
+  }
+
+  function resolveRowWarehouseId(tr) {
+    if (!tr) return 0;
+    let wid = parseInt(tr.dataset.warehouse_id || tr.dataset.warehouseId || '', 10) || 0;
+    if (wid > 0) return wid;
+    const hdr = getHeaderWarehouseContext();
+    if (hdr && hdr.id) return parseInt(hdr.id, 10) || 0;
+    let locCode = '';
+    const locEl = tr.querySelector('.location');
+    if (locEl) locCode = String(locEl.value || '').trim();
+    if (!locCode) locCode = String(tr.dataset.location || '').trim();
+    if (!locCode) return 0;
+    const hit = (warehousesList || []).find(function (w) {
+      const whCode = String(w.warehouse_code || w.code || '').trim();
+      return (whCode && whCode.toUpperCase() === locCode.toUpperCase()) || String(w.code || w.warehouse_id || '') === locCode;
+    });
+    if (hit && (hit.code || hit.warehouse_id)) return parseInt(hit.code || hit.warehouse_id, 10) || 0;
+    const asNum = parseInt(locCode, 10);
+    return asNum > 0 ? asNum : 0;
+  }
+
+  function prWarehouseCodeForId(whId) {
+    const hit = (warehousesList || []).find(function (w) {
+      return String(w.warehouse_id || w.code || '') === String(whId || '');
+    });
+    return hit ? warehousePickerCode(hit) : (whId ? String(whId) : '');
+  }
+
+  function prBinOptionLabel(b) {
+    return String((b.code || '') + (b.name ? (' — ' + b.name) : ''));
+  }
+
+  function prRememberBins(bins) {
+    (bins || []).forEach(function (b) {
+      if (!b || b.storage_id == null) return;
+      prBinsByStorageId[String(b.storage_id)] = b;
+    });
+  }
+
+  function prBinOptionsHtml(bins, selectedVal) {
+    let sel = '';
+    const want = String(selectedVal != null ? selectedVal : '').trim();
+    (bins || []).forEach(function (b) {
+      const sid = String(b.storage_id != null ? b.storage_id : '');
+      const lab = prBinOptionLabel(b).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      sel += '<option value="' + sid.replace(/"/g, '&quot;') + '"' + (want === sid ? ' selected' : '') + '>' + lab + '</option>';
+    });
+    return sel;
+  }
+
+  function binLabelForStorageId(sidRaw) {
+    const s = String(sidRaw != null ? sidRaw : '').trim();
+    if (!s) return '—';
+    const hit = prBinsByStorageId[s];
+    return hit ? prBinOptionLabel(hit) : ('#' + s);
+  }
+
+  function populateBinSelect(selectEl, warehouseId, selectedVal, preserveIfValid) {
+    if (!selectEl || !warehouseEnabled) return;
+    const want = String(selectedVal != null ? selectedVal : (selectEl.value || '')).trim();
+    function apply(bins) {
+      prRememberBins(bins);
+      selectEl.innerHTML = '<option value="">—</option>' + prBinOptionsHtml(bins, '');
+      if (want && preserveIfValid !== false) {
+        const ok = (bins || []).some(function (b) { return String(b.storage_id) === want; });
+        if (ok) selectEl.value = want;
+      }
+    }
+    const wh = parseInt(warehouseId, 10) || 0;
+    if (wh <= 0) {
+      apply([]);
+      return;
+    }
+    const key = String(wh);
+    if (prBinsCache[key]) {
+      apply(prBinsCache[key]);
+      return;
+    }
+    if (!apiWarehouseBins) {
+      apply([]);
+      return;
+    }
+    fetch(apiWarehouseBins + '?wh=' + encodeURIComponent(key), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        const bins = (d && d.success && d.bins) ? d.bins : [];
+        prBinsCache[key] = bins;
+        apply(bins);
+      })
+      .catch(function () { apply([]); });
+  }
+
+  function refreshRowBins(tr, preserveSelection) {
+    if (!tr || !warehouseEnabled) return;
+    const sel = tr.querySelector('.bin_storage') || tr.querySelector('.pr-bin-sel');
+    if (!sel) return;
+    const whId = resolveRowWarehouseId(tr);
+    const selected = preserveSelection ? (tr.dataset.storage_id || tr.dataset.storageId || sel.value || '') : '';
+    populateBinSelect(sel, whId, selected, !!preserveSelection);
+  }
+
+  function refreshAllLineBins(preserveSelection) {
+    if (!warehouseEnabled || !linesBody) return;
+    linesBody.querySelectorAll('.line-row, .line-entry').forEach(function (tr) {
+      refreshRowBins(tr, preserveSelection);
+    });
+  }
+
+  function applyHeaderWarehouseToRow(tr, force) {
+    if (!tr || !warehouseEnabled) return;
+    const hdr = getHeaderWarehouseContext();
+    if (!hdr) return;
+    const locEl = tr.querySelector('.location');
+    const locEmpty = !locEl || !String(locEl.value || '').trim();
+    if (force || locEmpty) {
+      if (locEl && hdr.code) {
+        locEl.value = hdr.code;
+        tr.dataset.location = hdr.code;
+      }
+      if (hdr.id) tr.dataset.warehouse_id = hdr.id;
+      refreshRowBins(tr, true);
+    } else if (hdr.id && !String(tr.dataset.warehouse_id || tr.dataset.warehouseId || '').trim()) {
+      tr.dataset.warehouse_id = hdr.id;
+      refreshRowBins(tr, true);
+    }
+  }
+
+  function applyHeaderWarehouseToAllLines(force) {
+    if (!warehouseEnabled || !linesBody) return;
+    linesBody.querySelectorAll('.line-row, .line-entry').forEach(function (tr) {
+      applyHeaderWarehouseToRow(tr, !!force);
+    });
+  }
+
+  function applyDefaultLocationToRow(tr) {
+    applyHeaderWarehouseToRow(tr, false);
+  }
+
+  function prEntryLocationValue(tr) {
+    const locEl = tr.querySelector('.location');
+    let locV = locEl ? String(locEl.value || '').trim() : '';
+    if (!locV) {
+      const hdr = getHeaderWarehouseContext();
+      if (hdr && hdr.code) locV = hdr.code;
+    }
+    return { locEl: locEl, locV: locV };
+  }
+
+  function prValidateWarehouseForEntry(tr) {
+    if (!warehouseEnabled) return true;
+    if (!getHeaderWarehouseContext()) {
+      alert('Please select warehouse (F1) before adding a line.');
+      if (headerWarehouseDisplay) headerWarehouseDisplay.focus();
+      return false;
+    }
+    const locParts = prEntryLocationValue(tr);
+    const locV = locParts.locV;
+    const locEl = locParts.locEl;
+    if (!locV) {
+      alert('Warehouse / store is required. Select header warehouse (F1) or enter warehouse code on the line.');
+      if (locEl) { locEl.focus(); try { locEl.select(); } catch (eLoc) {} }
+      return false;
+    }
+    if (warehouseEnabled) {
+      const wid = resolveRowWarehouseId(tr);
+      if (wid <= 0) {
+        alert('Warehouse / store "' + locV + '" is not valid. Select header warehouse (F1) or enter a valid warehouse code.');
+        if (locEl) { locEl.focus(); try { locEl.select(); } catch (eWh) {} }
+        return false;
+      }
+      const hdr = getHeaderWarehouseContext();
+      if (hdr && hdr.code && locV.toUpperCase() !== String(hdr.code).trim().toUpperCase()) {
+        alert('Line warehouse "' + locV + '" must match header warehouse "' + hdr.code + '".');
+        if (locEl) { locEl.focus(); try { locEl.select(); } catch (eWh2) {} }
+        return false;
+      }
+      if (locEl) {
+        locEl.value = hdr && hdr.code ? hdr.code : locV;
+        tr.dataset.location = locEl.value;
+        if (hdr && hdr.id) tr.dataset.warehouse_id = hdr.id;
+      }
+    }
+    return true;
+  }
+
+  function prValidateWarehouseBeforeSave() {
+    if (!warehouseEnabled) return true;
+    const hdr = getHeaderWarehouseContext();
+    if (!hdr || !hdr.id) {
+      alert('Please select warehouse (F1) before saving.');
+      if (headerWarehouseDisplay) headerWarehouseDisplay.focus();
+      return false;
+    }
+    let lineIdx = 0;
+    const rows = linesBody ? linesBody.querySelectorAll('tr[data-line="1"]') : [];
+    for (let i = 0; i < rows.length; i++) {
+      const tr = rows[i];
+      const itemcode = (tr.dataset.itemcode || '').trim();
+      const quantity = parseFloat(tr.dataset.quantity || 0) || 0;
+      if (!itemcode || quantity <= 0) continue;
+      lineIdx += 1;
+      const whv = resolveRowWarehouseId(tr);
+      if (whv <= 0) {
+        alert('Warehouse / store is required at line ' + lineIdx + '. Select header warehouse (F1) or enter warehouse on the line.');
+        const locEl = tr.querySelector('.location');
+        if (locEl) { locEl.focus(); try { locEl.select(); } catch (eWh) {} }
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function syncSupplierClearVisibility() {
+    if (!supplierClear) return;
+    const has = !queryMode && String(supplierCode && supplierCode.value || '').trim() !== '';
+    supplierClear.style.display = has ? 'block' : 'none';
+  }
+
+  function syncHeaderWarehouseClearVisibility() {
+    if (!headerWarehouseClear) return;
+    const has = !queryMode && warehouseEnabled && (parseInt(getHeaderWarehouseId(), 10) || 0) > 0;
+    headerWarehouseClear.style.display = has ? 'block' : 'none';
+  }
+
+  function setHeaderWarehouse(id, displayText) {
+    if (headerWarehouseId) headerWarehouseId.value = id ? String(id) : '';
+    if (headerWarehouseDisplay) headerWarehouseDisplay.value = displayText || '';
+    syncHeaderWarehouseClearVisibility();
+  }
+
+  function ensureWarehousesLoaded(done) {
+    if (!warehouseEnabled || !apiWarehouses) {
+      if (typeof done === 'function') done();
+      return;
+    }
+    if (warehousesLoaded && warehousesList.length) {
+      if (typeof done === 'function') done();
+      return;
+    }
+    if (warehouseFetchAbort) warehouseFetchAbort.abort();
+    warehouseFetchAbort = new AbortController();
+    fetch(apiWarehouses + (apiWarehouses.indexOf('?') >= 0 ? '&' : '?') + 'doc_kind=purchase_return', { credentials: 'same-origin', signal: warehouseFetchAbort.signal })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        const rows = (d && d.warehouses) || [];
+        warehousesList = rows.map(normalizeWarehouseRow).filter(Boolean);
+        warehousesLoaded = true;
+        if (typeof done === 'function') done();
+      })
+      .catch(function (err) {
+        if (err && err.name === 'AbortError') return;
+        if (typeof done === 'function') done();
+      });
+  }
+
+  function renderWarehouses(list) {
+    if (!warehouseBody) return;
+    const q = (warehouseSearch && warehouseSearch.value || '').toLowerCase();
+    const L = q ? (list || []).filter(function (w) {
+      const code = warehousePickerCode(w).toLowerCase();
+      const name = String(w.name || '').toLowerCase();
+      return code.indexOf(q) !== -1 || name.indexOf(q) !== -1;
+    }) : (list || []);
+    warehouseBody.innerHTML = L.length ? L.map(function (w) {
+      const whCode = warehousePickerCode(w);
+      return '<tr tabindex="0" data-id="' + (w.code || w.warehouse_id || '') + '" data-code="' + (String(whCode).replace(/"/g, '&quot;')) + '" data-name="' + (String(w.name || '').replace(/"/g, '&quot;')) + '"><td>' + (whCode || '') + '</td><td>' + (w.name || '') + '</td></tr>';
+    }).join('') : '<tr><td colspan="2">No warehouses</td></tr>';
+  }
+
+  function openWarehouseModal() {
+    if (queryMode || !warehouseEnabled || !apiWarehouses) return;
+    if (warehouseModal && !warehouseModal.classList.contains('hidden')) {
+      if (warehouseSearch) warehouseSearch.focus();
+      return;
+    }
+    if (warehouseModal) warehouseModal.classList.remove('hidden');
+    if (warehouseSearch) {
+      suppressWarehouseSearchInput = true;
+      warehouseSearch.value = '';
+      suppressWarehouseSearchInput = false;
+      warehouseSearch.focus();
+    }
+    if (warehouseBody) warehouseBody.innerHTML = '<tr><td colspan="2">Loading…</td></tr>';
+    ensureWarehousesLoaded(function () {
+      renderWarehouses(warehousesList);
+    });
+  }
+
+  function selectWarehouseRow(row) {
+    if (!row || !row.dataset.id) return;
+    const id = row.dataset.id || '';
+    const label = (row.dataset.code || '') + (row.dataset.name ? ' - ' + row.dataset.name : '');
+    setHeaderWarehouse(id, label.trim());
+    if (warehouseModal) warehouseModal.classList.add('hidden');
+    try { if (sessionStorage) sessionStorage.setItem('pr_header_warehouse', id || ''); } catch (e) {}
+    applyHeaderWarehouseToAllLines(true);
+    refreshAllLineBins(true);
+    if (headerWarehouseDisplay) headerWarehouseDisplay.focus();
+  }
+
+  function onHeaderWarehouseChange() {
+    const hw = getHeaderWarehouseId();
+    try { if (sessionStorage) sessionStorage.setItem('pr_header_warehouse', hw || ''); } catch (e) {}
+    applyHeaderWarehouseToAllLines(false);
+    refreshAllLineBins(true);
+  }
+
+  if (warehouseEnabled) {
+    try {
+      if (sessionStorage) {
+        const savedHw = sessionStorage.getItem('pr_header_warehouse');
+        if (savedHw) {
+          const w = (warehousesList || []).find(function (x) { return String(x.warehouse_id || x.code) === String(savedHw); });
+          if (w) setHeaderWarehouse(savedHw, warehousePickerLabel(w));
+        }
+      }
+    } catch (e) {}
+    ensureWarehousesLoaded(function () {
+      const hw = getHeaderWarehouseId();
+      if (hw && headerWarehouseDisplay && !headerWarehouseDisplay.value) {
+        const w = (warehousesList || []).find(function (x) { return String(x.warehouse_id || x.code) === String(hw); });
+        if (w) headerWarehouseDisplay.value = warehousePickerLabel(w);
+        syncHeaderWarehouseClearVisibility();
+      }
+      if (hw) onHeaderWarehouseChange();
+    });
+  }
+  syncSupplierClearVisibility();
+
+  function isNavVisible(el) {
+    return el && !el.disabled && el.offsetParent !== null;
+  }
+
+  function focusNavField(el) {
+    if (!isNavVisible(el)) return;
+    el.focus();
+    if (typeof el.select === 'function' && el.type !== 'date' && el.tagName !== 'SELECT') {
+      try { el.select(); } catch (e) {}
+    }
+  }
+
+  function getLastHeaderField() {
+    if (returnOrderNoLoad && isNavVisible(returnOrderNoLoad)) return returnOrderNoLoad;
+    if (headerWarehouseDisplay && isNavVisible(headerWarehouseDisplay)) return headerWarehouseDisplay;
+    return remarksEl;
+  }
+
+  function getFirstLineItemField() {
+    if (!currentEntryRow) return null;
+    const bc = currentEntryRow.querySelector('.barcode');
+    if (bc && isNavVisible(bc)) return bc;
+    return currentEntryRow.querySelector('.itemcode');
+  }
+
+  function validateEntryRateField(rateEl, codeEl) {
+    if (!rateEl) return true;
+    const itemcode = codeEl ? (codeEl.value || '').trim() : '';
+    if (!itemcode) return true;
+    const r = parseFloat(rateEl.value || 0) || 0;
+    if (r > 0) return true;
+    alert('Please enter rate.');
+    focusNavField(rateEl);
+    return false;
+  }
+
+  function validateEntryQtyField(qtyEl, codeEl) {
+    if (!qtyEl) return true;
+    const itemcode = codeEl ? (codeEl.value || '').trim() : '';
+    if (!itemcode) return true;
+    const q = parseFloat(qtyEl.value || 0) || 0;
+    if (q > 0) return true;
+    alert('Please enter quantity.');
+    focusNavField(qtyEl);
+    return false;
+  }
+
+  function bindEntryRowKeyboardNav(tr) {
+    if (!tr) return;
+    const code = tr.querySelector('.itemcode');
+    const uom = tr.querySelector('.uom');
+    const rate = tr.querySelector('.rate');
+    const qty = tr.querySelector('.qty');
+    const discount = tr.querySelector('.discount');
+    const location = tr.querySelector('.store');
+    const whLoc = tr.querySelector('.location');
+    const binSel = tr.querySelector('.bin_storage') || tr.querySelector('.pr-bin-sel');
+    const lotSel = tr.querySelector('.pr-lot-sel');
+    const amt = tr.querySelector('.amount');
+    const btnAddInline = tr.querySelector('.btnAddInline');
+    const lineFields = [code, uom, rate, qty, discount, location, whLoc, binSel, lotSel, amt, btnAddInline];
+    const lastHdr = getLastHeaderField();
+
+    function prevVisibleIdx(i) {
+      for (let p = i - 1; p >= 0; p--) if (isNavVisible(lineFields[p])) return p;
+      return -1;
+    }
+    function nextVisibleIdx(i) {
+      for (let n = i + 1; n < lineFields.length; n++) if (isNavVisible(lineFields[n])) return n;
+      return -1;
+    }
+
+    lineFields.forEach(function (el, idx) {
+      if (!el) return;
+      el.addEventListener('keydown', function (e) {
+        if (e.key === 'F1' || e.keyCode === 112) return;
+        if (e.key === 'Escape') {
+          if (isModalOpen()) {
+            e.preventDefault();
+            closeOpenModal();
+            return;
+          }
+          e.preventDefault();
+          const p = prevVisibleIdx(idx);
+          if (p >= 0) {
+            focusNavField(lineFields[p]);
+            return;
+          }
+          if (lastHdr && isNavVisible(lastHdr)) focusNavField(lastHdr);
+          return;
+        }
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (el === btnAddInline) {
+          addCurrentEntryToGrid();
+          return;
+        }
+        if (el === code) {
+          const codeVal = (code.value || '').trim();
+          if (!codeVal) {
+            alert('Select item first');
+            focusNavField(code);
+            return;
+          }
+          if (typeof tr._fetchReceiveLocations === 'function') tr._fetchReceiveLocations();
+          else code.dispatchEvent(new Event('blur'));
+        }
+        if (el === rate && !validateEntryRateField(rate, code)) return;
+        if (el === qty && !validateEntryQtyField(qty, code)) return;
+        const n = nextVisibleIdx(idx);
+        if (n >= 0 && lineFields[n]) focusNavField(lineFields[n]);
+      });
+    });
+  }
+
+  (function setupReturnKeyboardNav() {
+    const headerChain = [returnDateEl, supplierDisplay, refInvoiceNo, headerWarehouseDisplay, remarksEl, returnOrderNoLoad, grnNoLoad].filter(isNavVisible);
+    headerChain.forEach(function (el, idx) {
+      el.addEventListener('keydown', function (e) {
+        if (e.key === 'F1' || e.keyCode === 112) return;
+        if (e.key === 'Escape') {
+          if (isModalOpen()) return;
+          if (idx <= 0) return;
+          e.preventDefault();
+          focusNavField(headerChain[idx - 1]);
+          return;
+        }
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const next = headerChain[idx + 1];
+        if (next) {
+          focusNavField(next);
+          return;
+        }
+        const firstLine = getFirstLineItemField();
+        if (firstLine) focusNavField(firstLine);
+      });
+    });
+  })();
+
+  function calcTotal(){
+    let gross=0, net=0, discSum=0;
+    linesBody.querySelectorAll('tr[data-line="1"]').forEach((tr)=>{
+      const qty=parseFloat(tr.dataset.quantity||0)||0;
+      const rate=parseFloat(tr.dataset.rate||0)||0;
+      gross += qty * rate;
+      net += parseFloat(tr.dataset.amount||0)||0;
+      discSum += parseFloat(tr.dataset.discount||0)||0;
+    });
+    if (subtotalAmount) subtotalAmount.value = gross.toFixed(2);
+    const hdrDiscActive = headerDiscountEl && document.activeElement === headerDiscountEl;
+    const displayDisc = hdrDiscActive ? (parseFloat(headerDiscountEl.value || 0) || 0) : discSum;
+    if (totalsDiscountEl) totalsDiscountEl.value = displayDisc.toFixed(2);
+    if (netTotal) {
+      netTotal.value = hdrDiscActive
+        ? Math.max(0, gross - displayDisc).toFixed(2)
+        : net.toFixed(2);
+    }
+    if (headerDiscountEl && !hdrDiscActive) {
+      headerDiscountEl.value = discSum.toFixed(2);
+    }
+  }
+  if (headerDiscountEl && !isVendorNote) {
+    headerDiscountEl.addEventListener('input', calcTotal);
+  }
+  function refreshRows(){linesBody.querySelectorAll('tr[data-line="1"]').forEach((tr,idx)=>{const s=tr.querySelector('.slno'); if(s) s.textContent=idx+1;});}
+  function clearEntryRow(){
+    if(!currentEntryRow) return;
+    const set=(cls,v)=>{const el=currentEntryRow.querySelector('.'+cls); if(el) el.value=v;};
+    set('itemcode',''); set('barcode',''); set('itemname',''); set('uom','NOS'); set('convfactor','1.000'); set('rate','0'); set('qty','0'); set('discount','0'); set('store',''); set('amount','0.000');
+    const locS = currentEntryRow.querySelector('.location'); if (locS) locS.value = '';
+    const binS = currentEntryRow.querySelector('.bin_storage') || currentEntryRow.querySelector('.pr-bin-sel');
+    if (binS) binS.innerHTML = '<option value="">—</option>';
+    const lotS=currentEntryRow.querySelector('.pr-lot-sel'); if(lotS) { lotS.innerHTML='<option value="">— FEFO —</option>'; lotS.value=''; }
+    applyDefaultLocationToRow(currentEntryRow);
+    refreshRowBins(currentEntryRow, false);
+  }
+  function bindEntryRow(tr){
+    const qty=tr.querySelector('.qty'); const rate=tr.querySelector('.rate'); const discount=tr.querySelector('.discount'); const amt=tr.querySelector('.amount'); const code=tr.querySelector('.itemcode'); const name=tr.querySelector('.itemname'); const uom=tr.querySelector('.uom'); const convfactor=tr.querySelector('.convfactor'); const location=tr.querySelector('.store'); const btnAddInline=tr.querySelector('.btnAddInline');
+    var prAmountEditLock = false;
+    function recalc(fromAmount){
+      if (fromAmount) {
+        var q = parseFloat(qty.value || 0) || 0;
+        var a = parseFloat(amt.value || 0) || 0;
+        var d = isVendorNote ? 0 : (parseFloat(discount && discount.value || 0) || 0);
+        if (q <= 0) return;
+        prAmountEditLock = true;
+        rate.value = Math.max(0, (a + d) / q).toFixed(3);
+        prAmountEditLock = false;
+        return;
+      }
+      if (prAmountEditLock) return;
+      const q=parseFloat(qty.value||0)||0; const r=parseFloat(rate.value||0)||0; const d=isVendorNote ? 0 : (parseFloat(discount.value||0)||0); amt.value=Math.max(0,(q*r)-d).toFixed(3);
+    }
+    function fetchReceiveLocations(){
+      if (!isLocationEnabled() || !location) return;
+      const v = (code && code.value || '').trim();
+      if (!v) { location.value = ''; return; }
+      loadReceiveLocationsForRow(tr, v, location.value || '');
+    }
+    tr._fetchReceiveLocations = fetchReceiveLocations;
+    qty.addEventListener('input', function(){ recalc(false); }); rate.addEventListener('input', function(){ recalc(false); }); if(discount) discount.addEventListener('input', function(){ recalc(false); });
+    if (amt) { amt.addEventListener('input', function(){ recalc(true); }); amt.addEventListener('change', function(){ recalc(true); }); }
+    if (rate) {
+      rate.addEventListener('blur', function () {
+        const itemcode = (code && code.value || '').trim();
+        if (!itemcode) return;
+        const r = parseFloat(rate.value || 0) || 0;
+        if (r > 0) return;
+        setTimeout(function () {
+          if (document.activeElement === rate) return;
+          validateEntryRateField(rate, code);
+        }, 0);
+      });
+    }
+    if (qty) {
+      qty.addEventListener('blur', function () {
+        const itemcode = (code && code.value || '').trim();
+        if (!itemcode) return;
+        const q = parseFloat(qty.value || 0) || 0;
+        if (q > 0) return;
+        setTimeout(function () {
+          if (document.activeElement === qty) return;
+          validateEntryQtyField(qty, code);
+        }, 0);
+      });
+    }
+    const itemPicker = tr.querySelector('.pr-item-picker');
+    if (itemPicker) {
+      itemPicker.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        currentEntryRow = tr;
+        currentItemRow = null;
+        openItemModal(tr);
+      });
+    }
+    code.addEventListener('keydown', function (e) {
+      if (e.key === 'F1' || e.keyCode === 112) {
+        e.preventDefault();
+        currentEntryRow = tr;
+        currentItemRow = null;
+        openItemModal(tr);
+      }
+    });
+    uom.addEventListener('keydown',(e)=>{if(e.key==='F1'||e.keyCode===112){e.preventDefault();currentUomRow=null;openUomModalForRow(tr);}});
+    const barcodeEl = tr.querySelector('.barcode');
+    if (barcodeEl) {
+      barcodeEl.addEventListener('keydown', function (e) {
+        if (e.key === 'F1' || e.keyCode === 112) { e.preventDefault(); currentEntryRow = tr; currentItemRow = null; openItemModal(tr); return; }
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const v = (barcodeEl.value || '').trim();
+        if (!v) { const c = tr.querySelector('.itemcode'); if (c) c.focus(); return; }
+        prResolveBarcodeToEntry(tr, v, { notify: true }, function (ok) {
+          if (ok) { const q = tr.querySelector('.qty'); if (q) { q.focus(); if (q.select) q.select(); } }
+        });
+      });
+      barcodeEl.addEventListener('blur', function () {
+        const v = (barcodeEl.value || '').trim();
+        if (!v) return;
+        prResolveBarcodeToEntry(tr, v, { notify: false });
+      });
+    }
+    code.addEventListener('blur', function () {
+      const v = (code.value || '').trim();
+      if (!v) return;
+      const it = itemsList.find((x) => String(x.code || '') === v);
+      if (it) {
+        name.value = it.name || '';
+        if (uom) uom.value = (it.uom || 'NOS');
+        if (convfactor) convfactor.value = '1.000';
+        rate.value = Number(it.cost || 0).toFixed(3);
+        recalc();
+      }
+      fetchReceiveLocations();
+    });
+    if (location) {
+      location.addEventListener('focus', () => {
+        fetchReceiveLocations();
+      });
+    }
+    const whLoc = tr.querySelector('.location');
+    if (whLoc) {
+      whLoc.addEventListener('change', function () {
+        tr.dataset.location = String(whLoc.value || '').trim();
+        delete tr.dataset.warehouse_id;
+        refreshRowBins(tr, false);
+      });
+      whLoc.addEventListener('blur', function () {
+        tr.dataset.location = String(whLoc.value || '').trim();
+        const wid = resolveRowWarehouseId(tr);
+        if (wid > 0) tr.dataset.warehouse_id = String(wid);
+        refreshRowBins(tr, true);
+      });
+    }
+    if (btnAddInline) btnAddInline.addEventListener('click', addCurrentEntryToGrid);
+    bindEntryRowKeyboardNav(tr);
+    const btnRemove = tr.querySelector('.btnRemove');
+    if (btnRemove) btnRemove.addEventListener('click', clearEntryRow);
+  }
+  function addLineToGrid(line){
+    const itemcode=String(line.itemcode||'').trim(); if(!itemcode) return;
+    const itemname=String(line.itemname||''); const uom=String(line.uom||'NOS'); const qty=Number(line.quantity||0); const rate=Number(line.rate||0); const discount=Number(line.discount||0); const effectiveDiscount=isVendorNote ? 0 : discount; const conversionfactor=Number(line.conversionfactor != null ? line.conversionfactor : (line.uomfactor != null ? line.uomfactor : 1)); const barcode=String(line.barcode||''); const store=String(line.store||''); const amount=Number(line.amount != null ? line.amount : Math.max(0,(qty*rate)-effectiveDiscount));
+    const lotId = line.lot_id != null ? String(line.lot_id) : '';
+    const hdrWh = getHeaderWarehouseContext();
+    let warehouseId = (line.warehouse_id != null && line.warehouse_id !== '') ? String(line.warehouse_id) : (hdrWh && hdrWh.id ? hdrWh.id : getHeaderWarehouseId());
+    let locationCode = String(line.warehouse_code || line.location || '').trim();
+    if (!locationCode && warehouseId) locationCode = prWarehouseCodeForId(warehouseId);
+    if (!locationCode && hdrWh && hdrWh.code) locationCode = hdrWh.code;
+    const storageId = line.storage_id != null ? String(line.storage_id) : '';
+    const tr=document.createElement('tr');
+    tr.className='line-row';
+    tr.setAttribute('data-line','1');
+    tr.dataset.itemcode=itemcode; tr.dataset.itemname=itemname; tr.dataset.uom=uom; tr.dataset.quantity=String(qty); tr.dataset.rate=String(rate); tr.dataset.discount=String(effectiveDiscount); tr.dataset.conversionfactor=String(conversionfactor); tr.dataset.barcode=barcode; tr.dataset.store=store; tr.dataset.amount=String(amount); tr.dataset.location=locationCode; tr.dataset.warehouseId=warehouseId; tr.dataset.warehouse_id=warehouseId; tr.dataset.storageId=storageId; tr.dataset.storage_id=storageId; tr.dataset.lotId=lotId;
+    const whCell = locationCode || whLabelForId(warehouseId);
+    if (queryMode) {
+      const binCell = storageId ? binLabelForStorageId(storageId) : '—';
+      const lotCell = lotId ? ('Lot ' + lotId) : '—';
+      tr.innerHTML = '<td class="slno pr-col-slno"></td>'
+        + '<td class="pr-col-barcode">' + (barcode || '') + '</td>'
+        + '<td class="pr-col-itemcode">' + itemcode + '</td>'
+        + '<td class="pr-col-itemname">' + itemname + '</td>'
+        + '<td class="pr-col-uom">' + uom + '</td>'
+        + '<td class="pr-col-conv" style="text-align:right;">' + conversionfactor.toFixed(3) + '</td>'
+        + '<td class="pr-col-rate" style="text-align:right;">' + rate.toFixed(3) + '</td>'
+        + '<td class="pr-col-qty" style="text-align:right;">' + qty.toFixed(2) + '</td>'
+        + (isVendorNote ? '' : '<td class="pr-col-discount" style="text-align:right;">' + effectiveDiscount.toFixed(2) + '</td>')
+        + '<td class="pr-col-store">' + (store || '—') + '</td>'
+        + (warehouseEnabled ? '<td class="pr-col-wh">' + (whCell || '—') + '</td>' : '')
+        + '<td class="pr-col-bin">' + binCell + '</td>'
+        + '<td class="pr-col-lot">' + lotCell + '</td>'
+        + '<td class="pr-col-amount" style="text-align:right;">' + amount.toFixed(3) + '</td>'
+        + '<td class="pr-col-action" style="text-align:center;">—</td>';
+      linesBody.appendChild(tr);
+      refreshRows();
+      calcTotal();
+      return;
+    }
+    tr.innerHTML='<td class="slno pr-col-slno"></td>'
+      +'<td class="pr-col-barcode">'+(barcode||'')+'</td>'
+      +'<td class="pr-col-itemcode">'+itemcode+'</td>'
+      +'<td class="pr-col-itemname">'+itemname+'</td>'
+      +'<td class="pr-col-uom">'+uom+'</td>'
+      +'<td class="pr-col-conv" style="text-align:right;">'+conversionfactor.toFixed(3)+'</td>'
+      +'<td class="pr-col-rate" style="text-align:right;">'+rate.toFixed(3)+'</td>'
+      +'<td class="pr-col-qty" style="text-align:right;">'+qty.toFixed(2)+'</td>'
+      +(isVendorNote ? '' : '<td class="pr-col-discount" style="text-align:right;">'+effectiveDiscount.toFixed(2)+'</td>')
+      +'<td class="pr-col-store">'+store+'</td>'
+      +(warehouseEnabled ? '<td class="pr-col-wh">'+ (locationCode || '—') +'</td>' : '')
+      +'<td class="pr-col-bin"><select class="input bin_storage" title="Bins for selected warehouse / store"><option value="">—</option></select></td>'
+      +'<td class="pr-col-lot"><select class="pr-lot-sel"><option value="">— FEFO —</option>'+(lotId?`<option value="${lotId.replace(/"/g,'&quot;')}" selected>Lot ${lotId}</option>`:'')+' </select><button type="button" style="font-size:10px;border:1px solid #dee2e6;border-radius:3px;padding:1px 5px;background:#f8f9fa;cursor:pointer;" class="pr-lot-pick">…</button></td>'
+      +'<td class="pr-col-amount" style="text-align:right;">'+amount.toFixed(3)+'</td>'
+      +'<td class="pr-col-action"><button type="button" class="btnRemove">x</button></td>';
+    const btnRemove=tr.querySelector('.btnRemove');
+    if(btnRemove) btnRemove.addEventListener('click',()=>{tr.remove(); refreshRows(); calcTotal();});
+    const binSel = tr.querySelector('.bin_storage');
+    const lotSel = tr.querySelector('.pr-lot-sel');
+    const lotPickBtn = tr.querySelector('.pr-lot-pick');
+    if (warehouseId) populateBinSelect(binSel, warehouseId, storageId, true);
+    // load lots when lot-pick button clicked
+    function openLotPickForRow() {
+      fetch(apiItemLots + '/' + encodeURIComponent(itemcode))
+        .then(r => r.json()).then(d => {
+          const lots = (d && d.lots) || [];
+          const tbody = document.getElementById('lotPickBody');
+          if (!tbody) return;
+          if (!lots.length) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#94a3b8;">No open lots for this item</td></tr>'; }
+          else {
+            tbody.innerHTML = lots.map(l =>
+              `<tr><td>${l.lot_id}</td><td>${l.batch_no||'—'}</td><td>${l.expiry_date||'—'}</td><td style="text-align:right;">${Number(l.qty||0).toFixed(3)}</td><td><button type="button" class="btn btn-primary" style="font-size:11px;padding:3px 10px;" data-lot-id="${l.lot_id}" data-batch="${(l.batch_no||'').replace(/"/g,'&quot;')}" data-exp="${l.expiry_date||''}">Pick</button></td></tr>`
+            ).join('');
+            tbody.querySelectorAll('button[data-lot-id]').forEach(b => {
+              b.addEventListener('click', () => {
+                const lid = b.getAttribute('data-lot-id');
+                // add/select in lotSel
+                let opt = lotSel.querySelector(`option[value="${CSS.escape(lid)}"]`);
+                if (!opt) { opt = document.createElement('option'); opt.value = lid; lotSel.appendChild(opt); }
+                opt.textContent = `Lot ${lid} · ${b.getAttribute('data-batch')||''}${b.getAttribute('data-exp')?' exp '+b.getAttribute('data-exp'):''}`;
+                lotSel.value = lid;
+                document.getElementById('lotPickModal').classList.add('hidden');
+              });
+            });
+          }
+          document.getElementById('lotPickModal').classList.remove('hidden');
+        }).catch(() => {});
+    }
+    if (lotPickBtn) lotPickBtn.addEventListener('click', openLotPickForRow);
+    if (currentEntryRow && currentEntryRow.parentNode === linesBody) linesBody.insertBefore(tr, currentEntryRow);
+    else linesBody.appendChild(tr);
+    refreshRows(); calcTotal();
+  }
+  function addCurrentEntryToGrid(){
+    if(!currentEntryRow) return;
+    if (!prValidateWarehouseForEntry(currentEntryRow)) return;
+    const itemcode=(currentEntryRow.querySelector('.itemcode').value||'').trim();
+    const barcode=(currentEntryRow.querySelector('.barcode')&&currentEntryRow.querySelector('.barcode').value||'').trim();
+    const itemname=(currentEntryRow.querySelector('.itemname').value||'').trim();
+    const uom=(currentEntryRow.querySelector('.uom').value||'NOS').trim()||'NOS';
+    const conversionfactor=parseFloat(currentEntryRow.querySelector('.convfactor').value||1)||1;
+    const qty=parseFloat(currentEntryRow.querySelector('.qty').value||0)||0;
+    const rate=parseFloat(currentEntryRow.querySelector('.rate').value||0)||0;
+    const discountEl = currentEntryRow.querySelector('.discount');
+    const discountRaw = discountEl ? (parseFloat(discountEl.value || 0) || 0) : 0;
+    const discount = isVendorNote ? 0 : discountRaw;
+    const store=(currentEntryRow.querySelector('.store').value||'').trim();
+    const binSelE=currentEntryRow.querySelector('.bin_storage') || currentEntryRow.querySelector('.pr-bin-sel');
+    const lotSelE=currentEntryRow.querySelector('.pr-lot-sel');
+    const storageId = binSelE ? (binSelE.value||'') : '';
+    const lotId = lotSelE ? (lotSelE.value||'') : '';
+    if(!itemcode){ alert('Select item first'); const c=currentEntryRow.querySelector('.itemcode'); if(c) c.focus(); return; }
+    if (!validateEntryRateField(currentEntryRow.querySelector('.rate'), currentEntryRow.querySelector('.itemcode'))) return;
+    if (!validateEntryQtyField(currentEntryRow.querySelector('.qty'), currentEntryRow.querySelector('.itemcode'))) return;
+    if(isLocationEnabled() && !store){ alert('Select Inventory Location'); const s=currentEntryRow.querySelector('.store'); if(s) s.focus(); return; }
+    const locParts = prEntryLocationValue(currentEntryRow);
+    const warehouseId = resolveRowWarehouseId(currentEntryRow);
+    addLineToGrid({itemcode,barcode,itemname,uom,conversionfactor,quantity:qty,rate,discount,store:(isLocationEnabled()?store:''),amount:parseFloat(currentEntryRow.querySelector('.amount').value||Math.max(0,(qty*rate)-discount))||0,lot_id: lotId||undefined, warehouse_id: warehouseId > 0 ? warehouseId : undefined, warehouse_code: locParts.locV || undefined, storage_id: storageId||undefined});
+    clearEntryRow();
+    const bc=currentEntryRow.querySelector('.barcode'); if(bc) bc.focus(); else { const c=currentEntryRow.querySelector('.itemcode'); if(c) c.focus(); }
+  }
+  function openUomModalForRow(tr) {
+    const codeEl = tr.querySelector('.itemcode');
+    const itemcode = (codeEl && codeEl.value || '').trim();
+    if (!itemcode) { alert('Select Item first.'); return; }
+    currentUomRow = tr;
+    fetch(apiItemUoms + '/' + encodeURIComponent(itemcode))
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.success || !Array.isArray(d.uoms) || !d.uoms.length) { alert('No UOMs found for this item.'); currentUomRow = null; return; }
+        uomBody.innerHTML = d.uoms.map((u) => {
+          const uomVal = String(u.uom || '').replace(/"/g, '&quot;');
+          const costVal = (u.cost != null ? Number(u.cost) : 0);
+          const factorVal = (u.factor != null ? Number(u.factor) : 1);
+          return '<tr tabindex="0" data-uom="' + uomVal + '" data-cost="' + costVal + '" data-factor="' + factorVal + '"><td>' + uomVal + '</td><td style="text-align:right;">' + costVal.toFixed(2) + '</td></tr>';
+        }).join('');
+        uomModal.classList.remove('hidden');
+        const first = uomBody.querySelector('tr[data-uom]');
+        if (first) first.focus();
+      })
+      .catch(() => { currentUomRow = null; alert('Failed to load UOMs.'); });
+  }
+  function loadReceiveLocationsForRow(tr, itemcode, preferred) {
+    const location = tr.querySelector('.store');
+    if (!location || !itemcode) return;
+    const listId = tr.dataset.locListId || ('prInvLocList_' + (++rowSeq));
+    tr.dataset.locListId = listId;
+    location.setAttribute('list', listId);
+    let datalist = document.getElementById(listId);
+    if (!datalist) {
+      datalist = document.createElement('datalist');
+      datalist.id = listId;
+      document.body.appendChild(datalist);
+    }
+    fetchReceiveLocationCodes(itemcode)
+      .then((codes) => {
+        datalist.innerHTML = codes.map((code) => {
+          return '<option value="' + code.replace(/"/g, '&quot;') + '"></option>';
+        }).join('');
+        if (!codes.length) { location.value = ''; return; }
+        const pref = String(preferred || '').trim().toUpperCase();
+        const hit = pref ? codes.find((c) => String(c || '').trim().toUpperCase() === pref) : '';
+        // Same as GRN behavior: use first fetched location unless a valid preferred value exists.
+        location.value = hit || codes[0] || '';
+      })
+      .catch(() => { location.value = ''; });
+  }
+  function fetchReceiveLocationCodes(itemcode) {
+    return fetch(apiReceiveLocationsBase + '/' + encodeURIComponent(itemcode))
+      .then((r) => r.json())
+      .then((d) => {
+        const locs = (d && d.success && Array.isArray(d.locations)) ? d.locations : [];
+        return locs.map((x) => String((x && x.code) || '').trim()).filter((x) => !!x);
+      })
+      .catch(() => []);
+  }
+  function createEntryRow(){
+    const tr=document.createElement('tr'); tr.className='line-entry';
+    tr.innerHTML='<td class="pr-col-slno"></td>'
+      +'<td class="pr-col-barcode"><input type="text" class="input barcode" placeholder="Scan or enter barcode" /></td>'
+      +'<td class="pr-col-itemcode"><span class="search-field"><input type="text" class="input itemcode" placeholder="F1 / … item list" title="F1 or … button: item list" />'
+      +'<button type="button" class="search-picker pr-item-picker" title="Item list (F1)" aria-label="Select item">…</button></span></td>'
+      +'<td class="pr-col-itemname"><input type="text" class="input itemname" readonly /></td>'
+      +'<td class="pr-col-uom"><input type="text" class="input uom" value="NOS" /></td>'
+      +'<td class="pr-col-conv"><input type="number" class="input convfactor" step="0.001" value="1.000" readonly /></td>'
+      +'<td class="pr-col-rate"><input type="number" class="input rate" step="0.001" value="0" /></td>'
+      +'<td class="pr-col-qty"><input type="number" class="input qty" step="0.01" value="0" /></td>'
+      +(isVendorNote ? '' : '<td class="pr-col-discount"><input type="number" class="input discount" step="0.01" value="0" /></td>')
+      +'<td class="pr-col-store"><input type="text" class="input store" placeholder="Location" /></td>'
+      +(warehouseEnabled ? '<td class="pr-col-wh"><input type="text" class="input location" placeholder="WH" title="Warehouse / store code" /></td>' : '')
+      +'<td class="pr-col-bin"><select class="input bin_storage" title="Bins for selected warehouse / store"><option value="">—</option></select></td>'
+      +'<td class="pr-col-lot"><select class="pr-lot-sel"><option value="">— FEFO —</option></select>'
+      +'<button type="button" style="font-size:10px;border:1px solid #dee2e6;border-radius:3px;padding:1px 5px;background:#f8f9fa;cursor:pointer;" class="pr-lot-pick">…</button></td>'
+      +'<td class="pr-col-amount"><input type="number" class="input amount" step="0.001" value="0.000" title="Edit amount to back-calculate rate" /></td>'
+      +'<td class="pr-col-action"><button type="button" class="btnAddInline">+</button></td>';
+    linesBody.appendChild(tr);
+    currentEntryRow = tr;
+    bindEntryRow(tr);
+    applyDefaultLocationToRow(tr);
+    refreshRowBins(tr, false);
+    // lot pick button
+    const lotPickBtnE = tr.querySelector('.pr-lot-pick');
+    const lotSelE = tr.querySelector('.pr-lot-sel');
+    if (lotPickBtnE) lotPickBtnE.addEventListener('click', () => {
+      const codeEl = tr.querySelector('.itemcode');
+      const ic = (codeEl && codeEl.value || '').trim();
+      if (!ic) { alert('Enter item code first.'); return; }
+      fetch(apiItemLots + '/' + encodeURIComponent(ic))
+        .then(r => r.json()).then(d => {
+          const lots = (d && d.lots) || [];
+          const tbody = document.getElementById('lotPickBody');
+          if (!tbody) return;
+          if (!lots.length) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#94a3b8;">No open lots for this item</td></tr>'; }
+          else {
+            tbody.innerHTML = lots.map(l =>
+              `<tr><td>${l.lot_id}</td><td>${l.batch_no||'—'}</td><td>${l.expiry_date||'—'}</td><td style="text-align:right;">${Number(l.qty||0).toFixed(3)}</td><td><button type="button" class="btn btn-primary" style="font-size:11px;padding:3px 10px;" data-lot-id="${l.lot_id}" data-batch="${(l.batch_no||'').replace(/"/g,'&quot;')}" data-exp="${l.expiry_date||''}">Pick</button></td></tr>`
+            ).join('');
+            tbody.querySelectorAll('button[data-lot-id]').forEach(b => {
+              b.addEventListener('click', () => {
+                const lid = b.getAttribute('data-lot-id');
+                let opt = lotSelE.querySelector(`option[value="${CSS.escape(lid)}"]`);
+                if (!opt) { opt = document.createElement('option'); opt.value = lid; lotSelE.appendChild(opt); }
+                opt.textContent = `Lot ${lid} · ${b.getAttribute('data-batch')||''}${b.getAttribute('data-exp')?' exp '+b.getAttribute('data-exp'):''}`;
+                lotSelE.value = lid;
+                document.getElementById('lotPickModal').classList.add('hidden');
+              });
+            });
+          }
+          document.getElementById('lotPickModal').classList.remove('hidden');
+        }).catch(() => {});
+    });
+    return tr;
+  }
+  function renderSuppliers() {
+    if (!supplierBody) return;
+    const q = (supplierSearch && supplierSearch.value || '').toLowerCase();
+    const list = q ? (suppliersList || []).filter(function (s) {
+      return String(s.code || '').toLowerCase().includes(q) || String(s.name || '').toLowerCase().includes(q);
+    }) : (suppliersList || []);
+    supplierBody.innerHTML = list.length ? list.map(function (s) {
+      return '<tr tabindex="0" data-code="' + (s.code || '') + '" data-name="' + String(s.name || '').replace(/"/g, '&quot;') + '"><td>' + (s.code || '') + '</td><td>' + (s.name || '') + '</td></tr>';
+    }).join('') : '<tr><td colspan="2">No suppliers found</td></tr>';
+  }
+  function openSupplierModal() {
+    if (queryMode) return;
+    renderSuppliers();
+    if (supplierSearch) supplierSearch.value = '';
+    if (supplierModal) supplierModal.classList.remove('hidden');
+    if (supplierSearch) supplierSearch.focus();
+  }
+  function selectSupplierRow(row) {
+    if (!row || !row.dataset.code) return;
+    if (supplierCode) supplierCode.value = row.dataset.code || '';
+    if (supplierDisplay) supplierDisplay.value = (row.dataset.code || '') + ' - ' + (row.dataset.name || '');
+    syncSupplierClearVisibility();
+    if (supplierModal) supplierModal.classList.add('hidden');
+    if (warehouseEnabled && headerWarehouseDisplay && !queryMode && !getHeaderWarehouseId()) {
+      openWarehouseModal();
+      return;
+    }
+    if (refInvoiceNo && isNavVisible(refInvoiceNo)) refInvoiceNo.focus();
+    else if (supplierDisplay) supplierDisplay.focus();
+  }
+  function renderItems() {
+    if (!itemBody) return;
+    const q = (itemSearch && itemSearch.value || '').toLowerCase();
+    const list = q ? itemsList.filter(function (i) {
+      return String(i.code || '').toLowerCase().includes(q) ||
+        String(i.barcode || '').toLowerCase().includes(q) ||
+        String(i.name || '').toLowerCase().includes(q);
+    }) : itemsList;
+    if (!list.length) {
+      itemBody.innerHTML = '<div class="item-row item-empty">No items found</div>';
+      return;
+    }
+    itemBody.innerHTML = list.map(function (i) {
+      const code = String(i.code || '');
+      const name = String(i.name || '');
+      const barcode = String(i.barcode || '');
+      const uomVal = String(i.uom || 'NOS');
+      const cost = Number(i.cost || 0);
+      const line1 = code + (name ? ' · ' + name : '');
+      const line2 = [barcode, uomVal, cost.toFixed(2)].filter(Boolean).join(' | ');
+      return '<div class="item-row" tabindex="0" data-code="' + code.replace(/"/g, '&quot;') + '" data-name="' + name.replace(/"/g, '&quot;') + '" data-uom="' + uomVal.replace(/"/g, '&quot;') + '" data-cost="' + cost + '" data-barcode="' + barcode.replace(/"/g, '&quot;') + '"><div class="item-line1">' + (line1 || '—') + '</div><div class="item-line2">' + (line2 || '—') + '</div></div>';
+    }).join('');
+  }
+  function fetchItemList(searchTerm, limit, done) {
+    let url = apiItems + '?limit=' + (limit || 200);
+    if (searchTerm && String(searchTerm).trim()) url += '&search=' + encodeURIComponent(String(searchTerm).trim());
+    if (itemFetchAbort) itemFetchAbort.abort();
+    itemFetchAbort = new AbortController();
+    fetch(url, { credentials: 'same-origin', signal: itemFetchAbort.signal })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.items) itemsList = d.items;
+        if (typeof done === 'function') done();
+      })
+      .catch(function (err) {
+        if (err && err.name === 'AbortError') return;
+        itemsList = Array.isArray(items) ? items : [];
+        if (typeof done === 'function') done();
+      });
+  }
+  function openItemModal(fromRow) {
+    if (queryMode) return;
+    const tr = fromRow || currentEntryRow;
+    if (!tr) return;
+    currentEntryRow = tr;
+    if (itemModal && !itemModal.classList.contains('hidden')) {
+      if (itemSearch) itemSearch.focus();
+      return;
+    }
+    if (itemModal) itemModal.classList.remove('hidden');
+    if (itemSearch) {
+      suppressItemSearchInput = true;
+      itemSearch.value = '';
+      suppressItemSearchInput = false;
+      itemSearch.focus();
+    }
+    if (itemBody) itemBody.innerHTML = '<div class="item-row item-empty">Loading…</div>';
+    fetchItemList('', 100, renderItems);
+  }
+  function selectItemRow(row) {
+    if (!row || !row.dataset.code) return;
+    if (currentItemRow && currentItemRow.dataset && currentItemRow.dataset.line === '1') {
+      prApplyPickedItemToRow(currentItemRow, { code: row.dataset.code, name: row.dataset.name, barcode: row.dataset.barcode, uom: row.dataset.uom || 'NOS', cost: row.dataset.cost });
+      if (itemModal) itemModal.classList.add('hidden');
+      currentItemRow = null;
+      return;
+    }
+    if (!currentEntryRow) return;
+    const codeEl = currentEntryRow.querySelector('.itemcode');
+    const nameEl = currentEntryRow.querySelector('.itemname');
+    const uomEl = currentEntryRow.querySelector('.uom');
+    const convEl = currentEntryRow.querySelector('.convfactor');
+    const rateEl = currentEntryRow.querySelector('.rate');
+    const bcEl = currentEntryRow.querySelector('.barcode');
+    if (bcEl) bcEl.value = row.dataset.barcode || '';
+    if (codeEl) codeEl.value = row.dataset.code || '';
+    if (nameEl) nameEl.value = row.dataset.name || '';
+    if (uomEl) uomEl.value = row.dataset.uom || 'NOS';
+    if (convEl) convEl.value = '1.000';
+    if (rateEl) {
+      rateEl.value = Number(row.dataset.cost || 0).toFixed(3);
+      rateEl.dispatchEvent(new Event('input'));
+    }
+    if (isLocationEnabled() && typeof currentEntryRow._fetchReceiveLocations === 'function') {
+      currentEntryRow._fetchReceiveLocations();
+    }
+    if (itemModal) itemModal.classList.add('hidden');
+    currentItemRow = null;
+    const qtyEl = currentEntryRow.querySelector('.qty');
+    if (qtyEl) {
+      qtyEl.focus();
+      if (qtyEl.select) qtyEl.select();
+    } else if (codeEl) codeEl.focus();
+  }
+  var btnAddRowEl = document.getElementById('btnAddRow');
+  if (btnAddRowEl) btnAddRowEl.addEventListener('click', () => addCurrentEntryToGrid());
+  function applyLoadedReturnLines(hdr, lines) {
+    if (hdr.suppliercode != null) {
+      const sCode = String(hdr.suppliercode);
+      supplierCode.value = sCode;
+      const s = (suppliersList || []).find(function (x) { return String(x.code || '') === sCode; });
+      supplierDisplay.value = s ? (sCode + ' - ' + (s.name || '')) : sCode;
+      syncSupplierClearVisibility();
+    }
+    if (hdr.returndate) returnDateEl.value = String(hdr.returndate).slice(0, 10);
+    if (postingDateEl) postingDateEl.value = String(hdr.postingdate || hdr.returndate || '').slice(0, 10);
+    if (typeof prApplyTxnDateBounds === 'function') prApplyTxnDateBounds();
+    if (hdr.receiptno != null) refInvoiceNo.value = String(hdr.receiptno);
+    if (hdr.sectioninc) remarksEl.value = String(hdr.sectioninc);
+    else if (hdr.remarks) remarksEl.value = String(hdr.remarks);
+    if (warehouseEnabled && (hdr.warehouse_id || hdr.warehouse_code)) {
+      const whId = hdr.warehouse_id != null ? String(hdr.warehouse_id) : '';
+      const whCode = String(hdr.warehouse_code || '').trim();
+      const whName = String(hdr.warehouse_name || '').trim();
+      const disp = whName ? (whCode ? (whCode + ' - ' + whName) : whName) : (whCode || whId);
+      setHeaderWarehouse(whId, disp);
+    }
+    linesBody.innerHTML = '';
+    if (lines.length) {
+      const loadPromises = lines.map((ln) => {
+        const line = Object.assign({}, ln || {});
+        const itemcode = String((line && line.itemcode) || '').trim();
+        const store = String((line && line.store) || line.warehouse_code || line.location || '').trim();
+        if (store) line.store = store;
+        if (!isLocationEnabled() || !itemcode || store) {
+          return Promise.resolve(line);
+        }
+        return fetchReceiveLocationCodes(itemcode).then((codes) => {
+          if (codes.length) line.store = codes[0];
+          return line;
+        });
+      });
+      Promise.all(loadPromises).then((resolvedLines) => {
+        resolvedLines.forEach((ln) => addLineToGrid(ln));
+        createEntryRow();
+        calcTotal();
+      });
+    } else {
+      createEntryRow();
+      calcTotal();
+    }
+  }
+  function loadReturnOrder(orderNo) {
+    const no = parseInt(orderNo || '0', 10);
+    if (!no) { alert('Enter Return Order No'); return; }
+    fetch(apiLoadFromOrder + '/' + no)
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        const d = res.d || {};
+        if (!res.ok || !d.success) { alert(d.error || 'Load failed'); return; }
+        applyLoadedReturnLines(d.header || {}, d.lines || []);
+      })
+      .catch(() => alert('Load failed'));
+  }
+  if (btnLoadReturnOrder) btnLoadReturnOrder.addEventListener('click', function () {
+    loadReturnOrder(returnOrderNoLoad.value);
+  });
+  function loadFromGrn(receiptNo) {
+    const no = parseInt(receiptNo || '0', 10);
+    if (!no) { alert('Enter GRN / Receipt No'); return; }
+    if (!apiLoadFromGrn) { alert('Load from GRN is not available.'); return; }
+    fetch(apiLoadFromGrn + '/' + no)
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        const d = res.d || {};
+        if (!res.ok || !d.success) { alert(d.error || 'Load failed'); return; }
+        if (grnNoLoad) grnNoLoad.value = String(no);
+        applyLoadedReturnLines(d.header || {}, d.lines || []);
+      })
+      .catch(() => alert('Load from GRN failed'));
+  }
+  if (btnLoadGrn) btnLoadGrn.addEventListener('click', function () {
+    loadFromGrn(grnNoLoad && grnNoLoad.value);
+  });
+  if (grnNoLoad) {
+    grnNoLoad.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        loadFromGrn(grnNoLoad.value);
+      }
+    });
+  }
+  try {
+    const qs = new URLSearchParams(window.location.search || '');
+    const qOrderNo = parseInt(qs.get('return_order_no') || '0', 10);
+    const qReceiptNo = parseInt(qs.get('receipt_no') || qs.get('grn_no') || '0', 10);
+    if (qOrderNo > 0) {
+      if (returnOrderNoLoad) returnOrderNoLoad.value = String(qOrderNo);
+      loadReturnOrder(qOrderNo);
+    } else if (qReceiptNo > 0) {
+      if (grnNoLoad) grnNoLoad.value = String(qReceiptNo);
+      loadFromGrn(qReceiptNo);
+    }
+  } catch (e) {}
+  function bindHeaderPopupShell(shellEl, openFn) {
+    if (!shellEl || queryMode) return;
+    shellEl.addEventListener('click', function (e) {
+      if (e.target && e.target.classList && e.target.classList.contains('search-clear')) return;
+      openFn();
+    });
+  }
+  if (supplierDisplay) {
+    supplierDisplay.addEventListener('click', function (e) { e.stopPropagation(); if (!queryMode) openSupplierModal(); });
+    supplierDisplay.addEventListener('keydown', function (e) {
+      if (e.key === 'F1' || e.keyCode === 112) { e.preventDefault(); openSupplierModal(); }
+    });
+    bindHeaderPopupShell(supplierDisplay.closest('.pr-supplier-popup'), openSupplierModal);
+  }
+  if (supplierClear) {
+    supplierClear.addEventListener('click', function (e) {
+      e.preventDefault();
+      if (supplierCode) supplierCode.value = '';
+      if (supplierDisplay) supplierDisplay.value = '';
+      syncSupplierClearVisibility();
+      if (supplierDisplay) supplierDisplay.focus();
+    });
+  }
+  if (headerWarehouseDisplay) {
+    headerWarehouseDisplay.addEventListener('click', function (e) { e.stopPropagation(); if (!queryMode) openWarehouseModal(); });
+    headerWarehouseDisplay.addEventListener('keydown', function (e) {
+      if (e.key === 'F1' || e.keyCode === 112) { e.preventDefault(); openWarehouseModal(); }
+    });
+    bindHeaderPopupShell(headerWarehouseDisplay.closest('.pr-warehouse-popup'), openWarehouseModal);
+  }
+  if (headerWarehouseClear) {
+    headerWarehouseClear.addEventListener('click', function (e) {
+      e.preventDefault();
+      setHeaderWarehouse('', '');
+      try { if (sessionStorage) sessionStorage.removeItem('pr_header_warehouse'); } catch (err) {}
+      refreshAllLineBins(false);
+      if (headerWarehouseDisplay) headerWarehouseDisplay.focus();
+    });
+  }
+  if (warehouseModalSearchClear && warehouseSearch) {
+    warehouseModalSearchClear.addEventListener('click', function (e) {
+      e.preventDefault();
+      warehouseSearch.value = '';
+      renderWarehouses(warehousesList);
+      warehouseSearch.focus();
+    });
+  }
+  if (warehouseModal) {
+    warehouseModal.addEventListener('click', function (e) {
+      if (e.target.dataset.close === 'warehouseModal' || e.target.classList.contains('modal__close')) warehouseModal.classList.add('hidden');
+    });
+  }
+  if (supplierSearch) supplierSearch.addEventListener('input', renderSuppliers);
+  if (itemSearch) {
+    itemSearch.addEventListener('input', function () {
+      if (suppressItemSearchInput) return;
+      const term = (itemSearch.value || '').trim();
+      if (itemSearchDebounce) clearTimeout(itemSearchDebounce);
+      if (!term) {
+        renderItems();
+        return;
+      }
+      itemSearchDebounce = setTimeout(function () {
+        itemSearchDebounce = null;
+        if (itemBody) itemBody.innerHTML = '<div class="item-row item-empty">Searching…</div>';
+        fetchItemList(term, 200, renderItems);
+      }, 280);
+    });
+    itemSearch.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const first = itemBody && itemBody.querySelector('.item-row[data-code]');
+        if (first) first.focus();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        if (itemModal) itemModal.classList.add('hidden');
+        const codeEl = currentEntryRow && currentEntryRow.querySelector('.itemcode');
+        if (codeEl) codeEl.focus();
+      }
+    });
+  }
+  if (supplierSearch) {
+    supplierSearch.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const first = supplierBody && supplierBody.querySelector('tr[data-code]');
+        if (first) first.focus();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        if (supplierModal) supplierModal.classList.add('hidden');
+        if (supplierDisplay) supplierDisplay.focus();
+      }
+    });
+  }
+  if (warehouseSearch) warehouseSearch.addEventListener('input', function () {
+    if (suppressWarehouseSearchInput) return;
+    renderWarehouses(warehousesList);
+  });
+  if (warehouseSearch) {
+    warehouseSearch.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const first = warehouseBody && warehouseBody.querySelector('tr[data-id]');
+        if (first) first.focus();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        if (warehouseModal) warehouseModal.classList.add('hidden');
+        if (headerWarehouseDisplay) headerWarehouseDisplay.focus();
+      }
+    });
+  }
+  if (supplierBody) supplierBody.addEventListener('click', function (e) { selectSupplierRow(e.target.closest('tr[data-code]')); });
+  if (warehouseBody) warehouseBody.addEventListener('click', function (e) { selectWarehouseRow(e.target.closest('tr[data-id]')); });
+  if (supplierTable) {
+    supplierTable.addEventListener('keydown', function (e) {
+      const row = e.target.closest('tr[data-code]');
+      if (e.key === 'Enter') { if (row) { e.preventDefault(); selectSupplierRow(row); } }
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        if (!row || !supplierBody) return;
+        const rows = Array.from(supplierBody.querySelectorAll('tr[data-code]'));
+        const idx = rows.indexOf(row);
+        if (idx < 0) return;
+        e.preventDefault();
+        if (e.key === 'ArrowDown' && idx < rows.length - 1) rows[idx + 1].focus();
+        if (e.key === 'ArrowUp' && idx > 0) rows[idx - 1].focus();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        if (supplierModal) supplierModal.classList.add('hidden');
+        if (supplierDisplay) supplierDisplay.focus();
+      }
+    });
+  }
+  if (warehouseTable) {
+    warehouseTable.addEventListener('keydown', function (e) {
+      const row = e.target.closest('tr[data-id]');
+      if (e.key === 'Enter') { if (row) { e.preventDefault(); selectWarehouseRow(row); } }
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        if (!row || !warehouseBody) return;
+        const rows = Array.from(warehouseBody.querySelectorAll('tr[data-id]'));
+        const idx = rows.indexOf(row);
+        if (idx < 0) return;
+        e.preventDefault();
+        if (e.key === 'ArrowDown' && idx < rows.length - 1) rows[idx + 1].focus();
+        if (e.key === 'ArrowUp' && idx > 0) rows[idx - 1].focus();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        if (warehouseModal) warehouseModal.classList.add('hidden');
+        if (headerWarehouseDisplay) headerWarehouseDisplay.focus();
+      }
+    });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (!(e.key === 'F1' || e.keyCode === 112) || queryMode) return;
+    const ae = document.activeElement;
+    if (!ae) return;
+    if (ae.id === 'supplierDisplay') {
+      e.preventDefault();
+      e.stopPropagation();
+      openSupplierModal();
+      return;
+    }
+    if (warehouseEnabled && ae.id === 'headerWarehouseDisplay') {
+      e.preventDefault();
+      e.stopPropagation();
+      openWarehouseModal();
+      return;
+    }
+    if (ae.classList && ae.classList.contains('itemcode')) {
+      e.preventDefault();
+      e.stopPropagation();
+      const row = ae.closest('tr.line-entry');
+      if (row) {
+        currentEntryRow = row;
+        openItemModal(row);
+      }
+    }
+  }, true);
+  if (itemBody) {
+    itemBody.addEventListener('click', function (e) {
+      const row = e.target.closest('.item-row[data-code]');
+      if (row) selectItemRow(row);
+    });
+    itemBody.addEventListener('keydown', function (e) {
+      const row = e.target.closest('.item-row[data-code]');
+      if (!row) return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        selectItemRow(row);
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        const rows = Array.from(itemBody.querySelectorAll('.item-row[data-code]'));
+        const idx = rows.indexOf(row);
+        if (idx < 0) return;
+        e.preventDefault();
+        if (e.key === 'ArrowDown' && idx < rows.length - 1) rows[idx + 1].focus();
+        if (e.key === 'ArrowUp' && idx > 0) rows[idx - 1].focus();
+      }
+    });
+  }
+  function selectUomRow(row) {
+    if (!row || !currentUomRow) return;
+    const uomVal = row.dataset.uom || '';
+    const costVal = Number(row.dataset.cost || 0);
+    const factorVal = Number(row.dataset.factor || 1);
+    if (currentUomRow.dataset && currentUomRow.dataset.line === '1') {
+      currentUomRow.dataset.uom = (uomVal || 'NOS');
+      currentUomRow.dataset.conversionfactor = String(factorVal || 1);
+      if (row.dataset.cost != null && row.dataset.cost !== '') currentUomRow.dataset.rate = String(costVal || 0);
+      prMarkCellInvalid(currentUomRow, 'pr-col-uom', false);
+      prRecalcDataRow(currentUomRow);
+      calcTotal();
+      if (uomModal) uomModal.classList.add('hidden');
+      currentUomRow = null;
+      return;
+    }
+    const uom = currentUomRow.querySelector('.uom');
+    const conv = currentUomRow.querySelector('.convfactor');
+    const rate = currentUomRow.querySelector('.rate');
+    if (uom) uom.value = uomVal;
+    if (conv) conv.value = factorVal.toFixed(3);
+    if (rate) {
+      rate.value = costVal.toFixed(3);
+      rate.dispatchEvent(new Event('input'));
+      rate.focus();
+    }
+    uomModal.classList.add('hidden');
+    currentUomRow = null;
+  }
+  if (uomTable) {
+    uomTable.addEventListener('click', (e) => {
+      const row = e.target.closest('tr[data-uom]');
+      selectUomRow(row);
+    });
+    uomTable.addEventListener('keydown', (e) => {
+      const row = e.target.closest('tr[data-uom]');
+      if (!row) return;
+      if (e.key === 'Enter') { e.preventDefault(); selectUomRow(row); return; }
+      const rows = Array.from(uomBody.querySelectorAll('tr[data-uom]'));
+      const idx = rows.indexOf(row);
+      if (idx < 0) return;
+      if (e.key === 'ArrowDown' && idx < rows.length - 1) { e.preventDefault(); rows[idx + 1].focus(); }
+      if (e.key === 'ArrowUp' && idx > 0) { e.preventDefault(); rows[idx - 1].focus(); }
+    });
+  }
+  [supplierModal, warehouseModal, itemModal, uomModal, toolsModal].forEach(function (m) {
+    if (!m) return;
+    m.addEventListener('click', function (e) {
+      if (e.target.dataset.close || e.target.classList.contains('modal__close') || e.target === m.querySelector('.modal__overlay')) {
+        m.classList.add('hidden');
+        if (m === uomModal) currentUomRow = null;
+        if (m === itemModal) currentItemRow = null;
+      }
+    });
+  });
+  const lotPickModal = document.getElementById('lotPickModal');
+  if (lotPickModal) lotPickModal.addEventListener('click', (e) => { if (e.target.dataset.close || e.target === lotPickModal.querySelector('.modal__overlay')) lotPickModal.classList.add('hidden'); });
+  function isModalOpen(){
+    return [supplierModal, warehouseModal, itemModal, uomModal, toolsModal, lotPickModal].some(function (m) { return m && !m.classList.contains('hidden'); });
+  }
+  function closeOpenModal(){
+    if (supplierModal && !supplierModal.classList.contains('hidden')) supplierModal.classList.add('hidden');
+    if (warehouseModal && !warehouseModal.classList.contains('hidden')) warehouseModal.classList.add('hidden');
+    if (itemModal && !itemModal.classList.contains('hidden')) { itemModal.classList.add('hidden'); currentItemRow = null; }
+    if (uomModal && !uomModal.classList.contains('hidden')) { uomModal.classList.add('hidden'); currentUomRow = null; }
+    if (toolsModal && !toolsModal.classList.contains('hidden')) toolsModal.classList.add('hidden');
+    if (lotPickModal && !lotPickModal.classList.contains('hidden')) lotPickModal.classList.add('hidden');
+  }
+  /* ===== Request/Return inline grid editing (Business Central / PO style) ===== */
+  function prToast(message, type, timeoutMs) {
+    var host = document.getElementById('prToastHost');
+    if (!host) { host = document.createElement('div'); host.id = 'prToastHost'; document.body.appendChild(host); }
+    var el = document.createElement('div');
+    el.className = 'pr-toast' + (type ? (' pr-toast--' + type) : '');
+    var msg = document.createElement('span'); msg.className = 'pr-toast__msg'; msg.textContent = String(message == null ? '' : message);
+    var btn = document.createElement('button'); btn.type = 'button'; btn.className = 'pr-toast__close'; btn.setAttribute('aria-label', 'Dismiss'); btn.innerHTML = '&times;';
+    el.appendChild(msg); el.appendChild(btn); host.appendChild(el);
+    var timer = null;
+    function remove() { if (timer) { clearTimeout(timer); timer = null; } el.classList.add('pr-toast--out'); setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 200); }
+    btn.addEventListener('click', remove);
+    timer = setTimeout(remove, timeoutMs || 5000);
+    return el;
+  }
+  function prBarcodeCmp(v) { return String(v == null ? '' : v).trim().toUpperCase(); }
+  var prUomCache = {};
+  function prCacheUom(code, uoms) {
+    var m = {};
+    (uoms || []).forEach(function (u) {
+      var key = String(u.uom || '').trim().toUpperCase();
+      if (!key) return;
+      m[key] = { factor: parseFloat(u.factor != null ? u.factor : 1) || 1, cost: parseFloat(u.cost != null ? u.cost : 0) || 0 };
+    });
+    prUomCache[code] = m;
+    return m;
+  }
+  function prMarkCellInvalid(tr, colKey, bad, msg) {
+    var td = tr && tr.querySelector('.' + colKey);
+    if (!td) return;
+    td.classList.remove('pr-cell-checking');
+    if (bad) { td.classList.add('pr-cell-invalid'); td.title = msg || 'Invalid'; }
+    else { td.classList.remove('pr-cell-invalid'); td.removeAttribute('title'); }
+  }
+  function prRecalcDataRow(tr, keepAmount) {
+    if (!tr) return;
+    function st(cls, val) { var el = tr.querySelector(cls); if (el) el.textContent = val; }
+    var qty = parseFloat(tr.dataset.quantity || 0) || 0;
+    var rate = parseFloat(tr.dataset.rate || 0) || 0;
+    var disc = isVendorNote ? 0 : (parseFloat(tr.dataset.discount || 0) || 0);
+    var conv = parseFloat(tr.dataset.conversionfactor || 1) || 1;
+    var amt;
+    if (keepAmount) {
+      amt = parseFloat(tr.dataset.amount || 0) || 0;
+      rate = parseFloat(tr.dataset.rate || 0) || 0;
+    } else {
+      amt = Math.max(0, (qty * rate) - disc);
+      tr.dataset.amount = String(amt);
+    }
+    if (isVendorNote) tr.dataset.discount = '0';
+    st('.pr-col-barcode', tr.dataset.barcode || '');
+    st('.pr-col-itemcode', tr.dataset.itemcode || '');
+    st('.pr-col-itemname', tr.dataset.itemname || '');
+    st('.pr-col-uom', (tr.dataset.uom || 'NOS'));
+    st('.pr-col-conv', conv.toFixed(3));
+    st('.pr-col-rate', rate.toFixed(3));
+    st('.pr-col-qty', qty.toFixed(2));
+    st('.pr-col-discount', disc.toFixed(2));
+    st('.pr-col-amount', amt.toFixed(3));
+  }
+  function prApplyPickedItemToRow(tr, cand) {
+    if (!tr || !cand) return;
+    var mbc = String(cand.barcode != null ? cand.barcode : '').trim();
+    tr.dataset.itemcode = String(cand.code != null ? cand.code : '');
+    if (mbc) tr.dataset.barcode = mbc;
+    tr.dataset.itemname = String(cand.name != null ? cand.name : '');
+    tr.dataset.uom = (String(cand.uom || 'NOS').trim() || 'NOS');
+    tr.dataset.conversionfactor = '1';
+    if (cand.cost != null && cand.cost !== '') tr.dataset.rate = String(parseFloat(cand.cost) || 0);
+    prMarkCellInvalid(tr, 'pr-col-itemcode', false);
+    prMarkCellInvalid(tr, 'pr-col-itemname', false);
+    prMarkCellInvalid(tr, 'pr-col-barcode', false);
+    prValidateRowUom(tr);
+    prRecalcDataRow(tr);
+    calcTotal();
+  }
+  function prValidateRowUom(tr) {
+    if (!tr) return;
+    var code = (tr.dataset.itemcode || '').trim();
+    var uom = (tr.dataset.uom || '').trim();
+    if (!code || !uom) { prMarkCellInvalid(tr, 'pr-col-uom', false); return; }
+    function check() {
+      var m = prUomCache[code] || {};
+      var key = uom.toUpperCase();
+      var ok = Object.prototype.hasOwnProperty.call(m, key);
+      prMarkCellInvalid(tr, 'pr-col-uom', !ok, ok ? '' : ('UOM "' + uom + '" is not defined for item ' + code + '. Allowed: ' + (Object.keys(m).join(', ') || 'none')));
+      if (!ok) { prToast('UOM "' + uom + '" is not valid for item ' + code + '.', 'error'); return; }
+      tr.dataset.conversionfactor = String(m[key].factor || 1);
+      prRecalcDataRow(tr); calcTotal();
+    }
+    if (prUomCache[code]) { check(); return; }
+    var uTd = tr.querySelector('.pr-col-uom'); if (uTd) uTd.classList.add('pr-cell-checking');
+    fetch(apiItemUoms + '/' + encodeURIComponent(code)).then(function (r) { return r.json(); })
+      .then(function (d) { if (d && d.success && d.uoms) prCacheUom(code, d.uoms); check(); })
+      .catch(function () { if (uTd) uTd.classList.remove('pr-cell-checking'); });
+  }
+  function prValidateRowBarcode(tr) {
+    if (!tr) return;
+    var bc = (tr.dataset.barcode || '').trim();
+    var code = (tr.dataset.itemcode || '').trim();
+    if (!bc) { prMarkCellInvalid(tr, 'pr-col-barcode', false); return; }
+    var bcCmp = prBarcodeCmp(bc);
+    var bcTd = tr.querySelector('.pr-col-barcode'); if (bcTd) bcTd.classList.add('pr-cell-checking');
+    fetch(apiItems + '?search=' + encodeURIComponent(bc) + '&limit=30').then(function (r) { return r.json(); }).then(function (d) {
+      var list = (d && d.items) ? d.items : [];
+      var match = list.filter(function (i) { return prBarcodeCmp(i.barcode) === bcCmp; });
+      if (!match.length) { prMarkCellInvalid(tr, 'pr-col-barcode', true, 'Barcode "' + bc + '" not found in item master.'); prToast('Barcode "' + bc + '" not found in item master.', 'error'); return; }
+      if (match.length > 1) { prMarkCellInvalid(tr, 'pr-col-barcode', true, 'Barcode "' + bc + '" matches multiple items \u2014 enter the item code instead.'); prToast('Barcode "' + bc + '" matches multiple items.', 'warn'); return; }
+      var it = match[0];
+      var itCode = String(it.code != null ? it.code : '').trim();
+      if (!code) { prApplyPickedItemToRow(tr, { code: it.code, name: it.name, barcode: it.barcode, uom: it.uom || 'NOS', cost: it.cost }); prMarkCellInvalid(tr, 'pr-col-barcode', false); return; }
+      if (itCode && itCode !== code) { prMarkCellInvalid(tr, 'pr-col-barcode', true, 'Barcode "' + bc + '" belongs to item ' + itCode + (it.name ? ' (' + it.name + ')' : '') + ', not this line\u2019s item ' + code + '.'); prToast('Barcode "' + bc + '" belongs to item ' + itCode + ', not ' + code + '.', 'error'); return; }
+      prMarkCellInvalid(tr, 'pr-col-barcode', false);
+    }).catch(function () { if (bcTd) bcTd.classList.remove('pr-cell-checking'); });
+  }
+  function prResolveTypedItemCode(tr) {
+    if (!tr) return;
+    var code = (tr.dataset.itemcode || '').trim();
+    if (!code) {
+      prMarkCellInvalid(tr, 'pr-col-itemcode', false);
+      tr.dataset.itemname = '';
+      var nm0 = tr.querySelector('.pr-col-itemname'); if (nm0) nm0.textContent = '';
+      return;
+    }
+    var icTd = tr.querySelector('.pr-col-itemcode'); if (icTd) icTd.classList.add('pr-cell-checking');
+    fetch(apiItems + '?search=' + encodeURIComponent(code) + '&limit=50').then(function (r) { return r.json(); }).then(function (d) {
+      var list = (d && d.items) ? d.items : [];
+      var it = list.find(function (i) { return String(i.code) === String(code); });
+      if (!it) { prMarkCellInvalid(tr, 'pr-col-itemcode', true, 'Item code "' + code + '" not found in item master.'); prToast('Item code "' + code + '" not found in item master.', 'error'); return; }
+      prMarkCellInvalid(tr, 'pr-col-itemcode', false);
+      prApplyPickedItemToRow(tr, { code: it.code, name: it.name, barcode: it.barcode, uom: it.uom || 'NOS', cost: it.cost });
+    }).catch(function () { if (icTd) icTd.classList.remove('pr-cell-checking'); });
+  }
+  function prOpenUomLookupForRow(tr) {
+    if (!tr) return;
+    var itemcode = (tr.dataset.itemcode || '').trim();
+    if (!itemcode) { prToast('Select an item first.', 'warn'); return; }
+    currentUomRow = tr;
+    if (uomBody) uomBody.innerHTML = '<tr><td colspan="2">Loading...</td></tr>';
+    if (uomModal) uomModal.classList.remove('hidden');
+    fetch(apiItemUoms + '/' + encodeURIComponent(itemcode)).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.success || !Array.isArray(d.uoms) || !d.uoms.length) { if (uomBody) uomBody.innerHTML = '<tr><td colspan="2">No UOM found</td></tr>'; return; }
+      prCacheUom(itemcode, d.uoms);
+      uomBody.innerHTML = d.uoms.map(function (u) {
+        var uu = String(u.uom || 'NOS').replace(/"/g, '&quot;');
+        var cc = Number(u.cost || 0).toFixed(2);
+        var ff = Number(u.factor != null ? u.factor : 1).toFixed(3);
+        return '<tr tabindex="0" data-uom="' + uu + '" data-cost="' + cc + '" data-factor="' + ff + '"><td>' + uu + '</td><td style="text-align:right;">' + cc + '</td></tr>';
+      }).join('');
+      var first = uomBody.querySelector('tr[data-uom]');
+      if (first) first.focus();
+    }).catch(function () { if (uomBody) uomBody.innerHTML = '<tr><td colspan="2">Failed to load UOM</td></tr>'; });
+  }
+  function prApplyItemToEntryRow(tr, it, bcFallback) {
+    if (!tr || !it) return;
+    var set = function (cls, v) { var el = tr.querySelector('.' + cls); if (el) el.value = v; };
+    set('itemcode', String(it.code || ''));
+    set('barcode', String(it.barcode || bcFallback || ''));
+    set('itemname', it.name || '');
+    set('uom', (String(it.uom || '').trim() || 'NOS'));
+    set('convfactor', '1.000');
+    var rateEl = tr.querySelector('.rate');
+    if (rateEl) { rateEl.value = Number(it.cost || 0).toFixed(3); rateEl.dispatchEvent(new Event('input')); }
+    if (isLocationEnabled() && typeof tr._fetchReceiveLocations === 'function') tr._fetchReceiveLocations();
+  }
+  function prResolveBarcodeToEntry(tr, bcRaw, opts, onDone) {
+    opts = opts || {};
+    var bc = String(bcRaw || '').trim();
+    if (!tr || !bc) { if (typeof onDone === 'function') onDone(false); return; }
+    var bcCmp = prBarcodeCmp(bc);
+    function notify(msg, kind) { if (opts.notify) prToast(msg, kind); }
+    var cached = (itemsList || []).filter(function (i) { return prBarcodeCmp(i.barcode) === bcCmp; });
+    if (cached.length === 1) { prApplyItemToEntryRow(tr, cached[0], bc); if (typeof onDone === 'function') onDone(true); return; }
+    if (cached.length > 1) { notify('Multiple items match barcode "' + bc + '". Enter item code or use F1 item list.', 'warn'); if (typeof onDone === 'function') onDone(false); return; }
+    fetch(apiItems + '?search=' + encodeURIComponent(bc) + '&limit=30').then(function (r) { return r.json(); }).then(function (d) {
+      var list = (d && d.items) ? d.items : [];
+      var match = list.filter(function (i) { return prBarcodeCmp(i.barcode) === bcCmp; });
+      if (!match.length) {
+        notify('Barcode "' + bc + '" was not found on item master for this branch.', 'error');
+        if (opts.notify) { var bcEl = tr.querySelector('.barcode'); if (bcEl) { bcEl.value = ''; bcEl.focus(); } }
+        if (typeof onDone === 'function') onDone(false);
+        return;
+      }
+      if (match.length > 1) { notify('Multiple items match barcode "' + bc + '". Enter item code or use F1 item list.', 'warn'); if (typeof onDone === 'function') onDone(false); return; }
+      prApplyItemToEntryRow(tr, match[0], bc);
+      if (typeof onDone === 'function') onDone(true);
+    }).catch(function () { notify('Could not look up barcode. Check your connection and try again.', 'error'); if (typeof onDone === 'function') onDone(false); });
+  }
+  var PR_INLINE_COLS = {
+    'pr-col-barcode':  { ds: 'barcode',  type: 'text' },
+    'pr-col-itemcode': { ds: 'itemcode', type: 'text' },
+    'pr-col-uom':      { ds: 'uom',      type: 'text' },
+    'pr-col-rate':     { ds: 'rate',     type: 'number' },
+    'pr-col-qty':      { ds: 'quantity', type: 'number' },
+    'pr-col-amount':   { ds: 'amount',   type: 'number' },
+    'pr-col-discount': { ds: 'discount', type: 'number' }
+  };
+  var PR_INLINE_ORDER = ['pr-col-barcode', 'pr-col-itemcode', 'pr-col-uom', 'pr-col-rate', 'pr-col-qty', 'pr-col-amount', 'pr-col-discount'];
+  function prInlineColKey(td) {
+    if (!td || !td.classList) return null;
+    for (var k in PR_INLINE_COLS) { if (td.classList.contains(k)) return k; }
+    return null;
+  }
+  function prInlineMove(td, tr, dir) {
+    if (dir === 'down' || dir === 'up') {
+      var rows = Array.prototype.slice.call(linesBody.querySelectorAll('tr[data-line="1"]'));
+      var ri = rows.indexOf(tr);
+      var target = rows[ri + (dir === 'down' ? 1 : -1)];
+      if (!target) { if (dir === 'down') { var c = currentEntryRow && currentEntryRow.querySelector('.barcode'); if (c) { c.focus(); if (c.select) c.select(); } } return; }
+      var key = prInlineColKey(td);
+      var ntd = key ? target.querySelector('.' + key) : null;
+      if (ntd) prBeginInlineEdit(ntd, target, key);
+      return;
+    }
+    var curKey = prInlineColKey(td);
+    var oi = PR_INLINE_ORDER.indexOf(curKey);
+    if (oi === -1) return;
+    var step = dir === 'right' ? 1 : -1;
+    for (var i = oi + step; i >= 0 && i < PR_INLINE_ORDER.length; i += step) {
+      var c = tr.querySelector('.' + PR_INLINE_ORDER[i]);
+      if (c) { prBeginInlineEdit(c, tr, PR_INLINE_ORDER[i]); return; }
+    }
+  }
+  function prBeginInlineEdit(td, tr, key) {
+    if (!td || td._editing || queryMode) return;
+    var cfg = PR_INLINE_COLS[key];
+    if (!cfg) return;
+    var cur = cfg.type === 'number' ? String(parseFloat(tr.dataset[cfg.ds] || 0) || 0) : String(tr.dataset[cfg.ds] || '');
+    var input = document.createElement('input');
+    input.className = 'pr-inline-input';
+    input.type = cfg.type === 'number' ? 'number' : 'text';
+    if (cfg.type === 'number') input.step = 'any';
+    input.value = cur;
+    td._editing = true;
+    td.textContent = '';
+    td.appendChild(input);
+    input.focus();
+    try { input.select(); } catch (eSel) {}
+    var done = false;
+    function finish(commit) {
+      if (done) return; done = true;
+      td._editing = false;
+      if (commit) {
+        if (cfg.type === 'number') {
+          var n = parseFloat(input.value); if (isNaN(n)) n = 0;
+          if (key === 'pr-col-amount') {
+            var qtyA = parseFloat(tr.dataset.quantity || 0) || 0;
+            var discA = isVendorNote ? 0 : (parseFloat(tr.dataset.discount || 0) || 0);
+            tr.dataset.amount = String(Math.max(0, n));
+            if (qtyA > 0) tr.dataset.rate = String(Math.max(0, (Math.max(0, n) + discA) / qtyA));
+            prRecalcDataRow(tr, true);
+          } else {
+            tr.dataset[cfg.ds] = String(n);
+            prRecalcDataRow(tr);
+          }
+        }
+        else { var tv = String(input.value || '').trim(); if (key === 'pr-col-uom') tv = tv.toUpperCase(); tr.dataset[cfg.ds] = tv; prRecalcDataRow(tr); }
+      } else {
+        prRecalcDataRow(tr);
+      }
+      calcTotal();
+      if (commit) {
+        if (key === 'pr-col-uom') prValidateRowUom(tr);
+        else if (key === 'pr-col-barcode') prValidateRowBarcode(tr);
+        else if (key === 'pr-col-itemcode') prResolveTypedItemCode(tr);
+      }
+    }
+    input.addEventListener('blur', function () { finish(true); });
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'F1' || e.keyCode === 112) {
+        if (key === 'pr-col-barcode' || key === 'pr-col-itemcode') { e.preventDefault(); e.stopPropagation(); finish(false); currentItemRow = tr; openItemModal(); }
+        else if (key === 'pr-col-uom') { e.preventDefault(); e.stopPropagation(); finish(false); prOpenUomLookupForRow(tr); }
+        return;
+      }
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); prInlineMove(td, tr, 'down'); }
+      else if (e.key === 'Tab') { e.preventDefault(); finish(true); prInlineMove(td, tr, e.shiftKey ? 'left' : 'right'); }
+      else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    });
+  }
+  if (linesBody && !queryMode) {
+    linesBody.addEventListener('click', function (e) {
+      var td = e.target.closest && e.target.closest('td');
+      if (!td) return;
+      var tr = td.closest && td.closest('tr[data-line="1"]');
+      if (!tr) return;
+      if (e.target.closest && (e.target.closest('.btnRemove') || e.target.closest('.pr-lot-pick'))) return;
+      if (td.querySelector('input, select')) return;
+      if (td.classList.contains('pr-col-itemname')) { currentItemRow = tr; openItemModal(); return; }
+      var key = prInlineColKey(td);
+      if (key) prBeginInlineEdit(td, tr, key);
+    });
+  }
+
+  if (stockTypeToggle) {
+    stockTypeToggle.addEventListener('change', () => {
+      refreshStoreColumnVisibility();
+      if (isLocationEnabled() && currentEntryRow && typeof currentEntryRow._fetchReceiveLocations === 'function') {
+        currentEntryRow._fetchReceiveLocations();
+      }
+    });
+  }
+  const btnDiscard = document.getElementById('btnDiscard');
+  if (btnDiscard) btnDiscard.addEventListener('click', function () { window.location.reload(); });
+
+  function prGetSaveAsMode() {
+    var apprSave = document.querySelector('#prSaveAsModal input[name="prApprovalSaveAs"]:checked')
+      || document.querySelector('input[name="prApprovalSaveAs"]:checked');
+    return (apprSave && apprSave.value) ? apprSave.value : 'inventory_accounts';
+  }
+  function prResolveSavePayload(saveAsMode) {
+    if (saveAsMode === 'draft') {
+      return { save_mode: 'pr_draft', post_inventory: false, posts_accounts: false };
+    }
+    if (saveAsMode === 'inventory_only') {
+      return { save_mode: 'pr_only', post_inventory: true, posts_accounts: false };
+    }
+    return { save_mode: 'pr_posting', post_inventory: true, posts_accounts: true };
+  }
+  var prSaveAsModal = document.getElementById('prSaveAsModal');
+  var prSaveAsModalOverlay = document.getElementById('prSaveAsModalOverlay');
+  var prSaveAsModalClose = document.getElementById('prSaveAsModalClose');
+  var prSaveAsModalCancel = document.getElementById('prSaveAsModalCancel');
+  var prSaveAsModalContinue = document.getElementById('prSaveAsModalContinue');
+  var prSaveAsModalPending = null;
+  function prCloseSaveAsModal() {
+    prSaveAsModalPending = null;
+    if (prSaveAsModal) prSaveAsModal.classList.add('hidden');
+  }
+  function prOpenSaveAsModal(onContinue) {
+    if (!prSaveAsModal || isVendorNote) {
+      if (onContinue) onContinue();
+      return;
+    }
+    prSaveAsModalPending = onContinue;
+    prSaveAsModal.classList.remove('hidden');
+    var firstRadio = prSaveAsModal.querySelector('input[name="prApprovalSaveAs"]:checked')
+      || prSaveAsModal.querySelector('input[name="prApprovalSaveAs"]');
+    if (firstRadio) firstRadio.focus();
+  }
+  if (prSaveAsModalOverlay) prSaveAsModalOverlay.addEventListener('click', prCloseSaveAsModal);
+  if (prSaveAsModalClose) prSaveAsModalClose.addEventListener('click', prCloseSaveAsModal);
+  if (prSaveAsModalCancel) prSaveAsModalCancel.addEventListener('click', prCloseSaveAsModal);
+  if (prSaveAsModalContinue) {
+    prSaveAsModalContinue.addEventListener('click', function () {
+      var fn = prSaveAsModalPending;
+      prCloseSaveAsModal();
+      if (fn) fn();
+    });
+  }
+  if (prSaveAsModal) {
+    prSaveAsModal.querySelectorAll('.pr-save-as-card').forEach(function (card) {
+      card.addEventListener('dblclick', function () {
+        var radio = card.querySelector('input[type="radio"]');
+        if (radio) radio.checked = true;
+        if (prSaveAsModalContinue) prSaveAsModalContinue.click();
+      });
+    });
+  }
+
+  if (btnSave) btnSave.addEventListener('click', function () {
+    if (queryMode || isSaving) return;
+    if (txnDateBlocked) {
+      alert(txnDateError || 'No open transaction date. Set it in Transaction Date Setup before posting.');
+      return;
+    }
+    const goodsreturnno=parseInt(returnNoEl.value||'0',10)||0; if(!supplierCode.value){alert('Please select Supplier');return;}
+    if (!prValidateWarehouseBeforeSave()) return;
+    const lines=[]; linesBody.querySelectorAll('tr[data-line="1"]').forEach((tr)=>{const itemcode=(tr.dataset.itemcode||'').trim(); const uom=(tr.dataset.uom||'NOS').trim()||'NOS'; const conversionfactor=parseFloat(tr.dataset.conversionfactor||1)||1; const quantity=parseFloat(tr.dataset.quantity||0)||0; const rate=parseFloat(tr.dataset.rate||0)||0; const discount=parseFloat(tr.dataset.discount||0)||0; const store=(tr.dataset.store||'').trim(); const binSelR=tr.querySelector('.bin_storage') || tr.querySelector('.pr-bin-sel'); const lotSelR=tr.querySelector('.pr-lot-sel'); const whv=resolveRowWarehouseId(tr); const whCode=prWarehouseCodeForId(whv)||String(tr.dataset.location||'').trim(); const binv=(binSelR&&binSelR.value||tr.dataset.storage_id||tr.dataset.storageId||'').trim(); const lotv=(lotSelR&&lotSelR.value||tr.dataset.lotId||'').trim(); if(!itemcode||quantity<=0)return; const o={itemcode:itemcode,uom:uom,conversionfactor:conversionfactor,quantity:quantity,rate:rate,discount:discount,store:store,storecode:0,remarks:(remarksEl.value||''),averagecost:rate}; if (whv > 0) o.warehouse_id=whv; if (whCode) { o.warehouse_code=whCode; o.location=whCode; } if (binv && /^\d+$/.test(binv)) o.storage_id=parseInt(binv,10); if (lotv && /^\d+$/.test(lotv)) o.lot_id=parseInt(lotv,10); lines.push(o); });
+    if(!lines.length){alert('Enter valid line items');return;}
+    const sourceReturnOrderNo = (returnOrderNoLoad && returnOrderNoLoad.value) ? (parseInt(returnOrderNoLoad.value || '0', 10) || 0) : 0;
+    const isVendorNotePost = isVendorNote && !isDraftRequestMode;
+    var saveOpts = prResolveSavePayload('inventory_accounts');
+    function performPrSave(retryCount) {
+      retryCount = retryCount || 0;
+      var nonce = prSaveNonce();
+      if (!nonce) {
+        return prRefreshSaveNonce().then(function (refreshed) {
+          if (!refreshed) {
+            alert('Save token missing. Refresh the page and try again.');
+            return;
+          }
+          performPrSave();
+        });
+      }
+      setSavingOverlay(true);
+      fetch(apiSave, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Save-Nonce': nonce },
+        body: JSON.stringify({
+          goodsreturnno: goodsreturnno,
+          returndate: returnDateEl.value,
+          postingdate: (postingDateEl && postingDateEl.value) ? postingDateEl.value : returnDateEl.value,
+          returntype: returnTypeValue,
+          suppliercode: parseInt(supplierCode.value || '0', 10) || 0,
+          receiptno: parseInt(refInvoiceNo.value || '0', 10) || 0,
+          returnamount: parseFloat(netTotal && netTotal.value || '0') || 0,
+          discount: headerDiscountEl ? (parseFloat(headerDiscountEl.value || '0') || 0) : 0,
+          remarks: (remarksEl.value || ''),
+          warehouse_id: parseInt(getHeaderWarehouseId(), 10) || undefined,
+          return_order_no: sourceReturnOrderNo,
+          save_mode: saveOpts.save_mode,
+          post_inventory: saveOpts.post_inventory,
+          save_nonce: nonce,
+          lines: lines
+        })
+      })
+      .then(function (r) {
+        return r.json().then(function (d) { return { status: r.status, data: d }; });
+      })
+      .then(function (res) {
+        var d = res.data || {};
+        prApplySaveNonceFromResponse(d);
+        if (res.status === 423 || d.save_session_locked) {
+          alert(d.error || 'Another save is already in progress. Please wait and try again.');
+          return;
+        }
+        if (d.replay_blocked) {
+          prRefreshSaveNonce().finally(function () {
+            alert(d.error || 'Duplicate save request. Refresh the page and try again.');
+          });
+          return;
+        }
+        if (!d.success) {
+          if (d.duplicate_doc_key && retryCount < 3) {
+            var suggested = d.suggested_goodsreturnno;
+            if (suggested != null && returnNoEl) {
+              goodsreturnno = parseInt(suggested, 10) || suggested;
+              returnNoEl.value = String(goodsreturnno);
+              performPrSave(retryCount + 1);
+              return { keepSaving: true };
+            }
+          }
+          window.dispatchEvent(new CustomEvent('nexa-transaction-save-failed', { detail: d }));
+          alert(d.error || 'Save failed');
+          return;
+        }
+        if (d.goodsreturnno != null && returnNoEl) {
+          returnNoEl.value = String(d.goodsreturnno);
+        }
+        window.dispatchEvent(new CustomEvent('nexa-transaction-save-success', { detail: d }));
+        var saveOkMsg = d.message || docLabel + ' saved.';
+        alert(saveOkMsg);
+        if (d.pdf_url) {
+          try { window.open(d.pdf_url, '_blank'); } catch (e) {}
+        }
+        if (isDraftRequestMode || isVendorNote || loadHeader) {
+          var nextUrl = (d && d.list_url) ? String(d.list_url) : listUrl;
+          window.location.href = nextUrl;
+          return;
+        }
+        fetch(apiNextNo).then(function (r) { return r.json(); }).then(function (n) {
+          if (n.success && n.goodsreturnno) returnNoEl.value = n.goodsreturnno;
+          if (typeof window._prRefreshPostedNav === 'function') window._prRefreshPostedNav();
+        }).catch(function () {});
+      })
+      .catch(function () {
+        window.dispatchEvent(new CustomEvent('nexa-transaction-save-failed', { detail: {} }));
+        alert('Save failed');
+      })
+      .then(function (meta) {
+        if (!meta || !meta.keepSaving) setSavingOverlay(false);
+      });
+    }
+    if (isVendorNotePost) {
+      var postConfirm = 'Save and post this Purchase Debit Note to DRHDR and GL?';
+      if (sourceReturnOrderNo > 0) {
+        postConfirm = 'Post debit note #' + goodsreturnno + ' from request #' + sourceReturnOrderNo + '?\n\nThis writes DRHDR/DRDTL and GL entries.';
+      }
+      if (!window.confirm(postConfirm)) return;
+      saveOpts = { save_mode: 'pr_posting', post_inventory: true, posts_accounts: true };
+      performPrSave();
+      return;
+    }
+    if (inventoryPosted) {
+      saveOpts = prResolveSavePayload('inventory_accounts');
+      performPrSave();
+      return;
+    }
+    function startPrSaveWithSelectedMode() {
+      saveOpts = prResolveSavePayload(prGetSaveAsMode());
+      performPrSave();
+    }
+    prOpenSaveAsModal(startPrSaveWithSelectedMode);
+  });
+  if (loadHeader) {
+    if (loadHeader.returndate) returnDateEl.value = String(loadHeader.returndate).slice(0, 10);
+    if (postingDateEl) postingDateEl.value = String(loadHeader.postingdate || loadHeader.returndate || '').slice(0, 10);
+    if (typeof prApplyTxnDateBounds === 'function') prApplyTxnDateBounds();
+    if (loadHeader.suppliercode != null) {
+      const sCode = String(loadHeader.suppliercode);
+      if (supplierCode) supplierCode.value = sCode;
+      const s = (suppliersList || []).find(function (x) { return String(x.code || '') === sCode; });
+      if (supplierDisplay) supplierDisplay.value = s ? (sCode + ' - ' + (s.name || '')) : sCode;
+      syncSupplierClearVisibility();
+    }
+    if (loadHeader.receiptno != null && refInvoiceNo) refInvoiceNo.value = String(loadHeader.receiptno);
+    const remarksText = loadHeader.sectioninc != null ? loadHeader.sectioninc : loadHeader.remarks;
+    if (remarksText != null && remarksEl) remarksEl.value = String(remarksText);
+    if (headerDiscountEl && loadHeader.discount != null) headerDiscountEl.value = Number(loadHeader.discount || 0).toFixed(2);
+  }
+  if (isVendorNote && stockTypeToggle) {
+    const hasStoreInLoadedLines = (loadDetails || []).some((ln) => String((ln && ln.store) || '').trim() !== '');
+    stockTypeToggle.checked = hasStoreInLoadedLines;
+  }
+  refreshStoreColumnVisibility();
+  linesBody.innerHTML = '';
+  if (loadDetails && loadDetails.length) {
+    ensureWarehousesLoaded(function () {
+      loadDetails.forEach(function (ln) { addLineToGrid(ln); });
+      if (warehouseEnabled) {
+        const whIds = [];
+        loadDetails.forEach(function (ln) {
+          const w = ln.warehouse_id != null ? String(ln.warehouse_id) : '';
+          if (w) whIds.push(w);
+        });
+        const unique = whIds.filter(function (v, i, a) { return a.indexOf(v) === i; });
+        if (unique.length === 1) {
+          const w = (warehousesList || []).find(function (x) { return String(x.warehouse_id || x.code) === unique[0]; });
+          const whCode = w ? warehousePickerCode(w) : '';
+          const whName = w ? String(w.name || '').trim() : '';
+          const disp = whCode && whName ? (whCode + ' - ' + whName) : (w ? warehousePickerLabel(w) : unique[0]);
+          setHeaderWarehouse(unique[0], disp);
+          onHeaderWarehouseChange();
+        }
+      }
+      calcTotal();
+    });
+  }
+  if (!queryMode) createEntryRow();
+  if (!(loadDetails && loadDetails.length)) calcTotal();
+  if (queryMode) {
+    if (returnDateEl) returnDateEl.readOnly = true;
+    if (refInvoiceNo) refInvoiceNo.readOnly = true;
+    if (remarksEl) remarksEl.readOnly = true;
+  } else if (isDraftRequestMode && supplierDisplay && isNavVisible(supplierDisplay)) {
+    setTimeout(function () { focusNavField(supplierDisplay); }, 0);
+  }
+
+  (function prPostedNavInit() {
+    if (isDebitNote || !apiPrAdjacentPosted || !prQueryUrlTpl || !prNewUrl) return;
+    var navWrap = document.getElementById('prPostedNav');
+    var btnPrev = document.getElementById('prNavPrev');
+    var btnNext = document.getElementById('prNavNext');
+    if (!navWrap) return;
+
+    function prCurrentReturnNo() {
+      return parseInt(returnNoEl && returnNoEl.value || '0', 10) || 0;
+    }
+
+    function prNavReturnParam() {
+      var rno = prCurrentReturnNo();
+      return rno > 0 ? String(rno) : '0';
+    }
+
+    function prAnyModalOpen() {
+      var modals = document.querySelectorAll('.modal');
+      for (var i = 0; i < modals.length; i++) {
+        if (modals[i] && !modals[i].classList.contains('hidden')) return true;
+      }
+      return false;
+    }
+
+    function prTypingInField(target) {
+      if (!target) return false;
+      var tag = String(target.tagName || '').toUpperCase();
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      return !!(target.isContentEditable);
+    }
+
+    function prViewUrl(goodsreturnno) {
+      var url = String(prQueryUrlTpl).replace('999999999', String(goodsreturnno));
+      url += (url.indexOf('?') >= 0 ? '&' : '?') + 'view=1';
+      return url;
+    }
+
+    function prOpenNewReturn() {
+      window.location.href = prNewUrl;
+    }
+
+    function prRefreshNavButtons() {
+      fetch(apiPrAdjacentPosted + '?goodsreturnno=' + encodeURIComponent(prNavReturnParam()))
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (!d || !d.success) return;
+          if (btnPrev) btnPrev.disabled = !d.has_prev;
+          if (btnNext) btnNext.disabled = false;
+        })
+        .catch(function() {});
+    }
+
+    function prNavigatePosted(direction) {
+      if (direction === 'prev' && btnPrev && btnPrev.disabled) return;
+      fetch(apiPrAdjacentPosted + '?goodsreturnno=' + encodeURIComponent(prNavReturnParam())
+        + '&direction=' + encodeURIComponent(direction))
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (!d || !d.success) {
+            alert('Could not load adjacent return.');
+            return;
+          }
+          if (d.goodsreturnno) {
+            window.location.href = prViewUrl(d.goodsreturnno);
+            return;
+          }
+          if (direction === 'next') {
+            prOpenNewReturn();
+            return;
+          }
+          alert('No previous posted return.');
+          prRefreshNavButtons();
+        })
+        .catch(function() { alert('Could not load adjacent return.'); });
+    }
+
+    if (btnPrev) btnPrev.addEventListener('click', function(e) { e.preventDefault(); prNavigatePosted('prev'); });
+    if (btnNext) btnNext.addEventListener('click', function(e) { e.preventDefault(); prNavigatePosted('next'); });
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      if (prTypingInField(e.target)) return;
+      if (prAnyModalOpen()) return;
+      e.preventDefault();
+      prNavigatePosted(e.key === 'ArrowLeft' ? 'prev' : 'next');
+    });
+
+    window._prRefreshPostedNav = prRefreshNavButtons;
+    prRefreshNavButtons();
+  })();
+
+  (function initPrDelete() {
+    if (!apiDelete) return;
+    var btnDelete = document.getElementById('btnDelete');
+    var prDeleteModal = document.getElementById('prDeleteModal');
+    var prDeleteModalOverlay = document.getElementById('prDeleteModalOverlay');
+    var prDeleteModalClose = document.getElementById('prDeleteModalClose');
+    var prDeleteModalMessage = document.getElementById('prDeleteModalMessage');
+    var prDeletePasswordInput = document.getElementById('prDeletePassword');
+    var prDeletePasswordError = document.getElementById('prDeletePasswordError');
+    var prDeleteCancel = document.getElementById('prDeleteCancel');
+    var prDeleteSubmit = document.getElementById('prDeleteSubmit');
+    var prDeletePendingNo = 0;
+
+    function prCloseDeleteModal() {
+      if (prDeleteModal) prDeleteModal.classList.add('hidden');
+      if (prDeletePasswordInput) prDeletePasswordInput.value = '';
+      if (prDeletePasswordError) {
+        prDeletePasswordError.style.display = 'none';
+        prDeletePasswordError.textContent = '';
+      }
+      prDeletePendingNo = 0;
+      if (prDeleteSubmit) prDeleteSubmit.disabled = false;
+    }
+
+    function prRefreshDeleteNonce() {
+      if (!apiRefreshSaveNonce) return Promise.resolve(prSaveNonce());
+      return fetch(apiRefreshSaveNonce, { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d && d.save_nonce) window.__GLOBAL_SAVE_NONCE = d.save_nonce;
+          return prSaveNonce();
+        })
+        .catch(function() { return prSaveNonce(); });
+    }
+
+    function prOpenDeleteModal(goodsreturnno) {
+      if (!prDeleteModal) return;
+      prDeletePendingNo = goodsreturnno;
+      if (prDeleteModalMessage) {
+        prDeleteModalMessage.textContent = 'Delete draft Purchase Return ' + goodsreturnno + '?';
+      }
+      prDeleteModal.classList.remove('hidden');
+      if (prDeletePasswordInput) {
+        prDeletePasswordInput.value = '';
+        window.setTimeout(function() { prDeletePasswordInput.focus(); }, 0);
+      }
+    }
+
+    function prSubmitDelete() {
+      var rno = prDeletePendingNo || parseInt((returnNoEl && returnNoEl.value) || '0', 10);
+      if (!rno || rno <= 0) {
+        alert('Return number is required.');
+        return;
+      }
+      var pwd = (prDeletePasswordInput && prDeletePasswordInput.value || '').trim();
+      if (!pwd) {
+        if (prDeletePasswordError) {
+          prDeletePasswordError.textContent = 'Enter your password.';
+          prDeletePasswordError.style.display = 'block';
+        }
+        if (prDeletePasswordInput) prDeletePasswordInput.focus();
+        return;
+      }
+      if (prDeletePasswordError) {
+        prDeletePasswordError.style.display = 'none';
+        prDeletePasswordError.textContent = '';
+      }
+      if (prDeleteSubmit) prDeleteSubmit.disabled = true;
+      if (btnDelete) btnDelete.disabled = true;
+      prRefreshDeleteNonce().then(function(nonce) {
+        return fetch(apiDelete, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ goodsreturnno: rno, save_nonce: nonce, password: pwd }),
+        });
+      }).then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data && typeof data.save_nonce === 'string' && data.save_nonce) {
+            window.__GLOBAL_SAVE_NONCE = data.save_nonce;
+          }
+          if (!data || !data.success) {
+            var errMsg = (data && data.error) || 'Delete failed.';
+            if (prDeletePasswordError) {
+              prDeletePasswordError.textContent = errMsg;
+              prDeletePasswordError.style.display = 'block';
+            } else {
+              alert(errMsg);
+            }
+            if (prDeleteSubmit) prDeleteSubmit.disabled = false;
+            if (btnDelete) btnDelete.disabled = false;
+            return;
+          }
+          prCloseDeleteModal();
+          window.location.href = listUrl;
+        })
+        .catch(function() {
+          if (prDeletePasswordError) {
+            prDeletePasswordError.textContent = 'Delete failed.';
+            prDeletePasswordError.style.display = 'block';
+          } else {
+            alert('Delete failed.');
+          }
+          if (prDeleteSubmit) prDeleteSubmit.disabled = false;
+          if (btnDelete) btnDelete.disabled = false;
+        });
+    }
+
+    if (prDeleteCancel) prDeleteCancel.addEventListener('click', prCloseDeleteModal);
+    if (prDeleteModalClose) prDeleteModalClose.addEventListener('click', prCloseDeleteModal);
+    if (prDeleteModalOverlay) prDeleteModalOverlay.addEventListener('click', prCloseDeleteModal);
+    if (prDeleteSubmit) prDeleteSubmit.addEventListener('click', prSubmitDelete);
+    if (prDeletePasswordInput) {
+      prDeletePasswordInput.addEventListener('keydown', function(ev) {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          prSubmitDelete();
+        }
+      });
+    }
+    if (btnDelete) {
+      btnDelete.addEventListener('click', function() {
+        var rno = parseInt((returnNoEl && returnNoEl.value) || '0', 10);
+        if (!rno || rno <= 0) {
+          alert('Save the purchase return first before deleting.');
+          return;
+        }
+        prOpenDeleteModal(rno);
+      });
+    }
+  })();
+})();
+</script>
+<script src="{{ url_for('static', filename='js/transaction_recording_client.js') }}?v=7"></script>
+
+<div class="modal hidden" id="prPostingDateModal" aria-labelledby="prPostingDateModalTitle">
+  <div class="modal__overlay" id="prPostingDateModalOverlay"></div>
+  <div class="modal__content" style="max-width:420px;">
+    <div class="modal__header">
+      <h4 id="prPostingDateModalTitle">Change posting date</h4>
+      <button type="button" class="modal__close" id="prPostingDateModalClose" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <p style="margin:0 0 10px;color:#475569;font-size:13px;line-height:1.45;">
+        Updates the <strong>Posting Date</strong> used for Purchase Return / GL.
+        Return Date stays unchanged unless you tick the option below.
+      </p>
+      <label for="prPostingDateNew" style="display:block;font-size:12px;color:#475569;margin-bottom:4px;">New posting date</label>
+      <input type="date" id="prPostingDateNew" class="input" style="width:100%;box-sizing:border-box;margin-bottom:4px;"
+             {% if open_transaction_date_from %}min="{{ open_transaction_date_from }}"{% endif %}
+             {% if open_transaction_date_to %}max="{{ open_transaction_date_to }}"{% endif %} />
+      <p id="prPostingDatePeriodHint" style="margin:0 0 10px;font-size:11px;color:#64748b;line-height:1.4;"></p>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#475569;margin-bottom:10px;">
+        <input type="checkbox" id="prPostingDateAlsoReturn" />
+        Also change Return Date
+      </label>
+      <label for="prPostingDatePassword" style="display:block;font-size:12px;color:#475569;margin-bottom:4px;">Your password</label>
+      <input type="password" id="prPostingDatePassword" class="input" placeholder="Enter your login password" autocomplete="current-password" style="width:100%;box-sizing:border-box;" />
+      <p id="prPostingDatePasswordError" style="display:none;margin:10px 0 0;color:#dc3545;font-size:12px;"></p>
+    </div>
+    <div class="modal__footer" style="display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;">
+      <button type="button" class="button--secondary" id="prPostingDateCancel">Cancel</button>
+      <button type="button" class="im-btn-save" id="prPostingDateSubmit">Update</button>
+    </div>
+  </div>
+</div>
+<script type="application/json" id="prClosedPeriodsJson">{{ (closed_periods or [])|tojson }}</script>
+<script src="{{ url_for('static', filename='js/period_date_guard.js') }}?v=1"></script>
+
+<script>
+
+  (function () {
+    var inv = {{ 'true' if (inventory_posted is defined and inventory_posted) else 'false' }};
+    var acct = {{ 'true' if (accounts_posted is defined and accounts_posted) else 'false' }};
+    window.__prInventoryPosted = !!inv;
+    window.__prAccountsPosted = !!acct;
+  })();
+
+  (function prPostingDateChangeUi() {
+    var btn = document.getElementById('btnChangePostingDate');
+    var modal = document.getElementById('prPostingDateModal');
+    if (!btn || !modal) return;
+    var overlay = document.getElementById('prPostingDateModalOverlay');
+    var closeBtn = document.getElementById('prPostingDateModalClose');
+    var cancelBtn = document.getElementById('prPostingDateCancel');
+    var submitBtn = document.getElementById('prPostingDateSubmit');
+    var dateInput = document.getElementById('prPostingDateNew');
+    var alsoReturn = document.getElementById('prPostingDateAlsoReturn');
+    var pwdInput = document.getElementById('prPostingDatePassword');
+    var errEl = document.getElementById('prPostingDatePasswordError');
+    var hintEl = document.getElementById('prPostingDatePeriodHint');
+    var postingEl = document.getElementById('postingDate');
+    var returnEl = document.getElementById('returnDate');
+    var returnNoEl = document.getElementById('returnNo');
+    var apiUrl = {{ url_for('purchase.api_pr_change_posting_date')|tojson }};
+    var closedPeriods = (window.PeriodDateGuard && window.PeriodDateGuard.fromJsonScript)
+      ? window.PeriodDateGuard.fromJsonScript('prClosedPeriodsJson') : [];
+    var openFrom = {{ (open_transaction_date_from or '')|tojson }};
+    var openTo = {{ (open_transaction_date_to or '')|tojson }};
+    var preferredOpen = {{ (open_transaction_date or '')|tojson }};
+
+    function openRangeMessage(isoDate) {
+      var d = String(isoDate || '').trim().slice(0, 10);
+      if (!d) return 'New posting date is required.';
+      if (openFrom && openTo && (d < openFrom || d > openTo)) {
+        return openFrom === openTo
+          ? ('Date must be ' + openFrom + ' (open transaction date).')
+          : ('Date must be between ' + openFrom + ' and ' + openTo + ' (open transaction date).');
+      }
+      if (window.PeriodDateGuard) {
+        var closedMsg = window.PeriodDateGuard.messageForDate(d, closedPeriods);
+        if (closedMsg) return closedMsg;
+      }
+      return '';
+    }
+    function refreshGuard() {
+      if (!dateInput) return '';
+      if (openFrom) dateInput.min = openFrom;
+      if (openTo) dateInput.max = openTo;
+      var msg = openRangeMessage(dateInput.value);
+      if (msg) {
+        dateInput.setCustomValidity(msg);
+        if (hintEl) { hintEl.textContent = msg; hintEl.style.color = '#b91c1c'; }
+        if (submitBtn) submitBtn.disabled = true;
+      } else {
+        dateInput.setCustomValidity('');
+        if (hintEl) {
+          hintEl.textContent = (openFrom && openTo)
+            ? (openFrom === openTo ? ('Open date: ' + openFrom + '.') : ('Open dates: ' + openFrom + ' to ' + openTo + '.'))
+            : 'Choose a date in the open transaction range.';
+          hintEl.style.color = '#64748b';
+        }
+        if (submitBtn) submitBtn.disabled = false;
+      }
+      return msg;
+    }
+    if (dateInput) {
+      dateInput.addEventListener('change', refreshGuard);
+      dateInput.addEventListener('input', refreshGuard);
+    }
+    function closeModal() {
+      modal.classList.add('hidden');
+      if (pwdInput) pwdInput.value = '';
+      if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+    }
+    function openModal() {
+      var cur = (postingEl && postingEl.value) || (returnEl && returnEl.value) || '';
+      cur = String(cur).slice(0, 10);
+      if (dateInput) {
+        if (cur && !openRangeMessage(cur)) dateInput.value = cur;
+        else dateInput.value = preferredOpen || openFrom || cur || '';
+      }
+      if (alsoReturn) alsoReturn.checked = false;
+      if (pwdInput) pwdInput.value = '';
+      if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+      refreshGuard();
+      modal.classList.remove('hidden');
+      if (pwdInput) setTimeout(function () { pwdInput.focus(); }, 40);
+    }
+    async function submitChange() {
+      var rno = parseInt((returnNoEl && returnNoEl.value) || '0', 10);
+      var nd = dateInput ? (dateInput.value || '').trim() : '';
+      var pwd = pwdInput ? pwdInput.value : '';
+      if (!rno) { if (errEl) { errEl.textContent = 'Invalid return number.'; errEl.style.display = ''; } return; }
+      var blocked = openRangeMessage(nd);
+      if (blocked) { if (errEl) { errEl.textContent = blocked; errEl.style.display = ''; } refreshGuard(); return; }
+      if (!pwd) { if (errEl) { errEl.textContent = 'Password is required.'; errEl.style.display = ''; } return; }
+      if (submitBtn) submitBtn.disabled = true;
+      try {
+        var body = {
+          goods_return_no: rno,
+          new_date: nd,
+          password: pwd,
+          also_change_return_date: !!(alsoReturn && alsoReturn.checked),
+        };
+        if (typeof window.__GLOBAL_SAVE_NONCE === 'string' && window.__GLOBAL_SAVE_NONCE) body.save_nonce = window.__GLOBAL_SAVE_NONCE;
+        var res = await fetch(apiUrl, {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(body),
+        });
+        var data = {};
+        try { data = await res.json(); } catch (e) { data = {}; }
+        if (typeof data.save_nonce === 'string' && data.save_nonce) window.__GLOBAL_SAVE_NONCE = data.save_nonce;
+        if (!res.ok || !data.success) {
+          if (errEl) { errEl.textContent = data.error || 'Could not update posting date.'; errEl.style.display = ''; }
+          return;
+        }
+        closeModal();
+        alert(data.message || 'Posting date updated.');
+        window.location.reload();
+      } catch (e) {
+        if (errEl) { errEl.textContent = 'Request failed.'; errEl.style.display = ''; }
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
+      }
+    }
+    btn.addEventListener('click', openModal);
+    if (overlay) overlay.addEventListener('click', closeModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+    if (submitBtn) submitBtn.addEventListener('click', submitChange);
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('demo_sales.static', filename='css/demo_sales.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="page-po addon-demo-sales" style="max-width: 900px;">
+  <h1 class="page-po__title addon-demo-sales__title">Demo Sales — Orders</h1>
+  <p class="page-po__muted">Sample list view; wire <code>models/</code> to real tables when ready.</p>
+  <table class="table addon-demo-sales__tbl">
+    <thead><tr><th>Ref</th><th>Customer</th><th class="num">Total</th><th>State</th></tr></thead>
+    <tbody>
+      {% for r in orders %}
+      <tr>
+        <td>{{ r.ref }}</td>
+        <td>{{ r.customer }}</td>
+        <td class="num">{{ "%.2f"|format(r.total) }}</td>
+        <td>{{ r.state }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No rows (demo).</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="addon-demo-sales__nav"><a href="{{ url_for('demo_sales.dashboard') }}">← Cockpit</a></p>
+</div>
+{% endblock %}

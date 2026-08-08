@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% block title %}Import opening balances{% endblock %}
+{% block content %}
+<style>
+  .obi-wrap { max-width: 900px; }
+  .obi-hint { font-size: 13px; color: #64748b; margin: 0 0 12px; line-height: 1.5; }
+  .obi-cols { display: flex; flex-wrap: wrap; gap: 1rem; align-items: end; }
+  .obi-cols .field { min-width: 180px; }
+  .obi-preview { margin-top: 1.25rem; }
+  .obi-preview table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .obi-preview th, .obi-preview td { border: 1px solid #e2e8f0; padding: 6px 8px; }
+  .obi-preview th { background: #f1f5f9; text-align: left; }
+  .obi-preview .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .obi-tot { font-weight: 600; background: #f0f9ff; }
+  pre.obi-csv { font-size: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; overflow: auto; }
+  .obi-balance-pick {
+    display: flex; align-items: stretch; width: 100%; max-width: 520px; min-height: 40px;
+    border: 1px solid #cbd5e1; border-radius: 10px; background: #f8fafc; overflow: hidden;
+  }
+  .obi-balance-pick:focus-within { border-color: #1a56a4; box-shadow: 0 0 0 2px rgba(26, 86, 164, 0.12); background: #fff; }
+  .obi-balance-pick input[readonly] { flex: 1; min-width: 0; border: none; background: transparent; padding: 8px 10px; font-size: 14px; cursor: pointer; }
+  .obi-balance-pick .search-clear { width: 40px; background: #f1f5f9; border: none; border-left: 1px solid #e2e8f0; cursor: pointer; }
+  .obi-balance-pick .search-picker { min-width: 44px; background: #1a56a4; color: #fff; border: none; border-left: 1px solid #e2e8f0; font-size: 16px; font-weight: 600; cursor: pointer; }
+  .obi-balance-pick .search-picker:hover { background: #144a8a; }
+</style>
+<div class="page-po obi-wrap">
+  <p class="page-po__back" style="margin:0 0 8px;"><a href="{{ url_for('accounts.chart_of_accounts_list') }}">← Chart of accounts</a></p>
+  <div class="page-po__head">
+    <div>
+      <h1 class="page-po__title">Import opening balances</h1>
+      <p class="page-po__subtitle">Upload a CSV or Excel file to post <strong>one</strong> balanced GL journal (e.g. cut-over from another system).</p>
+    </div>
+  </div>
+
+  <p class="obi-hint">
+    Opening balances in this app are <strong>normal GL history</strong>: the voucher you post here becomes the starting point for
+    “opening” in account ledgers (anything dated <strong>before</strong> your first operating reports should use this voucher date, or the day you choose as go-live).
+    Your file must use <strong>account codes that already exist</strong> in the chart. Each row: one of debit or credit (not both) per account; optional
+    <code>remarks</code>, <code>party_type</code>, <code>party_code</code> (e.g. <code>CUSTOMER</code> + customer code for AR). If the file does not sum to a tie,
+    set a <strong>balance account</strong> to post the difference (like “Opening balance equity”).
+    Prefer <strong>Download Excel from Chart of Accounts</strong> — same layout as Chart of Accounts export — fill Debit/Credit, then upload.
+  </p>
+
+  <div class="page-po__section">
+    <form method="post" action="{{ url_for('accounts.opening_balance_import') }}" enctype="multipart/form-data" class="page-po__section">
+      <div class="obi-cols" style="margin-bottom: 12px;">
+        <div class="field">
+          <label class="label" for="voucher_date">Voucher date</label>
+          <input class="input" type="date" id="voucher_date" name="voucher_date" value="{{ default_voucher_date or '' }}" required>
+        </div>
+        <div class="field" style="min-width: 200px;">
+          <label class="label" for="reference_no">Reference</label>
+          <input class="input" type="text" id="reference_no" name="reference_no" value="OB-IMPORT" maxlength="50" placeholder="OB-IMPORT">
+        </div>
+        <div class="field" style="flex: 1; min-width: 240px;">
+          <label class="label" for="narration">Narration</label>
+          <input class="input" type="text" id="narration" name="narration" value="Opening balances import" maxlength="500" style="width: 100%; max-width: 400px;">
+        </div>
+      </div>
+      <div class="obi-cols" style="margin-bottom: 12px;">
+        <div class="field" style="min-width: 280px; flex: 1;">
+          <label class="label" for="obi_balance_display">Balance account (if file not balanced)</label>
+          <input type="hidden" name="balance_account" id="obi_balance_code" value="{{ (last_balance_code or '')|e }}">
+          <span class="search-field search-field--popup obi-balance-pick" style="width:100%;max-width:520px;">
+            <input type="text" id="obi_balance_display" readonly
+              placeholder="Click to search — optional if file already balances"
+              value="{{ (last_balance_label or '')|e }}">
+            <button type="button" class="search-clear" id="obiBalanceClear" title="Clear" aria-label="Clear" {% if not last_balance_code %}style="display:none"{% endif %}>×</button>
+            <button type="button" class="search-picker" id="obiBalancePickerOpen" aria-label="Open account list">▾</button>
+          </span>
+        </div>
+        <div class="field" style="align-self: center;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px;">
+            <input type="checkbox" name="dry_run" value="1"> Dry run (validate only, do not post)
+          </label>
+        </div>
+      </div>
+      <div class="field" style="margin-bottom: 12px;">
+        <label class="label" for="csv_file">CSV or Excel file</label>
+        <input type="file" id="csv_file" name="csv_file" accept=".csv,.xlsx,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+      </div>
+      <button class="page-po__btn-primary" type="submit">Upload and process</button>
+      <a class="page-po__btn-secondary" style="display: inline-block; margin-left: 8px; padding: 8px 14px; text-decoration: none;" href="{{ url_for('accounts.opening_balance_sample_excel', from_coa=1) }}">Download Excel from Chart of Accounts</a>
+      <a class="input" style="display: inline-block; margin-left: 8px; padding: 8px 14px; text-decoration: none; border: 1px solid #cbd5e1; border-radius: 8px;" href="{{ url_for('accounts.opening_balance_sample_excel') }}">Sample Excel</a>
+      <a class="input" style="display: inline-block; margin-left: 8px; padding: 8px 14px; text-decoration: none; border: 1px solid #cbd5e1; border-radius: 8px;" href="{{ url_for('accounts.opening_balance_sample_csv') }}">Sample CSV</a>
+    </form>
+  </div>
+
+  <div class="page-po__section">
+    <h2 class="page-po__section-title" style="font-size:1rem;">Expected Excel / CSV format</h2>
+    <p class="obi-hint" style="margin-top:0;">
+      Same style as <strong>Chart of Accounts → Export Excel</strong>. Header row (matched case-insensitively).
+      Required: <code>Code</code> (or <code>account_code</code>), <code>Debit</code>, <code>Credit</code>.
+      Optional: <code>Name</code>, <code>Type</code>, <code>Remarks</code>, <code>Party Type</code>, <code>Party Code</code>.
+      Rows with both Debit and Credit empty/zero are skipped.
+    </p>
+    <pre class="obi-csv">Code,Name,Type,Debit,Credit,Remarks,Party Type,Party Code
+1200,Accounts Receivable,ASSET,5000,,AR opening,CUSTOMER,101
+2110,Accounts Payable,LIABILITY,,3000,AP opening,SUPPLIER,55</pre>
+  </div>
+
+  {% if last_lines %}
+  <div class="page-po__section obi-preview">
+    <h2 class="page-po__section-title" style="font-size:1rem;">Last file — resolved lines (after auto-balance if applied)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Account</th>
+          <th>Debit</th>
+          <th>Credit</th>
+          <th>Remarks</th>
+          <th>Party</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ln in last_lines %}
+        <tr>
+          <td>{{ (ln.account_code or '')|e }}</td>
+          <td class="num">{{ '%.2f'|format(ln.debit|float) }}</td>
+          <td class="num">{{ '%.2f'|format(ln.credit|float) }}</td>
+          <td>{{ (ln.remarks or '')|e }}</td>
+          <td>{% if ln.party_type or ln.party_code %}{{ (ln.party_type or '')|e }} / {{ (ln.party_code or '')|e }}{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+        <tr class="obi-tot">
+          <td>Total</td>
+          <td class="num">{{ '%.2f'|format(last_total_dr|float) }}</td>
+          <td class="num">{{ '%.2f'|format(last_total_cr|float) }}</td>
+          <td colspan="2"></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<div class="modal hidden" id="obiBalancePickerModal" role="dialog" aria-modal="true" aria-labelledby="obiBalPickerTitle">
+  <div class="modal__overlay" data-close="obiBalancePickerModal"></div>
+  <div class="modal__content" style="width: min(700px, 95vw); max-height: 85vh;">
+    <div class="modal__header">
+      <h3 id="obiBalPickerTitle">Select balance account</h3>
+      <button type="button" class="modal__close" data-close="obiBalancePickerModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <p style="font-size: 12px; color: #64748b; margin: 0 0 8px;">Used only when your CSV total debits ≠ total credits. Pick an equity/suspense account to post the difference.</p>
+      <div class="modal__search" style="margin-bottom: 10px;">
+        <div class="search-field" style="width: 100%;">
+          <input type="text" id="obiBalPickerSearch" placeholder="Search by code, name, or type…" autocomplete="off" style="width: 100%;">
+          <button type="button" class="search-clear" id="obiBalPickerSearchClear" style="display: none;">×</button>
+        </div>
+      </div>
+      <div class="scroll-table modal__table" style="max-height: 52vh;">
+        <table class="table" id="obiBalPickerTable" style="width: 100%;">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Type</th>
+            </tr>
+          </thead>
+          <tbody id="obiBalPickerBody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var OBI_ACCTS = {{ acc_opts|tojson }};
+  if (!Array.isArray(OBI_ACCTS)) OBI_ACCTS = [];
+  var obiModalList = [];
+
+  function esc(s) {
+    if (s == null) return '';
+    var d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+  }
+
+  function openObiBalancePicker() {
+    var m = document.getElementById('obiBalancePickerModal');
+    if (!m) return;
+    obiModalList = OBI_ACCTS.slice();
+    renderObiBalanceRows(obiModalList, true);
+    var s = document.getElementById('obiBalPickerSearch');
+    if (s) { s.value = ''; s.focus(); }
+    var c = document.getElementById('obiBalPickerSearchClear');
+    if (c) c.style.display = 'none';
+    m.classList.remove('hidden');
+  }
+
+  function closeObiBalancePicker() {
+    var m = document.getElementById('obiBalancePickerModal');
+    if (m) m.classList.add('hidden');
+  }
+
+  function renderObiBalanceRows(list, showNone) {
+    var tbody = document.getElementById('obiBalPickerBody');
+    if (!tbody) return;
+    var parts = [];
+    if (showNone) {
+      parts.push('<tr data-code="" style="cursor:pointer;background:#f8fafc;"><td colspan="3"><em>— None (CSV must already balance) —</em></td></tr>');
+    }
+    (list || []).forEach(function(a) {
+      var code = a.code != null ? String(a.code) : '';
+      if (!code) return;
+      var name = a.name != null ? String(a.name) : '';
+      var typ = a.type != null ? String(a.type) : '—';
+      parts.push(
+        '<tr data-code="' + esc(code).replace(/"/g, '&quot;') + '" style="cursor:pointer;">' +
+        '<td><strong>' + esc(code) + '</strong></td><td>' + esc(name) + '</td><td>' + esc(typ) + '</td></tr>'
+      );
+    });
+    tbody.innerHTML = parts.join('');
+  }
+
+  function filterObiBalanceRows(q) {
+    var t = (q || '').trim().toLowerCase();
+    if (!t) { renderObiBalanceRows(obiModalList, true); return; }
+    var f = (obiModalList || []).filter(function(a) {
+      return (String(a.code || '').toLowerCase().indexOf(t) !== -1) ||
+        (String(a.name || '').toLowerCase().indexOf(t) !== -1) ||
+        (String(a.type || '').toLowerCase().indexOf(t) !== -1);
+    });
+    renderObiBalanceRows(f, true);
+  }
+
+  document.getElementById('obiBalancePickerOpen') && document.getElementById('obiBalancePickerOpen').addEventListener('click', function(e) { e.preventDefault(); openObiBalancePicker(); });
+  document.getElementById('obi_balance_display') && document.getElementById('obi_balance_display').addEventListener('click', function(e) { e.preventDefault(); openObiBalancePicker(); });
+
+  var obiM = document.getElementById('obiBalancePickerModal');
+  if (obiM) {
+    obiM.addEventListener('click', function(e) {
+      if (e.target.classList.contains('modal__overlay') || (e.target.dataset && e.target.dataset.close === 'obiBalancePickerModal') || e.target.classList.contains('modal__close')) {
+        closeObiBalancePicker();
+      }
+    });
+  }
+  var obiBody = document.getElementById('obiBalPickerBody');
+  if (obiBody) {
+    obiBody.addEventListener('click', function(e) {
+      var tr = e.target.closest('tr');
+      if (!tr) return;
+      var code = tr.getAttribute('data-code');
+      if (code === null) return;
+      var hid = document.getElementById('obi_balance_code');
+      var disp = document.getElementById('obi_balance_display');
+      var clr = document.getElementById('obiBalanceClear');
+      if (code === '') {
+        if (hid) hid.value = '';
+        if (disp) disp.value = '';
+        if (clr) clr.style.display = 'none';
+      } else {
+        var rec = (OBI_ACCTS || []).filter(function(x) { return x && String(x.code) === code; })[0];
+        var label = rec ? (String(rec.code) + ' — ' + String(rec.name || '')) : code;
+        if (hid) hid.value = code;
+        if (disp) disp.value = label;
+        if (clr) clr.style.display = 'block';
+      }
+      closeObiBalancePicker();
+    });
+  }
+  var obiSrch = document.getElementById('obiBalPickerSearch');
+  var obiSrchClr = document.getElementById('obiBalPickerSearchClear');
+  if (obiSrch) {
+    obiSrch.addEventListener('input', function() {
+      filterObiBalanceRows(obiSrch.value);
+      if (obiSrchClr) obiSrchClr.style.display = obiSrch.value ? 'block' : 'none';
+    });
+  }
+  if (obiSrchClr) {
+    obiSrchClr.addEventListener('click', function() {
+      if (obiSrch) { obiSrch.value = ''; obiSrch.focus(); }
+      obiSrchClr.style.display = 'none';
+      filterObiBalanceRows('');
+    });
+  }
+  var obiClr = document.getElementById('obiBalanceClear');
+  if (obiClr) {
+    obiClr.addEventListener('click', function(e) {
+      e.preventDefault();
+      var hid = document.getElementById('obi_balance_code');
+      var disp = document.getElementById('obi_balance_display');
+      if (hid) hid.value = '';
+      if (disp) disp.value = '';
+      obiClr.style.display = 'none';
+    });
+  }
+})();
+</script>
+{% endblock %}

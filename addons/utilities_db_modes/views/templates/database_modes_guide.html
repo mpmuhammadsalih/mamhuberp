@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+.dm-guide { max-width: 900px; margin: 24px auto 56px; padding: 0 16px; }
+.dm-guide h1 { font-size: 22px; margin-bottom: 8px; }
+.dm-guide > p.lead { color: #495057; font-size: 15px; margin-bottom: 20px; line-height: 1.5; }
+.dm-guide h2 { font-size: 17px; margin: 28px 0 10px; border-bottom: 1px solid #dee2e6; padding-bottom: 6px; }
+.dm-guide h3 { font-size: 15px; margin: 18px 0 8px; color: #212529; }
+.dm-guide p, .dm-guide li { font-size: 14px; line-height: 1.55; color: #212529; }
+.dm-guide ul { margin: 8px 0 12px 1.1em; }
+.dm-guide .callout {
+  background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 14px 16px; margin: 14px 0;
+  font-size: 13px;
+}
+.dm-guide .callout strong { color: #0d6efd; }
+.dm-guide pre, .dm-guide code {
+  font-family: ui-monospace, Consolas, monospace; font-size: 12.5px;
+  background: #f1f3f5; border-radius: 4px;
+}
+.dm-guide pre {
+  padding: 12px 14px; overflow-x: auto; border: 1px solid #e9ecef; margin: 10px 0;
+  white-space: pre-wrap; word-break: break-word;
+}
+.dm-guide code { padding: 2px 5px; }
+.dm-guide .status-pill {
+  display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+}
+.dm-guide .status-on { background: #d1e7dd; color: #0f5132; }
+.dm-guide .status-off { background: #f8d7da; color: #842029; }
+</style>
+
+<div class="dm-guide">
+  <h1>Database modes: single-DB vs multi-DB</h1>
+  <p class="lead">
+    This app can use <strong>one Oracle database</strong> for everything, or a <strong>separate auth database</strong>
+    for logins and <code>tenant_databases</code>, with <strong>per-tenant business databases</strong>.
+    This page summarizes how that works in <code>config/settings.py</code> and <code>db.py</code>, and what to put in <code>.env</code>.
+  </p>
+
+  <div class="callout">
+    <strong>Current process (read-only)</strong><br>
+    Multi-DB mode (app flag): <span class="status-pill {% if is_multi_db_mode %}status-on{% else %}status-off{% endif %}">{% if is_multi_db_mode %}ON{% else %}OFF{% endif %}</span>
+    &nbsp;—&nbsp; On when both <code>AUTH_DB_USERNAME</code> and <code>AUTH_DB_DSN</code> are set, unless overridden by <code>MULTI_DB_MODE=single</code> (or <code>0</code> / <code>false</code>).
+    Main DB configured: {{ 'yes' if main_user_set and main_dsn_set else 'no' }}.
+    Auth credentials set: {{ 'yes' if auth_user_set and auth_dsn_set else 'no' }}.
+  </div>
+
+  <h2>How the app decides</h2>
+  <p>
+    Optionally set <code>MULTI_DB_MODE</code> in <code>.env</code>: <code>single</code> (or <code>0</code>) forces single-DB even if <code>AUTH_DB_*</code> variables are still present; restart the server after saving.
+  </p>
+  <p>
+    With no override, <code>is_multi_db_mode()</code> is <strong>true</strong> only when <strong>both</strong>
+    <code>AUTH_DB_USERNAME</code> and <code>AUTH_DB_DSN</code> are set (non-empty).
+    Then logins and tables such as <code>login_users</code>, <code>roles</code>, and <code>tenant_databases</code>
+    are read via the auth connection when the code path uses <code>_get_connection_auth()</code> in multi-DB mode.
+  </p>
+  <p>
+    The main business connection uses <code>DB_USERNAME</code>, <code>DB_PASSWORD</code>, and <code>DB_DSN</code>
+    when you are not routing the request to a specific tenant connection.
+  </p>
+
+  <h2>Single-DB mode (one physical Oracle)</h2>
+  <p>
+    Use this when all schemas and app tables live on <strong>one</strong> database (typical dev / small deployment).
+  </p>
+  <ul>
+    <li>Set <code>DB_USERNAME</code>, <code>DB_PASSWORD</code>, <code>DB_DSN</code> to your Oracle user and Easy Connect string (e.g. <code>host:1521/service_name</code>).</li>
+    <li>Leave <code>AUTH_DB_USERNAME</code> and <code>AUTH_DB_DSN</code> <strong>empty</strong> if you want <code>is_multi_db_mode()</code> to stay <strong>false</strong>.</li>
+    <li>
+      Some features (for example HO APIs that call <code>_get_tenant_connection('HO')</code>) load tenant connection details from
+      <code>tenant_databases</code> using <code>_get_auth_connection()</code>, which <strong>requires</strong>
+      <code>AUTH_DB_*</code> to be set. If you see errors about the auth database not being configured, either:
+      <ul>
+        <li>set <code>AUTH_DB_USERNAME</code>, <code>AUTH_DB_PASSWORD</code>, <code>AUTH_DB_DSN</code> to the <strong>same</strong> values as <code>DB_*</code> (one physical DB, two env blocks), or</li>
+        <li>change application code to read <code>tenant_databases</code> via the default connection when not in multi-DB mode (developer change).</li>
+      </ul>
+    </li>
+    <li>
+      Ensure a row exists in <code>tenant_databases</code> for head office: <code>tenant_id = 'HO'</code>,
+      with <code>active_flag</code> not disabling the row (<code>NVL(active_flag,'Y') = 'Y'</code>), and
+      <code>ip</code> / <code>port</code> / <code>service_name</code> matching your database. Otherwise APIs such as
+      <code>customer_request_pending_count</code> raise <em>Tenant 'HO' not found or inactive</em>.
+    </li>
+  </ul>
+
+  <h3>Example <code>.env</code> (single physical DB, auth vars aligned with main DB)</h3>
+  <pre># Main app database
+DB_USERNAME=app_user
+DB_PASSWORD=secret
+DB_DSN=192.168.1.10:1521/ORCL
+
+# Same database — satisfies _get_auth_connection() and tenant_databases lookups
+AUTH_DB_USERNAME=app_user
+AUTH_DB_PASSWORD=secret
+AUTH_DB_DSN=192.168.1.10:1521/ORCL</pre>
+
+  <h2>Multi-DB mode (separate auth DB + tenant DBs)</h2>
+  <p>
+    Use this when <code>login_users</code>, roles, and <code>tenant_databases</code> live on a <strong>central</strong> Oracle instance,
+    and each tenant’s business data is on its own database (or service) defined by rows in <code>tenant_databases</code>.
+  </p>
+  <ul>
+    <li>Set <code>AUTH_DB_USERNAME</code>, <code>AUTH_DB_PASSWORD</code>, <code>AUTH_DB_DSN</code> to the <strong>central auth</strong> database.</li>
+    <li>Keep <code>DB_*</code> as a default / fallback user where the code falls back (for example when a tenant row omits a username).</li>
+    <li>Each active row in <code>tenant_databases</code> supplies <code>ip</code>, <code>port</code>, <code>service_name</code>, and optional <code>username</code> / <code>password</code> for that tenant’s connection.</li>
+    <li>Head office still needs <code>tenant_id = 'HO'</code> if features use <code>_get_tenant_connection('HO')</code>.</li>
+  </ul>
+
+  <h3>Example <code>.env</code> (multi-DB)</h3>
+  <pre># Central auth / registry
+AUTH_DB_USERNAME=central_user
+AUTH_DB_PASSWORD=central_pass
+AUTH_DB_DSN=10.0.0.1:1521/AUTHSRV
+
+# Default Oracle user (fallback when tenant row has no username)
+DB_USERNAME=rfim_user
+DB_PASSWORD=rfim_pass
+DB_DSN=192.168.1.50:1521/TENANT_DEFAULT</pre>
+
+  <h2>Rules of thumb</h2>
+  <ul>
+    <li><strong>Auth tables</strong> (<code>login_users</code>, <code>roles</code>, <code>role_permissions</code>, <code>tenant_databases</code>) must be queried with the auth connection pattern in code; in multi-DB mode that is the auth DB.</li>
+    <li><strong>Business tables</strong> use the tenant (or default) connection per session.</li>
+    <li>After changing <code>.env</code>, <strong>restart</strong> the application process.</li>
+    <li>Avoid duplicate keys in <code>.env</code> (e.g. two <code>AUTH_DB_USERNAME</code> lines); the loader may use the last value and confuse debugging.</li>
+  </ul>
+
+  <h2>Related</h2>
+  <p>
+    Database connection wizard: <a href="{{ url_for('database_setup.wizard') }}">/database-setup</a>
+    (when enabled). New Company setup (Oracle data clearance):
+    <a href="{{ url_for('db_sync.new_company_setup_page') }}">New Company setup</a>.
+  </p>
+</div>
+{% endblock %}

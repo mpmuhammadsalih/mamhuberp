@@ -1,0 +1,1549 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .page { --page-width: 98vw; max-width: var(--page-width); width: var(--page-width); margin: 0 auto; padding: 12px 8px; }
+  .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; border-bottom: 1px solid #dee2e6; padding-bottom: 10px; }
+  .title { margin: 0; font-size: 20px; font-weight: 400; color: #212529; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { border: 1px solid #dee2e6; background: #fff; color: #0f172a; border-radius: 4px; padding: 6px 10px; font-size: 12px; text-decoration: none; cursor: pointer; }
+  .btn-primary { background: #007bff; border-color: #007bff; color: #fff; }
+  .btn-filter.active { background: #0f172a; border-color: #0f172a; color: #fff; }
+  .sr-polarity-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    flex-wrap: wrap;
+  }
+  .sr-polarity-caption {
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-right: 2px;
+  }
+  .sr-polarity-btn {
+    min-width: 38px;
+    padding: 6px 12px;
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #0f172a;
+  }
+  .sr-polarity-btn.sr-polarity-all {
+    font-size: 12px;
+    font-weight: 600;
+    min-width: auto;
+    padding: 7px 12px;
+  }
+  .sr-polarity-btn:hover {
+    border-color: #94a3b8;
+    background: #f8fafc;
+  }
+  .sr-polarity-btn.active {
+    border-color: #0f172a;
+    background: #0f172a;
+    color: #fff;
+  }
+  .sr-polarity-btn.sr-polarity-plus.active {
+    border-color: #15803d;
+    background: #15803d;
+    color: #fff;
+  }
+  .sr-polarity-btn.sr-polarity-minus.active {
+    border-color: #b91c1c;
+    background: #b91c1c;
+    color: #fff;
+  }
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.35);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+  }
+  .modal-backdrop.show { display: flex; }
+  /* Column Tool dialog — centered card (scoped; pick modal uses global .modal elsewhere) */
+  #columnModalBackdrop {
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+    box-sizing: border-box;
+  }
+  #columnModalBackdrop .sr-tool-panel {
+    width: min(520px, 100%);
+    max-height: min(88vh, 720px);
+    overflow: hidden;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    box-shadow:
+      0 22px 44px -16px rgba(15, 23, 42, 0.35),
+      0 0 0 1px rgba(15, 23, 42, 0.05);
+  }
+  #columnModalBackdrop .sr-tool-panel__head {
+    flex-shrink: 0;
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #fff;
+    border-radius: 14px 14px 0 0;
+  }
+  #columnModalBackdrop .sr-tool-panel__title {
+    margin: 0 0 8px;
+    font-size: 17px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+  }
+  #columnModalBackdrop .sr-tool-panel__lead {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.55;
+    color: #64748b;
+  }
+  #columnModalBackdrop .sr-tool-panel__body {
+    flex: 1;
+    min-height: 0;
+    padding: 14px 16px;
+    overflow-y: auto;
+  }
+  #columnModalBackdrop .sr-tool-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0;
+  }
+  @media (max-width: 520px) {
+    #columnModalBackdrop .sr-tool-columns {
+      grid-template-columns: 1fr;
+    }
+  }
+  #columnModalBackdrop .sr-tool-columns .col-opt {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    margin: 0;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    cursor: pointer;
+    font-size: 12px;
+    color: #334155;
+    line-height: 1.4;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  #columnModalBackdrop .sr-tool-columns .col-opt:hover {
+    border-color: var(--nexa-focus-color);
+    box-shadow: 0 2px 10px rgba(37, 99, 235, 0.09);
+  }
+  #columnModalBackdrop .sr-tool-columns .col-opt:focus-within {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  }
+  #columnModalBackdrop .sr-tool-columns .col-opt input {
+    margin-top: 2px;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    accent-color: #2563eb;
+    cursor: pointer;
+  }
+  #columnModalBackdrop .sr-tool-panel__foot {
+    flex-shrink: 0;
+    padding: 14px 16px 18px;
+    border-top: 1px solid #e2e8f0;
+    background: #fff;
+    border-radius: 0 0 14px 14px;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+  #columnModalBackdrop .sr-tool-panel__foot .btn {
+    min-width: 88px;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-weight: 600;
+  }
+  /* Summary Tool dialog */
+  #summaryToolModalBackdrop {
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+    box-sizing: border-box;
+    z-index: 2001;
+  }
+  #summaryToolModalBackdrop .sr-tool-panel {
+    width: min(480px, 100%);
+    max-height: min(88vh, 720px);
+    overflow: hidden;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    box-shadow:
+      0 22px 44px -16px rgba(15, 23, 42, 0.35),
+      0 0 0 1px rgba(15, 23, 42, 0.05);
+  }
+  #summaryToolModalBackdrop .sr-tool-panel__head {
+    flex-shrink: 0;
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #fff;
+    border-radius: 14px 14px 0 0;
+  }
+  #summaryToolModalBackdrop .sr-tool-panel__title {
+    margin: 0 0 8px;
+    font-size: 17px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+  }
+  #summaryToolModalBackdrop .sr-tool-panel__lead {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.55;
+    color: #64748b;
+  }
+  #summaryToolModalBackdrop .sr-tool-panel__body {
+    flex: 1;
+    min-height: 0;
+    padding: 14px 16px;
+    overflow-y: auto;
+  }
+  #summaryToolModalBackdrop fieldset.sr-summary-fieldset {
+    margin: 0;
+    padding: 0;
+    border: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  #summaryToolModalBackdrop .sr-summary-fieldset legend {
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0;
+    margin-bottom: 4px;
+  }
+  #summaryToolModalBackdrop .sr-summary-dim-opt {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    margin: 0;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    cursor: pointer;
+    font-size: 13px;
+    color: #334155;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  #summaryToolModalBackdrop .sr-summary-dim-opt:hover {
+    border-color: var(--nexa-focus-color);
+    box-shadow: 0 2px 10px rgba(37, 99, 235, 0.09);
+  }
+  #summaryToolModalBackdrop .sr-summary-dim-opt:focus-within {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  }
+  #summaryToolModalBackdrop .sr-summary-dim-opt input {
+    margin-top: 3px;
+    flex-shrink: 0;
+    accent-color: #2563eb;
+    cursor: pointer;
+  }
+  #summaryToolModalBackdrop .sr-tool-panel__foot {
+    flex-shrink: 0;
+    padding: 14px 16px 18px;
+    border-top: 1px solid #e2e8f0;
+    background: #fff;
+    border-radius: 0 0 14px 14px;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+  #summaryToolModalBackdrop .sr-tool-panel__foot .btn {
+    min-width: 88px;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-weight: 600;
+  }
+  /* Export PDF — centered card (scoped to this backdrop only) */
+  #stockReportPdfModalBackdrop {
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+    box-sizing: border-box;
+  }
+  #stockReportPdfModalBackdrop .sr-pdf-panel {
+    width: min(440px, 100%);
+    max-height: min(88vh, 720px);
+    overflow: auto;
+    margin: 0 auto;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    box-shadow:
+      0 22px 44px -16px rgba(15, 23, 42, 0.35),
+      0 0 0 1px rgba(15, 23, 42, 0.05);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  #stockReportPdfModalBackdrop .sr-pdf-panel__head {
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #fff;
+    border-radius: 14px 14px 0 0;
+  }
+  #stockReportPdfModalBackdrop .sr-pdf-panel__title {
+    margin: 0 0 8px;
+    font-size: 17px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+  }
+  #stockReportPdfModalBackdrop .sr-pdf-panel__lead {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.55;
+    color: #64748b;
+  }
+  #stockReportPdfModalBackdrop .sr-pdf-panel__body {
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  #stockReportPdfModalBackdrop .sr-pdf-opt {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 14px;
+    margin: 0;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  #stockReportPdfModalBackdrop .sr-pdf-opt:hover {
+    border-color: var(--nexa-focus-color);
+    box-shadow: 0 2px 10px rgba(37, 99, 235, 0.09);
+  }
+  #stockReportPdfModalBackdrop .sr-pdf-opt:focus-within {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  }
+  #stockReportPdfModalBackdrop .sr-pdf-opt input {
+    margin-top: 3px;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    accent-color: #2563eb;
+    cursor: pointer;
+  }
+  #stockReportPdfModalBackdrop .sr-pdf-opt__text {
+    font-size: 12px;
+    line-height: 1.45;
+    color: #334155;
+  }
+  #stockReportPdfModalBackdrop .sr-pdf-opt__text strong {
+    color: #0f172a;
+  }
+  #stockReportPdfModalBackdrop .sr-pdf-panel__foot {
+    padding: 14px 16px 18px;
+    border-top: 1px solid #e2e8f0;
+    background: #fff;
+    border-radius: 0 0 14px 14px;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+  #stockReportPdfModalBackdrop .sr-pdf-panel__foot .btn {
+    min-width: 96px;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-weight: 600;
+  }
+  .grid { display: grid; grid-template-columns: repeat(6, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .stock-report-fg {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+  .stock-report-fg > label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: 0.02em;
+    line-height: 1.35;
+  }
+  .stock-report-fg .input::placeholder {
+    color: #475569;
+    opacity: 1;
+  }
+  .input { width: 100%; border: 1px solid #dee2e6; border-radius: 4px; padding: 6px 8px; font-size: 12px; box-sizing: border-box; }
+  .table-wrap { overflow: auto; max-height: 520px; border: 1px solid #adb5bd; border-radius: 4px; background: #fff; resize: none; }
+  .table-wrap thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; box-shadow: 0 1px 0 0 #adb5bd; }
+  .table-wrap #stockReportTable tfoot td {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    background: #f1f5f9 !important;
+    box-shadow: 0 -1px 0 0 #adb5bd;
+  }
+  table { width: 100%; min-width: 100%; border-collapse: collapse; font-size: 10px; table-layout: auto; }
+  th, td { padding: 4px 5px; border: 1px solid #adb5bd; text-align: left; box-sizing: border-box; }
+  td {
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    vertical-align: top;
+  }
+  th { background: #f8f9fa; font-weight: 600; font-size: 10px; white-space: nowrap; position: sticky; top: 0; z-index: 1; position: sticky; }
+  #stockReportTable thead th,
+  #microSummaryTable thead th {
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    color: #1e293b !important;
+    letter-spacing: 0.02em;
+  }
+  thead th { position: sticky; }
+  th.resizable { position: sticky; }
+  .col-resizer {
+    position: absolute;
+    top: 0;
+    right: -2px;
+    width: 8px;
+    height: 100%;
+    cursor: col-resize;
+    user-select: none;
+    touch-action: none;
+    z-index: 3;
+  }
+  .col-resizer:hover,
+  .col-resizer.active { background: rgba(37, 99, 235, 0.25); }
+  .section-title { margin: 10px 0 6px; font-size: 13px; font-weight: 600; color: #1f2937; }
+  .summary-wrap { overflow: auto; max-height: 260px; border: 1px solid #adb5bd; border-radius: 4px; background: #fff; margin-bottom: 10px; }
+  .summary-wrap thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; box-shadow: 0 1px 0 0 #adb5bd; }
+  .summary-wrap tfoot td { position: sticky; bottom: 0; z-index: 2; background: #f1f5f9 !important; box-shadow: 0 -1px 0 0 #adb5bd; }
+  table.summary-table { min-width: 100%; table-layout: auto; }
+  .micro-link { display: inline-block; color: #0b57d0; text-decoration: none; cursor: pointer; }
+  .micro-link:hover { text-decoration: underline; }
+  .num { text-align: right; }
+  th.col-location, td.col-location,
+  th.col-rawabi, td.col-rawabi,
+  th.col-itemcode, td.col-itemcode,
+  th.col-itemname, td.col-itemname,
+  th.col-property, td.col-property,
+  th.col-unit, td.col-unit,
+  th.col-cost, td.col-cost,
+  th.col-current, td.col-current,
+  th.col-stockvalue, td.col-stockvalue,
+  th.col-totalqty, td.col-totalqty,
+  th.col-avgdaily, td.col-avgdaily,
+  th.col-remaining, td.col-remaining { width: auto; max-width: none; }
+  td.col-remaining { overflow: hidden; text-overflow: clip; white-space: normal; }
+  .empty { padding: 16px; color: #6c757d; font-style: italic; }
+  tr.row-red td { background: #fee2e2; }
+  tr.row-yellow td { background: #fef9c3; }
+  tr.row-green td { background: #dcfce7; }
+  th.sortable { cursor: pointer; user-select: none; position: relative; }
+  th.sortable::after { content: " \2195"; color: #9ca3af; font-size: 10px; }
+  th.sortable.sort-asc::after { content: " \2191"; color: #334155; }
+  th.sortable.sort-desc::after { content: " \2193"; color: #334155; }
+  /* Filter fields: same picker row pattern as Item Master (search-field--popup + global style.css) */
+  .stock-report-pick-wrap { min-width: 0; width: 100%; }
+  .stock-report-pick-wrap .search-field--popup { width: 100%; }
+  .stock-report-pick-wrap .search-field--popup .input {
+    flex: 1; min-width: 0; cursor: pointer; font-size: 12px; padding: 6px 8px;
+    border: 1px solid #dee2e6; border-radius: 4px; box-sizing: border-box;
+  }
+  #stockReportPickModal .modal__content {
+    width: min(560px, 92vw);
+    max-height: 82vh;
+  }
+  #stockReportPickModal .modal__body {
+    min-height: 0;
+  }
+  #stockReportPickModal tbody tr { cursor: pointer; }
+  #stockReportPickModal tbody tr:hover { background: #f1f5f9; }
+  #stockReportPickModal .modal__header h3 { font-size: 16px; font-weight: 700; color: #0f172a; margin: 0; }
+  #stockReportPickModal label.search { font-size: 12px; font-weight: 600; color: #0f172a; }
+  #stockReportPickModal table thead th { font-size: 12px !important; font-weight: 700 !important; color: #1e293b !important; }
+</style>
+
+<div class="page">
+{% set _qty_hdr = (filters.storecode or '')|trim|upper %}
+{% set _stock_pol = (filters.stock_polarity or '')|trim|lower %}
+  <div class="top">
+    <h1 class="title">Stock Report</h1>
+    <div class="actions">
+      <button class="btn" type="button" id="widthDec">Width -</button>
+      <button class="btn" type="button" id="widthInc">Width +</button>
+    </div>
+  </div>
+  {% if report_error %}
+  <div class="alert alert-danger" role="alert" style="margin-bottom: 12px;">
+    {{ report_error }}
+  </div>
+  {% endif %}
+  <div class="actions" style="margin-bottom: 10px;">
+    <button class="btn btn-filter active" type="button" data-color-filter="all">All</button>
+    <button class="btn btn-filter" type="button" data-color-filter="red">Red</button>
+    <button class="btn btn-filter" type="button" data-color-filter="yellow">Yellow</button>
+    <button class="btn btn-filter" type="button" data-color-filter="green">Green</button>
+    <div class="sr-polarity-group" role="group" aria-label="Filter by stock quantity">
+      <span class="sr-polarity-caption">Stock</span>
+      <button type="button" class="btn sr-polarity-btn sr-polarity-all{% if _stock_pol != 'plus' and _stock_pol != 'minus' %} active{% endif %}" data-sr-polarity="" title="All quantities">All</button>
+      <button type="button" class="btn sr-polarity-btn sr-polarity-plus{% if _stock_pol == 'plus' %} active{% endif %}" data-sr-polarity="plus" title="Plus stock only (quantity &gt; 0)" aria-label="Plus stock">+</button>
+      <button type="button" class="btn sr-polarity-btn sr-polarity-minus{% if _stock_pol == 'minus' %} active{% endif %}" data-sr-polarity="minus" title="Minus stock only (quantity &lt; 0)" aria-label="Minus stock">−</button>
+    </div>
+  </div>
+
+  <form id="stockReportFilterForm" method="get" action="{{ url_for('reports.stock_report') }}">
+    <input type="hidden" name="stock_polarity" id="sr_stock_polarity" value="{{ filters.stock_polarity or '' }}" />
+    <input type="hidden" name="summary_by" id="sr_summary_by" value="{{ filters.summary_by or 'microcategory' }}" />
+    <div class="grid">
+      <div class="stock-report-fg">
+        <label for="sr_filter_days">Days</label>
+        <input id="sr_filter_days" class="input" type="number" name="days" placeholder="Default 30" value="{{ filters.days or '30' }}" min="1" max="3650" />
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_filter_cost_method">Cost method</label>
+        <select id="sr_filter_cost_method" class="input" name="cost_method" title="Unit cost used for stock value and movement value">
+          <option value="last_purchase"{% if (filters.cost_method or 'last_purchase') == 'last_purchase' %} selected{% endif %}>Last purchase (cost price)</option>
+          <option value="average"{% if filters.cost_method == 'average' %} selected{% endif %}>Average (average cost)</option>
+        </select>
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_filter_locationcode">Location code</label>
+        <div class="stock-report-pick-wrap">
+          <span class="search-field search-field--popup">
+            <input id="sr_filter_locationcode" class="input js-stock-report-pick" type="text" name="locationcode" placeholder="Pick or leave blank…" value="{{ filters.locationcode or '' }}" readonly autocomplete="off" />
+            <button type="button" class="search-clear" data-sr-clear="locationcode" aria-label="Clear location">×</button>
+            <button type="button" class="search-picker" data-sr-pick="locationcode" aria-label="Open location list">▾</button>
+          </span>
+        </div>
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_filter_storecode">Store (DBCODE)</label>
+        <div class="stock-report-pick-wrap">
+          <span class="search-field search-field--popup">
+            <input id="sr_filter_storecode" class="input js-stock-report-pick" type="text" name="storecode" placeholder="Pick store DBCODE or leave blank…" value="{{ filters.storecode or '' }}" readonly autocomplete="off" />
+            <button type="button" class="search-clear" data-sr-clear="storecode" aria-label="Clear store">×</button>
+            <button type="button" class="search-picker" data-sr-pick="storecode" aria-label="Open store list">▾</button>
+          </span>
+        </div>
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_filter_rawabicode">Barcode</label>
+        <input id="sr_filter_rawabicode" class="input" type="text" name="rawabicode" placeholder="Optional" value="{{ filters.rawabicode or '' }}" />
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_filter_itemcode">Item code</label>
+        <input id="sr_filter_itemcode" class="input" type="text" name="itemcode" placeholder="Optional" value="{{ filters.itemcode or '' }}" />
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_filter_itemname">Item name</label>
+        <div class="stock-report-pick-wrap">
+          <span class="search-field search-field--popup">
+            <input id="sr_filter_itemname" class="input js-stock-report-pick" type="text" name="itemname" placeholder="Pick…" value="{{ filters.itemname or '' }}" readonly autocomplete="off" />
+            <button type="button" class="search-clear" data-sr-clear="itemname" aria-label="Clear item name">×</button>
+            <button type="button" class="search-picker" data-sr-pick="itemname" aria-label="Open item names">▾</button>
+          </span>
+        </div>
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_filter_suppliername">Supplier name</label>
+        <div class="stock-report-pick-wrap">
+          <span class="search-field search-field--popup">
+            <input id="sr_filter_suppliername" class="input js-stock-report-pick" type="text" name="suppliername" placeholder="Pick…" value="{{ filters.suppliername or '' }}" readonly autocomplete="off" />
+            <button type="button" class="search-clear" data-sr-clear="suppliername" aria-label="Clear supplier">×</button>
+            <button type="button" class="search-picker" data-sr-pick="suppliername" aria-label="Open suppliers">▾</button>
+          </span>
+        </div>
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_filter_unit">Unit</label>
+        <div class="stock-report-pick-wrap">
+          <span class="search-field search-field--popup">
+            <input id="sr_filter_unit" class="input js-stock-report-pick" type="text" name="unit" placeholder="Pick…" value="{{ filters.unit or '' }}" readonly autocomplete="off" />
+            <button type="button" class="search-clear" data-sr-clear="unit" aria-label="Clear unit">×</button>
+            <button type="button" class="search-picker" data-sr-pick="unit" aria-label="Open units">▾</button>
+          </span>
+        </div>
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_filter_brandname">Brand name</label>
+        <div class="stock-report-pick-wrap">
+          <span class="search-field search-field--popup">
+            <input id="sr_filter_brandname" class="input js-stock-report-pick" type="text" name="brandname" placeholder="Pick…" value="{{ filters.brandname or '' }}" readonly autocomplete="off" />
+            <button type="button" class="search-clear" data-sr-clear="brandname" aria-label="Clear brand">×</button>
+            <button type="button" class="search-picker" data-sr-pick="brandname" aria-label="Open brands">▾</button>
+          </span>
+        </div>
+      </div>
+      <div class="stock-report-fg">
+        <label for="microcategoryFilterInput">Micro category</label>
+        <div class="stock-report-pick-wrap">
+          <span class="search-field search-field--popup">
+            <input id="microcategoryFilterInput" class="input js-stock-report-pick" type="text" name="microcategoryname" placeholder="Pick…" value="{{ filters.microcategoryname or '' }}" readonly autocomplete="off" />
+            <button type="button" class="search-clear" data-sr-clear="microcategoryname" aria-label="Clear micro category">×</button>
+            <button type="button" class="search-picker" data-sr-pick="microcategoryname" aria-label="Open micro categories">▾</button>
+          </span>
+        </div>
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_filter_categoryname">Category name</label>
+        <div class="stock-report-pick-wrap">
+          <span class="search-field search-field--popup">
+            <input id="sr_filter_categoryname" class="input js-stock-report-pick" type="text" name="categoryname" placeholder="Pick…" value="{{ filters.categoryname or '' }}" readonly autocomplete="off" />
+            <button type="button" class="search-clear" data-sr-clear="categoryname" aria-label="Clear category">×</button>
+            <button type="button" class="search-picker" data-sr-pick="categoryname" aria-label="Open categories">▾</button>
+          </span>
+        </div>
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_filter_propertyname">Property name</label>
+        <div class="stock-report-pick-wrap">
+          <span class="search-field search-field--popup">
+            <input id="sr_filter_propertyname" class="input js-stock-report-pick" type="text" name="propertyname" placeholder="Pick…" value="{{ filters.propertyname or '' }}" readonly autocomplete="off" />
+            <button type="button" class="search-clear" data-sr-clear="propertyname" aria-label="Clear property">×</button>
+            <button type="button" class="search-picker" data-sr-pick="propertyname" aria-label="Open properties">▾</button>
+          </span>
+        </div>
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_filter_min_stock">Min stock</label>
+        <input id="sr_filter_min_stock" class="input" type="number" step="0.001" name="min_stock" placeholder="Optional" value="{{ filters.min_stock or '' }}" />
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_filter_max_stock">Max stock</label>
+        <input id="sr_filter_max_stock" class="input" type="number" step="0.001" name="max_stock" placeholder="Optional" value="{{ filters.max_stock or '' }}" />
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_filter_min_avgdaily">Min avg daily</label>
+        <input id="sr_filter_min_avgdaily" class="input" type="number" step="0.01" name="min_avgdaily" placeholder="Optional" value="{{ filters.min_avgdaily or '' }}" />
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_filter_max_avgdaily">Max avg daily</label>
+        <input id="sr_filter_max_avgdaily" class="input" type="number" step="0.01" name="max_avgdaily" placeholder="Optional" value="{{ filters.max_avgdaily or '' }}" />
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_filter_min_days">Min remaining days</label>
+        <input id="sr_filter_min_days" class="input" type="number" step="0.01" name="min_days" placeholder="Optional" value="{{ filters.min_days or '' }}" />
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_filter_max_days">Max remaining days</label>
+        <input id="sr_filter_max_days" class="input" type="number" step="0.01" name="max_days" placeholder="Optional" value="{{ filters.max_days or '' }}" />
+      </div>
+    </div>
+    <div class="actions" style="margin-bottom: 12px;">
+      <button class="btn btn-primary" type="submit">Apply Filters</button>
+      <a class="btn" href="{{ url_for('reports.stock_report') }}">Clear</a>
+    </div>
+  </form>
+
+  <div class="top" style="margin-top: 6px; margin-bottom: 8px;">
+    <div class="section-title" style="margin: 0;">Summary — {{ summary_dimension_label }}</div>
+    <div class="actions">
+      <button type="button" class="btn btn-primary" id="summaryToolOpenBtn">Tool</button>
+      <a class="btn" href="{{ micro_export_url }}">Export Micro CSV</a>
+      <a class="btn" href="{{ summary_pdf_url }}">Export Summary PDF</a>
+    </div>
+  </div>
+  <div class="summary-wrap">
+    <table id="microSummaryTable" class="summary-table">
+      <thead>
+        <tr>
+          <th class="sortable">{{ summary_dimension_label }}</th>
+          <th class="num sortable">Total Qty</th>
+          <th class="num sortable">Stock Value</th>
+          <th class="num sortable">Avg Daily Value</th>
+          <th class="num sortable">Stock Remaining Days</th>
+        </tr>
+      </thead>
+      <tbody id="microSummaryBody">
+        {% for s in micro_summary_rows %}
+        {% set _s_days = (s.stockremainingdays or 0)|float %}
+        <tr class="{% if _s_days <= 7 %}row-red{% elif _s_days <= 14 %}row-yellow{% else %}row-green{% endif %}">
+          <td>
+            <a href="#" class="micro-link js-summary-filter" data-dim="{{ filters.summary_by or 'microcategory' }}" data-value="{{ s.summary_name or '' }}">{{ s.summary_name or '' }}</a>
+          </td>
+          <td class="num">{{ '%.3f'|format((s.totalqty or 0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format((s.stockvalue or 0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format((s.avgdailyvalue or 0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format((s.stockremainingdays or 0)|float) }}</td>
+        </tr>
+        {% else %}
+        <tr><td class="empty" colspan="5">No summary rows for this selection.</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr style="font-weight: 600; background: #f1f5f9;">
+          <td>Totals</td>
+          {% set _micro_tot_qty = namespace(v=0) %}
+          {% set _micro_total = namespace(v=0) %}
+          {% for s in micro_summary_rows %}
+          {% set _micro_tot_qty.v = _micro_tot_qty.v + (s.totalqty or 0)|float %}
+          {% set _micro_total.v = _micro_total.v + (s.stockvalue or 0)|float %}
+          {% endfor %}
+          <td class="num">{{ '%.3f'|format(_micro_tot_qty.v) }}</td>
+          <td class="num">{{ '%.2f'|format(_micro_total.v) }}</td>
+          <td class="num">—</td>
+          <td class="num">—</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div class="top" style="margin-top: 6px; margin-bottom: 6px;">
+    <div class="section-title" style="margin: 0;">Item Grid</div>
+    <div class="actions">
+      <button type="button" class="btn btn-primary" id="columnPopupBtn">Tool</button>
+      <a class="btn" href="{{ export_url }}">Export Items CSV</a>
+      <button class="btn" type="button" id="stockReportPdfOpenBtn">Export Item PDF</button>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table id="stockReportTable">
+      <thead>
+        <tr>
+          <th class="col-location sortable">Location</th>
+          <th class="col-rawabi sortable">Barcode</th>
+          <th class="col-itemcode sortable">Item Code</th>
+          <th class="col-itemname sortable">Item Name</th>
+          <th class="sortable">Supplier Name</th>
+          <th class="col-unit sortable">Unit</th>
+          <th class="num col-cost sortable">{{ cost_column_label or 'Cost Price' }}</th>
+          <th class="sortable">Brand</th>
+          <th class="sortable">Micro Category</th>
+          <th class="sortable">Category</th>
+          <th class="col-property sortable">Property</th>
+          <th class="num col-current sortable">{% if _qty_hdr %}{{ _qty_hdr }}{% else %}Current Stock{% endif %}</th>
+          <th class="num col-stockvalue sortable">Stock Value</th>
+          <th class="num col-totalqty sortable">Total Qty</th>
+          <th class="num col-avgdaily sortable">Avg Daily</th>
+          <th class="num col-remaining sortable">Stock Remaining Days</th>
+        </tr>
+      </thead>
+      <tbody id="stockReportBody">
+        {% for r in rows %}
+        {% set _days = (r.stockremainingdays or 0)|float %}
+        <tr class="{% if _days <= 7 %}row-red{% elif _days <= 14 %}row-yellow{% else %}row-green{% endif %}">
+          <td class="col-location">{{ r.locationcode or '' }}</td>
+          <td class="col-rawabi">{{ r.barcode or '' }}</td>
+          <td class="col-itemcode">{{ r.itemcode or '' }}</td>
+          <td class="col-itemname">{{ r.itemname or '' }}</td>
+          <td>{{ r.suppliername or '' }}</td>
+          <td class="col-unit">{{ r.unit or '' }}</td>
+          <td class="num col-cost">{{ '%.3f'|format((r.costprice or 0)|float) }}</td>
+          <td>{{ r.brandname or '' }}</td>
+          <td>{{ r.microcategoryname or '' }}</td>
+          <td>{{ r.categoryname or '' }}</td>
+          <td class="col-property">{{ r.propertyname or '' }}</td>
+          <td class="num col-current">{{ '%.3f'|format((r.currentstock or 0)|float) }}</td>
+          <td class="num col-stockvalue">{{ '%.2f'|format((r.stockvalue or 0)|float) }}</td>
+          <td class="num col-totalqty">{{ '%.3f'|format((r.totalqty or 0)|float) }}</td>
+          <td class="num col-avgdaily">{{ '%.2f'|format((r.avgdaily or 0)|float) }}</td>
+          <td class="num col-remaining">{{ '%.2f'|format((r.stockremainingdays or 0)|float) }}</td>
+        </tr>
+        {% else %}
+        <tr><td class="empty" colspan="16">No rows found for selected filters.</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr style="font-weight: 600;">
+          <td class="col-location">Totals</td>
+          <td class="col-rawabi"></td>
+          <td class="col-itemcode"></td>
+          <td class="col-itemname"></td>
+          <td></td>
+          <td class="col-unit"></td>
+          <td class="num col-cost"></td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td class="col-property"></td>
+          {% set _grid_tot_cur = namespace(v=0) %}
+          {% set _grid_tot_sv = namespace(v=0) %}
+          {% set _grid_tot_tq = namespace(v=0) %}
+          {% for r in rows %}
+          {% set _grid_tot_cur.v = _grid_tot_cur.v + (r.currentstock or 0)|float %}
+          {% set _grid_tot_sv.v = _grid_tot_sv.v + (r.stockvalue or 0)|float %}
+          {% set _grid_tot_tq.v = _grid_tot_tq.v + (r.totalqty or 0)|float %}
+          {% endfor %}
+          <td class="num col-current">{{ '%.3f'|format(_grid_tot_cur.v) }}</td>
+          <td class="num col-stockvalue">{{ '%.2f'|format(_grid_tot_sv.v) }}</td>
+          <td class="num col-totalqty">{{ '%.3f'|format(_grid_tot_tq.v) }}</td>
+          <td class="num col-avgdaily">—</td>
+          <td class="num col-remaining">—</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+<div id="summaryToolModalBackdrop" class="modal-backdrop" aria-hidden="true">
+  <div class="sr-tool-panel" role="dialog" aria-modal="true" aria-labelledby="summaryToolModalTitle">
+    <div class="sr-tool-panel__head">
+      <h3 id="summaryToolModalTitle" class="sr-tool-panel__title">Tool — Summary grouping</h3>
+      <p class="sr-tool-panel__lead">Choose which item attribute defines summary rows. Metrics (stock value, period qty, remaining days) stay the same. Apply reloads the report.</p>
+    </div>
+    <div class="sr-tool-panel__body">
+      <fieldset class="sr-summary-fieldset">
+        <legend>Group by</legend>
+        <label class="sr-summary-dim-opt"><input type="radio" name="sr_summary_dim_ui" value="microcategory" {% if (filters.summary_by or 'microcategory') == 'microcategory' %}checked{% endif %} /> Micro Category</label>
+        <label class="sr-summary-dim-opt"><input type="radio" name="sr_summary_dim_ui" value="brand" {% if (filters.summary_by or '') == 'brand' %}checked{% endif %} /> Brand</label>
+        <label class="sr-summary-dim-opt"><input type="radio" name="sr_summary_dim_ui" value="category" {% if (filters.summary_by or '') == 'category' %}checked{% endif %} /> Category</label>
+        <label class="sr-summary-dim-opt"><input type="radio" name="sr_summary_dim_ui" value="supplier" {% if (filters.summary_by or '') == 'supplier' %}checked{% endif %} /> Supplier</label>
+        <label class="sr-summary-dim-opt"><input type="radio" name="sr_summary_dim_ui" value="unit" {% if (filters.summary_by or '') == 'unit' %}checked{% endif %} /> Unit</label>
+        <label class="sr-summary-dim-opt"><input type="radio" name="sr_summary_dim_ui" value="property" {% if (filters.summary_by or '') == 'property' %}checked{% endif %} /> Property</label>
+      </fieldset>
+    </div>
+    <div class="sr-tool-panel__foot actions">
+      <button class="btn" type="button" id="summaryToolCancelBtn">Cancel</button>
+      <button class="btn btn-primary" type="button" id="summaryToolApplyBtn">Apply</button>
+    </div>
+  </div>
+</div>
+<div id="columnModalBackdrop" class="modal-backdrop" aria-hidden="true">
+  <div class="sr-tool-panel" role="dialog" aria-modal="true" aria-labelledby="columnModalTitle">
+    <div class="sr-tool-panel__head">
+      <h3 id="columnModalTitle" class="sr-tool-panel__title">Tool — Item Grid columns</h3>
+      <p class="sr-tool-panel__lead">Checked columns are visible. Preferences are saved in this browser only.</p>
+    </div>
+    <div class="sr-tool-panel__body">
+      <div id="columnOptionsWrap" class="sr-tool-columns"></div>
+    </div>
+    <div class="sr-tool-panel__foot actions">
+      <button class="btn" type="button" id="columnSelectAll">Select all</button>
+      <button class="btn" type="button" id="columnClearAll">Hide all</button>
+      <button class="btn btn-primary" type="button" id="columnCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+<div id="stockReportPdfModalBackdrop" class="modal-backdrop" aria-hidden="true">
+  <div class="sr-pdf-panel" role="dialog" aria-modal="true" aria-labelledby="stockReportPdfModalTitle">
+    <div class="sr-pdf-panel__head">
+      <h3 id="stockReportPdfModalTitle" class="sr-pdf-panel__title">Export Item PDF</h3>
+      <p class="sr-pdf-panel__lead">Choose one or more reports. Each PDF includes a <strong>totals</strong> row (sums of on-hand qty, period total qty, and stock value for the rows shown). Multiple selections download as one ZIP with separate files.</p>
+    </div>
+    <div class="sr-pdf-panel__body">
+      <label class="sr-pdf-opt">
+        <input type="checkbox" class="js-sr-pdf-kind" value="total" checked />
+        <span class="sr-pdf-opt__text"><strong>Total</strong> — full filtered item list.</span>
+      </label>
+      <label class="sr-pdf-opt">
+        <input type="checkbox" class="js-sr-pdf-kind" value="plus_stock" />
+        <span class="sr-pdf-opt__text"><strong>Plus stock</strong> — rows where {% if _qty_hdr %}<strong>{{ _qty_hdr }}</strong>{% else %}current stock{% endif %} quantity is <strong>greater than zero</strong>.</span>
+      </label>
+      <label class="sr-pdf-opt">
+        <input type="checkbox" class="js-sr-pdf-kind" value="minus_stock" />
+        <span class="sr-pdf-opt__text"><strong>Minus stock</strong> — rows where {% if _qty_hdr %}<strong>{{ _qty_hdr }}</strong>{% else %}current stock{% endif %} quantity is below zero.</span>
+      </label>
+      <label class="sr-pdf-opt">
+        <input type="checkbox" class="js-sr-pdf-kind" value="zero_stock" />
+        <span class="sr-pdf-opt__text"><strong>0 stock</strong> — rows where {% if _qty_hdr %}<strong>{{ _qty_hdr }}</strong>{% else %}current stock{% endif %} quantity equals zero.</span>
+      </label>
+    </div>
+    <div class="sr-pdf-panel__foot actions">
+      <button class="btn" type="button" id="stockReportPdfCancelBtn">Cancel</button>
+      <button class="btn btn-primary" type="button" id="stockReportPdfGenerateBtn">Generate</button>
+    </div>
+  </div>
+</div>
+<!-- Pick list: same shell as Item Master category popup (modal + scroll-table + table) -->
+<div class="modal hidden" id="stockReportPickModal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="modal__overlay" data-close="stockReportPickModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3 id="stockReportPickModalTitle">Pick</h3>
+      <button type="button" class="modal__close" data-close="stockReportPickModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <label class="search">
+        Search
+        <span class="search-field search-field--wide">
+          <input type="text" id="stockReportPickModalSearch" placeholder="Search by code or name…" autocomplete="off" />
+          <button type="button" class="search-clear" id="stockReportPickModalClear" aria-label="Clear search">×</button>
+        </span>
+      </label>
+      <div class="scroll-table modal__table">
+        <table class="table table-fixed" id="stockReportPickModalTable">
+          <thead>
+            <tr>
+              <th id="stockReportPickModalColHeader">Value</th>
+            </tr>
+          </thead>
+          <tbody id="stockReportPickModalBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<script type="application/json" id="srFilterOptionsJson">{{ (options or {}) | tojson }}</script>
+<script>
+(function () {
+  var page = document.querySelector('.page');
+  var decBtn = document.getElementById('widthDec');
+  var incBtn = document.getElementById('widthInc');
+  var widthKey = 'stockReportPageWidthV1';
+  var widthStep = 4;
+  var minW = 70;
+  var maxW = 98;
+
+  function applyWidth(vw) {
+    if (!page) return;
+    var safe = Math.max(minW, Math.min(maxW, vw));
+    page.style.setProperty('--page-width', safe + 'vw');
+    try { localStorage.setItem(widthKey, String(safe)); } catch (e) {}
+  }
+
+  try {
+    var saved = parseFloat(localStorage.getItem(widthKey) || '');
+    if (!isNaN(saved)) applyWidth(saved);
+  } catch (e) {}
+
+  if (decBtn) {
+    decBtn.addEventListener('click', function () {
+      var curr = parseFloat(getComputedStyle(page).getPropertyValue('--page-width')) || 90;
+      applyWidth(curr - widthStep);
+    });
+  }
+  if (incBtn) {
+    incBtn.addEventListener('click', function () {
+      var curr = parseFloat(getComputedStyle(page).getPropertyValue('--page-width')) || 90;
+      applyWidth(curr + widthStep);
+    });
+  }
+
+  var filterForm = document.getElementById('stockReportFilterForm');
+  var stockPolarityHidden = document.getElementById('sr_stock_polarity');
+  function syncStockPolarityButtons() {
+    var v = (stockPolarityHidden && stockPolarityHidden.value)
+      ? String(stockPolarityHidden.value).trim().toLowerCase() : '';
+    if (v !== 'plus' && v !== 'minus') v = '';
+    Array.prototype.slice.call(document.querySelectorAll('.sr-polarity-btn')).forEach(function (btn) {
+      var raw = btn.getAttribute('data-sr-polarity');
+      var pv = raw === null || raw === '' ? '' : String(raw).trim().toLowerCase();
+      var match = (pv === '' && v === '') || (pv === 'plus' && v === 'plus') || (pv === 'minus' && v === 'minus');
+      btn.classList.toggle('active', match);
+    });
+  }
+  syncStockPolarityButtons();
+  Array.prototype.slice.call(document.querySelectorAll('.sr-polarity-btn')).forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (!stockPolarityHidden || !filterForm) return;
+      var raw = btn.getAttribute('data-sr-polarity');
+      stockPolarityHidden.value = raw === null || raw === undefined ? '' : String(raw);
+      syncStockPolarityButtons();
+      filterForm.submit();
+    });
+  });
+
+  var summaryByHidden = document.getElementById('sr_summary_by');
+  var summaryToolBackdrop = document.getElementById('summaryToolModalBackdrop');
+  var summaryToolOpenBtn = document.getElementById('summaryToolOpenBtn');
+  var summaryToolCancelBtn = document.getElementById('summaryToolCancelBtn');
+  var summaryToolApplyBtn = document.getElementById('summaryToolApplyBtn');
+  function showSummaryTool() {
+    if (!summaryToolBackdrop) return;
+    var cur = (summaryByHidden && summaryByHidden.value)
+      ? String(summaryByHidden.value).trim().toLowerCase() : 'microcategory';
+    Array.prototype.slice.call(document.querySelectorAll('input[name="sr_summary_dim_ui"]')).forEach(function (rb) {
+      rb.checked = (rb.value === cur);
+    });
+    summaryToolBackdrop.classList.add('show');
+    summaryToolBackdrop.setAttribute('aria-hidden', 'false');
+  }
+  function hideSummaryTool() {
+    if (!summaryToolBackdrop) return;
+    summaryToolBackdrop.classList.remove('show');
+    summaryToolBackdrop.setAttribute('aria-hidden', 'true');
+  }
+  if (summaryToolOpenBtn) summaryToolOpenBtn.addEventListener('click', showSummaryTool);
+  if (summaryToolCancelBtn) summaryToolCancelBtn.addEventListener('click', hideSummaryTool);
+  if (summaryToolBackdrop) {
+    summaryToolBackdrop.addEventListener('click', function (e) {
+      if (e.target === summaryToolBackdrop) hideSummaryTool();
+    });
+  }
+  if (summaryToolApplyBtn) {
+    summaryToolApplyBtn.addEventListener('click', function () {
+      var rb = document.querySelector('input[name="sr_summary_dim_ui"]:checked');
+      if (!rb || !summaryByHidden || !filterForm) return;
+      summaryByHidden.value = rb.value || 'microcategory';
+      hideSummaryTool();
+      filterForm.submit();
+    });
+  }
+  window.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (summaryToolBackdrop && summaryToolBackdrop.classList.contains('show')) hideSummaryTool();
+  });
+
+  var SUMMARY_FILTER_FIELDS = {
+    microcategory: 'microcategoryname',
+    brand: 'brandname',
+    category: 'categoryname',
+    supplier: 'suppliername',
+    unit: 'unit',
+    property: 'propertyname'
+  };
+  Array.prototype.slice.call(document.querySelectorAll('.js-summary-filter')).forEach(function (lnk) {
+    lnk.addEventListener('click', function (e) {
+      e.preventDefault();
+      if (!filterForm) return;
+      var dim = (lnk.getAttribute('data-dim') || 'microcategory').trim().toLowerCase();
+      var fname = SUMMARY_FILTER_FIELDS[dim];
+      if (!fname) return;
+      var inp = filterForm.querySelector('[name="' + fname + '"]');
+      if (!inp) return;
+      inp.value = (lnk.getAttribute('data-value') || '').trim();
+      filterForm.submit();
+    });
+  });
+
+  var colorButtons = Array.prototype.slice.call(document.querySelectorAll('[data-color-filter]'));
+  var columnPopupBtn = document.getElementById('columnPopupBtn');
+  var columnModalBackdrop = document.getElementById('columnModalBackdrop');
+  var columnOptionsWrap = document.getElementById('columnOptionsWrap');
+  var columnCloseBtn = document.getElementById('columnCloseBtn');
+  var columnSelectAllBtn = document.getElementById('columnSelectAll');
+  var columnClearAllBtn = document.getElementById('columnClearAll');
+
+  /* Pick-list popup — Item Master category-style modal (global style.css) */
+  var srPickModal = document.getElementById('stockReportPickModal');
+  var srPickTitle = document.getElementById('stockReportPickModalTitle');
+  var srPickSearch = document.getElementById('stockReportPickModalSearch');
+  var srPickClearBtn = document.getElementById('stockReportPickModalClear');
+  var srPickBody = document.getElementById('stockReportPickModalBody');
+  var srPickColHeader = document.getElementById('stockReportPickModalColHeader');
+  var srPickTargetInput = null;
+  var SR_OPT_KEYS = {
+    locationcode: 'locationcodes',
+    itemname: 'itemnames',
+    suppliername: 'suppliernames',
+    unit: 'units',
+    brandname: 'brandnames',
+    microcategoryname: 'microcategories',
+    categoryname: 'categories',
+    propertyname: 'properties'
+  };
+  var SR_OPT_LABELS = {
+    locationcode: 'Location code',
+    storecode: 'Store (DBCODE)',
+    itemname: 'Item name',
+    suppliername: 'Supplier name',
+    unit: 'Unit',
+    brandname: 'Brand name',
+    microcategoryname: 'Micro category',
+    categoryname: 'Category name',
+    propertyname: 'Property name'
+  };
+  var srFilterOptions = {};
+  try {
+    var sj = document.getElementById('srFilterOptionsJson');
+    if (sj && sj.textContent) srFilterOptions = JSON.parse(sj.textContent) || {};
+  } catch (e) { srFilterOptions = {}; }
+
+  function closeSrPick() {
+    if (!srPickModal) return;
+    srPickModal.classList.add('hidden');
+    srPickModal.setAttribute('aria-hidden', 'true');
+    srPickTargetInput = null;
+  }
+
+  function filterSrPickRows(needleRaw) {
+    if (!srPickBody) return;
+    var needle = (needleRaw || '').toLowerCase().trim();
+    Array.prototype.slice.call(srPickBody.querySelectorAll('tr')).forEach(function (tr) {
+      var t = (tr.getAttribute('data-text') || tr.textContent || '').toLowerCase();
+      tr.style.display = (!needle || t.indexOf(needle) !== -1) ? '' : 'none';
+    });
+  }
+
+  function openSrPick(fieldName, inputEl) {
+    if (!srPickModal || !srPickBody || !srPickTitle) return;
+    srPickTargetInput = inputEl || null;
+    var title = SR_OPT_LABELS[fieldName] || fieldName;
+    srPickTitle.textContent = title;
+    if (srPickColHeader) srPickColHeader.textContent = title;
+    var vals = [];
+    if (fieldName === 'storecode' && Array.isArray(srFilterOptions.stores)) {
+      vals = srFilterOptions.stores.map(function (x) {
+        return {
+          value: String(x.code || '').trim(),
+          text: String(x.label || x.code || '').trim()
+        };
+      });
+    } else {
+      var k = SR_OPT_KEYS[fieldName];
+      var arr = k ? srFilterOptions[k] : null;
+      var flat = Array.isArray(arr) ? arr : [];
+      vals = flat.map(function (v) { return { value: String(v), text: String(v) }; });
+    }
+    srPickBody.innerHTML = '';
+    vals.forEach(function (row) {
+      var tr = document.createElement('tr');
+      var td = document.createElement('td');
+      td.textContent = row.text;
+      tr.setAttribute('data-text', String(row.text || '').toLowerCase());
+      tr.appendChild(td);
+      tr.addEventListener('click', function () {
+        if (srPickTargetInput) srPickTargetInput.value = row.value;
+        closeSrPick();
+      });
+      srPickBody.appendChild(tr);
+    });
+    if (vals.length === 0) {
+      var tr0 = document.createElement('tr');
+      var td0 = document.createElement('td');
+      td0.style.color = '#6c757d';
+      td0.style.fontStyle = 'italic';
+      td0.textContent = fieldName === 'storecode'
+        ? 'No rows in WAREHOUSE_MASTER for this scope, or table missing. Pick Location then Apply Filters to refresh.'
+        : 'No values for current scope. Adjust Location Code and reload.';
+      tr0.appendChild(td0);
+      srPickBody.appendChild(tr0);
+    }
+    if (srPickSearch) {
+      srPickSearch.value = '';
+      filterSrPickRows('');
+      setTimeout(function () { srPickSearch.focus(); }, 0);
+    }
+    srPickModal.classList.remove('hidden');
+    srPickModal.setAttribute('aria-hidden', 'false');
+  }
+
+  if (srPickSearch) {
+    srPickSearch.addEventListener('input', function () {
+      filterSrPickRows(srPickSearch.value);
+    });
+    srPickSearch.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeSrPick();
+      }
+    });
+  }
+  if (srPickClearBtn) {
+    srPickClearBtn.addEventListener('click', function () {
+      if (srPickSearch) {
+        srPickSearch.value = '';
+        filterSrPickRows('');
+        srPickSearch.focus();
+      }
+    });
+  }
+  if (srPickModal) {
+    srPickModal.addEventListener('click', function (e) {
+      if (e.target.getAttribute('data-close') === 'stockReportPickModal' || e.target.classList.contains('modal__close')) {
+        closeSrPick();
+      }
+    });
+    srPickModal.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeSrPick();
+      }
+    });
+  }
+  Array.prototype.slice.call(document.querySelectorAll('[data-sr-pick]')).forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var fn = btn.getAttribute('data-sr-pick');
+      if (!fn || !filterForm) return;
+      var inp = filterForm.querySelector('[name="' + fn + '"]');
+      openSrPick(fn, inp);
+    });
+  });
+  Array.prototype.slice.call(document.querySelectorAll('[data-sr-clear]')).forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var fn = btn.getAttribute('data-sr-clear');
+      if (!fn || !filterForm) return;
+      var inp = filterForm.querySelector('[name="' + fn + '"]');
+      if (inp) inp.value = '';
+    });
+  });
+  Array.prototype.slice.call(document.querySelectorAll('#stockReportFilterForm .js-stock-report-pick')).forEach(function (inp) {
+    inp.addEventListener('click', function () {
+      var name = inp.getAttribute('name');
+      if (name) openSrPick(name, inp);
+    });
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'F1') {
+        e.preventDefault();
+        var name = inp.getAttribute('name');
+        if (name) openSrPick(name, inp);
+      }
+    });
+  });
+  window.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (srPickModal && !srPickModal.classList.contains('hidden')) closeSrPick();
+  });
+
+  function initInteractiveTable(tableId, bodyId, keyPrefix) {
+    var table = document.getElementById(tableId);
+    var body = document.getElementById(bodyId);
+    if (!table || !body) return;
+
+    var allHeaders = Array.prototype.slice.call(table.querySelectorAll('thead th'));
+    var headers = Array.prototype.slice.call(table.querySelectorAll('thead th.sortable'));
+    var sortState = { index: -1, dir: 'asc' };
+    var suppressSortUntil = 0;
+    var colWidthKey = keyPrefix + 'ColWidthsV1';
+    var numericIdx = {};
+    headers.forEach(function (h, i) { if (h.classList.contains('num')) numericIdx[i] = true; });
+
+    function isNumericColumn(idx) { return !!numericIdx[idx]; }
+    function getCellText(row, idx) {
+      var cell = row.children[idx];
+      return cell ? (cell.textContent || '').trim() : '';
+    }
+    function compareRows(a, b, idx, dir) {
+      var av = getCellText(a, idx);
+      var bv = getCellText(b, idx);
+      if (isNumericColumn(idx)) {
+        var an = parseFloat(av.replace(/,/g, ''));
+        var bn = parseFloat(bv.replace(/,/g, ''));
+        an = isNaN(an) ? 0 : an;
+        bn = isNaN(bn) ? 0 : bn;
+        return dir === 'asc' ? (an - bn) : (bn - an);
+      }
+      av = av.toLowerCase();
+      bv = bv.toLowerCase();
+      if (av < bv) return dir === 'asc' ? -1 : 1;
+      if (av > bv) return dir === 'asc' ? 1 : -1;
+      return 0;
+    }
+    function sortBy(idx) {
+      if (Date.now() < suppressSortUntil) return;
+      var rows = Array.prototype.slice.call(body.querySelectorAll('tr'));
+      if (!rows.length) return;
+      if (sortState.index === idx) sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc';
+      else { sortState.index = idx; sortState.dir = 'asc'; }
+      headers.forEach(function (h) { h.classList.remove('sort-asc', 'sort-desc'); });
+      var h = headers[idx];
+      if (h) h.classList.add(sortState.dir === 'asc' ? 'sort-asc' : 'sort-desc');
+      rows.sort(function (r1, r2) { return compareRows(r1, r2, idx, sortState.dir); });
+      rows.forEach(function (r) { body.appendChild(r); });
+    }
+    headers.forEach(function (h, idx) {
+      h.addEventListener('click', function () { sortBy(idx); });
+    });
+
+    function setColumnWidth(colIdx, px) {
+      var safe = Math.max(60, Math.round(px));
+      allHeaders.forEach(function (th, i) {
+        if (i === colIdx) {
+          th.style.width = safe + 'px';
+          th.style.maxWidth = safe + 'px';
+          th.style.minWidth = '60px';
+        }
+      });
+      var rows = body.querySelectorAll('tr');
+      rows.forEach(function (tr) {
+        var td = tr.children[colIdx];
+        if (!td) return;
+        td.style.width = safe + 'px';
+        td.style.maxWidth = safe + 'px';
+        td.style.minWidth = '60px';
+      });
+      Array.prototype.slice.call(table.querySelectorAll('tfoot tr')).forEach(function (tr) {
+        var td = tr.children[colIdx];
+        if (!td) return;
+        td.style.width = safe + 'px';
+        td.style.maxWidth = safe + 'px';
+        td.style.minWidth = '60px';
+      });
+    }
+    function saveColumnWidths() {
+      try {
+        var map = {};
+        allHeaders.forEach(function (th, idx) {
+          var w = Math.round(th.getBoundingClientRect().width || 0);
+          if (w > 0) map[idx] = w;
+        });
+        localStorage.setItem(colWidthKey, JSON.stringify(map));
+      } catch (e) {}
+    }
+    function loadColumnWidths() {
+      try {
+        var raw = localStorage.getItem(colWidthKey);
+        if (!raw) return;
+        var map = JSON.parse(raw);
+        Object.keys(map).forEach(function (k) {
+          var idx = parseInt(k, 10);
+          if (!isNaN(idx)) setColumnWidth(idx, map[k]);
+        });
+      } catch (e) {}
+    }
+    allHeaders.forEach(function (th, colIdx) {
+      th.classList.add('resizable');
+      if (th.querySelector('.col-resizer')) return;
+      var grip = document.createElement('span');
+      grip.className = 'col-resizer';
+      grip.title = 'Drag to resize column';
+      th.appendChild(grip);
+      grip.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var startX = e.clientX;
+        var startW = th.getBoundingClientRect().width;
+        var moved = false;
+        grip.classList.add('active');
+        function onMove(ev) {
+          var dx = ev.clientX - startX;
+          if (Math.abs(dx) > 1) moved = true;
+          setColumnWidth(colIdx, startW + dx);
+        }
+        function onUp() {
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+          grip.classList.remove('active');
+          if (moved) {
+            suppressSortUntil = Date.now() + 250;
+            saveColumnWidths();
+          }
+        }
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+      });
+    });
+    loadColumnWidths();
+  }
+
+  initInteractiveTable('stockReportTable', 'stockReportBody', 'stockReport');
+  initInteractiveTable('microSummaryTable', 'microSummaryBody', 'microSummary');
+
+  function matchesColorClass(row, color) {
+    if (color === 'red') return row.classList.contains('row-red');
+    if (color === 'yellow') return row.classList.contains('row-yellow');
+    if (color === 'green') return row.classList.contains('row-green');
+    return true;
+  }
+
+  function applyColorFilter(color) {
+    ['stockReportBody', 'microSummaryBody'].forEach(function (bodyId) {
+      var tbody = document.getElementById(bodyId);
+      if (!tbody) return;
+      Array.prototype.slice.call(tbody.querySelectorAll('tr')).forEach(function (row) {
+        if (row.querySelector('.empty')) {
+          row.style.display = (color === 'all') ? '' : 'none';
+          return;
+        }
+        row.style.display = matchesColorClass(row, color) ? '' : 'none';
+      });
+    });
+    colorButtons.forEach(function (btn) {
+      btn.classList.toggle('active', (btn.getAttribute('data-color-filter') || 'all') === color);
+    });
+  }
+
+  colorButtons.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      applyColorFilter((btn.getAttribute('data-color-filter') || 'all').toLowerCase());
+    });
+  });
+
+  function initColumnVisibilityPopup() {
+    var table = document.getElementById('stockReportTable');
+    var body = document.getElementById('stockReportBody');
+    if (!table || !body || !columnOptionsWrap) return;
+    var headers = Array.prototype.slice.call(table.querySelectorAll('thead th'));
+    var storageKey = 'stockReportHiddenColsV1';
+
+    function setColumnVisible(colIdx, visible) {
+      headers.forEach(function (h, i) {
+        if (i === colIdx) h.style.display = visible ? '' : 'none';
+      });
+      Array.prototype.slice.call(body.querySelectorAll('tr')).forEach(function (tr) {
+        var td = tr.children[colIdx];
+        if (td) td.style.display = visible ? '' : 'none';
+      });
+      Array.prototype.slice.call(table.querySelectorAll('tfoot tr')).forEach(function (tr) {
+        var td = tr.children[colIdx];
+        if (td) td.style.display = visible ? '' : 'none';
+      });
+    }
+
+    function getHiddenSet() {
+      try {
+        var raw = localStorage.getItem(storageKey);
+        if (!raw) return {};
+        return JSON.parse(raw) || {};
+      } catch (e) { return {}; }
+    }
+
+    function saveHiddenSet(hiddenSet) {
+      try { localStorage.setItem(storageKey, JSON.stringify(hiddenSet)); } catch (e) {}
+    }
+
+    function applyStoredHidden() {
+      var hiddenSet = getHiddenSet();
+      headers.forEach(function (_, idx) {
+        setColumnVisible(idx, !hiddenSet[idx]);
+      });
+      Array.prototype.slice.call(columnOptionsWrap.querySelectorAll('input[type="checkbox"]')).forEach(function (cb) {
+        var idx = parseInt(cb.getAttribute('data-col-idx') || '-1', 10);
+        cb.checked = !hiddenSet[idx];
+      });
+    }
+
+    function renderColumnOptions() {
+      columnOptionsWrap.innerHTML = '';
+      headers.forEach(function (h, idx) {
+        var labelText = (h.textContent || '').replace(/\s+/g, ' ').trim() || ('Column ' + (idx + 1));
+        var label = document.createElement('label');
+        label.className = 'col-opt';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = true;
+        cb.setAttribute('data-col-idx', String(idx));
+        cb.addEventListener('change', function () {
+          var hiddenSet = getHiddenSet();
+          if (cb.checked) delete hiddenSet[idx];
+          else hiddenSet[idx] = true;
+          saveHiddenSet(hiddenSet);
+          setColumnVisible(idx, cb.checked);
+        });
+        var span = document.createElement('span');
+        span.textContent = labelText;
+        label.appendChild(cb);
+        label.appendChild(span);
+        columnOptionsWrap.appendChild(label);
+      });
+      applyStoredHidden();
+    }
+
+    function showModal() {
+      if (!columnModalBackdrop) return;
+      columnModalBackdrop.classList.add('show');
+      columnModalBackdrop.setAttribute('aria-hidden', 'false');
+    }
+    function hideModal() {
+      if (!columnModalBackdrop) return;
+      columnModalBackdrop.classList.remove('show');
+      columnModalBackdrop.setAttribute('aria-hidden', 'true');
+    }
+
+    if (columnPopupBtn) columnPopupBtn.addEventListener('click', showModal);
+    if (columnCloseBtn) columnCloseBtn.addEventListener('click', hideModal);
+    if (columnModalBackdrop) {
+      columnModalBackdrop.addEventListener('click', function (e) {
+        if (e.target === columnModalBackdrop) hideModal();
+      });
+    }
+    if (columnSelectAllBtn) {
+      columnSelectAllBtn.addEventListener('click', function () {
+        saveHiddenSet({});
+        headers.forEach(function (_, idx) { setColumnVisible(idx, true); });
+        Array.prototype.slice.call(columnOptionsWrap.querySelectorAll('input[type="checkbox"]')).forEach(function (cb) { cb.checked = true; });
+      });
+    }
+    if (columnClearAllBtn) {
+      columnClearAllBtn.addEventListener('click', function () {
+        var hiddenSet = {};
+        headers.forEach(function (_, idx) { hiddenSet[idx] = true; setColumnVisible(idx, false); });
+        saveHiddenSet(hiddenSet);
+        Array.prototype.slice.call(columnOptionsWrap.querySelectorAll('input[type="checkbox"]')).forEach(function (cb) { cb.checked = false; });
+      });
+    }
+    window.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') hideModal();
+    });
+
+    renderColumnOptions();
+  }
+
+  initColumnVisibilityPopup();
+
+  (function initStockReportPdfModal() {
+    var stockReportPdfBaseUrl = {{ stock_report_pdf_url | tojson }};
+    var stockReportPdfOpenBtn = document.getElementById('stockReportPdfOpenBtn');
+    var stockReportPdfModalBackdrop = document.getElementById('stockReportPdfModalBackdrop');
+    var stockReportPdfGenerateBtn = document.getElementById('stockReportPdfGenerateBtn');
+    var stockReportPdfCancelBtn = document.getElementById('stockReportPdfCancelBtn');
+
+    function showPdfModal() {
+      if (!stockReportPdfModalBackdrop) return;
+      stockReportPdfModalBackdrop.classList.add('show');
+      stockReportPdfModalBackdrop.setAttribute('aria-hidden', 'false');
+    }
+    function hidePdfModal() {
+      if (!stockReportPdfModalBackdrop) return;
+      stockReportPdfModalBackdrop.classList.remove('show');
+      stockReportPdfModalBackdrop.setAttribute('aria-hidden', 'true');
+    }
+
+    function buildStockReportPdfUrl() {
+      var form = document.getElementById('stockReportFilterForm');
+      var params = new URLSearchParams();
+      if (form) {
+        Array.prototype.slice.call(form.elements).forEach(function (el) {
+          if (!el.name || el.disabled) return;
+          if (el.type === 'checkbox' || el.type === 'radio') {
+            if (!el.checked) return;
+          }
+          params.append(el.name, el.value);
+        });
+      }
+      Array.prototype.slice.call(document.querySelectorAll('.js-sr-pdf-kind:checked')).forEach(function (cb) {
+        params.append('pdf_kind', cb.value);
+      });
+      var qs = params.toString();
+      var base = stockReportPdfBaseUrl || '';
+      return base + (qs ? ('?' + qs) : '');
+    }
+
+    if (stockReportPdfOpenBtn) stockReportPdfOpenBtn.addEventListener('click', showPdfModal);
+    if (stockReportPdfCancelBtn) stockReportPdfCancelBtn.addEventListener('click', hidePdfModal);
+    if (stockReportPdfModalBackdrop) {
+      stockReportPdfModalBackdrop.addEventListener('click', function (e) {
+        if (e.target === stockReportPdfModalBackdrop) hidePdfModal();
+      });
+    }
+    if (stockReportPdfGenerateBtn) {
+      stockReportPdfGenerateBtn.addEventListener('click', function () {
+        if (!document.querySelector('.js-sr-pdf-kind:checked')) {
+          alert('Please select at least one export option.');
+          return;
+        }
+        var url = buildStockReportPdfUrl();
+        window.open(url, '_blank', 'noopener');
+        hidePdfModal();
+      });
+    }
+    window.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      if (stockReportPdfModalBackdrop && stockReportPdfModalBackdrop.classList.contains('show')) hidePdfModal();
+    });
+  })();
+
+})();
+</script>
+{% endblock %}

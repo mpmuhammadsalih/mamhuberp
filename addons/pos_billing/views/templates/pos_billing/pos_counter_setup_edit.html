@@ -1,0 +1,454 @@
+{% extends "base.html" %}
+{% block title %}Edit POS Counter{% endblock %}
+{% from 'pos_billing/_pos_counter_warehouse_picker.html' import pos_counter_warehouse_field, pos_counter_warehouse_modal %}
+
+{% block content %}
+<style>
+  body { overflow-x: auto; min-height: 100vh; background: #f5f6f8; color: #212529; }
+  .pos-counter-im-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 8px 12px 10px;
+    --im-field-fill: rgba(255, 255, 255, 0.52);
+    --im-field-fill-strong: #eaf2fa;
+    --im-field-readonly: rgba(226, 236, 247, 0.92);
+  }
+  .pos-counter-im-page .im-topbar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 6px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #dee2e6;
+  }
+  .pos-counter-im-page .im-topbar-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 12px;
+    width: 100%;
+  }
+  .pos-counter-im-page .im-topbar h1 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 400;
+    color: #212529;
+    line-height: 1.3;
+  }
+  .pos-counter-im-page .im-topbar h1 .im-ref { font-weight: 600; }
+  .pos-counter-im-page .im-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .pos-counter-im-page .im-btn-save {
+    background: #28a745 !important;
+    border: none !important;
+    color: #fff !important;
+    padding: 8px 20px !important;
+    border-radius: 4px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    cursor: pointer;
+    box-shadow: none !important;
+  }
+  .pos-counter-im-page .im-btn-secondary {
+    background: var(--im-field-fill-strong) !important;
+    border: 1px solid rgba(13, 110, 253, 0.16) !important;
+    color: #495057 !important;
+    padding: 8px 16px !important;
+    border-radius: 4px !important;
+    font-size: 13px !important;
+    font-weight: 400 !important;
+    cursor: pointer;
+    box-shadow: none !important;
+    text-decoration: none !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.2;
+  }
+  .pos-counter-im-page .im-btn-secondary:hover { background: #dfe8f3 !important; }
+  .pos-counter-im-page .status-badge {
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .pos-counter-im-page .status-badge--new {
+    background: #cce5ff;
+    color: #004085;
+    border: 1px solid #b8daff;
+  }
+  .pos-counter-im-page .status-badge--edit {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeeba;
+  }
+  .pos-counter-im-page .itemmaster-container {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+  }
+  .pos-counter-im-page .im-section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #212529;
+    margin: 12px 0 6px;
+    padding-bottom: 3px;
+    border-bottom: 2px solid #007bff;
+    display: inline-block;
+  }
+  .pos-counter-im-page .itemmaster-container .form-section {
+    background: transparent;
+    padding: 4px 0 10px !important;
+    margin-bottom: 0 !important;
+    border: none;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 0;
+  }
+  .pos-counter-im-page .itemmaster-container .form-grid--2cols {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 4px !important;
+    column-gap: 18px !important;
+  }
+  .pos-counter-im-page .itemmaster-container .form-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .pos-counter-im-page .itemmaster-container .form-group.form-group--full {
+    grid-column: 1 / -1;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .pos-counter-im-page .itemmaster-container .form-group label {
+    color: #495057;
+    font-weight: 400;
+    font-size: 13px;
+    margin-bottom: 0;
+    display: block;
+    min-width: 150px;
+  }
+  .pos-counter-im-page .itemmaster-container .form-group > .pos-counter-field-label {
+    color: #495057;
+    font-weight: 400;
+    font-size: 13px;
+    margin-bottom: 0;
+    display: block;
+    min-width: 150px;
+  }
+  .pos-counter-im-page .itemmaster-container .form-group > input,
+  .pos-counter-im-page .itemmaster-container .form-group > select {
+    flex: 1;
+    min-width: 0;
+  }
+  .pos-counter-im-page .itemmaster-container .input,
+  .pos-counter-im-page .itemmaster-container input[type="text"],
+  .pos-counter-im-page .itemmaster-container select {
+    border: none !important;
+    border-bottom: 1px solid #dee2e6 !important;
+    border-radius: 0 !important;
+    padding: 2px 0;
+    font-size: 13px;
+    line-height: 1.25;
+    background: var(--im-field-fill);
+    box-shadow: none !important;
+  }
+  .pos-counter-im-page .itemmaster-container input[readonly],
+  .pos-counter-im-page .itemmaster-container .input-readonly {
+    background: var(--im-field-readonly);
+    color: #6c757d;
+  }
+  .pos-counter-im-page .itemmaster-container .input:focus,
+  .pos-counter-im-page .itemmaster-container select:focus {
+    outline: none;
+    border-bottom-color: var(--nexa-focus-color) !important;
+  }
+  .pos-counter-im-page .pos-online-switch-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+  }
+  .pos-counter-im-page .pos-online-switch {
+    position: relative;
+    display: inline-block;
+    width: 48px;
+    height: 28px;
+    flex-shrink: 0;
+  }
+  .pos-counter-im-page .pos-online-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+  }
+  .pos-counter-im-page .pos-online-switch-track {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background: #cbd5e1;
+    border-radius: 28px;
+    transition: background 0.2s ease;
+    border: 1px solid rgba(148, 163, 184, 0.6);
+    box-sizing: border-box;
+  }
+  .pos-counter-im-page .pos-online-switch-thumb {
+    position: absolute;
+    height: 22px;
+    width: 22px;
+    left: 3px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.22s ease;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.22);
+  }
+  .pos-counter-im-page .pos-online-switch input:checked + .pos-online-switch-track {
+    background: linear-gradient(180deg, #34d399 0%, #10b981 100%);
+    border-color: rgba(16, 185, 129, 0.65);
+  }
+  .pos-counter-im-page .pos-online-switch input:checked + .pos-online-switch-track .pos-online-switch-thumb {
+    transform: translate(20px, -50%);
+  }
+  .pos-counter-im-page .pos-online-switch input:focus-visible + .pos-online-switch-track {
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.28);
+  }
+  .pos-counter-im-page .pos-online-switch-caption {
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+  .pos-counter-im-page .itemmaster-container .field-hint {
+    margin-top: 2px;
+    color: #64748b;
+    font-size: 11px;
+    line-height: 1.35;
+    flex: 0 0 100%;
+    margin-left: 160px;
+  }
+  @media (max-width: 700px) {
+    .pos-counter-im-page .itemmaster-container .form-grid--2cols {
+      grid-template-columns: 1fr;
+    }
+    .pos-counter-im-page .itemmaster-container .field-hint { margin-left: 0; }
+  }
+</style>
+
+<div class="im-page pos-counter-im-page">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>POS Counter Setup / <span class="im-ref">Edit</span>
+        <span class="item-status"><span class="status-badge status-badge--edit">Edit</span></span>
+      </h1>
+      <div class="im-actions">
+        <button type="submit" form="posCounterEditForm" class="im-btn-save">Save changes</button>
+        <button type="button" class="im-btn-secondary" id="btnQzFill">Fill from QZ Tray</button>
+        <a class="im-btn-secondary" href="{{ url_for('pos_billing.pos_counter_setup_list') }}">List</a>
+      </div>
+    </div>
+  </div>
+
+  <section class="itemmaster-container">
+    <form method="post" action="{{ url_for('pos_billing.pos_counter_setup_update') }}" id="posCounterEditForm" autocomplete="off">
+      <input type="hidden" name="rowid" value="{{ rowid }}" />
+      <h2 class="im-section-title">Counter details</h2>
+      <div class="form-section">
+        <div class="form-grid form-grid--2cols">
+          <div class="form-group">
+            <label for="countercode_preview">Counter code <span class="muted" style="font-weight:400;">(read-only)</span></label>
+            <input type="text" class="input input-readonly" id="countercode_preview" value="{{ counter_row.get('countercode', '') }}" readonly tabindex="-1" />
+          </div>
+          <div class="form-group">
+            <label for="locationcode_display">Location <span class="muted" style="font-weight:400;">(read-only)</span></label>
+            <input type="hidden" name="locationcode" id="locationcode" value="{{ locked_location_code }}" />
+            <input type="text" class="input input-readonly" id="locationcode_display" value="{{ locked_location_label }}" readonly tabindex="-1" aria-readonly="true" />
+          </div>
+          <div class="form-group">
+            <label for="countername">Counter name <span style="color:#ef4444;">*</span></label>
+            <input type="text" name="countername" id="countername" class="input" maxlength="40" required placeholder="e.g. Front POS 1" value="{{ counter_row.get('countername') or '' }}" />
+          </div>
+          <div class="form-group">
+            <label for="warehouseDisplay" id="warehouseDisplayLabel">Warehouse{% if warehouse_required %} <span style="color:#ef4444;">*</span>{% endif %}</label>
+            {% if branch_warehouses %}
+            {% set wh_ns = namespace(id='', label='') %}
+            {% for wh in branch_warehouses %}
+              {% if selected_warehouse_id is not none and wh.warehouse_id == selected_warehouse_id %}
+                {% set wh_ns.id = wh.warehouse_id %}
+                {% set wh_ns.label = wh.warehouse_code ~ ' — ' ~ wh.warehouse_name %}
+              {% endif %}
+            {% endfor %}
+            {{ pos_counter_warehouse_field(wh_ns.id, wh_ns.label, warehouse_required) }}
+            {% else %}
+            <input type="text" name="store" id="store" class="input" maxlength="20" placeholder="Legacy store code (e.g. STORE1)" value="{{ counter_row.get('store') or '' }}" />
+            <p class="muted" style="margin:6px 0 0;font-size:12px;">No warehouses for this branch — optional legacy store code.</p>
+            {% endif %}
+          </div>
+          <div class="form-group">
+            <label for="onlinesale" class="pos-counter-field-label">Online sale</label>
+            <div class="pos-online-switch-wrap">
+              <label class="pos-online-switch">
+                <input type="checkbox" name="onlinesale" id="onlinesale" value="Y" {% set _os = ((counter_row.get('onlinesale') or '')|string)|trim|upper %}{% if _os.startswith('Y') %}checked{% endif %} />
+                <span class="pos-online-switch-track"><span class="pos-online-switch-thumb" aria-hidden="true"></span></span>
+              </label>
+              <span class="pos-online-switch-caption" id="onlinesaleCaption">Off</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="im-section-title">Workstation</h2>
+      <div class="form-section">
+        <div class="form-grid form-grid--2cols">
+          <div class="form-group">
+            <label for="systemname">System name <span style="color:#ef4444;">*</span></label>
+            <input type="text" name="systemname" id="systemname" class="input" maxlength="25" required autocomplete="off" placeholder="PC name (e.g. from QZ Tray)" aria-required="true" value="{{ counter_row.get('systemname') or '' }}" />
+          </div>
+          <div class="form-group">
+            <label for="systemip">System IP</label>
+            <input type="text" name="systemip" id="systemip" class="input" maxlength="20" autocomplete="off" placeholder="e.g. 192.168.1.10" value="{{ counter_row.get('systemip') or '' }}" />
+          </div>
+        </div>
+        <p id="qzFillStatus" class="field-hint" style="margin-left: 0; margin-top: 8px;" role="status" aria-live="polite"></p>
+      </div>
+    </form>
+  </section>
+</div>
+{% if branch_warehouses %}
+{{ pos_counter_warehouse_modal(branch_warehouses, warehouse_required) }}
+{% endif %}
+
+<script>
+  window.__POS_QZ_URLS__ = {
+    certificate: {{ url_for('reports.qz_certificate')|tojson }},
+    sign: {{ url_for('reports.qz_sign')|tojson }}
+  };
+</script>
+<script src="{{ url_for('static', filename='js/qz_invoice_print.js') }}"></script>
+<script>
+(function () {
+  var btnQz = document.getElementById('btnQzFill');
+  var elName = document.getElementById('systemname');
+  var elIp = document.getElementById('systemip');
+  var st = document.getElementById('qzFillStatus');
+
+  function setStatus(msg, isErr) {
+    if (!st) return;
+    st.textContent = msg || '';
+    st.style.color = isErr ? '#b91c1c' : '';
+  }
+
+  var os = document.getElementById('onlinesale');
+  var osc = document.getElementById('onlinesaleCaption');
+  if (os && osc) {
+    function syncOnlineSaleCaption() {
+      osc.textContent = os.checked ? 'On' : 'Off';
+    }
+    os.addEventListener('change', syncOnlineSaleCaption);
+    syncOnlineSaleCaption();
+  }
+
+  function unlockWorkstationFields() {
+    if (elName) {
+      elName.readOnly = false;
+      elName.removeAttribute('readonly');
+      elName.classList.remove('input-readonly');
+      elName.removeAttribute('aria-readonly');
+    }
+    if (elIp) {
+      elIp.readOnly = false;
+      elIp.removeAttribute('readonly');
+      elIp.classList.remove('input-readonly');
+      elIp.removeAttribute('aria-readonly');
+    }
+  }
+
+  function lockWorkstationFieldsFromQz(hostnameApplied, ipApplied) {
+    if (elName && hostnameApplied) {
+      elName.readOnly = true;
+      elName.setAttribute('readonly', 'readonly');
+      elName.classList.add('input-readonly');
+      elName.setAttribute('aria-readonly', 'true');
+    }
+    if (elIp && ipApplied) {
+      elIp.readOnly = true;
+      elIp.setAttribute('readonly', 'readonly');
+      elIp.classList.add('input-readonly');
+      elIp.setAttribute('aria-readonly', 'true');
+    }
+  }
+
+  function fillFromQzTray(isAuto) {
+    if (!window.SalesQzPrint || !window.__POS_QZ_URLS__) {
+      if (isAuto) setStatus('QZ is not available in the browser. Install QZ Tray and tap “Fill from QZ Tray”.', false);
+      return Promise.resolve();
+    }
+    if (isAuto && elName && String(elName.value || '').trim() !== '') {
+      return Promise.resolve();
+    }
+    if (!isAuto) {
+      unlockWorkstationFields();
+    }
+    setStatus(isAuto ? 'Fetching workstation from QZ Tray…' : 'Connecting QZ Tray…', false);
+    return window.SalesQzPrint.ensureQzSecurity(window.__POS_QZ_URLS__)
+      .then(function () {
+        if (!window.qz || !window.qz.networking) {
+          throw new Error('QZ networking API not available (update QZ Tray).');
+        }
+        var pHost = window.qz.networking.hostname();
+        var pDev = window.qz.networking.device();
+        return Promise.all([pHost, pDev]);
+      })
+      .then(function (pair) {
+        var hostname = pair[0];
+        var device = pair[1] || {};
+        var hostApplied = false;
+        var ipApplied = false;
+        if (elName && hostname) {
+          elName.value = String(hostname).slice(0, 25);
+          hostApplied = true;
+        }
+        var ip = device.ip || (device.ip4 && device.ip4[0]) || '';
+        if (elIp && ip) {
+          elIp.value = String(ip).slice(0, 20);
+          ipApplied = true;
+        }
+        lockWorkstationFieldsFromQz(hostApplied, ipApplied);
+        var lockNote = (hostApplied || ipApplied) ? ' Fields from QZ are read-only; tap “Fill from QZ Tray” to refresh.' : '';
+        setStatus((isAuto ? 'Filled system name and IP from QZ Tray automatically.' : 'Filled from QZ Tray.') + lockNote, false);
+      });
+  }
+
+  if (btnQz) {
+    btnQz.addEventListener('click', function () {
+      fillFromQzTray(false).catch(function (e) {
+        setStatus((e && e.message) ? e.message : 'QZ Tray fill failed.', true);
+      });
+    });
+  }
+
+  if (!window.SalesQzPrint || !window.__POS_QZ_URLS__) {
+    if (btnQz) btnQz.disabled = true;
+  }
+
+  window.setTimeout(function () {
+    fillFromQzTray(true).catch(function (e) {
+      setStatus((e && e.message) ? e.message : 'QZ Tray automatic fill failed — use “Fill from QZ Tray” or type manually.', true);
+    });
+  }, 0);
+})();
+</script>
+{% endblock %}

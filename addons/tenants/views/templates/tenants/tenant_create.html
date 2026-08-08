@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .setup-im-page .tenant-details { display: grid; grid-template-columns: 1fr 1fr; gap: 0 48px; margin-bottom: 8px; }
+  .setup-im-page .tenant-details .form-group { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; min-height: 32px; }
+  .setup-im-page .tenant-details .form-group label { margin: 0; min-width: 140px; font-size: 13px; font-weight: 400; color: #495057; flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; flex: 1; }
+  .setup-im-page .tenant-details .form-group label > span { min-width: 140px; flex-shrink: 0; }
+  .setup-im-page .tenant-details .form-group .input, .setup-im-page .tenant-details .form-group input[type="text"], .setup-im-page .tenant-details .form-group input[type="password"], .setup-im-page .tenant-details .form-group input[type="number"], .setup-im-page .tenant-details .form-group select { flex: 1; min-width: 0; font-size: 13px; padding: 6px 0; border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; background: transparent; }
+  .setup-im-page .tenant-details .form-group .input:focus, .setup-im-page .tenant-details .form-group select:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .setup-im-page .tenant-details .form-group label small { width: 100%; margin-top: 2px; font-size: 12px; color: #6c757d; }
+  .setup-im-page .tenant-actions { display: none; }
+  @media (max-width: 1024px) { .setup-im-page .tenant-details { grid-template-columns: 1fr; } }
+</style>
+<div class="im-page setup-im-page">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>Tenants / <span class="im-ref">New</span> <span class="status-badge status-badge--new">New</span></h1>
+      <div class="im-actions">
+        <button type="submit" form="tenantForm" class="im-btn-save">Create tenant</button>
+        <a href="{{ url_for('tenants.tenant_list') }}" class="im-btn-secondary">Cancel</a>
+        <a href="{{ url_for('tenants.tenant_list') }}" class="im-btn-secondary">List</a>
+      </div>
+    </div>
+  </div>
+
+  <section class="setup-im-shell customer-form-shell itemmaster-container">
+    <div class="cf-form-stack">
+      <div class="cf-form-panel">
+        <h2 class="cf-section-title">Tenant details</h2>
+        <p class="field-hint-inline" style="margin:6px 12px 8px;">Save only with toolbar <strong>Create tenant</strong> (Enter in a field does not submit). FK errors usually mean a related auth row is missing—see your DBA.</p>
+  <form id="tenantForm" method="post" enctype="multipart/form-data">
+    <div class="customer-details tenant-details">
+      <div class="form-group">
+        <label for="tenant_id">
+          <span>Tenant ID</span>
+          <input type="text" id="tenant_id" name="tenant_id" required placeholder="e.g. HO, BR1" maxlength="50" class="input" />
+          <small class="muted">Short code used to link users to this database.</small>
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="display_name">
+          <span>Display Name</span>
+          <input type="text" id="display_name" name="display_name" placeholder="e.g. Head Office" maxlength="200" class="input" />
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="network_link">
+          <span>Network Link</span>
+          <input type="text" id="network_link" name="network_link" placeholder="e.g. \\\\SERVER\\Share or https://..." maxlength="500" class="input" />
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="ip">
+          <span>IP Address</span>
+          <input type="text" id="ip" name="ip" required placeholder="e.g. 192.168.1.225" maxlength="45" class="input" />
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="port">
+          <span>Port</span>
+          <input type="text" id="port" name="port" required placeholder="e.g. 1521" maxlength="10" class="input" />
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="service_name">
+          <span>Service Name</span>
+          <input type="text" id="service_name" name="service_name" required placeholder="e.g. rgc or rgc_ho" maxlength="100" class="input" />
+          <small class="muted">Oracle service name (DSN is built as IP:PORT/SERVICE_NAME).</small>
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="username">
+          <span>Database Username</span>
+          <input type="text" id="username" name="username" placeholder="Optional" maxlength="100" class="input" />
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="password">
+          <span>Database Password</span>
+          <input type="password" id="password" name="password" placeholder="Optional" maxlength="255" class="input" />
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="locationcode">
+          <span>Location Code</span>
+          <input type="number" id="locationcode" name="locationcode" placeholder="Optional numeric code" step="1" class="input" />
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="active_flag">
+          <span>Status</span>
+          <select id="active_flag" name="active_flag">
+            <option value="Y" selected>Active</option>
+            <option value="N">Inactive</option>
+          </select>
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="logo">
+          <span>Tenant Logo</span>
+          <input type="file" id="logo" name="logo" accept=".png,.jpg,.jpeg,.webp" class="input" />
+          <small class="muted">Optional. Allowed: PNG, JPG, JPEG, WEBP.</small>
+        </label>
+      </div>
+    </div>
+    <div class="tenant-actions">
+      <button type="submit" class="page-po__btn-primary">Create Tenant</button>
+      <a href="{{ url_for('tenants.tenant_list') }}" class="page-po__btn-secondary" style="margin-left: 8px;">Cancel</a>
+    </div>
+  </form>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+(function() {
+  function blockEnterSubmit(e) {
+    if (e.key !== 'Enter') return;
+    var el = e.target;
+    if (!el || el.tagName === 'TEXTAREA' || el.tagName === 'BUTTON') return;
+    if (el.tagName === 'INPUT' && el.type === 'submit') return;
+    e.preventDefault();
+  }
+  document.addEventListener('DOMContentLoaded', function() {
+    var f = document.getElementById('tenantForm');
+    if (f) f.addEventListener('keydown', blockEnterSubmit);
+  });
+})();
+</script>
+{% endblock %}

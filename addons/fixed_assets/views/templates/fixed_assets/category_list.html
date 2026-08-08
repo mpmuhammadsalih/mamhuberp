@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Fixed Asset Categories{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/fixed_assets_pages.css') }}?v=1" />
+
+{% set kpi = fa_kpis or {} %}
+<div class="page-po nexa-list-page fa-list-page">
+  {% include 'fixed_assets/_fa_nav.html' %}
+
+  <section class="fa-stat-grid" aria-label="Category summary">
+    <div class="fa-stat-card">
+      <span class="fa-stat-icon fa-stat-icon--blue"><i class="bi bi-tags" aria-hidden="true"></i></span>
+      <div>
+        <p class="fa-stat-label">Total categories</p>
+        <p class="fa-stat-value">{{ "{:,}".format(kpi.total or 0) }}</p>
+        <p class="fa-stat-sub">FA_CATEGORY</p>
+      </div>
+    </div>
+    <div class="fa-stat-card">
+      <span class="fa-stat-icon fa-stat-icon--green"><i class="bi bi-check-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="fa-stat-label">Active</p>
+        <p class="fa-stat-value">{{ "{:,}".format(kpi.active or 0) }}</p>
+        <p class="fa-stat-sub">Depreciation enabled</p>
+      </div>
+    </div>
+    <div class="fa-stat-card">
+      <span class="fa-stat-icon fa-stat-icon--amber"><i class="bi bi-pause-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="fa-stat-label">Inactive</p>
+        <p class="fa-stat-value">{{ "{:,}".format(kpi.inactive or 0) }}</p>
+        <p class="fa-stat-sub">Hidden from new assets</p>
+      </div>
+    </div>
+    <div class="fa-stat-card">
+      <span class="fa-stat-icon fa-stat-icon--purple"><i class="bi bi-calendar-range" aria-hidden="true"></i></span>
+      <div>
+        <p class="fa-stat-label">Avg life</p>
+        <p class="fa-stat-value">{{ kpi.avg_life or 0 }}<span style="font-size:12px;font-weight:600;"> mo</span></p>
+        <p class="fa-stat-sub">Straight-line default</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Fixed Asset Categories</h1>
+      <p class="page-po__muted">Map asset types to GL accounts (1510 / 1520 / 1530 → 1600 / 5500) and useful life in months.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('fixed_assets.fa_category_form') }}" class="page-po__btn-primary">+ New category</a>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div class="nexa-list-toolbar">
+    <input type="text" id="faCatSearch" class="input" placeholder="Search code or name…" style="min-width:220px; max-width:320px;" autocomplete="off" />
+    <label style="font-size:12px; color:#64748b; display:inline-flex; align-items:center; gap:6px;">
+      <input type="checkbox" id="faCatInactive" {% if include_inactive %}checked{% endif %} /> Show inactive
+    </label>
+    <button type="button" class="page-po__btn-secondary" id="faCatClear" style="padding:4px 10px; font-size:11px;">Clear</button>
+    <span id="faCatCount" class="nexa-num" style="margin-left:4px;">{{ rows|length }} records</span>
+  </div>
+
+  <div class="co-table-wrap">
+    <table class="co-table" id="faCatTable">
+      <thead>
+        <tr>
+          <th style="text-align:center; width:52px;">Sl.No</th>
+          <th style="width:100px;">Code</th>
+          <th>Name</th>
+          <th style="width:88px;">Asset</th>
+          <th style="width:88px;">Accum</th>
+          <th style="width:88px;">Expense</th>
+          <th style="width:72px; text-align:right;">Life</th>
+          <th style="width:72px;">Status</th>
+          <th style="text-align:center; width:120px;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if not rows %}
+        <tr class="fa-empty-row"><td colspan="9" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">No categories. <a href="{{ url_for('fixed_assets.fa_category_form') }}">Create one</a>.</td></tr>
+        {% else %}
+        {% for r in rows %}
+        {% set active = ((r.active or r.ACTIVE or 'Y')|string|upper == 'Y') %}
+        <tr class="fa-row-clickable" data-search="{{ (r.code or '') ~ ' ' ~ (r.name or '') }}" data-active="{{ 'Y' if active else 'N' }}" data-edit-url="{{ url_for('fixed_assets.fa_category_form', id=(r.category_id or r.CATEGORY_ID)) }}">
+          <td style="text-align:center;">{{ loop.index }}</td>
+          <td><span class="fa-code">{{ r.code or r.CODE }}</span></td>
+          <td>{{ r.name or r.NAME }}</td>
+          <td><span class="fa-code">{{ r.asset_account or r.ASSET_ACCOUNT }}</span></td>
+          <td><span class="fa-code">{{ r.accum_dep_account or r.ACCUM_DEP_ACCOUNT }}</span></td>
+          <td><span class="fa-code">{{ r.dep_expense_account or r.DEP_EXPENSE_ACCOUNT }}</span></td>
+          <td class="fa-num">{{ r.useful_life_months or r.USEFUL_LIFE_MONTHS }}</td>
+          <td>{% if active %}<span class="fa-status-badge fa-status-badge--active">Active</span>{% else %}<span class="fa-status-badge fa-status-badge--inactive">Off</span>{% endif %}</td>
+          <td style="text-align:center; white-space:nowrap;">
+            <a class="btn-view" href="{{ url_for('fixed_assets.fa_category_form', id=(r.category_id or r.CATEGORY_ID)) }}">Edit</a>
+            <form method="post" action="{{ url_for('fixed_assets.fa_category_delete') }}" style="display:inline; margin-left:4px;" onsubmit="return confirm('Delete this category?');">
+              <input type="hidden" name="category_id" value="{{ r.category_id or r.CATEGORY_ID }}" />
+              <button type="submit" class="btn-view" style="border-color:#fecaca; color:#b91c1c;">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function () {
+  var search = document.getElementById('faCatSearch');
+  var inactive = document.getElementById('faCatInactive');
+  var clearBtn = document.getElementById('faCatClear');
+  var countEl = document.getElementById('faCatCount');
+  var tbody = document.querySelector('#faCatTable tbody');
+  if (!tbody) return;
+
+  function applyFilter() {
+    var q = (search && search.value || '').trim().toLowerCase();
+    var showInactive = inactive && inactive.checked;
+    var visible = 0;
+    tbody.querySelectorAll('tr[data-search]').forEach(function (tr) {
+      var ok = true;
+      if (!showInactive && tr.getAttribute('data-active') === 'N') ok = false;
+      if (ok && q && (tr.getAttribute('data-search') || '').toLowerCase().indexOf(q) === -1) ok = false;
+      tr.style.display = ok ? '' : 'none';
+      if (ok) visible++;
+    });
+    if (countEl) countEl.textContent = visible + ' records';
+  }
+
+  tbody.addEventListener('click', function (e) {
+    if (e.target.closest('a, button, form')) return;
+    var tr = e.target.closest('tr[data-edit-url]');
+    if (tr) window.location.href = tr.getAttribute('data-edit-url');
+  });
+
+  if (search) search.addEventListener('input', applyFilter);
+  if (inactive) inactive.addEventListener('change', applyFilter);
+  if (clearBtn) clearBtn.addEventListener('click', function () {
+    if (search) search.value = '';
+    applyFilter();
+  });
+  applyFilter();
+})();
+</script>
+{% endblock %}

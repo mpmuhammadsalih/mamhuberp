@@ -1,0 +1,2 @@
+"""Addon manifest — Api."""
+MANIFEST = {'technical_name': 'api', 'name': 'Api', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Migrated from blueprints/api.py', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/api'}, 'flask': {'blueprint': 'api', 'blueprint_ref': 'addons.api:bp', 'models_package': 'addons.api.models', 'routes_module': 'addons.api.controllers.routes'}}

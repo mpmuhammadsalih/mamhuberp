@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body { background: #fff !important; }
+  .page-po .customer-view-details { display: grid; grid-template-columns: 1fr 1fr; gap: 0 48px; margin-bottom: 24px; }
+  .page-po .customer-view-details .form-group { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 12px; min-height: 32px; }
+  .page-po .customer-view-details .form-group label { margin: 0; min-width: 140px; font-size: 13px; font-weight: 600; color: #495057; flex-shrink: 0; }
+  .page-po .customer-view-details .form-group .value { flex: 1; font-size: 13px; color: #212529; }
+  @media (max-width: 1024px) { .page-po .customer-view-details { grid-template-columns: 1fr; } }
+</style>
+<div class="page-po" style="max-width: 900px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Customer Details</h1>
+      <p class="page-po__muted">{{ location_code }} - {{ location_name }}</p>
+    </div>
+    <div class="page-po__actions">
+      <a href="{{ url_for('customer.customer_edit', location_code=location_code, customer_code=customer.customercode) }}" class="page-po__btn-primary">Edit</a>
+      <a href="{{ url_for('customer.customer_list') }}" class="page-po__btn-secondary">Back to List</a>
+    </div>
+  </div>
+
+  <div class="page-po__section-title">Customer details</div>
+  <div class="customer-view-details">
+    <div class="form-group"><label>Customer Code</label><span class="value">{{ customer.customercode or '-' }}</span></div>
+    <div class="form-group"><label>Customer Name</label><span class="value">{{ customer.customername or '-' }}</span></div>
+    <div class="form-group"><label>Address</label><span class="value">{{ customer.address or '-' }}</span></div>
+    <div class="form-group"><label>Street</label><span class="value">{{ customer.street or '-' }}</span></div>
+    <div class="form-group"><label>Zone</label><span class="value">{{ customer.zone or '-' }}</span></div>
+    <div class="form-group"><label>P.O.Box</label><span class="value">{{ customer.pobox or '-' }}</span></div>
+    <div class="form-group"><label>CR No</label><span class="value">{{ customer.crno or '-' }}</span></div>
+    <div class="form-group"><label>Nationality</label><span class="value">{{ customer.nationality or '-' }}</span></div>
+    <div class="form-group"><label>Telephone</label><span class="value">{{ customer.telephone or '-' }}</span></div>
+    <div class="form-group"><label>Mobile</label><span class="value">{{ customer.mobile or '-' }}</span></div>
+    <div class="form-group"><label>Credit Limit</label><span class="value">{{ customer.creditlimit or 0 }}</span></div>
+    <div class="form-group"><label>Credit Term</label><span class="value">{{ customer.creditterms or 0 }}</span></div>
+    <div class="form-group"><label>Current Credit</label><span class="value">{{ customer.currentcreditamount or 0 }}</span></div>
+    <div class="form-group"><label>Salesman</label><span class="value">{{ salesman_name or customer.salesmancode or '-' }}</span></div>
+    <div class="form-group"><label>Customer type</label><span class="value">{{ customer.customer_billing_type or 'CASH' }}</span></div>
+    <div class="form-group"><label>Customer Category</label><span class="value">{{ category_name or customer.customercategory or '-' }}</span></div>
+    <div class="form-group"><label>By Salesman</label><span class="value">{{ by_salesman_name or customer.bysalesman or '-' }}</span></div>
+    <div class="form-group"><label>Route No</label><span class="value">{{ route_name or customer.routeno or '-' }}</span></div>
+  </div>
+</div>
+{% endblock %}

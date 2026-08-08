@@ -1,0 +1,2 @@
+"""Addon manifest — Route master (TBLROUTES)."""
+MANIFEST = {'technical_name': 'route_master', 'name': 'Route Master', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Routes per branch (TBLROUTES)', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/route-master'}, 'flask': {'blueprint': 'route_master', 'blueprint_ref': 'addons.route_master.controllers.routes:bp', 'routes_module': 'addons.route_master.controllers.routes'}}

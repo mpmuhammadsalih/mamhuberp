@@ -1,0 +1,2 @@
+"""Addon manifest — Sms."""
+MANIFEST = {'technical_name': 'sms', 'name': 'Sms', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Migrated from blueprints/sms.py', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/sms'}, 'flask': {'blueprint': 'sms', 'blueprint_ref': 'addons.sms:bp', 'models_package': 'addons.sms.models', 'routes_module': 'addons.sms.controllers.routes'}}

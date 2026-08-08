@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-po nexa-list-page lpo-list-page" style="max-width:1300px;"
+  data-lpo-api="{{ lpo_list_api_url or url_for('purchase.api_lpo_list') }}"
+  data-po-query-url-tpl="{{ po_query_url_tpl or url_for('purchase.purchase_order_query', lpo_no=999999999) }}"
+  data-po-edit-url-tpl="{{ po_edit_url_tpl or url_for('purchase.purchase_order_edit', lpo_no=999999999) }}"
+  data-cancel-api="{{ url_for('purchase.api_lpo_cancel') }}"
+  data-items-per-page="{{ items_per_page or 50 }}"
+  data-initial-total-count="{{ initial_total_count or 0 }}"
+  data-initial-total-pages="{{ initial_total_pages or 1 }}">
+<style>
+  .lpo-list-page .lpo-scroll-status {
+    margin: 10px 0 2px;
+    padding: 9px 12px;
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 12px;
+    text-align: center;
+    cursor: pointer;
+  }
+  .lpo-list-page .lpo-scroll-status.is-error {
+    border-color: #fecaca;
+    background: #fff1f2;
+    color: #b91c1c;
+  }
+  .lpo-list-page .lpo-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 12px 0 4px;
+    font-size: 12px;
+    color: #475569;
+  }
+  .lpo-list-page .lpo-pagination-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .lpo-list-page .lpo-pagination-controls button,
+  .lpo-list-page .lpo-pagination-controls span {
+    padding: 5px 12px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    background: #fff;
+    color: #374151;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .lpo-list-page .lpo-pagination-controls button:disabled {
+    color: #adb5bd;
+    cursor: default;
+    background: #f8f9fa;
+  }
+  .lpo-list-page .lpo-pagination-controls .lpo-page-active {
+    background: #1a56a4;
+    border-color: #1a56a4;
+    color: #fff;
+    font-weight: 600;
+  }
+</style>
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Purchase Order (LPO)</h1>
+      <p class="page-po__muted">List of all purchase orders from suppliers.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('purchase.purchase_order_new') }}" class="page-po__btn-primary">+ New Purchase Order</a>
+      {% include 'includes/list_refresh_bar.html' %}
+      <a href="{{ url_for('purchase.goods_receipt_list') }}" class="po-nav-link">Goods Receipt</a>
+      <a href="{{ url_for('purchase.purchase_invoice_list') }}" class="po-nav-link">Purchase Invoice</a>
+    </div>
+  </div>
+
+  <div class="po-tabs">
+    <button type="button" class="po-tab active" id="tabDraft" onclick="setLpoTab('draft')">Draft</button>
+    <button type="button" class="po-tab" id="tabApproved" onclick="setLpoTab('approved')">Approved</button>
+    <button type="button" class="po-tab" id="tabCanceled" onclick="setLpoTab('canceled')">Canceled</button>
+  </div>
+
+  <div class="nexa-list-toolbar">
+    <input type="text" id="lpoSearch" class="input" placeholder="Search LPO no, supplier, name..."
+           style="min-width:220px; max-width:320px;" autocomplete="off">
+    <label style="font-size:12px; color:#6b7280; white-space:nowrap;">From</label>
+    <input type="date" id="lpoDateFrom" class="input" style="width:150px;">
+    <label style="font-size:12px; color:#6b7280; white-space:nowrap;">To</label>
+    <input type="date" id="lpoDateTo" class="input" style="width:150px;">
+    <button type="button" class="page-po__btn-secondary" onclick="clearFilters()" style="padding:4px 10px; font-size:11px;">Clear</button>
+    <span id="lpoCount" class="nexa-num" style="margin-left:4px;">{{ initial_total_count or 0 }} records</span>
+  </div>
+
+  <div class="co-table-wrap">
+    <table class="co-table" id="lpoTable">
+      <thead>
+        <tr>
+          <th data-col="0" style="text-align:center; width:60px;">Sl.No<span class="sort-arrow"></span></th>
+          <th data-col="1">LPO No<span class="sort-arrow"></span></th>
+          <th data-col="2">LPO Date<span class="sort-arrow"></span></th>
+          <th data-col="3">Created<span class="sort-arrow"></span></th>
+          <th data-col="4">Supplier Code<span class="sort-arrow"></span></th>
+          <th data-col="5">Supplier Name<span class="sort-arrow"></span></th>
+          <th data-col="6" style="text-align:right;">Amount<span class="sort-arrow"></span></th>
+          <th data-col="7">Approval<span class="sort-arrow"></span></th>
+          <th style="text-align:center; cursor:default;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="lpoBody">
+        {% for o in orders %}
+        <tr class="lpo-row"
+          data-lpono="{{ o.lpono or '' }}"
+          data-date="{{ o.lpodate or '' }}"
+          data-supplier="{{ o.suppliercode or '' }}"
+          data-suppliername="{{ o.suppliername or '' }}"
+          data-inreceipt="{{ (o.in_receipt or 'N')|upper }}"
+          data-amount="{{ o.amount or 0 }}"
+          data-approval="{{ (o.approval_status or 'DRAFT')|upper }}"
+        >
+          <td class="sl-no">{{ loop.index }}</td>
+          <td><a class="grn-link" href="{{ url_for('purchase.purchase_order_query', lpo_no=o.lpono) }}">{{ o.lpono or '-' }}</a></td>
+          <td>{{ o.lpodate or '-' }}</td>
+          <td>{{ o.createddate or '-' }}</td>
+          <td>{{ o.suppliercode or '-' }}</td>
+          <td>{{ o.suppliername or '-' }}</td>
+          <td class="num">{{ '{:,.2f}'.format(o.amount|float) if o.amount is not none and o.amount != '' else '0.00' }}</td>
+          <td>{{ (o.approval_status or 'DRAFT') }}</td>
+          <td style="text-align:center;">
+            <a class="btn-view" href="{{ url_for('purchase.purchase_order_query', lpo_no=o.lpono) }}">View</a>
+            {% if (o.approval_status or '')|upper != 'CANCELLED' and (o.in_receipt or 'N')|upper != 'Y' %}
+              <a class="btn-view" href="{{ url_for('purchase.purchase_order_edit', lpo_no=o.lpono) }}" style="margin-left:6px;">Edit</a>
+              <button type="button" class="btn-view btn-cancel-po" data-lpono="{{ o.lpono }}" style="margin-left:6px;border-color:#fecaca;color:#b91c1c;">Cancel</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr id="lpoNoData"><td colspan="9" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">No purchase orders found.</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="5" style="text-align:right; padding-right:12px; font-weight:700;">Total (loaded)</td>
+          <td></td>
+          <td class="num" id="lpoTotalAmt">
+            {% set ns = namespace(total=0) %}
+            {% for o in orders %}{% set ns.total = ns.total + (o.amount|float if o.amount is not none and o.amount != '' else 0) %}{% endfor %}
+            {{ '{:,.2f}'.format(ns.total) }}
+          </td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div id="lpoPagination" class="lpo-pagination"{% if not orders %} style="display:none;"{% endif %}>
+    <div id="lpoPaginationInfo" class="lpo-pagination-info"></div>
+    <div class="lpo-pagination-controls">
+      <button type="button" id="lpoPrevPage">« Previous</button>
+      <span id="lpoPageLabel" class="lpo-page-active">1</span>
+      <button type="button" id="lpoNextPage">Next »</button>
+      <button type="button" id="lpoLoadMore">Load more</button>
+    </div>
+  </div>
+  <div id="lpoScrollStatus" class="lpo-scroll-status" style="display:none;"></div>
+  <div id="lpoScrollSentinel" style="height:1px;"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/lpo_list.js') }}?v=6"></script>
+{% endblock %}

@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Fiscal Year Setup{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+
+{% set ns = namespace(total=0, current=0, open=0, closed=0) %}
+{% for r in rows %}
+  {% set ns.total = ns.total + 1 %}
+  {% if (r.is_current or '')|upper == 'Y' %}{% set ns.current = ns.current + 1 %}{% endif %}
+  {% if (r.is_closed or '')|upper == 'Y' %}{% set ns.closed = ns.closed + 1 %}{% else %}{% set ns.open = ns.open + 1 %}{% endif %}
+{% endfor %}
+
+<div class="page-po nexa-list-page nexa-setup-list-page fy-list-page">
+  <section class="nexa-stat-grid" aria-label="Fiscal year summary">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-calendar-range" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Fiscal years</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.total) }}</p>
+        <p class="nexa-stat-sub">FISCAL_YEAR</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-check-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Current</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.current) }}</p>
+        <p class="nexa-stat-sub">IS_CURRENT = Y</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-unlock" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Open</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.open) }}</p>
+        <p class="nexa-stat-sub">Not closed</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-lock" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Closed</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.closed) }}</p>
+        <p class="nexa-stat-sub">IS_CLOSED = Y</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div class="page-po__title-wrap">
+      <h1 class="page-po__title">Fiscal year setup</h1>
+      <p class="page-po__muted">
+        Define accounting periods for GL and reporting. One row can be marked <strong>current</strong> per scope
+        (company-wide or a specific branch). Periods must not overlap within the same scope.
+      </p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('fiscal_year.fiscal_year_new') }}" class="page-po__btn-primary">+ Add fiscal year</a>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <form class="nexa-list-filter-panel" method="get" action="{{ url_for('fiscal_year.fiscal_year_list') }}">
+    <label style="font-size:12px;font-weight:600;color:#475569;display:inline-flex;align-items:center;gap:6px;">
+      <input type="checkbox" name="closed" value="1" {% if include_closed %}checked{% endif %} />
+      Show closed years
+    </label>
+    <button type="submit" class="page-po__btn-secondary">Apply</button>
+  </form>
+
+  {% if not rows %}
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <tbody>
+        <tr>
+          <td style="text-align:center;padding:14px;color:#64748b;font-style:italic;">
+            No fiscal years defined. <a href="{{ url_for('fiscal_year.fiscal_year_new') }}" class="pi-link">Add fiscal year</a>.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="nexa-list-toolbar" style="margin-bottom:8px;">
+    <span class="nexa-num"><strong>{{ rows|length }}</strong> period(s)</span>
+  </div>
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th style="text-align:center;width:52px;">#</th>
+          <th>Code</th>
+          <th>Name</th>
+          <th>From</th>
+          <th>To</th>
+          <th>Branch</th>
+          <th>Current</th>
+          <th>Closed</th>
+          <th style="text-align:center;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr class="{% if (r.is_current or '')|upper == 'Y' %}fy-row--current{% endif %}">
+          <td style="text-align:center;">{{ loop.index }}</td>
+          <td><code>{{ r.year_code }}</code></td>
+          <td>{{ r.year_name or '—' }}</td>
+          <td>{{ r.date_from or '' }}</td>
+          <td>{{ r.date_to or '' }}</td>
+          <td>{% if r.locationcode is none or r.locationcode == '' %}All{% else %}{{ r.locationcode }}{% endif %}</td>
+          <td>
+            {% if (r.is_current or '')|upper == 'Y' %}
+              <span class="co-status co-status--ok">Current</span>
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td>
+            {% if (r.is_closed or '')|upper == 'Y' %}
+              <span class="co-status co-status--inactive">Closed</span>
+            {% else %}
+              <span class="co-status">Open</span>
+            {% endif %}
+          </td>
+          <td style="text-align:center;white-space:nowrap;">
+            <a class="btn-view" href="{{ url_for('fiscal_year.fiscal_year_edit', fiscal_year_id=r.fiscal_year_id) }}">Edit</a>
+            {% if (r.is_current or '')|upper != 'Y' and (r.is_closed or '')|upper != 'Y' %}
+            <form method="post" action="{{ url_for('fiscal_year.fiscal_year_set_current') }}" style="display:inline;margin-left:4px;">
+              <input type="hidden" name="fiscal_year_id" value="{{ r.fiscal_year_id }}" />
+              <button type="submit" class="btn-view">Set current</button>
+            </form>
+            {% endif %}
+            {% if (r.is_current or '')|upper != 'Y' %}
+            <form method="post" action="{{ url_for('fiscal_year.fiscal_year_delete') }}" style="display:inline;margin-left:4px;"
+                  onsubmit="return confirm('Delete fiscal year {{ r.year_code|e }}?');">
+              <input type="hidden" name="fiscal_year_id" value="{{ r.fiscal_year_id }}" />
+              <button type="submit" class="btn-view" style="border-color:#fecaca;color:#b91c1c;">Delete</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+<style>
+  .fy-list-page .co-table tbody tr.fy-row--current { box-shadow: inset 3px 0 0 #16a34a; }
+  .fy-list-page .co-status--ok { background: #dcfce7; color: #166534; display: inline-flex; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; }
+  .fy-list-page .co-status--inactive { background: #fee2e2; color: #991b1b; display: inline-flex; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; }
+  .fy-list-page .co-status { display: inline-flex; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; background: #e0f2fe; color: #0369a1; }
+</style>
+{% endblock %}

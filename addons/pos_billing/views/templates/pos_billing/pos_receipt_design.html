@@ -1,0 +1,549 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="user-create-container receipt-design-page">
+    <div class="receipt-design-layout">
+      <div class="user-create-card receipt-design-form-card">
+        <div class="user-create-header">
+          <h1>POS Receipt Design</h1>
+          <p class="muted">Set receipt page width and which fields to show on printed receipts.</p>
+        </div>
+
+        <form id="receiptDesignForm" class="user-create-form">
+        <div class="form-group">
+          <label>
+            <span>Page width (characters)</span>
+            <input type="number" id="page_width" name="page_width" min="24" max="80" value="{{ config.get('page_width') or 48 }}" class="input" />
+          </label>
+          <small class="muted">24–80 characters. Thermal receipts are often 32 or 48.</small>
+        </div>
+        <div class="form-group">
+          <label>
+            <span>Paper width (mm)</span>
+            <input type="number" id="paper_width_mm" name="paper_width_mm" min="58" max="120" value="{{ config.get('paper_width_mm') or 80 }}" class="input" />
+          </label>
+          <small class="muted">80mm = 3.15 inches (typical receipt). Used when printer does not report paper size.</small>
+        </div>
+        <div class="form-group">
+          <label>
+            <span>Receipt printer</span>
+            <select id="receipt_printer_name" name="receipt_printer_name" class="input" data-current="{{ config.get('receipt_printer_name') or '' }}">
+              <option value="">Use Windows default printer</option>
+            </select>
+          </label>
+          <small class="muted">Select your thermal (80mm) receipt printer here so receipts go to it. Your A4 can stay as Windows default.</small>
+        </div>
+        <div class="form-group">
+          <label>
+            <span>Printer IP (optional – no margins)</span>
+            <input type="text" id="receipt_printer_ip" name="receipt_printer_ip" value="{{ config.get('receipt_printer_ip') or '' }}" class="input" placeholder="e.g. 192.168.1.100" />
+          </label>
+          <small class="muted">If your receipt printer has an IP address, enter it to send directly on port 9100. This bypasses the Windows driver so there are no left/top margins. Leave blank to use the Windows printer above.</small>
+        </div>
+
+        <fieldset class="form-group">
+          <legend>Header</legend>
+          <label class="checkbox-label">
+            <input type="checkbox" name="header.business_name" {% if config.get('header', {}).get('business_name', True) %}checked{% endif %} />
+            <span>Business / location name</span>
+          </label>
+        </fieldset>
+
+        <fieldset class="form-group">
+          <legend>Bill section</legend>
+          <label class="checkbox-label">
+            <input type="checkbox" name="bill.bill_no" {% if config.get('bill', {}).get('bill_no', True) %}checked{% endif %} />
+            <span>Bill number</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="bill.bill_date" {% if config.get('bill', {}).get('bill_date', True) %}checked{% endif %} />
+            <span>Bill date (B.D)</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="bill.bill_time" {% if config.get('bill', {}).get('bill_time', True) %}checked{% endif %} />
+            <span>Bill time</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="bill.print_date" {% if config.get('bill', {}).get('print_date', True) %}checked{% endif %} />
+            <span>Print date (P.D)</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="bill.print_time" {% if config.get('bill', {}).get('print_time', True) %}checked{% endif %} />
+            <span>Print time</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="bill.customer" {% if config.get('bill', {}).get('customer', True) %}checked{% endif %} />
+            <span>Customer name</span>
+          </label>
+        </fieldset>
+
+        <fieldset class="form-group">
+          <legend>Item table columns</legend>
+          <label class="checkbox-label">
+            <input type="checkbox" name="items.slno" {% if config.get('items', {}).get('slno', True) %}checked{% endif %} />
+            <span># (serial)</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="items.item" {% if config.get('items', {}).get('item', True) %}checked{% endif %} />
+            <span>Item name</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="items.item_ara" {% if config.get('items', {}).get('item_ara', True) %}checked{% endif %} />
+            <span>Item name (Arabic)</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="items.unit_price" {% if config.get('items', {}).get('unit_price', True) %}checked{% endif %} />
+            <span>Unit price (U.P)</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="items.qty" {% if config.get('items', {}).get('qty', True) %}checked{% endif %} />
+            <span>Quantity (QTY)</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="items.line_total" {% if config.get('items', {}).get('line_total', True) %}checked{% endif %} />
+            <span>Line total (L.TOTAL)</span>
+          </label>
+        </fieldset>
+
+        <fieldset class="form-group">
+          <legend>Summary</legend>
+          <label class="checkbox-label">
+            <input type="checkbox" name="summary.cashier" {% if config.get('summary', {}).get('cashier', True) %}checked{% endif %} />
+            <span>Cashier</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="summary.waiter" {% if config.get('summary', {}).get('waiter', True) %}checked{% endif %} />
+            <span>Waiter</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="summary.paid" {% if config.get('summary', {}).get('paid', True) %}checked{% endif %} />
+            <span>Paid amount</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="summary.currency" {% if config.get('summary', {}).get('currency', True) %}checked{% endif %} />
+            <span>Currency</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="summary.total_tax_ex" {% if config.get('summary', {}).get('total_tax_ex', True) %}checked{% endif %} />
+            <span>Total (Tax Ex.)</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="summary.disc_pct" {% if config.get('summary', {}).get('disc_pct', True) %}checked{% endif %} />
+            <span>Discount %</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="summary.taxes" {% if config.get('summary', {}).get('taxes', True) %}checked{% endif %} />
+            <span>Taxes</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="summary.grand_total" {% if config.get('summary', {}).get('grand_total', True) %}checked{% endif %} />
+            <span>Grand total (box)</span>
+          </label>
+        </fieldset>
+
+        <fieldset class="form-group">
+          <legend>Footer</legend>
+          <label class="checkbox-label">
+            <input type="checkbox" name="footer.barcode" {% if config.get('footer', {}).get('barcode', True) %}checked{% endif %} />
+            <span>Barcode (bill no) at bottom</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="footer.message" {% if config.get('footer', {}).get('message', True) %}checked{% endif %} />
+            <span>Thank-you / message</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="footer.powered_by" {% if config.get('footer', {}).get('powered_by', True) %}checked{% endif %} />
+            <span>Powered by line</span>
+          </label>
+        </fieldset>
+
+        <fieldset class="form-group">
+          <legend>Labels (optional)</legend>
+          <label>
+            <span>Grand total prefix</span>
+            <input type="text" id="label_grand_total_prefix" name="labels.grand_total_prefix" value="{{ config.get('labels', {}).get('grand_total_prefix') or 'T' }}" class="input" placeholder="T" />
+          </label>
+          <label>
+            <span>Powered by text</span>
+            <input type="text" id="label_powered_by" name="labels.powered_by" value="{{ config.get('labels', {}).get('powered_by') or 'POWERED BY KAPP' }}" class="input" placeholder="POWERED BY KAPP" />
+          </label>
+        </fieldset>
+
+        <fieldset class="form-group">
+          <legend>Arabic / encoding</legend>
+          <label>
+            <span>Oracle NLS_LANG</span>
+            <select id="nls_lang" name="nls_lang" class="input">
+              <option value="" {% if not config.get('nls_lang') %}selected{% endif %}>Default (do not set – avoids ORA-12705)</option>
+              <option value="AMERICAN_AMERICA.UTF8" {% if config.get('nls_lang') == 'AMERICAN_AMERICA.UTF8' %}selected{% endif %}>AMERICAN_AMERICA.UTF8</option>
+              <option value="AMERICAN_AMERICA.AL32UTF8" {% if config.get('nls_lang') == 'AMERICAN_AMERICA.AL32UTF8' %}selected{% endif %}>AMERICAN_AMERICA.AL32UTF8</option>
+              <option value="ARABIC_UNITED_ARAB_EMIRATES.UTF8" {% if config.get('nls_lang') == 'ARABIC_UNITED_ARAB_EMIRATES.UTF8' %}selected{% endif %}>ARABIC_UNITED_ARAB_EMIRATES.UTF8</option>
+              <option value="ARABIC_SAUDI_ARABIA.UTF8" {% if config.get('nls_lang') == 'ARABIC_SAUDI_ARABIA.UTF8' %}selected{% endif %}>ARABIC_SAUDI_ARABIA.UTF8</option>
+            </select>
+            <small class="muted">Only set if Arabic (ITEMNAMEARA) is wrong. Use Default to avoid ORA-12705. Applies after Save.</small>
+          </label>
+          <label>
+            <span>Printer output encoding</span>
+            <select id="output_encoding" name="output_encoding" class="input">
+              <option value="utf-8" {% if (config.get('output_encoding') or 'utf-8') == 'utf-8' %}selected{% endif %}>UTF-8 (default)</option>
+              <option value="cp1256" {% if config.get('output_encoding') == 'cp1256' %}selected{% endif %}>Windows Arabic (CP1256)</option>
+            </select>
+            <small class="muted">Use CP1256 if Arabic prints as garbled.</small>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="escpos_left_align" id="escpos_left_align" {% if config.get('escpos_left_align', True) %}checked{% endif %} />
+            <span>ESC/POS left-align (print from left edge; uncheck if printer shows garbage at start)</span>
+          </label>
+        </fieldset>
+
+        <div class="form-actions">
+          <button type="submit" class="button button--primary">Save design</button>
+          <button type="button" id="testPrintBtn" class="button">Test print</button>
+          <span id="saveStatus" class="muted" style="margin-left: 0.5rem;"></span>
+        </div>
+      </form>
+      </div>
+
+      <div class="receipt-design-preview-card">
+        <div class="receipt-design-preview-header">
+          <h2>Receipt preview</h2>
+          <p class="muted">Changes update live.</p>
+          <p id="printerPaperSize" class="muted" style="margin-top: 0.25rem;"></p>
+        </div>
+        <div class="receipt-design-preview-wrap">
+          <pre id="receiptPreview" class="receipt-preview-text" aria-label="Receipt preview"></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+(function () {
+  const form = document.getElementById('receiptDesignForm');
+  const pageWidth = document.getElementById('page_width');
+  const saveStatus = document.getElementById('saveStatus');
+  const receiptPreview = document.getElementById('receiptPreview');
+  const printerPaperSizeEl = document.getElementById('printerPaperSize');
+
+  var receiptPrinterSelect = document.getElementById('receipt_printer_name');
+  if (receiptPrinterSelect) {
+    fetch('{{ url_for("pos_billing.pos_receipt_design_printers") }}')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.success && data.printers && data.printers.length) {
+          var current = (receiptPrinterSelect.getAttribute('data-current') || '').trim();
+          receiptPrinterSelect.innerHTML = '<option value="">Use Windows default printer</option>';
+          data.printers.forEach(function (name) {
+            var opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name + (name === data.default_printer ? ' (default)' : '');
+            if (name === current) opt.selected = true;
+            receiptPrinterSelect.appendChild(opt);
+          });
+          if (current && !receiptPrinterSelect.value) receiptPrinterSelect.value = current;
+        }
+      })
+      .catch(function () {});
+  }
+
+  fetch('{{ url_for("pos_billing.pos_receipt_design_printer_paper_size") }}')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (printerPaperSizeEl) {
+        if (data.success) {
+          var w = data.width_mm || 80;
+          printerPaperSizeEl.textContent = 'Print width: ' + w + ' mm (3.15" wide)' + (data.printer_name ? ' | Printer: ' + data.printer_name : '') + (data.from_design ? ' (from design)' : '');
+        } else {
+          printerPaperSizeEl.textContent = 'Print width: 80 mm (3.15" wide) – from design. ' + (data.error || '');
+        }
+      }
+    })
+    .catch(function () {
+      if (printerPaperSizeEl) printerPaperSizeEl.textContent = 'Print width: 80 mm (3.15" wide) – from design.';
+    });
+
+  var demoData = {
+    loc_name: 'OTO Restaurant',
+    receiptno: '9',
+    billdate: '10/10/2022',
+    billtime: '21:02:48',
+    customername: 'Klaxy',
+    user: 'kapp',
+    net_total: 45500,
+    disc_total: 0,
+    message: 'Thank you.',
+    lines: [
+      { slno: 1, item: 'Hot Chocolate', item_ara: '\u0634\u0648\u0643\u0648\u0644\u0627\u062a\u0629 \u0633\u0627\u062e\u0646\u0629', uom: 'CUP', qty: 3, rate: 5000, amount: 15000 },
+      { slno: 2, item: 'Cappuccino', item_ara: '\u0642\u0647\u0648\u0629 \u0628\u062D\u0644\u0628', uom: 'CUP', qty: 1, rate: 3500, amount: 3500 },
+      { slno: 3, item: 'Americano', item_ara: '', uom: 'PCS', qty: 5, rate: 3000, amount: 15000 },
+      { slno: 4, item: 'Chicken Pulao', item_ara: '\u0628\u064A\u0644\u0627\u0648 \u062F\u062C\u0627\u062C', uom: 'PLT', qty: 1, rate: 12000, amount: 12000 }
+    ]
+  };
+
+  function fmtNum(n, decimals) {
+    var s = decimals === 0 ? String(Math.round(n)) : n.toFixed(decimals);
+    var parts = [];
+    var str = s.indexOf('.') >= 0 ? s.split('.')[0] : s;
+    while (str.length > 3) {
+      parts.unshift(str.slice(-3));
+      str = str.slice(0, -3);
+    }
+    if (str) parts.unshift(str);
+    s = parts.join(',');
+    if (decimals > 0 && s.indexOf('.') === -1) s += '.' + n.toFixed(decimals).split('.')[1];
+    return s;
+  }
+
+    function buildPayload() {
+    var paperWidthMm = parseInt(document.getElementById('paper_width_mm').value, 10);
+    if (isNaN(paperWidthMm) || paperWidthMm < 58 || paperWidthMm > 120) paperWidthMm = 80;
+    var payload = {
+      page_width: Math.max(24, Math.min(80, parseInt(pageWidth.value, 10) || 48)),
+      paper_width_mm: paperWidthMm,
+      receipt_printer_name: (document.getElementById('receipt_printer_name') || {}).value || '',
+      receipt_printer_ip: (document.getElementById('receipt_printer_ip') || {}).value || '',
+      header: {},
+      bill: {},
+      items: {},
+      summary: {},
+      footer: {},
+      labels: {
+        grand_total_prefix: (document.getElementById('label_grand_total_prefix') || {}).value || 'T',
+        powered_by: (document.getElementById('label_powered_by') || {}).value || 'POWERED BY KAPP'
+      },
+      output_encoding: (document.getElementById('output_encoding') || {}).value || 'utf-8',
+      nls_lang: (document.getElementById('nls_lang') || {}).value || '',
+      escpos_left_align: (document.getElementById('escpos_left_align') || {}).checked !== false
+    };
+    form.querySelectorAll('input[type="checkbox"][name]').forEach(function (cb) {
+      var name = cb.getAttribute('name');
+      if (!name || name.indexOf('.') === -1) return;
+      var parts = name.split('.');
+      var section = parts[0];
+      var key = parts[1];
+      if (payload[section] && typeof payload[section] === 'object') {
+        payload[section][key] = cb.checked;
+      }
+    });
+    return payload;
+  }
+
+  function buildPreviewText() {
+    var cfg = buildPayload();
+    var w = Math.max(24, Math.min(80, cfg.page_width || 48));
+    var h = cfg.header || {};
+    var bill = cfg.bill || {};
+    var itemsCfg = cfg.items || {};
+    var summaryCfg = cfg.summary || {};
+    var footerCfg = cfg.footer || {};
+    var labels = cfg.labels || {};
+    var d = demoData;
+    var now = new Date();
+    var printDate = now.getDate().toString().padStart(2,'0') + '/' + (now.getMonth()+1).toString().padStart(2,'0') + '/' + now.getFullYear();
+    var printTime = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0') + ':' + now.getSeconds().toString().padStart(2,'0');
+
+    function centerStr(s, width) {
+      s = (s || '').toString().slice(0, width);
+      if (s.length >= width) return s;
+      var pad = width - s.length;
+      return ' '.repeat(Math.floor(pad/2)) + s + ' '.repeat(Math.ceil(pad/2));
+    }
+    var EAN13_L = ['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
+    var EAN13_G = ['0100111','0110011','0011011','0100001','0011101','0111001','0000101','0010001','0001001','0010111'];
+    var EAN13_R = ['1110010','1100110','1101100','1000010','1011100','1001110','1010000','1000100','1001000','1110100'];
+    var EAN13_FIRST = ['LLLLLL','LLGLGG','LLGGLG','LLGGGL','LGLLGG','LGGLLG','LGGGLL','LGLGLG','LGLGGL','LGGLGL'];
+    function ean13CheckDigit(s12) {
+      s12 = String(s12).replace(/\D/g, '').slice(0, 12).padStart(12, '0');
+      var total = 0;
+      for (var i = 0; i < 12; i++) total += parseInt(s12[i], 10) * (i % 2 === 0 ? 1 : 3);
+      return (10 - (total % 10)) % 10;
+    }
+    function toEan13(receiptno) {
+      var s = String(receiptno).replace(/\D/g, '') || '0';
+      var s12 = s.slice(-12).padStart(12, '0');
+      return s12 + String(ean13CheckDigit(s12));
+    }
+    function ean13ToBarPattern(ean13) {
+      if (!ean13 || ean13.length !== 13 || !/^\d{13}$/.test(ean13)) return '';
+      var first = parseInt(ean13[0], 10);
+      var leftSets = EAN13_FIRST[first];
+      var out = '101';
+      for (var i = 1; i < 7; i++) {
+        var d = parseInt(ean13[i], 10);
+        out += leftSets[i-1] === 'L' ? EAN13_L[d] : EAN13_G[d];
+      }
+      out += '01010';
+      for (var i = 7; i < 13; i++) out += EAN13_R[parseInt(ean13[i], 10)];
+      return out + '101';
+    }
+    function asciiEan13Line(ean13, width) {
+      var pattern = ean13ToBarPattern(ean13);
+      if (!pattern) return ('|'.repeat(20)).slice(0, width);
+      var n = pattern.length;
+      if (n <= width) {
+        var line = pattern.split('').map(function(m) { return m === '1' ? '|' : ' '; }).join('');
+        return (line + ' '.repeat(width - n)).slice(0, width);
+      }
+      var result = '';
+      for (var i = 0; i < width; i++) {
+        var start = Math.floor(i * n / width);
+        var end = Math.floor((i + 1) * n / width);
+        var segment = end > start ? pattern.slice(start, end) : pattern.slice(start, start + 1);
+        var bars = (segment.match(/1/g) || []).length;
+        result += bars * 2 >= segment.length ? '|' : ' ';
+      }
+      return result.slice(0, width);
+    }
+    function asciiBarcodeLine(s, width) {
+      if (!s || width < 8) return ('|'.repeat(20)).slice(0, width);
+      s = String(s).trim();
+      var result = [];
+      for (var i = 0; i < s.length; i++) {
+        var n = s.charCodeAt(i) % 11;
+        result.push('|'.repeat(1 + (n % 3)));
+        result.push(' '.repeat(1 + (n % 2)));
+      }
+      var line = result.join('');
+      return line.length > width ? line.slice(0, width) : line + ' '.repeat(width - line.length);
+    }
+    var out = [];
+    if (h.business_name !== false) {
+      out.push(centerStr(d.loc_name, w));
+    }
+    out.push('='.repeat(w));
+    if (bill.bill_no !== false || bill.bill_date !== false) {
+      var left1 = bill.bill_no !== false ? 'BILL # ' + d.receiptno : '';
+      var right1 = bill.bill_date !== false && d.billdate ? 'B.D : ' + d.billdate : '';
+      out.push((left1 + ' '.repeat(Math.max(0, w - left1.length - right1.length)) + right1).slice(0,w));
+    }
+    out.push('-'.repeat(w));
+    if (bill.customer !== false || bill.bill_time !== false) {
+      var left2 = bill.customer !== false ? (d.customername || '').slice(0,20) : '';
+      var right2 = bill.bill_time !== false ? d.billtime : '';
+      out.push((left2 + ' '.repeat(Math.max(0, w - left2.length - right2.length)) + right2).slice(0,w));
+    }
+    out.push('-'.repeat(w));
+    if (bill.print_date !== false) out.push(('P.D ' + printDate + ' '.repeat(w)).slice(0, w));
+    if (bill.print_time !== false) out.push((printTime + ' '.repeat(w)).slice(0, w));
+    out.push('='.repeat(w));
+    if (itemsCfg.item !== false || itemsCfg.unit_price !== false || itemsCfg.qty !== false || itemsCfg.line_total !== false) {
+      var colDesc = itemsCfg.item !== false ? 'ITEM DESCRIPTION' : '';
+      var colUom = itemsCfg.item !== false ? 'UOM' : '';
+      var colPrice = itemsCfg.unit_price !== false ? 'PRICE' : '';
+      var colQty = itemsCfg.qty !== false ? 'QTY' : '';
+      var colTotal = itemsCfg.line_total !== false ? 'TOTAL' : '';
+      var header = (colDesc.slice(0, 18) + ' '.repeat(18)).slice(0, 18) + ' ' + ('    ' + colUom).slice(-4) + ' ' + ('      ' + colPrice).slice(-6) + ' ' + ('    ' + colQty).slice(-4) + ' ' + ('        ' + colTotal).slice(-8);
+      out.push(header.slice(0, w));
+      out.push('='.repeat(w));
+    }
+    d.lines.forEach(function(line) {
+      var itemName = itemsCfg.item !== false ? (line.item || '').trim() : '';
+      var uomStr = itemsCfg.item !== false ? (line.uom || '').trim() : '';
+      var qtyStr = itemsCfg.qty !== false ? fmtNum(line.qty, 0) : '';
+      var rateStr = itemsCfg.unit_price !== false ? fmtNum(line.rate, 0) : '';
+      var amountStr = itemsCfg.line_total !== false ? fmtNum(line.amount, 0) : '';
+      var itemAra = itemsCfg.item_ara !== false ? (line.item_ara || '').trim() : '';
+      if (itemName) out.push((itemName.slice(0, w) + ' '.repeat(w)).slice(0, w));
+      if (qtyStr || rateStr || amountStr || uomStr) {
+        var uom4 = itemsCfg.item !== false ? ('    ' + uomStr.slice(0, 4)).slice(-4) : '    ';
+        var price6 = itemsCfg.unit_price !== false ? ('      ' + rateStr).slice(-6) : '      ';
+        var qty4 = itemsCfg.qty !== false ? ('    ' + qtyStr).slice(-4) : '    ';
+        var total8 = itemsCfg.line_total !== false ? ('        ' + amountStr).slice(-8) : '        ';
+        var row = (uom4 + ' ' + price6 + ' ' + qty4 + ' ' + total8);
+        out.push((row + ' '.repeat(w)).slice(0, w));
+      }
+      if (itemAra) out.push((itemAra.slice(0, w) + ' '.repeat(w)).slice(0, w));
+      out.push('-'.repeat(w));
+    });
+    if (summaryCfg.cashier !== false) out.push('Cashier : ' + (d.user || '-'));
+    if (summaryCfg.waiter !== false) out.push('Waiter : ' + (d.user || '-'));
+    if (summaryCfg.paid !== false) out.push('Paid: 0');
+    if (summaryCfg.currency !== false) out.push('Currency: RWF');
+    if (summaryCfg.total_tax_ex !== false) out.push('Total(Tax Ex.): ' + fmtNum(d.net_total, 0));
+    if (summaryCfg.disc_pct !== false) {
+      var denom = d.net_total + d.disc_total;
+      var pct = !denom ? '0%' : Math.round(100 * d.disc_total / denom) + '%';
+      out.push('Disc.: -(' + pct + ')');
+    }
+    if (summaryCfg.taxes !== false) out.push('Taxes: 0');
+    if (summaryCfg.grand_total !== false) {
+      var prefix = labels.grand_total_prefix || 'T';
+      var grandStr = prefix + ' ' + fmtNum(d.net_total, 0);
+      out.push('+' + '-'.repeat(w-2) + '+');
+      out.push('|' + (grandStr.slice(0, w-2) + ' '.repeat(w-2)).slice(0, w-2) + '|');
+      out.push('+' + '-'.repeat(w-2) + '+');
+    }
+    if (footerCfg.barcode !== false) {
+      out.push('');
+      var ean13 = toEan13(d.receiptno || '9');
+      out.push(asciiEan13Line(ean13, w).slice(0, w));
+      out.push((ean13.slice(0, w) + ' '.repeat(w)).slice(0, w));
+    }
+    if (footerCfg.message !== false) {
+      out.push((d.message.slice(0, w) + ' '.repeat(w)).slice(0, w));
+    }
+    if (footerCfg.powered_by !== false) {
+      out.push(((labels.powered_by || 'POWERED BY KAPP').toString().slice(0, w) + ' '.repeat(w)).slice(0, w));
+    }
+    return out.join('\n');
+  }
+
+  function updatePreview() {
+    if (receiptPreview) receiptPreview.textContent = buildPreviewText();
+  }
+
+  if (form) {
+    form.addEventListener('input', updatePreview);
+    form.addEventListener('change', updatePreview);
+  }
+  updatePreview();
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    saveStatus.textContent = 'Saving…';
+    fetch('{{ url_for("pos_billing.pos_receipt_design_config") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildPayload())
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.success) {
+          saveStatus.textContent = 'Saved.';
+          setTimeout(function () { saveStatus.textContent = ''; }, 2000);
+        } else {
+          saveStatus.textContent = 'Error: ' + (data.error || 'Failed');
+        }
+      })
+      .catch(function () {
+        saveStatus.textContent = 'Error: network';
+      });
+  });
+
+  var testPrintBtn = document.getElementById('testPrintBtn');
+  if (testPrintBtn) {
+    testPrintBtn.addEventListener('click', function () {
+      saveStatus.textContent = 'Printing…';
+      fetch('{{ url_for("pos_billing.pos_receipt_design_test_print") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildPayload())
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.success) {
+            saveStatus.textContent = 'Test receipt sent to printer.';
+            setTimeout(function () { saveStatus.textContent = ''; }, 3000);
+          } else {
+            saveStatus.textContent = 'Print error: ' + (data.error || 'Failed');
+          }
+        })
+        .catch(function () {
+          saveStatus.textContent = 'Print error: network';
+        });
+    });
+  }
+})();
+  </script>
+{% endblock %}

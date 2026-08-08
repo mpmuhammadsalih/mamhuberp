@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Repacking List{% endblock %}
+{% block content %}
+<style>
+  .co-table-wrap { overflow: auto; border-radius: 4px; max-height: 72vh; }
+  .co-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .co-table th, .co-table td { border: 1px solid #cfd4da !important; padding: 7px 10px; white-space: nowrap; }
+  .co-table thead th { background: #eef2f7 !important; position: sticky; top: 0; z-index: 2; font-weight: 600; color: #374151; }
+  .co-table tbody tr:nth-child(even) { background: #fbfcfe; }
+  .co-table tbody tr:hover { background: #f0f5ff !important; }
+  .co-table td.sl-no { text-align: center; color: #6b7280; }
+  .rp-list-actions { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: center; align-items: center; }
+  .btn-view { border: 1px solid #cfd4da; background: #fff; color: #374151; border-radius: 3px; font-size: 12px; padding: 3px 10px; text-decoration: none; }
+  .btn-view:hover { background: #eef2f7; }
+  .btn-view--pdf { color: #1d4ed8; border-color: var(--nexa-focus-color); }
+  .btn-view--pdf:hover { background: #f0f9ff; }
+</style>
+<div class="list-refresh-slot" style="display:flex;justify-content:flex-end;flex-wrap:wrap;align-items:center;margin:6px 0 12px;">{% include 'includes/list_refresh_bar.html' %}</div>
+
+<div class="page-po nexa-list-page" style="max-width:1200px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Repacking List</h1>
+      <p class="page-po__muted">Convert stock from one item to another in the same warehouse.</p>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <a href="{{ url_for('purchase.repacking_form') }}" class="page-po__btn-primary">+ New Repacking</a>
+    </div>
+  </div>
+
+  <form method="get" style="display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap;">
+    <input class="input" type="text" name="search" value="{{ search or '' }}" placeholder="Search no, item, remarks..." style="min-width:240px;" />
+    <input class="input" type="date" name="date_from" value="{{ date_from or '' }}" />
+    <input class="input" type="date" name="date_to" value="{{ date_to or '' }}" />
+    <button class="page-po__btn-secondary" type="submit">Search</button>
+    <a class="page-po__btn-secondary" href="{{ url_for('purchase.repacking_list') }}">Reset</a>
+  </form>
+
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th style="width:60px;">Sl.No</th>
+          <th>Repack No</th>
+          <th>Date</th>
+          <th>Warehouse</th>
+          <th>Source item</th>
+          <th>Output item</th>
+          <th class="num">Source qty</th>
+          <th class="num">Output qty</th>
+          <th>Remarks</th>
+          <th>Created By</th>
+          <th style="text-align:center; min-width:200px;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="sl-no">{{ loop.index }}</td>
+          <td>{{ r.repackno or '-' }}</td>
+          <td>{{ (r.repackdate|string)[:10] if r.repackdate else '-' }}</td>
+          <td>{{ r.warehouse or '' }}</td>
+          <td>{{ r.src_itemcode or '' }}{% if r.src_itemname %} — {{ r.src_itemname }}{% endif %}</td>
+          <td>{{ r.dst_itemcode or '' }}{% if r.dst_itemname %} — {{ r.dst_itemname }}{% endif %}</td>
+          <td class="num">{{ r.src_qty or '' }}</td>
+          <td class="num">{{ r.dst_qty or '' }}</td>
+          <td>{{ r.remarks or '' }}</td>
+          <td>{{ r.createdby or '' }}</td>
+          <td style="text-align:center;">
+            <div class="rp-list-actions">
+              <a class="btn-view" href="{{ url_for('purchase.repacking_view', repack_no=r.repackno) }}">View</a>
+              <a class="btn-view" href="{{ url_for('purchase.repacking_form', repack_no=r.repackno) }}">Edit</a>
+              <a class="btn-view btn-view--pdf" href="{{ url_for('purchase.repacking_pdf', repack_no=r.repackno) }}" target="_blank" rel="noopener noreferrer">PDF</a>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11" style="text-align:center; padding:14px; color:#6b7280; font-style:italic;">No repacking documents found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

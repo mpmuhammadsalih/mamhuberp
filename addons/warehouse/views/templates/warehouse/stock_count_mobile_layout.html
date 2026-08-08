@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1565c0" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <title>{% block scm_title %}Stock Count{% endblock %} · Nexus</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/font/bootstrap-icons.min.css') }}?v=1.11.3" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/stock_count_mobile.css') }}?v=2" />
+  {% block scm_head %}{% endblock %}
+</head>
+<body class="scm-app">
+  {% block scm_body %}{% endblock %}
+  <div id="scmToast" class="scm-toast" role="status" aria-live="polite" hidden></div>
+  <div id="scmSheetBackdrop" class="scm-sheet-backdrop" hidden></div>
+  {% block scm_scripts %}
+  <script src="{{ url_for('static', filename='js/stock_count_mobile.js') }}?v=2"></script>
+  {% endblock %}
+</body>
+</html>

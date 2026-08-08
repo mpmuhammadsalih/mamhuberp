@@ -1,0 +1,46 @@
+---
+description: DB transactions and save-once for mobile_backend mutation endpoints
+globs: mobile_backend/**/*.py
+alwaysApply: false
+---
+
+# mobile_backend mutations
+
+## Database transactions
+
+Use `oracle_transaction(conn)` for any insert/update/delete block:
+
+```python
+from mobile_backend.database.transaction import oracle_transaction
+
+conn = get_connection(tenant_id=tenant_id)
+with oracle_transaction(conn):
+    with conn.cursor() as cur:
+        cur.execute("UPDATE ...")
+```
+
+Read-only queries: `with conn.cursor()` only — no transaction wrapper.
+
+## Save-once (duplicate save protection)
+
+| Piece | Module |
+|-------|--------|
+| Token store | `save_guard.py` |
+| Route deps | `deps_save.py` — `require_save_nonce`, `success_after_mutation` |
+| 409 handler | `bootstrap.py` — `SaveNonceReplayError` |
+
+**New write route template:**
+
+```python
+from fastapi import Request
+from mobile_backend.deps_save import require_save_nonce, success_after_mutation
+
+@router.post("/x", dependencies=[_perm, require_save_nonce])
+def save_x(request: Request, body: Body):
+    result = svc.save_x(body.model_dump())
+    return success_after_mutation(request, result, message="Saved")
+```
+
+Client sends `X-Save-Nonce`. Response includes top-level `save_nonce` after success.
+
+Full guide: `mobile_backend/MUTATIONS.md`

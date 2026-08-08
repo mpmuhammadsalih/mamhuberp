@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Fixed Asset Sale{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/fixed_assets_pages.css') }}?v=5" />
+
+{% set kpi = fa_kpis or {} %}
+<div class="page-po nexa-list-page fa-list-page">
+  {% include 'fixed_assets/_fa_nav.html' %}
+
+  <section class="fa-stat-grid" aria-label="Sale summary">
+    <div class="fa-stat-card">
+      <span class="fa-stat-icon fa-stat-icon--blue"><i class="bi bi-cash-coin" aria-hidden="true"></i></span>
+      <div>
+        <p class="fa-stat-label">Total sales</p>
+        <p class="fa-stat-value">{{ "{:,}".format(kpi.total or 0) }}</p>
+      </div>
+    </div>
+    <div class="fa-stat-card">
+      <span class="fa-stat-icon fa-stat-icon--green"><i class="bi bi-check2-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="fa-stat-label">Posted</p>
+        <p class="fa-stat-value">{{ "{:,}".format(kpi.posted or 0) }}</p>
+      </div>
+    </div>
+    <div class="fa-stat-card">
+      <span class="fa-stat-icon fa-stat-icon--amber"><i class="bi bi-pencil-square" aria-hidden="true"></i></span>
+      <div>
+        <p class="fa-stat-label">Draft</p>
+        <p class="fa-stat-value">{{ "{:,}".format(kpi.draft or 0) }}</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Fixed asset sale</h1>
+      <p class="page-po__muted">Sell one or more posted assets in a single document — proceeds, NBV, and gain/loss post to GL.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('fixed_assets.fa_sale_form') }}" class="page-po__btn-primary">+ New sale</a>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div class="co-table-wrap">
+    <table class="co-table" id="faSaleTable">
+      <thead>
+        <tr>
+          <th style="text-align:center; width:52px;">Sl.No</th>
+          <th style="width:130px;">Sale no</th>
+          <th style="width:100px;">Date</th>
+          <th style="width:72px; text-align:center;">Assets</th>
+          <th style="text-align:right; width:100px;">Proceeds</th>
+          <th style="text-align:right; width:100px;">NBV</th>
+          <th style="text-align:right; width:100px;">Gain/loss</th>
+          <th style="width:88px;">Status</th>
+          <th style="text-align:center; width:72px;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if not rows %}
+        <tr><td colspan="9" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">No sales yet. <a href="{{ url_for('fixed_assets.fa_sale_form') }}">Create one</a>.</td></tr>
+        {% else %}
+        {% for r in rows %}
+        {% set st = (r.status or 'DRAFT')|upper %}
+        {% set gl = r.total_gain_loss|float %}
+        <tr class="fa-row-clickable" data-edit-url="{{ url_for('fixed_assets.fa_sale_form', id=r.sale_id) }}">
+          <td style="text-align:center;">{{ loop.index }}</td>
+          <td><span class="fa-code">{{ r.sale_no }}</span></td>
+          <td>{{ r.sale_date }}</td>
+          <td style="text-align:center;">{{ r.line_count or 0 }}</td>
+          <td class="fa-num">{{ '%.2f'|format(r.total_proceeds|float) }}</td>
+          <td class="fa-num">{{ '%.2f'|format(r.total_nbv|float) }}</td>
+          <td class="fa-num">{% if gl > 0 %}+{% endif %}{{ '%.2f'|format(gl) }}</td>
+          <td>
+            {% if st == 'POSTED' %}<span class="fa-status-badge fa-status-badge--posted">Posted</span>
+            {% else %}<span class="fa-status-badge fa-status-badge--draft">Draft</span>{% endif %}
+          </td>
+          <td style="text-align:center; white-space:nowrap;">
+            <a class="btn-view" href="{{ url_for('fixed_assets.fa_sale_form', id=r.sale_id) }}">Open</a>
+            {% if st == 'POSTED' %}
+            <a class="btn-view" href="{{ url_for('fixed_assets.fa_sale_pdf', sale_id=r.sale_id) }}" target="_blank" rel="noopener">PDF</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function () {
+  var tbody = document.querySelector('#faSaleTable tbody');
+  if (!tbody) return;
+  tbody.addEventListener('click', function (e) {
+    if (e.target.closest('a, button')) return;
+    var tr = e.target.closest('tr[data-edit-url]');
+    if (tr) window.location.href = tr.getAttribute('data-edit-url');
+  });
+})();
+</script>
+{% endblock %}

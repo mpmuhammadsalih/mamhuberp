@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Batch stock by bin / shelf{% endblock %}
+{% block content %}
+<style>
+  .bsb-root { max-width: 1400px; margin: 0 auto; padding: 24px 16px 48px; }
+  .bsb-h1 { font-size: 1.4rem; font-weight: 700; margin: 0 0 8px; color: #0f172a; }
+  .bsb-meta { font-size: 13px; color: #64748b; margin-bottom: 18px; }
+  .bsb-panel {
+    background: #fafbfc; border: 1px solid #e2e8f0; border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 14px;
+  }
+  .bsb-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .bsb-filters label { font-size: 11px; font-weight: 700; color: #334155; display: block; margin-bottom: 4px; }
+  .bsb-filters input, .bsb-filters select {
+    padding: 8px 10px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 13px;
+  }
+  .bsb-filters button {
+    padding: 9px 16px; border-radius: 8px; border: none; font-weight: 700; font-size: 13px;
+    background: #2563eb; color: #fff; cursor: pointer;
+  }
+  .bsb-filters button:hover { background: #1d4ed8; }
+  .bsb-nav { margin-bottom: 14px; }
+  .bsb-nav a {
+    font-size: 13px; color: #2563eb; text-decoration: none; margin-right: 14px;
+  }
+  .bsb-scroll { max-height: min(62vh, 780px); overflow: auto; border: 1px solid #e2e8f0;
+    border-radius: 10px; background: #fff; }
+  .bsb-scroll table {
+    width: 100%; font-size: 12px; border-collapse: collapse;
+  }
+  .bsb-scroll th {
+    position: sticky; top: 0;
+    background: #f8fafc; padding: 10px 12px; text-align: left;
+    border-bottom: 2px solid #e2e8f0; font-weight: 700; color: #334155;
+  }
+  .bsb-scroll td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+
+<div class="bsb-root">
+  <nav class="bsb-nav">
+    <a href="{{ url_for('purchase.batch_lot_inquiry') }}">← Batch / lot inquiry</a>
+    <a href="{{ url_for('purchase.batch_lot_qc_hold') }}">QC hold →</a>
+  </nav>
+  <h1 class="bsb-h1">Batch stock by bin / shelf</h1>
+  <p class="bsb-meta">Rows are <strong>lot × bin</strong> with warehouse storage labels (parent = rack/shelf when configured). Location <code>{{ session_location }}</code>.</p>
+
+  <div class="bsb-panel">
+    <form method="get" class="bsb-filters">
+      <div>
+        <label for="f_item">Item code</label>
+        <input type="number" name="itemcode" id="f_item" value="{{ filter_itemcode or '' }}" placeholder="All" />
+      </div>
+      <div style="flex: 1; min-width: 200px; max-width: 360px;">
+        <label for="f_search">Search (item / batch)</label>
+        <input type="text" name="search" id="f_search" value="{{ filter_search or '' }}" placeholder="Optional" />
+      </div>
+      <div>
+        <label for="f_wh">Warehouse site filter</label>
+        <select name="wh_loc" id="f_wh">
+          <option value="">All sites</option>
+          {% for s in warehouse_sites or [] %}
+            <option value="{{ s.key }}" {% if default_wh_loc_key == s.key %}selected{% endif %}>
+              {{ s.name or s.key }} · {{ s.key }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit">Apply</button>
+    </form>
+  </div>
+
+  <div class="bsb-scroll" role="region">
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Batch</th>
+          <th>Expiry</th>
+          <th>Lot #</th>
+          <th class="num">Qty</th>
+          <th>Bin code</th>
+          <th>Bin name</th>
+          <th>Type</th>
+          <th>Shelf / parent</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows or [] %}
+        <tr>
+          <td>{{ r.itemcode }}</td>
+          <td>{{ r.batch_no or '—' }}</td>
+          <td>{% if r.expiry_date %}{{ r.expiry_date }}{% else %}—{% endif %}</td>
+          <td>{{ r.lot_id }}</td>
+          <td class="num">{{ '%.4f'|format((r.qty or 0)|float) }}</td>
+          <td>{{ r.bin_code or '—' }}</td>
+          <td>{{ r.bin_name or '—' }}</td>
+          <td>{{ r.storage_type or '—' }}</td>
+          <td>
+            {% set sc = r.shelf_code or '' %}
+            {% set sn = r.shelf_name or '' %}
+            {% if sc or sn %}
+              {{ sc }} {{ sn }}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" style="text-align:center;color:#64748b;padding:28px;">No binned batch rows for these filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

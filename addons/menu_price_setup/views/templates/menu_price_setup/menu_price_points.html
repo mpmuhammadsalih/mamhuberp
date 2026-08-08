@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}Menu price &amp; points{% endblock %}
+{% block content %}
+<style>
+  .mpp-loc-hint { font-size: 11px; color: #64748b; font-weight: 400; margin-left: 4px; }
+  .nexa-list-page .co-table td.mpp-cell-input { white-space: normal; vertical-align: middle; }
+  .nexa-list-page .co-table td.mpp-cell-input .input { width: 100%; max-width: 130px; padding: 4px 8px; font-size: 12px; box-sizing: border-box; }
+  .mpp-modal { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; }
+  .mpp-modal.is-open { display: flex; }
+  .mpp-modal__overlay { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.45); }
+  .mpp-modal__content { position: relative; width: min(980px, 98vw); min-height: 520px; max-height: 94vh; overflow: auto; background: #fff; border-radius: 10px; box-shadow: 0 18px 48px rgba(15, 23, 42, 0.28); }
+  .mpp-modal__header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #e5e7eb; background:#f8fafc; }
+  .mpp-modal__body { padding: 12px 14px 14px; display: grid; gap: 10px; }
+  .mpp-config-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; background: #fff; }
+  .mpp-config-card h3 { margin: 0 0 6px; font-size: 14px; color: #111827; }
+  .mpp-config-card .input { min-height: 30px; padding: 4px 8px; font-size: 12px; }
+  .mpp-check-list { max-height: 260px; overflow: auto; border: 1px solid #d1d5db; border-radius: 6px; padding: 6px; background: #fff; }
+  .mpp-check-row { display: flex; align-items: center; gap: 7px; padding: 4px 3px; font-size: 12px; color: #111827; cursor: pointer; }
+  .mpp-check-row input { margin: 0; }
+  .mpp-config-hint { margin: 4px 0 0; font-size: 11px; color:#64748b; line-height:1.35; }
+  .mpp-config-grid { display: grid; grid-template-columns: minmax(150px, .7fr) minmax(240px, 1.3fr) minmax(150px, .7fr) auto; gap: 10px; align-items: end; }
+  .mpp-config-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  @media (max-width: 760px) { .mpp-config-grid { grid-template-columns: 1fr; } }
+</style>
+
+<div class="page-po nexa-list-page" style="max-width: 1300px;">
+  <form method="post">
+    <div class="page-po__topbar">
+      <div>
+        <h1 class="page-po__title">Menu price and points</h1>
+        {% if list_was_fallback %}
+        <p class="page-po__muted" style="color:#b45309; margin-top: 6px;">No rows matched your current session location ({{ location_code }}), so the list below shows <strong>all</strong> micro-categories in this company. Save updates the row&apos;s own location in the database.</p>
+        {% endif %}
+        {% if quick_limited %}
+        <p class="page-po__muted" style="color:#2563eb; margin-top: 6px;">Quick load shows first {{ quick_limit }} categories. <a href="{{ url_for('menu_price_setup.menu_price_points_page', all=1) }}">Show all categories</a>.</p>
+        {% elif show_all %}
+        <p class="page-po__muted" style="color:#64748b; margin-top: 6px;">Showing all categories. <a href="{{ url_for('menu_price_setup.menu_price_points_page') }}">Back to quick load</a>.</p>
+        {% endif %}
+      </div>
+      <div class="page-po__topbar-actions">
+        <button type="button" class="page-po__btn-secondary" id="mppConfigBtn">Configuration</button>
+        {% include 'includes/list_refresh_bar.html' %}
+        <button type="submit" class="page-po__btn-primary">Save changes</button>
+      </div>
+    </div>
+
+    {% if rows and rows|length > 0 %}
+    <div class="co-table-wrap">
+      <table class="co-table">
+        <thead>
+          <tr>
+            <th style="cursor:default;">Code</th>
+            <th style="cursor:default;">Name</th>
+            <th class="num" style="cursor:default;">Amount</th>
+            <th class="num" style="cursor:default;">Points</th>
+            <th class="num" style="cursor:default;">Price %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr class="mpp-row" data-category-code="{{ row.code }}" data-category-name="{{ row.name or '' }}">
+            <td>
+              {{ row.code }}
+              {% if has_row_location and row.locationcode is not none %}
+              <span class="mpp-loc-hint" title="CATEGORY.LOCATIONCODE">(loc {{ row.locationcode }})</span>
+              {% endif %}
+            </td>
+            <td>{{ row.name or '' }}</td>
+            <td class="mpp-cell-input num">
+              <input type="hidden" name="code" value="{{ row.code }}" />
+              {% if has_row_location %}<input type="hidden" name="row_location" value="{{ row.locationcode if row.locationcode is not none else '' }}" />{% endif %}
+              <input type="number" name="amount" class="input" value="{{ row.amount|default(0) }}" step="any" min="0" />
+            </td>
+            <td class="mpp-cell-input num">
+              <input type="number" name="points" class="input" value="{{ row.points|default(0) }}" step="any" min="0" />
+            </td>
+            <td class="mpp-cell-input num">
+              <input type="number" name="pricepercentage" class="input" value="{{ row.pricepercentage|default(0) }}" step="any" min="0" />
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="nexa-num" style="margin-top: 8px;">Location code: {{ location_code }}</p>
+    {% else %}
+    <div class="co-table-wrap">
+      <table class="co-table">
+        <tbody>
+          <tr>
+            <td colspan="5" style="padding: 14px 16px; vertical-align: top; white-space: normal;">
+              <p style="margin: 0 0 8px; font-weight: 600; color: #374151;">Why is this empty?</p>
+              <ul style="margin: 0; padding-left: 1.25rem; color: #64748b; font-size: 13px; line-height: 1.55;">
+                <li>There are <strong>no</strong> rows in <code>CATEGORY</code> with <code>FLAG = &apos;C&apos;</code> (micro-categories). Add them under <strong>Category Master</strong>: main → department → <em>micro category</em>.</li>
+                <li>Or they exist under a <strong>different</strong> <code>LOCATIONCODE</code> than your session; the app falls back to list all <code>C</code> rows — if you still see this, the table has no micro-categories.</li>
+              </ul>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </form>
+</div>
+<div class="mpp-modal" id="mppConfigModal" aria-hidden="true">
+  <div class="mpp-modal__overlay" data-close-mpp-config></div>
+  <div class="mpp-modal__content" role="dialog" aria-modal="true" aria-labelledby="mppConfigTitle">
+    <div class="mpp-modal__header">
+      <h2 class="page-po__title" id="mppConfigTitle" style="font-size:18px;margin:0;">Configuration</h2>
+      <button type="button" class="page-po__btn-secondary" data-close-mpp-config>Close</button>
+    </div>
+    <div class="mpp-modal__body">
+      <div class="mpp-config-card">
+        <h3>Excel update</h3>
+        <div class="mpp-config-actions">
+          <a class="page-po__btn-secondary" href="{{ url_for('menu_price_setup.menu_price_points_export') }}">Export Excel</a>
+          <form method="post" action="{{ url_for('menu_price_setup.menu_price_points_upload') }}" enctype="multipart/form-data" class="mpp-config-actions">
+            <input type="file" name="excel_file" accept=".xlsx,.xlsm" class="input" required />
+            <button type="submit" class="page-po__btn-primary">Upload Excel</button>
+          </form>
+        </div>
+      </div>
+      <div class="mpp-config-card">
+        <h3>Update retail price from cost</h3>
+        <form method="post" action="{{ url_for('menu_price_setup.menu_price_points_update_retail') }}" class="mpp-config-grid">
+          <label>
+            Price to update
+            <select name="price_kind" class="input">
+              <option value="retail">Retail price</option>
+              <option value="wholesale">Wholesale price</option>
+              <option value="third">Third price</option>
+            </select>
+          </label>
+          <label>
+            Category
+            <div class="mpp-check-list" id="mppCategoryChecks">
+              <label class="mpp-check-row">
+                <input type="checkbox" name="category_codes" value="all" checked data-all-category />
+                <span>All categories</span>
+              </label>
+              <div id="mppCategoryOptionContainer"></div>
+            </div>
+            <p class="mpp-config-hint">Tick one or more categories. Keep “All categories” checked to update all.</p>
+          </label>
+          <label>
+            Percentage of cost price
+            <input type="number" name="percentage" class="input" step="any" value="0" />
+          </label>
+          <button type="submit" class="page-po__btn-primary" onclick="return confirm('Update selected ITEMMASTER price from cost price?');">Update price</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    const modal = document.getElementById('mppConfigModal');
+    const btn = document.getElementById('mppConfigBtn');
+    let categoryChecksBuilt = false;
+    function buildCategoryChecks() {
+      if (categoryChecksBuilt) return;
+      const container = document.getElementById('mppCategoryOptionContainer');
+      if (!container) return;
+      const rows = Array.from(document.querySelectorAll('.mpp-row[data-category-code]'));
+      rows.forEach(function (row) {
+        const code = row.getAttribute('data-category-code') || '';
+        if (!code) return;
+        const name = row.getAttribute('data-category-name') || '';
+        const label = document.createElement('label');
+        label.className = 'mpp-check-row';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.name = 'category_codes';
+        input.value = code;
+        input.setAttribute('data-category-option', '');
+        const span = document.createElement('span');
+        span.textContent = code + (name ? ' - ' + name : '');
+        label.appendChild(input);
+        label.appendChild(span);
+        container.appendChild(label);
+      });
+      categoryChecksBuilt = true;
+    }
+    function show(open) {
+      if (!modal) return;
+      if (open) buildCategoryChecks();
+      modal.classList.toggle('is-open', !!open);
+      modal.setAttribute('aria-hidden', open ? 'false' : 'true');
+    }
+    if (btn) btn.addEventListener('click', function () { show(true); });
+    const categoryChecks = document.getElementById('mppCategoryChecks');
+    if (categoryChecks) {
+      categoryChecks.addEventListener('change', function (e) {
+        const allOption = categoryChecks.querySelector('[data-all-category]');
+        const options = Array.from(categoryChecks.querySelectorAll('[data-category-option]'));
+        if (!allOption) return;
+        if (e.target === allOption && allOption.checked) {
+          options.forEach(function (option) { option.checked = false; });
+          return;
+        }
+        const hasSelectedCategory = options.some(function (option) { return option.checked; });
+        allOption.checked = !hasSelectedCategory;
+      });
+    }
+    document.addEventListener('click', function (e) {
+      if (e.target && e.target.hasAttribute('data-close-mpp-config')) show(false);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') show(false);
+    });
+  })();
+</script>
+{% endblock %}

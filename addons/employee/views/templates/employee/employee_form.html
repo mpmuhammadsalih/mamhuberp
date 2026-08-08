@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit employee{% else %}New employee{% endif %}{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/im_form_shell.css') }}?v=1" />
+<style>
+  main.container:has(> .emp-form-page.im-form-shell-page) { padding-top: 0; }
+  .emp-form-page textarea.input { min-height: 3em; resize: vertical; }
+  .emp-form-page .emp-hint {
+    margin: 0 0 10px;
+    padding: 8px 12px;
+    font-size: 13px;
+    line-height: 1.4;
+    border-radius: 4px;
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    color: #0c4a6e;
+  }
+</style>
+{% set emp_std = is_standard_employee if is_standard_employee is defined else (employee_table and employee_table|upper == 'EMPLOYEE') %}
+{% set rn = row_norm or {} %}
+
+<div class="im-page im-form-shell-page emp-form-page">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>Employee Master / <span class="im-ref">{{ next_employeecode }}</span>
+        {% if not is_edit %}<span class="status-badge status-badge--new">New</span>{% endif %}
+      </h1>
+      <div class="im-actions">
+        <button type="submit" form="employeeForm" class="im-btn-save">{% if is_edit %}Save{% else %}Create{% endif %}</button>
+        <a href="{{ url_for('employee.employee_list') }}" class="im-btn-secondary">List</a>
+      </div>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, msg in messages %}
+        <p class="flash flash--{{ category }}" style="margin-bottom:12px;">{{ msg }}</p>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <section class="itemmaster-container">
+    {% if not is_edit %}
+    <p class="emp-hint">
+      Enter the <strong>employee code</strong> you use in ERP (unique per branch).
+      Suggested next code: <strong>{{ next_employeecode }}</strong>.
+    </p>
+    {% endif %}
+
+    <form id="employeeForm" method="post" autocomplete="off" class="form-enter-focus-only" action="
+      {%- if is_edit -%}
+        {{ url_for('employee.employee_edit', employeecode=next_employeecode) }}
+      {%- else -%}
+        {{ url_for('employee.employee_create') }}
+      {%- endif -%}
+    ">
+      <input type="hidden" name="save_nonce" value="{{ global_save_nonce | default('') }}" />
+      <input type="hidden" name="locationcode" id="locHidden" value="{{ location_code }}" />
+      {% if not is_edit %}
+      <input type="hidden" name="employee_create_once" value="{{ employee_create_once }}" />
+      {% else %}
+      <input type="hidden" name="employee_edit_once" value="{{ employee_edit_once }}" />
+      {% endif %}
+
+      <h2 class="im-section-title">Identification</h2>
+      <div class="form-section im-panel-body">
+        <div class="form-grid--2cols">
+          {% if not is_edit %}
+          <div class="form-group span-2">
+            <label for="location_pick">Branch</label>
+            <select class="input" id="location_pick" aria-label="Branch">
+              {% for loc in locations %}
+              <option value="{{ loc.code }}" {% if loc.code|string == location_code|string %}selected{% endif %}>
+                {{ loc.code }} — {{ loc.name or loc.code }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          {% else %}
+          <div class="form-group span-2">
+            <label>Branch</label>
+            <input type="text" class="input input-readonly" readonly
+              value="{{ location_code }}{% if location_name %} — {{ location_name }}{% endif %}" />
+          </div>
+          {% endif %}
+
+          {% if has_employee_id %}
+          <div class="form-group">
+            <label>Employee ID (system)</label>
+            <input type="text" class="input input-readonly" readonly
+              value="{% if is_edit %}{{ rn.employeeid or '' }}{% else %}{{ suggested_employee_id or '' }}{% endif %}"
+              title="Assigned automatically on save" />
+          </div>
+          {% endif %}
+
+          <div class="form-group">
+            <label for="employeecode">Employee code <span style="color:#b45309">*</span></label>
+            {% if is_edit %}
+            <input class="input input-readonly" id="employeecode" name="employeecode" type="text" readonly
+              value="{{ next_employeecode }}" />
+            {% else %}
+            <input class="input" id="employeecode" name="employeecode" type="number" min="1" step="1" required
+              placeholder="Suggested: {{ next_employeecode }}"
+              value="{{ rn.employeecode if rn.employeecode is not none else next_employeecode }}" />
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <h2 class="im-section-title">Personal</h2>
+      <div class="form-section im-panel-body">
+        <div class="form-grid--2cols">
+          <div class="form-group span-2">
+            <label for="employeename">Employee name <span style="color:#b45309">*</span></label>
+            <input class="input" id="employeename" name="employeename" type="text" maxlength="80" required
+              value="{{ (rn.employeename or '')|default('', true)|trim }}" />
+          </div>
+
+          <div class="form-group">
+            <label for="department">{% if emp_std %}Designation{% else %}Department{% endif %}</label>
+            <input class="input" id="department" name="department" type="text" maxlength="60"
+              value="{{ (rn.department or rn.designation or '')|default('', true)|trim }}" />
+          </div>
+
+          {% if emp_std %}
+          <div class="form-group">
+            <label for="sex">Gender</label>
+            <select class="input" id="sex" name="sex">
+              <option value="" {% if not (rn.sex or '')|trim %}selected{% endif %}>—</option>
+              <option value="M" {% if (rn.sex or '')|upper|trim == 'M' %}selected{% endif %}>Male</option>
+              <option value="F" {% if (rn.sex or '')|upper|trim == 'F' %}selected{% endif %}>Female</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="nationality">Nationality</label>
+            <input class="input" id="nationality" name="nationality" type="text" maxlength="60"
+              value="{{ (rn.nationality or '')|default('', true)|trim }}" />
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if emp_std %}
+      <h2 class="im-section-title">Contact</h2>
+      <div class="form-section im-panel-body">
+        <div class="form-grid--2cols">
+          <div class="form-group span-2">
+            <label for="address">Address</label>
+            <textarea class="input" id="address" name="address" rows="2" maxlength="500">{{ (rn.address or '')|default('', true)|trim }}</textarea>
+          </div>
+          <div class="form-group">
+            <label for="telephone">Telephone</label>
+            <input class="input" id="telephone" name="telephone" type="text" maxlength="30"
+              value="{{ (rn.telephone or '')|default('', true)|trim }}" />
+          </div>
+          <div class="form-group">
+            <label for="mobile">Mobile</label>
+            <input class="input" id="mobile" name="mobile" type="text" maxlength="30"
+              value="{{ (rn.mobile or '')|default('', true)|trim }}" />
+          </div>
+        </div>
+      </div>
+
+      <h2 class="im-section-title">Employment</h2>
+      <div class="form-section im-panel-body">
+        <div class="form-grid--2cols">
+          <div class="form-group">
+            <label for="dateofjoining">Date of joining</label>
+            {% set doj = rn.dateofjoining if rn else none %}
+            <input class="input" id="dateofjoining" name="dateofjoining" type="date"
+              value="{% if doj and doj.strftime is defined %}{{ doj.strftime('%Y-%m-%d') }}{% elif doj %}{{ doj|string|trim|truncate(10, true, '') }}{% endif %}" />
+          </div>
+          <div class="form-group">
+            <label for="resignationflag">Resigned</label>
+            <select class="input" id="resignationflag" name="resignationflag">
+              <option value="N" {% if (rn.resignationflag or 'N')|string|upper|trim != 'Y' %}selected{% endif %}>No — Active</option>
+              <option value="Y" {% if (rn.resignationflag or '')|string|upper|trim == 'Y' %}selected{% endif %}>Yes — Resigned</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="im-section-title">Remarks</h2>
+      <div class="form-section im-panel-body">
+        <div class="form-grid--2cols">
+          <div class="form-group span-2">
+            <label for="remarks">Remarks</label>
+            <textarea class="input" id="remarks" name="remarks" rows="2" maxlength="500">{{ (rn.remarks or '')|default('', true)|trim }}</textarea>
+          </div>
+        </div>
+      </div>
+      {% else %}
+
+      <h2 class="im-section-title">Employment</h2>
+      <div class="form-section im-panel-body">
+        <div class="form-grid--2cols">
+          <div class="form-group">
+            <label for="dateofjoining">Date of joining</label>
+            {% set doj = rn.dateofjoining if rn else none %}
+            <input class="input" id="dateofjoining" name="dateofjoining" type="date"
+              value="{% if doj and doj.strftime is defined %}{{ doj.strftime('%Y-%m-%d') }}{% elif doj %}{{ doj|string|trim|truncate(10, true, '') }}{% endif %}" />
+          </div>
+          <div class="form-group">
+            <label for="status">Status</label>
+            <input class="input" id="status" name="status" type="text" maxlength="1" placeholder="1 char"
+              value="{{ ((rn.status or '')|string)|trim }}" />
+          </div>
+          <div class="form-group">
+            <label for="dateoftransfer">Date of transfer</label>
+            {% set dot = rn.dateoftransfer if rn else none %}
+            <input class="input" id="dateoftransfer" name="dateoftransfer" type="date"
+              value="{% if dot and dot.strftime is defined %}{{ dot.strftime('%Y-%m-%d') }}{% elif dot %}{{ dot|string|trim|truncate(10, true, '') }}{% endif %}" />
+          </div>
+          <div class="form-group">
+            <label for="shiftcode">Shift code</label>
+            <input class="input" id="shiftcode" name="shiftcode" type="number"
+              value="{{ rn.shiftcode if rn.shiftcode is not none else '' }}" />
+          </div>
+          <div class="form-group">
+            <label for="pending">Pending</label>
+            <select class="input" id="pending" name="pending">
+              <option value="N" {% if (rn.pending or 'N')|string|upper|trim != 'Y' %}selected{% endif %}>No</option>
+              <option value="Y" {% if (rn.pending or '')|string|upper|trim == 'Y' %}selected{% endif %}>Yes</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="im-section-title">Shift times</h2>
+      <div class="form-section im-panel-body">
+        <div class="form-grid--2cols">
+          <div class="form-group">
+            <label for="time1">Time 1</label>
+            <input class="input" id="time1" name="time1" type="text" maxlength="20"
+              value="{{ (rn.time1 or '')|default('', true)|trim }}" />
+          </div>
+          <div class="form-group">
+            <label for="time2">Time 2</label>
+            <input class="input" id="time2" name="time2" type="text" maxlength="20"
+              value="{{ (rn.time2 or '')|default('', true)|trim }}" />
+          </div>
+          <div class="form-group">
+            <label for="time3">Time 3</label>
+            <input class="input" id="time3" name="time3" type="text" maxlength="20"
+              value="{{ (rn.time3 or '')|default('', true)|trim }}" />
+          </div>
+          <div class="form-group">
+            <label for="time4">Time 4</label>
+            <input class="input" id="time4" name="time4" type="text" maxlength="20"
+              value="{{ (rn.time4 or '')|default('', true)|trim }}" />
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </form>
+  </section>
+</div>
+
+{% if not is_edit %}
+<script>
+(function() {
+  var pick = document.getElementById('location_pick');
+  var hidden = document.getElementById('locHidden');
+  if (!pick || !hidden) return;
+  pick.addEventListener('change', function() {
+    hidden.value = pick.value;
+    window.location = '{{ url_for("employee.employee_create") }}'.split('?')[0] + '?pref_loc=' + encodeURIComponent(pick.value);
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

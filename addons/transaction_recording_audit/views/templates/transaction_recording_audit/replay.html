@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/transaction_recording_audit.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="tra-page tra-replay-page" id="traReplayApp"
+     data-audit-id="{{ record.audit_id }}"
+     data-api-detail="{{ url_for('transaction_recording_audit.api_detail', audit_id=record.audit_id) }}"
+     data-file-base="{{ file_url_base }}">
+
+  <header class="tra-header">
+    <div>
+      <h1 class="tra-title"><i class="bi bi-play-circle"></i> Transaction Replay</h1>
+      <p class="tra-subtitle">
+        {{ record.transaction_type_label }} <strong>{{ record.transaction_no or '—' }}</strong>
+        · {{ record.username }} · {{ record.start_time[:19] if record.start_time else '' }}
+      </p>
+    </div>
+    <div class="tra-header-actions">
+      <a href="{{ viewer_url }}" class="tra-btn"><i class="bi bi-arrow-left"></i> Back to Viewer</a>
+      <button type="button" class="tra-btn tra-btn--primary" id="traReplayPlay"><i class="bi bi-play-fill"></i> Replay Changes</button>
+      <button type="button" class="tra-btn" id="traReplayPause" disabled><i class="bi bi-pause-fill"></i> Pause</button>
+    </div>
+  </header>
+
+  <div class="tra-replay-layout">
+    <aside class="tra-replay-meta">
+      <dl class="tra-meta-list">
+        <dt>Status</dt><dd><span class="tra-badge tra-badge--{{ (record.status or 'OPEN')|lower }}">{{ record.status }}</span></dd>
+        <dt>Duration</dt><dd>{{ record.duration_label }}</dd>
+        <dt>IP Address</dt><dd>{{ record.ip_address or '—' }}</dd>
+        <dt>Machine</dt><dd>{{ record.machine_name or '—' }}</dd>
+      </dl>
+      <div class="tra-replay-media">
+        {% if record.before_image_path %}
+        <a href="{{ file_url_base }}{{ record.before_image_path }}" target="_blank" rel="noopener" class="tra-btn tra-btn--sm">Before screenshot</a>
+        {% endif %}
+        {% if record.after_image_path %}
+        <a href="{{ file_url_base }}{{ record.after_image_path }}" target="_blank" rel="noopener" class="tra-btn tra-btn--sm">After screenshot</a>
+        {% endif %}
+        {% if record.video_path %}
+        <a href="{{ file_url_base }}{{ record.video_path }}" target="_blank" rel="noopener" class="tra-btn tra-btn--sm">Play video</a>
+        {% endif %}
+      </div>
+    </aside>
+
+    <section class="tra-replay-main">
+      <div class="tra-replay-progress">
+        <div class="tra-replay-progress__bar" id="traReplayBar"></div>
+      </div>
+      <div class="tra-replay-current" id="traReplayCurrent">
+        <p class="tra-replay-hint">Press <strong>Replay Changes</strong> to step through field edits in sequence.</p>
+      </div>
+      <div class="tra-table-wrap">
+        <table class="co-table tra-table tra-replay-table" id="traReplayTable">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Field</th>
+              <th>Old Value</th>
+              <th>New Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ch in record.changes %}
+            <tr data-index="{{ loop.index0 }}">
+              <td>{{ ch.change_time[:19] if ch.change_time else '—' }}</td>
+              <td>{{ ch.field_name }}</td>
+              <td class="tra-old">{{ ch.old_value }}</td>
+              <td class="tra-new">{{ ch.new_value }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="tra-empty">No field changes recorded for this session.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+  window.__TRA_REPLAY_CHANGES__ = {{ record.changes|tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/transaction_recording_audit_replay.js') }}?v=1"></script>
+{% endblock %}

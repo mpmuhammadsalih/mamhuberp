@@ -1,0 +1,397 @@
+{% extends "base.html" %}
+{% block title %}POS Settlement Posting{% endblock %}
+
+{% block content %}
+<div class="page-po nexa-list-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">POS Settlement Posting</h1>
+      <p class="page-po__muted">Pending days, open drafts, and posted settlement batches for this branch.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ workflow_url }}" class="page-po__btn-primary">+ New settlement</a>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <p style="font-size:13px;color:#64748b;margin:0 0 12px;">
+    Branch: <strong>{{ branch_display }}</strong>
+    <input type="hidden" id="pspListBranch" value="{{ location_code }}" />
+  </p>
+
+  <div class="po-tabs">
+    <button type="button" class="po-tab active" id="pspListTabPending" onclick="setPspListTab('pending')">Pending by date</button>
+    <button type="button" class="po-tab" id="pspListTabOpen" onclick="setPspListTab('open')">Open drafts</button>
+    <button type="button" class="po-tab" id="pspListTabPosted" onclick="setPspListTab('posted')">Posted settlements</button>
+  </div>
+
+  <div class="nexa-list-toolbar">
+    <button type="button" class="page-po__btn-secondary" id="pspListBtnReload" onclick="loadPspSettlementList()" style="padding:6px 12px; font-size:12px;">
+      <i class="bi bi-arrow-clockwise"></i> Refresh
+    </button>
+    <span id="pspListCount" class="nexa-num" style="margin-left:8px;"></span>
+  </div>
+
+  <div class="co-table-wrap" id="pspListWrapPending">
+    <table class="co-table" id="pspListTablePending" aria-label="Pending POS settlement by date">
+      <thead>
+        <tr>
+          <th class="sl-no" style="width:56px;">Sl.No</th>
+          <th>Bill date</th>
+          <th class="num">Bills</th>
+          <th class="num">Net amount</th>
+          <th style="text-align:center;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="pspListBodyPending"></tbody>
+    </table>
+  </div>
+
+  <div class="co-table-wrap" id="pspListWrapOpen" style="display:none;">
+    <table class="co-table" id="pspListTableOpen" aria-label="Open settlement drafts">
+      <thead>
+        <tr>
+          <th class="sl-no" style="width:56px;">Sl.No</th>
+          <th class="sl-no">Draft ID</th>
+          <th>Status</th>
+          <th class="num">Bills</th>
+          <th>Verified</th>
+          <th>Created</th>
+          <th style="text-align:center;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="pspListBodyOpen"></tbody>
+    </table>
+  </div>
+
+  <div class="co-table-wrap" id="pspListWrapPosted" style="display:none;">
+    <table class="co-table" id="pspListTablePosted" aria-label="Posted settlement batches">
+      <thead>
+        <tr>
+          <th class="sl-no" style="width:56px;">Sl.No</th>
+          <th class="sl-no">Batch ID</th>
+          <th class="num">Bills</th>
+          <th>GL voucher</th>
+          <th>Posting date</th>
+          <th>Created</th>
+          <th style="text-align:center;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="pspListBodyPosted"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function () {
+  var apiDraftsUrl = {{ api_settlement_drafts_url|tojson }};
+  var apiPendingByDateUrl = {{ api_settlement_pending_by_date_url|tojson }};
+  var apiMutationUrl = {{ api_settlement_draft_mutation_url|tojson }};
+  var workflowUrl = {{ workflow_url|tojson }};
+  var settlementPdfUrl = {{ settlement_pdf_url|tojson }};
+  window.__pspListTab = 'pending';
+
+  function withBranch(url) {
+    var br = (document.getElementById('pspListBranch') && document.getElementById('pspListBranch').value || '').trim();
+    if (!br) return url;
+    return url + (url.indexOf('?') >= 0 ? '&' : '?') + 'location_code=' + encodeURIComponent(br);
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function money(n) {
+    var x = Number(n);
+    if (!isFinite(x)) x = 0;
+    return x.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function setPspListTab(which) {
+    window.__pspListTab = which;
+    var pendingBtn = document.getElementById('pspListTabPending');
+    var openBtn = document.getElementById('pspListTabOpen');
+    var postedBtn = document.getElementById('pspListTabPosted');
+    var wrapPend = document.getElementById('pspListWrapPending');
+    var wrapO = document.getElementById('pspListWrapOpen');
+    var wrapP = document.getElementById('pspListWrapPosted');
+    if (!pendingBtn || !openBtn || !postedBtn || !wrapPend || !wrapO || !wrapP) return;
+    pendingBtn.classList.toggle('active', which === 'pending');
+    openBtn.classList.toggle('active', which === 'open');
+    postedBtn.classList.toggle('active', which === 'posted');
+    wrapPend.style.display = which === 'pending' ? '' : 'none';
+    wrapO.style.display = which === 'open' ? '' : 'none';
+    wrapP.style.display = which === 'posted' ? '' : 'none';
+    updateListCount();
+  }
+  window.setPspListTab = setPspListTab;
+
+  function updateListCount() {
+    var el = document.getElementById('pspListCount');
+    if (!el) return;
+    var bp = document.getElementById('pspListBodyPending');
+    var bo = document.getElementById('pspListBodyOpen');
+    var bpo = document.getElementById('pspListBodyPosted');
+    var nPend = bp ? bp.querySelectorAll('tr[data-bill-date]').length : 0;
+    var no = bo ? bo.querySelectorAll('tr[data-draft-id]').length : 0;
+    var np = bpo ? bpo.querySelectorAll('tr[data-draft-id]').length : 0;
+    if (window.__pspListTab === 'pending') {
+      el.textContent = nPend ? (nPend + ' pending day' + (nPend === 1 ? '' : 's')) : 'No pending days';
+    } else if (window.__pspListTab === 'open') {
+      el.textContent = no ? (no + ' open') : 'No open drafts';
+    } else {
+      el.textContent = np ? (np + ' posted') : 'No posted batches';
+    }
+  }
+
+  function openWorkflow(draftId) {
+    var u = workflowUrl;
+    if (draftId != null && draftId !== '') {
+      u += (u.indexOf('?') >= 0 ? '&' : '?') + 'draft=' + encodeURIComponent(String(draftId));
+    }
+    window.location.href = u;
+  }
+  window.openPspSettlementWorkflow = openWorkflow;
+
+  function openWorkflowForDate(billDate) {
+    var d = String(billDate || '').trim();
+    if (!d) return;
+    var u = workflowUrl;
+    u += (u.indexOf('?') >= 0 ? '&' : '?') + 'from=' + encodeURIComponent(d) + '&to=' + encodeURIComponent(d);
+    window.location.href = u;
+  }
+
+  function settlementPdfHref(draftId) {
+    var u = settlementPdfUrl + '?draft_id=' + encodeURIComponent(String(draftId || ''));
+    return withBranch(u);
+  }
+
+  function cancelPspDraft(draftId) {
+    if (draftId == null || draftId === '') return;
+    if (!window.confirm('Cancel open settlement #' + draftId + '?\nThe bills stay pending and can be settled again.')) return;
+    fetch(withBranch(apiMutationUrl), {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'cancel', draft_id: draftId })
+    })
+      .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, d: d }; }); })
+      .then(function (r) {
+        if (!r.ok || !r.d || !r.d.success) {
+          alert((r.d && r.d.error) || 'Could not cancel settlement.');
+          return;
+        }
+        loadPspSettlementList();
+      })
+      .catch(function (e) { alert(e.message || 'Network error'); });
+  }
+  window.cancelPspSettlementDraft = cancelPspDraft;
+
+  function errRow(colspan, msg) {
+    return '<tr><td colspan="' + colspan + '" style="text-align:center;padding:14px;color:#b91c1c;">' + escapeHtml(msg) + '</td></tr>';
+  }
+
+  function loadPendingByDate() {
+    var tb = document.getElementById('pspListBodyPending');
+    if (!tb) return;
+    tb.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:14px;color:#64748b;">Loading…</td></tr>';
+    var url = withBranch(apiPendingByDateUrl);
+    url += (url.indexOf('?') >= 0 ? '&' : '?') + 'limit=90';
+    fetch(url, { credentials: 'same-origin' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        tb.innerHTML = '';
+        if (!data.success) {
+          tb.innerHTML = errRow(5, data.error || 'Could not load pending days');
+          updateListCount();
+          return;
+        }
+        var days = data.days || [];
+        if (!days.length) {
+          tb.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:14px;color:#64748b;">No pending POS bills for this branch.</td></tr>';
+          updateListCount();
+          return;
+        }
+        days.forEach(function (d, idx) {
+          var tr = document.createElement('tr');
+          var bd = String(d.bill_date || '');
+          tr.dataset.billDate = bd;
+          tr.innerHTML =
+            '<td class="sl-no">' + (idx + 1) + '</td>' +
+            '<td>' + escapeHtml(bd) + '</td>' +
+            '<td class="num">' + escapeHtml(String(d.bill_count || 0)) + '</td>' +
+            '<td class="num">' + escapeHtml(money(d.net_amount)) + '</td>' +
+            '<td style="text-align:center;white-space:nowrap;">' +
+              '<a class="btn-view" href="#" data-settle-date="' + escapeHtml(bd) + '">Settle</a>' +
+            '</td>';
+          var a = tr.querySelector('a[data-settle-date]');
+          if (a) {
+            a.addEventListener('click', function (ev) {
+              ev.preventDefault();
+              openWorkflowForDate(bd);
+            });
+          }
+          tb.appendChild(tr);
+        });
+        updateListCount();
+      })
+      .catch(function (e) {
+        tb.innerHTML = errRow(5, e.message || 'Network error');
+        updateListCount();
+      });
+  }
+
+  function loadPspSettlementDraftList() {
+    var tbOpen = document.getElementById('pspListBodyOpen');
+    var tbPosted = document.getElementById('pspListBodyPosted');
+    if (!tbOpen || !tbPosted) return;
+
+    tbOpen.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:14px;color:#64748b;">Loading…</td></tr>';
+    tbPosted.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:14px;color:#64748b;">Loading…</td></tr>';
+
+    var draftUrl = withBranch(apiDraftsUrl);
+    draftUrl += (draftUrl.indexOf('?') >= 0 ? '&' : '?') + 'limit=80';
+
+    fetch(draftUrl, { credentials: 'same-origin' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        tbOpen.innerHTML = '';
+        tbPosted.innerHTML = '';
+        if (!data.success) {
+          tbOpen.innerHTML = errRow(7, data.error || 'Could not load drafts');
+          tbPosted.innerHTML = errRow(7, data.error || 'Could not load drafts');
+          updateListCount();
+          return;
+        }
+        var list = data.drafts || [];
+        var openList = list.filter(function (d) {
+          var s = String(d.status || '').trim().toUpperCase();
+          return s === 'DRAFT' || s === 'VERIFIED';
+        });
+        var postedList = list.filter(function (d) {
+          return String(d.status || '').trim().toUpperCase() === 'POSTED';
+        });
+        postedList.sort(function (a, b) {
+          var da = String(a.voucher_date || a.posted_at || '');
+          var db = String(b.voucher_date || b.posted_at || '');
+          if (da !== db) return db.localeCompare(da);
+          return String(b.posted_at || '').localeCompare(String(a.posted_at || ''));
+        });
+
+        if (!openList.length) {
+          tbOpen.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:14px;color:#64748b;">No open drafts. Use <strong>New settlement</strong> or <strong>Settle</strong> from Pending by date.</td></tr>';
+        } else {
+          openList.forEach(function (d, idx) {
+            var tr = document.createElement('tr');
+            tr.dataset.draftId = String(d.draft_id);
+            var st = String(d.status || '');
+            var chip = '<span class="nexa-badge nexa-badge--pending">' + escapeHtml(st) + '</span>';
+            if (st === 'VERIFIED') {
+              chip = '<span class="nexa-badge nexa-badge--posted">' + escapeHtml(st) + '</span>';
+            }
+            tr.innerHTML =
+              '<td class="sl-no">' + (idx + 1) + '</td>' +
+              '<td class="sl-no">' + escapeHtml(String(d.draft_id)) + '</td>' +
+              '<td>' + chip + '</td>' +
+              '<td class="num">' + escapeHtml(String(d.bill_count || 0)) + '</td>' +
+              '<td>' + escapeHtml(String(d.verified_at || '—')) + '</td>' +
+              '<td>' + escapeHtml(String(d.created_at || '')) + '</td>' +
+              '<td style="text-align:center;white-space:nowrap;">' +
+                '<a class="btn-view" href="#" data-draft="' + escapeHtml(String(d.draft_id)) + '">Open</a> ' +
+                '<a class="btn-view" href="#" data-cancel="' + escapeHtml(String(d.draft_id)) + '" style="color:#b91c1c;">Cancel</a>' +
+              '</td>';
+            var a = tr.querySelector('a[data-draft]');
+            if (a) {
+              a.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                openWorkflow(d.draft_id);
+              });
+            }
+            var cancelA = tr.querySelector('a[data-cancel]');
+            if (cancelA) {
+              cancelA.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                cancelPspDraft(d.draft_id);
+              });
+            }
+            tbOpen.appendChild(tr);
+          });
+        }
+
+        if (!postedList.length) {
+          tbPosted.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:14px;color:#64748b;">No posted settlement batches for this branch yet.</td></tr>';
+        } else {
+          postedList.forEach(function (d, idx) {
+            var tr = document.createElement('tr');
+            tr.dataset.draftId = String(d.draft_id);
+            var postDate = String(d.voucher_date || '').trim() || '—';
+            var postedAt = String(d.posted_at || '').trim();
+            var postCell = escapeHtml(postDate);
+            if (postedAt && postDate !== '—') {
+              postCell +=
+                '<div style="font-size:0.85em;color:#64748b;margin-top:2px;" title="Saved at">' +
+                escapeHtml(postedAt) +
+                '</div>';
+            } else if (postDate === '—' && postedAt) {
+              postCell = escapeHtml(postedAt);
+            }
+            tr.innerHTML =
+              '<td class="sl-no">' + (idx + 1) + '</td>' +
+              '<td class="sl-no">' + escapeHtml(String(d.draft_id)) + '</td>' +
+              '<td class="num">' + escapeHtml(String(d.bill_count || 0)) + '</td>' +
+              '<td>' + escapeHtml(String(d.voucher_no || '—')) + '</td>' +
+              '<td>' + postCell + '</td>' +
+              '<td>' + escapeHtml(String(d.created_at || '')) + '</td>' +
+              '<td style="text-align:center;"><a class="btn-view" href="#" data-draft="' + escapeHtml(String(d.draft_id)) + '">Open</a> <a class="btn-view" href="' + escapeHtml(settlementPdfHref(d.draft_id)) + '" target="_blank" rel="noopener">PDF</a></td>';
+            var a = tr.querySelector('a.btn-view');
+            if (a) {
+              a.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                openWorkflow(d.draft_id);
+              });
+            }
+            tbPosted.appendChild(tr);
+          });
+        }
+        updateListCount();
+      })
+      .catch(function (e) {
+        tbOpen.innerHTML = errRow(7, e.message || 'Network error');
+        tbPosted.innerHTML = errRow(7, e.message || 'Network error');
+        updateListCount();
+      });
+  }
+  window.loadPspSettlementDraftList = loadPspSettlementDraftList;
+
+  function loadPspSettlementList() {
+    loadPendingByDate();
+    loadPspSettlementDraftList();
+  }
+  window.loadPspSettlementList = loadPspSettlementList;
+
+  document.addEventListener('DOMContentLoaded', function () {
+    var params = new URLSearchParams(window.location.search);
+    var autoPdfDraft = params.get('open_pos_settlement_pdf');
+    var tab = (params.get('tab') || '').trim().toLowerCase();
+    if (tab === 'open' || tab === 'posted' || tab === 'pending') {
+      setPspListTab(tab);
+    }
+    if (autoPdfDraft) {
+      setPspListTab('posted');
+      window.open(settlementPdfHref(autoPdfDraft), '_blank', 'noopener');
+      params.delete('open_pos_settlement_pdf');
+      var next = params.toString();
+      var clean = window.location.pathname + (next ? '?' + next : '');
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState({}, '', clean);
+      }
+    }
+    loadPspSettlementList();
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% from 'includes/global_lookup_field.html' import global_lookup_field %}
+{% block title %}{{ 'Edit' if edit_mode else 'New' }} Fixed Asset{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/fixed_assets_pages.css') }}?v=3" />
+
+<div class="fa-form-page">
+  {% include 'fixed_assets/_fa_nav.html' %}
+
+  <div class="fa-topbar">
+    <div class="fa-topbar-main">
+      <h1>Fixed Assets / <span class="fa-ref">{% if row.asset_no %}{{ row.asset_no }}{% else %}New asset{% endif %}</span>
+        {% if posted %}<span class="fa-status-badge fa-status-badge--posted" style="margin-left:8px;">Posted</span>
+        {% elif edit_mode %}<span class="fa-status-badge fa-status-badge--draft" style="margin-left:8px;">Draft</span>
+        {% else %}<span class="fa-status-badge fa-status-badge--active" style="margin-left:8px;">New</span>{% endif %}
+      </h1>
+      <div class="fa-actions">
+        <button type="submit" form="faAssetForm" class="fa-btn-save">{% if edit_mode %}Update{% else %}Save{% endif %}</button>
+        <a href="{{ url_for('fixed_assets.fa_asset_list') }}" class="fa-btn-secondary">List</a>
+        <a href="{{ url_for('fixed_assets.fa_asset_form') }}" class="fa-btn-secondary">New</a>
+      </div>
+    </div>
+  </div>
+
+  <form id="faAssetForm" method="post" action="{{ url_for('fixed_assets.fa_asset_form') }}" class="fa-form-shell">
+    {% if row.asset_id %}<input type="hidden" name="asset_id" value="{{ row.asset_id }}" />{% endif %}
+    <input type="hidden" id="faCreditPartyType" name="credit_party_type" value="{{ row.credit_party_type or '' }}" />
+    <input type="hidden" id="faCreditPartyCode" name="credit_party_code" value="{{ row.credit_party_code or '' }}" />
+
+    <section class="form-section">
+      <h2 class="form-section-title">Asset details</h2>
+      {% if row.asset_no %}
+      <div class="form-group">
+        <label>Asset number</label>
+        <input class="input input-readonly" readonly value="{{ row.asset_no }}" />
+      </div>
+      {% endif %}
+      <div class="form-group">
+        <label for="name">Description</label>
+        <input id="name" name="name" class="input" required maxlength="200" value="{{ row.name or '' }}" />
+      </div>
+      <div class="form-group">
+        <label for="category_id">Category</label>
+        <select id="category_id" name="category_id" class="input{% if posted %} input-readonly{% endif %}" required {% if posted %}disabled{% endif %}>
+          <option value="">— Select —</option>
+          {% for c in categories %}
+          <option value="{{ c.category_id }}" {% if (row.category_id|string) == (c.category_id|string) %}selected{% endif %}>{{ c.code }} — {{ c.name }}</option>
+          {% endfor %}
+        </select>
+        {% if posted %}<input type="hidden" name="category_id" value="{{ row.category_id }}" />{% endif %}
+      </div>
+      <div class="form-group">
+        <label for="serial_no">Serial / tag no</label>
+        <input id="serial_no" name="serial_no" class="input" maxlength="100" value="{{ row.serial_no or '' }}" />
+      </div>
+      <div class="form-group">
+        <label for="custodian">Custodian</label>
+        <input id="custodian" name="custodian" class="input" maxlength="100" value="{{ row.custodian or '' }}" />
+      </div>
+      <div class="form-group">
+        <label for="location_code">Location</label>
+        <select id="location_code" name="location_code" class="input">
+          <option value="">— None —</option>
+          {% for loc in locations %}
+          <option value="{{ loc.code }}" {% if (row.location_code|string) == (loc.code|string) %}selected{% endif %}>{{ loc.code }} — {{ loc.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group form-group--full">
+        <label for="remarks">Remarks</label>
+        <textarea id="remarks" name="remarks" class="input" rows="2" maxlength="500">{{ row.remarks or '' }}</textarea>
+      </div>
+    </section>
+
+    <section class="form-section">
+      <h2 class="form-section-title">Acquisition</h2>
+      <div class="form-group">
+        <label for="acquisition_date">Acquisition date</label>
+        <input id="acquisition_date" name="acquisition_date" type="date" class="input" required value="{{ row.acquisition_date or '' }}" />
+      </div>
+      <div class="form-group">
+        <label for="acquisition_cost">Acquisition cost</label>
+        <input id="acquisition_cost" name="acquisition_cost" type="number" step="0.01" min="0.01" class="input{% if posted %} input-readonly{% endif %}" required value="{{ row.acquisition_cost or '' }}" {% if posted %}readonly{% endif %} />
+      </div>
+      <div class="form-group">
+        <label for="salvage_value">Salvage value</label>
+        <input id="salvage_value" name="salvage_value" type="number" step="0.01" min="0" class="input" value="{{ row.salvage_value or '0' }}" />
+      </div>
+      <div class="form-group fa-credit-lookup-row">
+        <label for="faCreditLookupDisplay">Credit account</label>
+        <div class="fa-credit-lookup-wrap">
+          {{ global_lookup_field(
+            field_id='faCreditLookup',
+            label='',
+            name='credit_account',
+            kind='gl_account',
+            value_code=row.credit_account or '',
+            value_label=credit_lookup_label or '',
+            placeholder='Search GL account, supplier, or customer…',
+            no_default=true,
+            inline=true,
+            field_class='fa-credit-lookup-field',
+            input_class='global-lookup__input odoo-lookup__input input',
+            readonly=posted,
+            disabled=posted,
+            dropdown_min_width='420',
+          ) }}
+        </div>
+      </div>
+      <p class="field-hint">Type to search — pick a <strong>GL account</strong> (cash/bank) or a <strong>supplier</strong> (SUP: …) for AP. On post: Dr asset / Cr selected account (with supplier party when applicable).</p>
+      {% if edit_mode and row.nbv is defined %}
+      <div class="form-group">
+        <label>Net book value</label>
+        <input class="input input-readonly" readonly value="{{ '%.2f'|format(row.nbv|float) }}" />
+      </div>
+      {% endif %}
+    </section>
+
+    <section class="form-section">
+      <h2 class="form-section-title">GL posting</h2>
+      {% if posted %}
+      <div class="fa-post-panel">
+        <strong>Acquisition posted</strong>
+        {% if row.gl_acq_voucher %} — voucher <code>{{ row.gl_acq_voucher }}</code>{% endif %}
+      </div>
+      {% else %}
+      <div class="fa-post-panel">
+        <p style="margin:0 0 10px; font-size:13px; color:#495057;">Save the asset first, then post acquisition to GL.</p>
+        <label class="checkbox-inline" style="margin-bottom:0;">
+          <input type="checkbox" name="post_acq" value="1" /> Post acquisition to GL on save
+        </label>
+      </div>
+      {% endif %}
+    </section>
+  </form>
+
+  {% if edit_mode and not posted and row.asset_id %}
+  <form method="post" action="{{ url_for('fixed_assets.fa_asset_post_acquisition') }}" class="fa-form-shell" style="padding-top:0;">
+    <input type="hidden" name="asset_id" value="{{ row.asset_id }}" />
+    <button type="submit" class="fa-btn-secondary" onclick="return confirm('Post acquisition to GL?');">Post acquisition</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var lookup = document.querySelector('#faCreditLookupDisplay') && document.querySelector('#faCreditLookupDisplay').closest('.global-lookup, .odoo-lookup');
+  var partyType = document.getElementById('faCreditPartyType');
+  var partyCode = document.getElementById('faCreditPartyCode');
+  if (!lookup || !partyType || !partyCode) return;
+
+  lookup.addEventListener('global-lookup:select', function (e) {
+    var row = (e.detail && e.detail.row) || {};
+    partyType.value = row.party_type || '';
+    partyCode.value = row.party_code || '';
+  });
+
+  lookup.addEventListener('change', function () {
+    var hidden = lookup.querySelector('.global-lookup__value, .odoo-lookup__value');
+    if (hidden && !hidden.value) {
+      partyType.value = '';
+      partyCode.value = '';
+    }
+  });
+})();
+</script>
+{% endblock %}

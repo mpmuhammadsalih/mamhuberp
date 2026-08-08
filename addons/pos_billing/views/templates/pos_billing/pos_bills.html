@@ -1,0 +1,486 @@
+{% extends "base.html" %}
+{% block title %}POS Transactions{% endblock %}
+{% macro fmt_date(d) -%}
+{%- if not d -%}—{%- elif d is string -%}{{ d[:10] }}{%- elif d.strftime is defined -%}{{ d.strftime('%Y-%m-%d') }}{%- else -%}{{ (d|string)[:10] }}{%- endif -%}
+{%- endmacro %}
+{% block content %}
+<style>
+  .pb-modal { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; }
+  .pb-modal.show { display: flex; }
+  .pb-modal__overlay { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.45); }
+  .pb-modal__card {
+    position: relative; background: #fff; border-radius: 12px; width: min(1080px, 96vw); max-height: 92vh;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.28); padding: 16px 18px; display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .pb-modal__head { flex-shrink: 0; margin-bottom: 12px; }
+  .pb-modal__title { margin: 0 0 6px; font-size: 17px; color: #0f172a; }
+  .pb-modal__meta { margin: 0 0 10px; font-size: 12px; color: #64748b; line-height: 1.5; }
+  .pb-modal__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pb-modal__body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 14px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .pb-modal__col {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+  }
+  .pb-modal__col-title {
+    margin: 0 0 8px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+  }
+  .pb-lines-wrap {
+    overflow: auto;
+    flex: 1;
+    min-height: 280px;
+    max-height: min(58vh, 520px);
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+  }
+  .pb-lines-wrap table { font-size: 12px; width: 100%; }
+  .pb-lines-wrap .num { text-align: right; }
+  .pb-modal__preview {
+    overflow: auto;
+    flex: 1;
+    min-height: 280px;
+    max-height: min(58vh, 520px);
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #f9fafb;
+  }
+  .pb-modal__pre {
+    margin: 0;
+    padding: 12px 14px;
+    font-size: 11px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    font-family: ui-monospace, Consolas, monospace;
+    color: #111827;
+    min-height: 100%;
+    box-sizing: border-box;
+  }
+  @media (max-width: 768px) {
+    .pb-modal__body { grid-template-columns: 1fr; }
+    .pb-lines-wrap, .pb-modal__preview { max-height: 240px; min-height: 180px; }
+  }
+  tr.pb-row-selectable { cursor: pointer; }
+  tr.pb-row-selectable:hover { filter: brightness(0.97); }
+  tr.pb-row-selected { outline: 2px solid #1a56a4; outline-offset: -2px; }
+</style>
+
+<div class="page-po nexa-list-page pos-bills-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">POS Transactions</h1>
+      <p class="page-po__muted">POS counter bills (posted), held carts, and canceled drafts for location <strong>{{ location_code }}</strong>, <strong>{{ date_from }}</strong> to <strong>{{ date_to }}</strong>. Click a row for line details and receipt copy.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% include 'includes/list_refresh_bar.html' %}
+      <a class="page-po__btn-secondary" href="{{ url_for('pos_billing.pos_billing_page') }}">POS Billing</a>
+    </div>
+  </div>
+
+  <form method="get" action="{{ url_for('pos_billing.pos_bills_page') }}" class="nexa-list-toolbar" style="display:flex; flex-wrap:wrap; align-items:center; gap:10px;">
+    <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; color:#475569;">
+      From
+      <input type="date" name="from" class="input" value="{{ date_from }}" required style="width:auto;" />
+    </label>
+    <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; color:#475569;">
+      To
+      <input type="date" name="to" class="input" value="{{ date_to }}" required style="width:auto;" />
+    </label>
+    <button type="submit" class="page-po__btn-primary" style="padding:6px 14px;">Apply</button>
+    <input type="text" id="pbFilter" class="input" placeholder="Filter bill no, customer, counter…"
+           style="min-width:220px; max-width:360px; margin-left:auto;" autocomplete="off" />
+  </form>
+
+  <div class="po-tabs">
+    <button type="button" class="po-tab active" data-tab="pbTabPosted">Bills ({{ posted_rows|length }})</button>
+    <button type="button" class="po-tab" data-tab="pbTabHeld">Held ({{ held_rows|length }})</button>
+    <button type="button" class="po-tab" data-tab="pbTabCanceled">Canceled ({{ canceled_rows|length }})</button>
+  </div>
+
+  <div id="pbTabPosted" class="tab-pane active">
+    <div class="co-table-wrap">
+      <table class="co-table" id="pbTablePosted">
+        <thead>
+          <tr>
+            <th>Bill no</th>
+            <th>Date</th>
+            <th>Time</th>
+            <th>Customer</th>
+            <th style="text-align:right;">Net</th>
+            <th>Counter</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in posted_rows %}
+          <tr class="pb-row-selectable" tabindex="0" role="button"
+              data-tab="posted" data-billno="{{ r.billno }}" data-location-code="{{ r.locationcode or location_code }}"
+              data-search="{{ (r.billno|string ~ ' ' ~ (r.customername or '') ~ ' ' ~ (r.customercode or '') ~ ' ' ~ (r.countercode or ''))|lower }}">
+            <td>{{ r.billno }}</td>
+            <td>{{ fmt_date(r.billdate) }}</td>
+            <td>{{ (r.billtime|string)[:12] if r.billtime else '—' }}</td>
+            <td>{{ r.customername or r.customercode or '—' }}</td>
+            <td class="num">{{ '{:,.2f}'.format((r.netbillamount or 0)|float) }}</td>
+            <td>{{ r.countercode or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" style="text-align:center; padding:18px; color:#6b7280;">No posted bills for this location.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="pbTabHeld" class="tab-pane">
+    <div class="co-table-wrap">
+      <table class="co-table" id="pbTableHeld">
+        <thead>
+          <tr>
+            <th>Bill no</th>
+            <th>Date</th>
+            <th>Time</th>
+            <th>Customer</th>
+            <th style="text-align:right;">Net</th>
+            <th>Counter</th>
+            <th>Created by</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in held_rows %}
+          <tr class="pb-row-selectable" tabindex="0" role="button"
+              data-tab="held" data-billno="{{ r.billno }}" data-location-code="{{ r.locationcode or location_code }}"
+              data-search="{{ (r.billno|string ~ ' ' ~ (r.customercode or '') ~ ' ' ~ (r.countercode or '') ~ ' ' ~ (r.createdby or ''))|lower }}">
+            <td>{{ r.billno }}</td>
+            <td>{{ fmt_date(r.billdate) }}</td>
+            <td>{{ (r.billtime|string)[:12] if r.billtime else '—' }}</td>
+            <td>{{ r.customercode or '—' }}</td>
+            <td class="num">{{ '{:,.2f}'.format((r.netbillamount or 0)|float) }}</td>
+            <td>{{ r.countercode or '—' }}</td>
+            <td>{{ r.createdby or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" style="text-align:center; padding:18px; color:#6b7280;">No held bills.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="pbTabCanceled" class="tab-pane">
+    <div class="co-table-wrap">
+      <table class="co-table" id="pbTableCanceled">
+        <thead>
+          <tr>
+            <th>Bill no</th>
+            <th>Type</th>
+            <th>Date</th>
+            <th>Time</th>
+            <th>Customer</th>
+            <th style="text-align:right;">Net</th>
+            <th>Counter</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in canceled_rows %}
+          <tr class="pb-row-selectable" tabindex="0" role="button"
+              data-tab="canceled" data-billno="{{ r.billno }}" data-location-code="{{ r.locationcode or location_code }}"
+              data-search="{{ (r.billno|string ~ ' ' ~ (r.billtype or '') ~ ' ' ~ (r.customercode or '') ~ ' ' ~ (r.countercode or ''))|lower }}">
+            <td>{{ r.billno }}</td>
+            <td>{{ r.billtype or '—' }}</td>
+            <td>{{ fmt_date(r.billdate) }}</td>
+            <td>{{ (r.billtime|string)[:12] if r.billtime else '—' }}</td>
+            <td>{{ r.customercode or '—' }}</td>
+            <td class="num">{{ '{:,.2f}'.format((r.netbillamount or 0)|float) }}</td>
+            <td>{{ r.countercode or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" style="text-align:center; padding:18px; color:#6b7280;">No canceled drafts (table <code>TBLCANCELEDHDR</code> missing or empty).</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="pb-modal" id="pbDetailModal" aria-hidden="true">
+  <div class="pb-modal__overlay" id="pbDetailOverlay"></div>
+  <div class="pb-modal__card">
+    <div class="pb-modal__head">
+      <h3 class="pb-modal__title" id="pbDetailTitle">Bill detail</h3>
+      <p class="pb-modal__meta" id="pbDetailMeta"></p>
+      <div class="pb-modal__actions">
+        <button type="button" class="page-po__btn-primary" id="pbBtnPrint">Print copy</button>
+        <button type="button" class="page-po__btn-secondary" id="pbBtnClose">Close</button>
+      </div>
+    </div>
+    <div class="pb-modal__body">
+      <section class="pb-modal__col pb-modal__col--items" aria-label="Item details">
+        <h4 class="pb-modal__col-title">Item details</h4>
+        <div class="pb-lines-wrap">
+          <table class="co-table" style="margin:0;">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Item</th>
+                <th>UOM</th>
+                <th class="num">Qty</th>
+                <th class="num">Rate</th>
+                <th class="num">Amount</th>
+              </tr>
+            </thead>
+            <tbody id="pbDetailLines"></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="pb-modal__col pb-modal__col--preview" aria-label="Print preview">
+        <h4 class="pb-modal__col-title">Print preview</h4>
+        <div class="pb-modal__preview">
+          <pre class="pb-modal__pre" id="pbDetailReceipt"></pre>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.__SALES_QZ_SCRIPT_URL__ = 'https://cdn.jsdelivr.net/npm/qz-tray/qz-tray.js';
+  window.__POS_QZ_URLS__ = {
+    certificate: {{ url_for('reports.qz_certificate')|tojson }},
+    sign: {{ url_for('reports.qz_sign')|tojson }}
+  };
+</script>
+<script src="{{ url_for('static', filename='js/qz_printer_prefs.js') }}?v={{ pos_asset_version|default('1') }}"></script>
+<script src="{{ url_for('static', filename='js/qz_invoice_print.js') }}?v={{ pos_asset_version|default('1') }}"></script>
+<script>
+(function () {
+  if (typeof window.hideLoadingOverlay === 'function') {
+    window.hideLoadingOverlay();
+  }
+  var DETAIL_URL = {{ detail_url|tojson }};
+  var PRINT_URL = {{ print_url|tojson }};
+  var QZ_URLS = window.__POS_QZ_URLS__ || {};
+  var modal = document.getElementById('pbDetailModal');
+  var overlay = document.getElementById('pbDetailOverlay');
+  var btnClose = document.getElementById('pbBtnClose');
+  var btnPrint = document.getElementById('pbBtnPrint');
+  var metaEl = document.getElementById('pbDetailMeta');
+  var linesBody = document.getElementById('pbDetailLines');
+  var receiptPre = document.getElementById('pbDetailReceipt');
+  var filterInp = document.getElementById('pbFilter');
+  var lastReceipt = null;
+  var lastReceiptText = '';
+  var receiptReady = false;
+
+  function setPrintReady(ready) {
+    receiptReady = !!ready;
+    if (!btnPrint) return;
+    btnPrint.disabled = !receiptReady;
+    btnPrint.title = receiptReady ? '' : 'Wait until receipt preview has loaded';
+  }
+  setPrintReady(false);
+
+  function esc(s) {
+    var d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+
+  document.querySelectorAll('.po-tab').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.po-tab').forEach(function (b) { b.classList.remove('active'); });
+      document.querySelectorAll('.tab-pane').forEach(function (p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+      var pane = document.getElementById(btn.dataset.tab);
+      if (pane) pane.classList.add('active');
+      applyFilter();
+    });
+  });
+
+  function visiblePaneTableBody() {
+    var pane = document.querySelector('.tab-pane.active');
+    if (!pane) return null;
+    var tb = pane.querySelector('tbody');
+    return tb;
+  }
+
+  function applyFilter() {
+    var q = (filterInp && filterInp.value || '').trim().toLowerCase();
+    var tb = visiblePaneTableBody();
+    if (!tb) return;
+    tb.querySelectorAll('tr.pb-row-selectable').forEach(function (tr) {
+      var hay = (tr.getAttribute('data-search') || '').toLowerCase();
+      tr.style.display = (!q || hay.indexOf(q) !== -1) ? '' : 'none';
+    });
+  }
+  if (filterInp) filterInp.addEventListener('input', applyFilter);
+
+  function clearRowHighlight() {
+    document.querySelectorAll('tr.pb-row-selected').forEach(function (tr) { tr.classList.remove('pb-row-selected'); });
+  }
+
+  function openModal() {
+    modal.classList.add('show');
+    modal.setAttribute('aria-hidden', 'false');
+  }
+  function closeModal() {
+    modal.classList.remove('show');
+    modal.setAttribute('aria-hidden', 'true');
+    clearRowHighlight();
+  }
+
+  overlay.addEventListener('click', closeModal);
+  btnClose.addEventListener('click', closeModal);
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && modal.classList.contains('show')) closeModal();
+  });
+
+  function renderLines(lines) {
+    linesBody.innerHTML = '';
+    (lines || []).forEach(function (ln) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + esc(ln.slno) + '</td>' +
+        '<td>' + esc(ln.item || ln.itemcode || '') + '</td>' +
+        '<td>' + esc(ln.uom || '') + '</td>' +
+        '<td class="num">' + esc(ln.qty) + '</td>' +
+        '<td class="num">' + esc(ln.rate) + '</td>' +
+        '<td class="num">' + esc(ln.amount) + '</td>';
+      linesBody.appendChild(tr);
+    });
+  }
+
+  function selectRow(tr) {
+    clearRowHighlight();
+    tr.classList.add('pb-row-selected');
+    var tab = tr.getAttribute('data-tab');
+    var billno = tr.getAttribute('data-billno');
+    var loc = tr.getAttribute('data-location-code') || '';
+    metaEl.textContent = 'Loading…';
+    receiptPre.textContent = 'Loading print preview…';
+    linesBody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:16px;color:#6b7280;">Loading items…</td></tr>';
+    lastReceipt = null;
+    lastReceiptText = '';
+    setPrintReady(false);
+    openModal();
+    var u = DETAIL_URL + '?tab=' + encodeURIComponent(tab) + '&billno=' + encodeURIComponent(billno) + '&location_code=' + encodeURIComponent(loc);
+    fetch(u, { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (data) {
+      if (!data.success) {
+        metaEl.textContent = data.error || 'Could not load bill.';
+        receiptPre.textContent = data.error || 'Could not load receipt preview.';
+        setPrintReady(false);
+        return;
+      }
+      lastReceipt = data.receipt;
+      lastReceiptText = String(data.receipt_text || '').trimEnd();
+      var rc = data.receipt || {};
+      var ft = rc.footer || {};
+      document.getElementById('pbDetailTitle').textContent = 'Bill #' + billno + ' (' + tab + ')';
+      metaEl.textContent = [
+        rc.billdate ? 'Date: ' + rc.billdate : '',
+        rc.billtime ? 'Time: ' + rc.billtime : '',
+        rc.customername ? 'Customer: ' + rc.customername : '',
+        rc.countercode != null ? 'Counter: ' + rc.countercode : '',
+        ft.net_total != null ? 'Net: ' + ft.net_total : ''
+      ].filter(Boolean).join(' · ');
+      renderLines(rc.lines || []);
+      receiptPre.textContent = lastReceiptText || 'No receipt text available.';
+      setPrintReady(!!lastReceiptText);
+    }).catch(function () {
+      metaEl.textContent = 'Network error loading bill.';
+      receiptPre.textContent = 'Network error loading receipt preview.';
+      setPrintReady(false);
+    });
+  }
+
+  document.querySelectorAll('tr.pb-row-selectable').forEach(function (tr) {
+    tr.addEventListener('click', function () { selectRow(tr); });
+    tr.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        selectRow(tr);
+      }
+    });
+  });
+
+  function posPrinterName() {
+    try {
+      if (window.QzPrinterPrefs && typeof window.QzPrinterPrefs.get === 'function') {
+        return String(window.QzPrinterPrefs.get('pos_receipt') || '').trim();
+      }
+    } catch (e) { /* ignore */ }
+    return '';
+  }
+
+  function serverPrintFallback() {
+    return fetch(PRINT_URL, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ receipt: lastReceipt })
+    }).then(function (r) {
+      return r.json().catch(function () {
+        return { success: false, error: 'Server print HTTP ' + r.status };
+      }).then(function (data) {
+        if (!data.success) throw new Error(data.error || 'Server print failed');
+      });
+    });
+  }
+
+  btnPrint.addEventListener('click', function () {
+    if (!receiptReady || !lastReceipt) {
+      alert('Please wait until the receipt preview has finished loading.');
+      return;
+    }
+    var text = String(lastReceiptText || '').trimEnd();
+    if (!text) {
+      alert('No receipt text to print.');
+      return;
+    }
+    var oldLabel = btnPrint.textContent;
+    btnPrint.disabled = true;
+    btnPrint.textContent = 'Printing…';
+
+    var qzErrMsg = '';
+    var qzPrint;
+    if (window.SalesQzPrint && typeof window.SalesQzPrint.printPosReceiptViaQz === 'function') {
+      qzPrint = window.SalesQzPrint.printPosReceiptViaQz(text, lastReceipt, QZ_URLS);
+    } else {
+      qzPrint = Promise.reject(new Error('QZ print helper not loaded. Hard-refresh this page (Ctrl+F5).'));
+    }
+
+    qzPrint.catch(function (qzErr) {
+      qzErrMsg = (qzErr && qzErr.message) ? qzErr.message : String(qzErr || 'QZ print failed');
+      console.warn('[POS Transactions] QZ print failed, trying server printer:', qzErr);
+      return serverPrintFallback();
+    }).then(function () {
+      /* printed */
+    }).catch(function (err) {
+      var serverMsg = (err && err.message) ? err.message : 'Print failed';
+      var printerHint = posPrinterName()
+        ? ('Saved POS printer: ' + posPrinterName())
+        : 'No POS receipt printer saved. Open Sales → Printer Setup, choose POS receipt printer, and Save.';
+      var msg = qzErrMsg
+        ? ('QZ print: ' + qzErrMsg + '\n\nServer fallback: ' + serverMsg + '\n\n' + printerHint + '\n\nAlso check QZ Tray is running on this PC.')
+        : (serverMsg + '\n\n' + printerHint);
+      alert(msg);
+    }).finally(function () {
+      btnPrint.textContent = oldLabel;
+      setPrintReady(true);
+    });
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% from 'includes/global_lookup_field.html' import global_lookup_field %}
+{% set sale_mode = sale_mode|default(false) %}
+{% set list_endpoint = list_endpoint|default('fixed_assets.fa_disposal_list') %}
+{% set form_endpoint = form_endpoint|default('fixed_assets.fa_disposal_form') %}
+{% set post_endpoint = post_endpoint|default('fixed_assets.fa_disposal_post') %}
+{% set doc_label = 'sale' if sale_mode else 'disposal' %}
+{% block title %}{% if sale_mode %}{{ 'Sale' if edit_mode else 'New' }} Fixed Asset Sale{% else %}{{ 'Disposal' if edit_mode else 'New' }} Fixed Asset Disposal{% endif %}{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/fixed_assets_pages.css') }}?v=4" />
+
+<div class="fa-form-page">
+  {% include 'fixed_assets/_fa_nav.html' %}
+
+  <div class="fa-topbar">
+    <div class="fa-topbar-main">
+      <h1>Fixed Assets / <span class="fa-ref">{% if row.disposal_no %}{{ row.disposal_no }}{% else %}New {{ doc_label }}{% endif %}</span>
+        {% if posted %}<span class="fa-status-badge fa-status-badge--posted" style="margin-left:8px;">Posted</span>
+        {% elif edit_mode %}<span class="fa-status-badge fa-status-badge--draft" style="margin-left:8px;">Draft</span>{% endif %}
+      </h1>
+      <div class="fa-actions">
+        {% if not posted %}
+        <button type="submit" form="faDisposalForm" class="fa-btn-save">Save</button>
+        {% endif %}
+        <a href="{{ url_for(list_endpoint) }}" class="fa-btn-secondary">List</a>
+        {% if not edit_mode and not posted %}
+        <a href="{{ url_for(form_endpoint) }}" class="fa-btn-secondary">New</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <form id="faDisposalForm" method="post" action="{{ url_for(form_endpoint) }}" class="fa-form-shell">
+    {% if row.disposal_id %}<input type="hidden" name="disposal_id" value="{{ row.disposal_id }}" />{% endif %}
+    <input type="hidden" id="faProceedsPartyType" name="proceeds_party_type" value="{{ row.proceeds_party_type or '' }}" />
+    <input type="hidden" id="faProceedsPartyCode" name="proceeds_party_code" value="{{ row.proceeds_party_code or '' }}" />
+    {% if sale_mode %}<input type="hidden" name="disposal_type" value="SALE" />{% endif %}
+
+    <section class="form-section">
+      <h2 class="form-section-title">Asset</h2>
+      <div class="form-group">
+        <label for="asset_id">Asset</label>
+        <select id="asset_id" name="asset_id" class="input{% if posted or edit_mode %} input-readonly{% endif %}" required {% if posted or edit_mode %}disabled{% endif %}>
+          <option value="">— Select posted asset —</option>
+          {% for a in eligible_assets %}
+          <option value="{{ a.asset_id }}"
+            {% if (row.asset_id|string) == (a.asset_id|string) or (selected_asset and (selected_asset.asset_id|string) == (a.asset_id|string)) %}selected{% endif %}
+            data-cost="{{ a.acquisition_cost }}"
+            data-accum="{{ a.accum_dep }}"
+            data-nbv="{{ a.nbv }}"
+            data-gain="{{ a.gain_on_disposal_account or '' }}"
+            data-loss="{{ a.loss_on_disposal_account or '' }}">{{ a.asset_no }} — {{ a.name }} (NBV {{ '%.2f'|format(a.nbv|float) }})</option>
+          {% endfor %}
+        </select>
+        {% if posted or edit_mode %}<input type="hidden" name="asset_id" value="{{ row.asset_id }}" />{% endif %}
+      </div>
+      <div class="form-group">
+        <label>Cost / Accum dep / NBV</label>
+        <input id="faDispSnapshot" class="input input-readonly" readonly
+          value="{% if selected_asset %}Cost {{ '%.2f'|format(selected_asset.acquisition_cost|float) }} · Accum {{ '%.2f'|format(selected_asset.accum_dep|float) }} · NBV {{ '%.2f'|format(selected_asset.nbv|float) }}{% elif row.acquisition_cost is defined %}Cost {{ '%.2f'|format(row.acquisition_cost|float) }} · Accum {{ '%.2f'|format(row.accum_dep|float) }} · NBV {{ '%.2f'|format(row.nbv|float) }}{% endif %}" />
+      </div>
+    </section>
+
+    <section class="form-section">
+      <h2 class="form-section-title">{% if sale_mode %}Sale details{% else %}Disposal details{% endif %}</h2>
+      <div class="form-group">
+        <label for="disposal_date">{% if sale_mode %}Sale date{% else %}Disposal date{% endif %}</label>
+        <input id="disposal_date" name="disposal_date" type="date" class="input{% if posted %} input-readonly{% endif %}" required
+          value="{{ row.disposal_date or '' }}" {% if posted %}readonly{% endif %} />
+      </div>
+      {% if not sale_mode %}
+      <div class="form-group">
+        <label for="disposal_type">Type</label>
+        <select id="disposal_type" name="disposal_type" class="input{% if posted %} input-readonly{% endif %}" {% if posted %}disabled{% endif %}>
+          <option value="SALE" {% if (row.disposal_type or 'SALE')|upper == 'SALE' %}selected{% endif %}>Sale</option>
+          <option value="SCRAP" {% if (row.disposal_type or '')|upper == 'SCRAP' %}selected{% endif %}>Scrap / write-off</option>
+        </select>
+        {% if posted %}<input type="hidden" name="disposal_type" value="{{ row.disposal_type }}" />{% endif %}
+      </div>
+      {% endif %}
+      <div class="form-group">
+        <label for="proceeds_amount">{% if sale_mode %}Sale proceeds{% else %}Proceeds{% endif %}</label>
+        <input id="proceeds_amount" name="proceeds_amount" type="number" step="0.01" min="0" class="input{% if posted %} input-readonly{% endif %}"
+          value="{{ row.proceeds_amount if row.proceeds_amount is defined else '0' }}" {% if posted %}readonly{% endif %}{% if sale_mode %} required{% endif %} />
+      </div>
+      <div class="form-group fa-credit-lookup-row">
+        <label for="faProceedsLookupDisplay">{% if sale_mode %}Proceeds account (cash / bank / customer){% else %}Proceeds account{% endif %}</label>
+        <div class="fa-credit-lookup-wrap">
+          {{ global_lookup_field(
+            field_id='faProceedsLookup',
+            label='',
+            name='proceeds_account',
+            kind='gl_account',
+            value_code=row.proceeds_account or '',
+            value_label=proceeds_lookup_label or '',
+            placeholder='Cash, bank, or customer account…',
+            no_default=true,
+            inline=true,
+            field_class='fa-credit-lookup-field',
+            input_class='global-lookup__input odoo-lookup__input input',
+            readonly=posted,
+            disabled=posted,
+            dropdown_min_width='420',
+          ) }}
+        </div>
+      </div>
+      <p class="field-hint">
+        {% if sale_mode %}
+        Sale proceeds and proceeds account are required.
+        {% else %}
+        Required when proceeds &gt; 0. Scrap with zero proceeds needs no proceeds account.
+        {% endif %}
+      </p>
+      <div class="form-group form-group--full">
+        <label for="remarks">Remarks</label>
+        <textarea id="remarks" name="remarks" class="input" rows="2" maxlength="500" {% if posted %}readonly{% endif %}>{{ row.remarks or '' }}</textarea>
+      </div>
+    </section>
+
+    {% if not posted %}
+    <section class="form-section">
+      <h2 class="form-section-title">GL posting</h2>
+      <div class="fa-post-panel">
+        <p style="margin:0 0 10px; font-size:13px; color:#495057;">Set gain/loss accounts on the asset category. Post removes asset cost, clears accumulated depreciation, and records gain or loss.</p>
+        <label class="checkbox-inline" style="margin-bottom:0;">
+          <input type="checkbox" name="post_disposal" value="1" /> Post {{ doc_label }} to GL on save
+        </label>
+      </div>
+    </section>
+    {% else %}
+    <section class="form-section">
+      <h2 class="form-section-title">GL posting</h2>
+      <div class="fa-post-panel">
+        <strong>{% if sale_mode %}Sale{% else %}Disposal{% endif %} posted</strong>
+        {% if row.gl_voucher_no %} — voucher <code>{{ row.gl_voucher_no }}</code>{% endif %}
+        · Gain/loss: {{ '%.2f'|format(row.gain_loss_amount|float) }}
+      </div>
+    </section>
+    {% endif %}
+  </form>
+
+  {% if edit_mode and not posted and row.disposal_id %}
+  <form method="post" action="{{ url_for(post_endpoint) }}" class="fa-form-shell" style="padding-top:0;">
+    <input type="hidden" name="disposal_id" value="{{ row.disposal_id }}" />
+    <button type="submit" class="fa-btn-secondary" onclick="return confirm('Post {{ doc_label }} to GL? Asset will be marked disposed.');">Post {{ doc_label }}</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var assetSel = document.getElementById('asset_id');
+  var snapshot = document.getElementById('faDispSnapshot');
+  var proceeds = document.getElementById('proceeds_amount');
+  var dispType = document.getElementById('disposal_type');
+  var lookup = document.querySelector('#faProceedsLookupDisplay') && document.querySelector('#faProceedsLookupDisplay').closest('.global-lookup, .odoo-lookup');
+  var partyType = document.getElementById('faProceedsPartyType');
+  var partyCode = document.getElementById('faProceedsPartyCode');
+  var formUrl = {{ url_for(form_endpoint)|tojson }};
+
+  function updateSnapshot() {
+    if (!assetSel || !snapshot) return;
+    var opt = assetSel.options[assetSel.selectedIndex];
+    if (!opt || !opt.value) { snapshot.value = ''; return; }
+    snapshot.value = 'Cost ' + (opt.getAttribute('data-cost') || '0') + ' · Accum ' + (opt.getAttribute('data-accum') || '0') + ' · NBV ' + (opt.getAttribute('data-nbv') || '0');
+  }
+
+  function onTypeChange() {
+    if (!dispType || !proceeds) return;
+    if (dispType.value === 'SCRAP' && !proceeds.value) proceeds.value = '0';
+  }
+
+  if (assetSel) {
+    assetSel.addEventListener('change', function () {
+      if (!assetSel.disabled && assetSel.value) {
+        window.location.href = formUrl + (formUrl.indexOf('?') >= 0 ? '&' : '?') + 'asset_id=' + encodeURIComponent(assetSel.value);
+      }
+      updateSnapshot();
+    });
+    updateSnapshot();
+  }
+  if (dispType) dispType.addEventListener('change', onTypeChange);
+
+  if (lookup && partyType && partyCode) {
+    lookup.addEventListener('global-lookup:select', function (e) {
+      var row = (e.detail && e.detail.row) || {};
+      partyType.value = row.party_type || '';
+      partyCode.value = row.party_code || '';
+    });
+    lookup.addEventListener('change', function () {
+      var hidden = lookup.querySelector('.global-lookup__value, .odoo-lookup__value');
+      if (hidden && !hidden.value) {
+        partyType.value = '';
+        partyCode.value = '';
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}

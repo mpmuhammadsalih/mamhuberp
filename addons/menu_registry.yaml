@@ -1,0 +1,35 @@
+# Declarative menu tree (documentation + future codegen).
+# Authoritative runtime menu is still templates/base.html + permissions.MENU_GROUPS.
+#
+# Convention:
+#   module:     top-level app area (maps to one sidebar main button + submenu)
+#   menu_path:  must match permissions.py item menu_path for RBAC
+#   route:      Flask endpoint name (blueprint.view_function)
+#
+# Sidebar icons (required for every sidebar entry):
+#   - In templates/base.html, add data-icon="XX" on each sidebar__section /
+#     sidebar__section--link / submenu <a> that should show an icon.
+#   - In static/css/style.css under "Sidebar icon mapping", add:
+#       .sidebar [data-icon="XX"]::before { content: "\...."; }  /* bi-<name> - label */
+#   - Use Bootstrap Icons 1.11 codepoints (same version as base.html CDN). Look up the
+#     hex in bootstrap-icons.css as .bi-<name>::before { content: "\f..." }.
+#   - Keep codes short (2–3 letters); avoid reusing the same data-icon for unrelated pages.
+
+modules:
+  - technical_name: demo_sales
+    title: Demo Sales (sample)
+    icon: DS
+    menu_path_root: demo_sales.dashboard
+    pages:
+      - id: demo_sales.dashboard
+        label: Sales cockpit
+        route: demo_sales.dashboard
+        url: /demo-sales/
+      - id: demo_sales.orders
+        label: Orders
+        route: demo_sales.orders
+        url: /demo-sales/orders
+      - id: demo_sales.pipeline
+        label: Pipeline
+        route: demo_sales.pipeline
+        url: /demo-sales/pipeline

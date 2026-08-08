@@ -1,0 +1,2 @@
+"""Addon manifest — Shelf/bin/rack & bin stock."""
+MANIFEST = {'technical_name': 'warehouse', 'name': 'Warehouse storage', 'version': '1.0.0', 'category': 'Inventory', 'summary': 'Shelf/bin/rack & bin stock', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/warehouse/storage'}, 'flask': {'blueprint': 'warehouse', 'blueprint_ref': 'addons.warehouse:bp', 'models_package': 'addons.warehouse.models', 'routes_module': 'addons.warehouse.controllers.routes'}}

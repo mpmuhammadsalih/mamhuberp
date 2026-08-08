@@ -1,0 +1,2 @@
+"""Addon manifest — Chat (migrated from ``blueprints/chat`` + ``templates/chat.html``)."""
+MANIFEST = {'technical_name': 'chat', 'name': 'Internal chat', 'version': '1.0.0', 'category': 'Communication', 'summary': 'User messaging; routes and template colocated under addons/chat.', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/chat'}, 'flask': {'blueprint': 'chat', 'blueprint_ref': 'addons.chat:bp', 'models_package': 'addons.chat.models', 'routes_module': 'addons.chat.controllers.routes'}}

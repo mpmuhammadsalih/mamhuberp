@@ -1,0 +1,670 @@
+{% extends "base.html" %}
+{% block title %}Supplier opening outstanding{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/im_form_shell.css') }}?v=1" />
+<style>
+  .soo-im-page.setup-im-extra-wide .setup-im-shell.soo-shell {
+    max-width: min(1400px, 100%);
+  }
+  .soo-im-page .soo-hint {
+    margin: 0;
+    padding: 8px 12px 10px;
+    font-size: 12px;
+    color: #64748b;
+    line-height: 1.45;
+    border: 1px solid #b8c8d4;
+    border-top: none;
+    background: #fff;
+  }
+  .soo-effect-panel {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid #b8c8d4;
+    border-top: none;
+    background: #fff;
+    font-size: 12px;
+  }
+  .soo-effect-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 10px;
+    border: 1px solid #cfe2ff;
+    border-radius: 4px;
+    background: #f0f9ff;
+    color: #1e3a8a;
+  }
+  .soo-effect-row strong { color: #0f172a; font-weight: 600; }
+  .soo-panel-body {
+    padding: 10px 12px 12px;
+    border: 1px solid #b8c8d4;
+    border-top: none;
+    background: #fff;
+  }
+  .soo-entry-scroll {
+    overflow: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    background: var(--im-table-surface, #fff);
+  }
+  #sooEntryTable {
+    width: 100%;
+    min-width: 980px;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  #sooEntryTable thead th {
+    background: var(--im-field-fill-strong, #eaf2fa) !important;
+    color: #495057 !important;
+    padding: 8px 10px;
+    border-bottom: 1px solid #dee2e6;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+  }
+  #sooEntryTable tbody td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #dee2e6;
+    vertical-align: middle;
+  }
+  #sooEntryTable tbody tr:hover { background: #f8f9fa; }
+  #sooEntryTable input {
+    width: 100%;
+    box-sizing: border-box;
+    border: none;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 0;
+    padding: 4px 0;
+    font-size: 13px;
+    background: transparent;
+  }
+  #sooEntryTable input:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  #sooEntryTable .search-field {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    max-width: none;
+  }
+  #sooEntryTable .num { text-align: right; }
+  .soo-add-line-icon {
+    width: 28px;
+    height: 28px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    background: #fff;
+    color: #0d6efd;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .soo-add-line-icon:hover { background: #0d6efd; border-color: #0d6efd; color: #fff; }
+  .soo-entry-total {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    align-items: center;
+    margin-top: 10px;
+    font-size: 13px;
+    color: #495057;
+  }
+  .soo-entry-total strong {
+    min-width: 120px;
+    text-align: right;
+    font-weight: 700;
+    color: #212529;
+    border-bottom: 1px solid #dee2e6;
+    padding: 4px 0;
+  }
+  .soo-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-top: 12px;
+  }
+  .soo-actions label.im-btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    margin: 0;
+  }
+  .soo-actions label.im-btn-secondary input { margin: 0; }
+  .soo-csv-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+  }
+  .soo-csv-row .form-group { flex: 1; min-width: 220px; }
+  .soo-muted {
+    margin-top: 10px;
+    padding: 8px 10px;
+    font-size: 12px;
+    color: #64748b;
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    border-radius: 4px;
+    line-height: 1.45;
+  }
+  .soo-preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .soo-preview-table th,
+  .soo-preview-table td {
+    border: 1px solid #dee2e6;
+    padding: 6px 10px;
+    text-align: left;
+  }
+  .soo-preview-table thead th {
+    background: var(--im-field-fill-strong, #eaf2fa) !important;
+    color: #495057 !important;
+    font-weight: 600;
+  }
+  .soo-preview-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .soo-empty { color: #94a3b8; text-align: center !important; padding: 16px !important; }
+  .soo-row-remove {
+    color: #b91c1c !important;
+    border-color: #fecaca !important;
+    padding: 4px 10px !important;
+    min-height: 28px !important;
+  }
+  #sooSupplierModal .modal__content { width: min(520px, 96vw); }
+  #sooSupplierModal .modal__body { display: flex; flex-direction: column; min-height: 0; max-height: 65vh; }
+  #sooSupplierSearch { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
+  #sooSupplierBody { overflow-y: auto; flex: 1; min-height: 120px; }
+  .soo-supplier-row {
+    display: block;
+    padding: 8px 10px;
+    border-bottom: 1px solid #e2e8f0;
+    cursor: pointer;
+    outline: none;
+  }
+  .soo-supplier-row:hover,
+  .soo-supplier-row:focus { background: #f0f9ff; }
+  .soo-supplier-line1 { font-weight: 600; color: #0f172a; }
+  .soo-supplier-line2 { font-size: 12px; color: #64748b; margin-top: 2px; }
+  .soo-supplier-empty { color: #94a3b8; font-style: italic; padding: 12px; text-align: center; }
+  .save-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.35);
+  }
+  .save-overlay.active { display: flex; }
+  .save-overlay__box {
+    min-width: 230px;
+    background: #fff;
+    border-radius: 10px;
+    padding: 16px 18px;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.25);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #1f2937;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .save-overlay__spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #cbd5e1;
+    border-top-color: #2563eb;
+    border-radius: 50%;
+    animation: soo-spin 0.8s linear infinite;
+  }
+  @keyframes soo-spin { to { transform: rotate(360deg); } }
+</style>
+
+<div class="im-page setup-im-page setup-im-extra-wide im-form-shell-page soo-im-page">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>Supplier opening outstanding / <span class="im-ref">Entry</span></h1>
+      <div class="im-actions">
+        <a class="im-btn-secondary" href="{{ url_for('accounts.supplier_ledger_page') }}">Supplier ledger</a>
+        <a class="im-btn-secondary" href="{{ url_for('accounts.journal_entry') }}">Journal entry</a>
+      </div>
+    </div>
+  </div>
+
+  <section class="setup-im-shell supplier-form-shell itemmaster-container soo-shell">
+    <div class="cf-form-stack">
+      <div class="cf-form-panel">
+        <h2 class="cf-section-title">Overview</h2>
+        <p class="soo-hint">
+          Enter or import opening supplier invoices for ledger balances. Posts GL vouchers only — no purchase invoices, VAT, stock, or settlement tables.
+        </p>
+        <div class="soo-effect-panel">
+          <div class="soo-effect-row">
+            <span>Credit</span>
+            <strong>Supplier payable (SUPPLIER party)</strong>
+          </div>
+          <div class="soo-effect-row">
+            <span>Debit</span>
+            <strong>Opening balance equity{% if selected_balance_label %}: {{ selected_balance_label }}{% endif %}</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="cf-form-panel">
+        <h2 class="cf-section-title">Manual entry</h2>
+        <p class="soo-hint">Add invoice lines below (F1 on supplier field). Press <strong>Enter</strong> to move across fields; on remarks, Enter adds the line.</p>
+        <div class="soo-panel-body">
+          <form method="post" action="{{ url_for('accounts.supplier_opening_outstanding') }}" id="manualOpeningForm">
+            <input type="hidden" name="save_nonce" value="{{ global_save_nonce | default('') }}" />
+            <input type="hidden" name="mode" value="manual">
+            <div class="soo-entry-scroll scroll-table">
+              <table class="table" id="sooEntryTable">
+                <thead>
+                  <tr>
+                    <th style="width:30%;">Supplier</th>
+                    <th style="width:14%;">Invoice no</th>
+                    <th style="width:13%;">Invoice date</th>
+                    <th class="num" style="width:13%;">Amount</th>
+                    <th>Remarks</th>
+                    <th style="width:56px; text-align:center;">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="soo-line-entry">
+                    <td>
+                      <span class="search-field search-field--popup">
+                        <input type="hidden" id="draftSupplierCode">
+                        <input type="hidden" id="draftSupplierName">
+                        <input type="text" id="draftSupplierText" class="input" placeholder="F1 or click — select supplier" readonly autocomplete="off" tabindex="0">
+                        <button type="button" class="search-picker" id="draftSupplierPicker" title="Select supplier" aria-label="Select supplier">▾</button>
+                      </span>
+                    </td>
+                    <td><input type="text" id="draftInvoiceNo" maxlength="50" placeholder="Invoice no"></td>
+                    <td><input type="date" id="draftInvoiceDate" value="{{ default_invoice_date or '' }}"></td>
+                    <td><input class="num" type="number" id="draftInvoiceAmount" min="0.01" step="0.01" placeholder="0.00"></td>
+                    <td><input type="text" id="draftRemarks" placeholder="Optional remarks"></td>
+                    <td style="text-align:center;">
+                      <button class="soo-add-line-icon" type="button" id="addManualRow" title="Add line">+</button>
+                    </td>
+                  </tr>
+                </tbody>
+                <tbody id="manualRows">
+                  <tr data-empty-row>
+                    <td class="soo-empty" colspan="6">No lines yet — complete the row above and click + or press Enter on remarks.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="soo-entry-total">
+              <span>Total amount</span>
+              <strong id="manualTotalAmount">0.00</strong>
+            </div>
+            <div class="soo-actions">
+              <button class="im-btn-secondary" type="button" id="clearManualDraft">Clear draft</button>
+              <button class="im-btn-save" type="submit">Post listed invoices</button>
+              <label class="im-btn-secondary"><input type="checkbox" name="dry_run" value="1"> Validate only</label>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="cf-form-panel">
+        <h2 class="cf-section-title">CSV import</h2>
+        <p class="soo-hint">Bulk import: <code>suppliercode, suppliername, invoiceno, invoicedate, invoiceamount, remarks</code></p>
+        <div class="soo-panel-body">
+          <form method="post" action="{{ url_for('accounts.supplier_opening_outstanding') }}" enctype="multipart/form-data" id="csvOpeningForm">
+            <input type="hidden" name="save_nonce" value="{{ global_save_nonce | default('') }}" />
+            <input type="hidden" name="mode" value="csv">
+            <div class="soo-csv-row">
+              <div class="form-group">
+                <label class="label" for="csv_file">CSV file</label>
+                <input type="file" id="csv_file" name="csv_file" class="input" accept=".csv,text/csv" required>
+              </div>
+              <div class="form-group" style="align-self:flex-end;">
+                <a class="im-btn-secondary" href="{{ url_for('accounts.supplier_opening_outstanding_sample_csv') }}">Download sample</a>
+              </div>
+            </div>
+            <div class="soo-actions">
+              <button class="im-btn-save" type="submit">Upload and post</button>
+              <label class="im-btn-secondary"><input type="checkbox" name="dry_run" value="1"> Validate only</label>
+            </div>
+          </form>
+          <div class="soo-muted">
+            Use validate only first on large files. Checks suppliers, invoice numbers, dates, and amounts before posting.
+          </div>
+        </div>
+      </div>
+
+      {% if last_rows %}
+      <div class="cf-form-panel">
+        <h2 class="cf-section-title">Last processed preview <span style="font-weight:400;color:#64748b;">— total {{ '%.2f'|format(last_total or 0) }}</span></h2>
+        <div class="soo-panel-body scroll-table">
+          <table class="soo-preview-table table">
+            <thead>
+              <tr>
+                <th>Supplier</th>
+                <th>Name</th>
+                <th>Invoice no</th>
+                <th>Invoice date</th>
+                <th class="num">Amount</th>
+                <th>Payable</th>
+                <th>Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in last_rows %}
+              <tr>
+                <td>{{ r.suppliercode or '' }}</td>
+                <td>{{ r.suppliername or '' }}</td>
+                <td>{{ r.invoiceno or '' }}</td>
+                <td>{{ r.invoicedate or '' }}</td>
+                <td class="num">{{ '%.2f'|format(r.invoiceamount or 0) }}</td>
+                <td>{{ r.payableaccount or '' }}</td>
+                <td>{{ r.remarks or '' }}</td>
+              </tr>
+              {% endfor %}
+              <tr>
+                <th colspan="4">Total</th>
+                <th class="num">{{ '%.2f'|format(last_total or 0) }}</th>
+                <th colspan="2"></th>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+</div>
+
+<div class="save-overlay" id="sooSubmitOverlay" aria-hidden="true">
+  <div class="save-overlay__box">
+    <span class="save-overlay__spinner" aria-hidden="true"></span>
+    <span id="sooSubmitOverlayText">Posting, please wait...</span>
+  </div>
+</div>
+
+<div class="modal hidden" id="sooSupplierModal" role="dialog" aria-modal="true" aria-labelledby="sooSupplierModalTitle">
+  <div class="modal__overlay" data-close="sooSupplierModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3 id="sooSupplierModalTitle">Select supplier</h3>
+      <button type="button" class="modal__close" data-close="sooSupplierModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <input type="text" class="input" id="sooSupplierSearch" placeholder="Search by code or name..." autocomplete="off">
+      <div id="sooSupplierBody"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  const suppliers = {{ suppliers|tojson }};
+  let picker = null;
+  const supplierModal = document.getElementById('sooSupplierModal');
+
+  function esc(v) {
+    const d = document.createElement('div');
+    d.textContent = v == null ? '' : String(v);
+    return d.innerHTML;
+  }
+  function openModal(id) {
+    const m = document.getElementById(id);
+    if (!m) return;
+    m.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeModals() {
+    if (supplierModal) supplierModal.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+  document.querySelectorAll('[data-close="sooSupplierModal"]').forEach(function (el) {
+    el.addEventListener('click', closeModals);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && supplierModal && !supplierModal.classList.contains('hidden')) {
+      closeModals();
+    }
+  });
+  function focusById(id) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.focus();
+      if (typeof el.select === 'function') el.select();
+    }
+  }
+  function renderSuppliers(q) {
+    const t = (q || '').toLowerCase();
+    const body = document.getElementById('sooSupplierBody');
+    if (!body) return;
+    const list = suppliers.filter(function (c) {
+      return (String(c.suppliercode || '') + ' ' + String(c.suppliername || '')).toLowerCase().includes(t);
+    }).slice(0, 500);
+    if (!list.length) {
+      body.innerHTML = '<div class="soo-supplier-row soo-supplier-empty">No suppliers found</div>';
+      return;
+    }
+    body.innerHTML = list.map(function (c) {
+      const code = esc(c.suppliercode);
+      const name = esc(c.suppliername);
+      return '<div class="soo-supplier-row" tabindex="0" data-code="' + code + '" data-name="' + name + '">' +
+        '<div class="soo-supplier-line1">' + (code || '-') + '</div>' +
+        '<div class="soo-supplier-line2">' + (name || '-') + '</div></div>';
+    }).join('');
+  }
+  function openSupplierPickerForDraft() {
+    picker = {
+      targetCode: 'draftSupplierCode',
+      targetName: 'draftSupplierName',
+      targetText: 'draftSupplierText',
+    };
+    renderSuppliers('');
+    openModal('sooSupplierModal');
+    setTimeout(function () { focusById('sooSupplierSearch'); }, 0);
+  }
+  document.getElementById('draftSupplierPicker')?.addEventListener('click', openSupplierPickerForDraft);
+  document.getElementById('draftSupplierText')?.addEventListener('click', openSupplierPickerForDraft);
+  document.getElementById('sooSupplierSearch')?.addEventListener('input', function (e) {
+    renderSuppliers(e.target.value);
+  });
+  document.getElementById('sooSupplierSearch')?.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    const first = document.querySelector('#sooSupplierBody .soo-supplier-row[data-code]');
+    if (first) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
+  document.getElementById('sooSupplierBody')?.addEventListener('click', function (e) {
+    const row = e.target.closest('.soo-supplier-row[data-code]');
+    if (!row || !picker) return;
+    document.getElementById(picker.targetCode).value = row.dataset.code || '';
+    document.getElementById(picker.targetName).value = row.dataset.name || '';
+    document.getElementById(picker.targetText).value = (row.dataset.code || '') + ' - ' + (row.dataset.name || '');
+    closeModals();
+    if (picker.targetCode === 'draftSupplierCode') {
+      setTimeout(function () { focusById('draftInvoiceNo'); }, 0);
+    }
+  });
+  document.getElementById('sooSupplierBody')?.addEventListener('keydown', function (e) {
+    const row = e.target.closest('.soo-supplier-row[data-code]');
+    if (!row) return;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      row.click();
+      return;
+    }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const rows = Array.from(document.querySelectorAll('#sooSupplierBody .soo-supplier-row[data-code]'));
+    const idx = rows.indexOf(row);
+    const next = e.key === 'ArrowDown' ? rows[idx + 1] : rows[idx - 1];
+    if (next) next.focus();
+  });
+
+  function valueOf(id) {
+    return (document.getElementById(id)?.value || '').trim();
+  }
+  function setValue(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.value = value || '';
+  }
+  function showSubmitOverlay(message) {
+    const overlay = document.getElementById('sooSubmitOverlay');
+    const text = document.getElementById('sooSubmitOverlayText');
+    if (text) text.textContent = message || 'Processing, please wait...';
+    if (overlay) {
+      overlay.classList.add('active');
+      overlay.setAttribute('aria-hidden', 'false');
+    }
+  }
+  function cell(text, className) {
+    const td = document.createElement('td');
+    td.textContent = text || '';
+    if (className) td.className = className;
+    return td;
+  }
+  function hidden(name, value) {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = name;
+    input.value = value || '';
+    return input;
+  }
+  function refreshManualEmptyRow() {
+    const body = document.getElementById('manualRows');
+    if (!body) return;
+    const dataRows = body.querySelectorAll('tr[data-manual-row]');
+    const empty = body.querySelector('[data-empty-row]');
+    if (dataRows.length === 0 && !empty) {
+      const tr = document.createElement('tr');
+      tr.setAttribute('data-empty-row', '1');
+      tr.innerHTML = '<td class="soo-empty" colspan="6">No lines yet — complete the row above and click + or press Enter on remarks.</td>';
+      body.appendChild(tr);
+    } else if (dataRows.length > 0 && empty) {
+      empty.remove();
+    }
+    refreshManualTotal();
+  }
+  function refreshManualTotal() {
+    let total = 0;
+    document.querySelectorAll('#manualRows input[name="invoiceamount"]').forEach(function (input) {
+      total += Number(input.value || 0) || 0;
+    });
+    const el = document.getElementById('manualTotalAmount');
+    if (el) el.textContent = total.toFixed(2);
+  }
+  function clearManualDraft() {
+    setValue('draftSupplierCode', '');
+    setValue('draftSupplierName', '');
+    setValue('draftSupplierText', '');
+    setValue('draftInvoiceNo', '');
+    setValue('draftInvoiceDate', '{{ default_invoice_date or "" }}');
+    setValue('draftInvoiceAmount', '');
+    setValue('draftRemarks', '');
+    focusById('draftSupplierText');
+  }
+
+  document.getElementById('addManualRow')?.addEventListener('click', function () {
+    const code = valueOf('draftSupplierCode');
+    const name = valueOf('draftSupplierName');
+    const invoiceNo = valueOf('draftInvoiceNo');
+    const invoiceDate = valueOf('draftInvoiceDate');
+    const amount = valueOf('draftInvoiceAmount');
+    const remarks = valueOf('draftRemarks');
+    if (!code || !invoiceNo || !invoiceDate || !amount || Number(amount) <= 0) {
+      alert('Select supplier, invoice no, invoice date, and amount before adding to list.');
+      return;
+    }
+    const body = document.getElementById('manualRows');
+    if (!body) return;
+    const tr = document.createElement('tr');
+    tr.setAttribute('data-manual-row', '1');
+    const supplierCell = cell(code + (name ? ' - ' + name : ''));
+    supplierCell.appendChild(hidden('suppliercode', code));
+    supplierCell.appendChild(hidden('suppliername', name));
+    tr.appendChild(supplierCell);
+    const invoiceCell = cell(invoiceNo);
+    invoiceCell.appendChild(hidden('invoiceno', invoiceNo));
+    tr.appendChild(invoiceCell);
+    const dateCell = cell(invoiceDate);
+    dateCell.appendChild(hidden('invoicedate', invoiceDate));
+    tr.appendChild(dateCell);
+    const amountCell = cell(Number(amount).toFixed(2), 'num');
+    amountCell.appendChild(hidden('invoiceamount', amount));
+    tr.appendChild(amountCell);
+    const remarksCell = cell(remarks);
+    remarksCell.appendChild(hidden('remarks', remarks));
+    tr.appendChild(remarksCell);
+    const actionCell = document.createElement('td');
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'im-btn-secondary soo-row-remove';
+    removeBtn.textContent = 'Remove';
+    removeBtn.addEventListener('click', function () {
+      tr.remove();
+      refreshManualEmptyRow();
+    });
+    actionCell.appendChild(removeBtn);
+    tr.appendChild(actionCell);
+    body.appendChild(tr);
+    refreshManualEmptyRow();
+    clearManualDraft();
+  });
+
+  document.getElementById('clearManualDraft')?.addEventListener('click', clearManualDraft);
+  document.getElementById('draftSupplierText')?.addEventListener('keydown', function (e) {
+    if (e.key === 'F1' || e.keyCode === 112) {
+      e.preventDefault();
+      openSupplierPickerForDraft();
+    } else if (e.key === 'Enter' && valueOf('draftSupplierCode')) {
+      e.preventDefault();
+      focusById('draftInvoiceNo');
+    }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (!(e.key === 'F1' || e.keyCode === 112)) return;
+    const ae = document.activeElement;
+    if (ae && ae.id === 'draftSupplierText') {
+      e.preventDefault();
+      e.stopPropagation();
+      openSupplierPickerForDraft();
+    }
+  }, true);
+  [
+    ['draftInvoiceNo', 'draftInvoiceDate'],
+    ['draftInvoiceDate', 'draftInvoiceAmount'],
+    ['draftInvoiceAmount', 'draftRemarks'],
+  ].forEach(function (pair) {
+    document.getElementById(pair[0])?.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        focusById(pair[1]);
+      }
+    });
+  });
+  document.getElementById('draftRemarks')?.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      document.getElementById('addManualRow')?.click();
+    }
+  });
+  document.getElementById('manualOpeningForm')?.addEventListener('submit', function (e) {
+    if (!document.querySelector('#manualRows tr[data-manual-row]')) {
+      e.preventDefault();
+      alert('Add at least one invoice to the list before posting.');
+      return;
+    }
+    showSubmitOverlay('Posting listed invoices, please wait...');
+  });
+  document.getElementById('csvOpeningForm')?.addEventListener('submit', function () {
+    showSubmitOverlay('Uploading and posting CSV, please wait...');
+  });
+})();
+</script>
+{% endblock %}

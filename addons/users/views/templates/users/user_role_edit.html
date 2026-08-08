@@ -1,0 +1,364 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .setup-im-page #locationDisplay.input-readonly { background: #f1f5f9; color: #475569; cursor: default; }
+  .setup-im-page .location-from-tenant-extras { margin-top: 8px; width: 100%; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+  .setup-im-page .location-from-tenant-extras.hidden { display: none !important; }
+  .allowed-tenant-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 28px; max-width: 100%; }
+  .allowed-tenant-chip {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+    padding: 4px 8px 4px 10px; background: #e0f2fe; color: #0c4a6e; border-radius: 6px; border: 1px solid #7dd3fc;
+  }
+  .allowed-tenant-chip code { font-size: 12px; font-weight: 700; color: #0369a1; background: transparent; padding: 0; }
+  .allowed-tenant-chip button { border: none; background: transparent; cursor: pointer; color: #64748b; font-size: 16px; line-height: 1; padding: 0 2px; }
+  .setup-im-page .btn-location-from-tenant { font-size: 12px; padding: 6px 12px; border-radius: 4px; border: 1px solid #cbd5e1; background: #f8fafc; color: #334155; cursor: pointer; }
+  .setup-im-page .btn-location-from-tenant:hover { background: #e2e8f0; }
+  .setup-im-page .customer-details .form-group--full { grid-column: 1 / -1; }
+  .setup-im-page .form-actions { display: none; }
+  .tenant-pick-multi-row.is-selected { opacity: 0.45; pointer-events: none; }
+</style>
+<div class="im-page setup-im-page">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>Users / <span class="im-ref">{{ user_row.username if user_row else '—' }}</span></h1>
+      <div class="im-actions">
+        <button type="submit" form="user-role-edit-form" class="im-btn-save">Save</button>
+        <a class="im-btn-secondary" href="{{ url_for('users.user_list') }}">List</a>
+      </div>
+    </div>
+  </div>
+
+  <section class="setup-im-shell customer-form-shell itemmaster-container">
+    <div class="cf-form-stack">
+      <div class="cf-form-panel">
+        <h2 class="cf-section-title">Role &amp; access</h2>
+  <form method="post" id="user-role-edit-form" class="form">
+      <div class="customer-details">
+        <div class="form-group">
+          <label for="username">
+            <span>Username</span>
+            <input
+              type="text"
+              id="username"
+              name="username"
+              value="{{ user_row.username if user_row else '' }}"
+              readonly
+              class="input-readonly"
+            />
+          </label>
+        </div>
+        <div class="form-group">
+          <label>
+            <span>Tenant</span>
+            <span class="search-field search-field--popup">
+              <input
+                type="text"
+                id="tenantDisplay"
+                name="tenant_display"
+                value="{% if user_row and user_row.tenant_id %}{% for t in available_tenants %}{% if t.tenant_id == user_row.tenant_id %}{{ t.display_name or t.tenant_id }}{% endif %}{% endfor %}{% endif %}"
+                placeholder="-- No tenant --"
+                readonly
+              />
+              <button type="button" class="search-clear" id="tenantClear" aria-label="Clear tenant" style="display: {{ 'block' if user_row and user_row.tenant_id else 'none' }};">×</button>
+              <button type="button" class="search-picker" id="tenantPicker" aria-label="Open tenant list">▾</button>
+            </span>
+            <input type="hidden" id="tenant_id" name="tenant_id" value="{{ user_row.tenant_id if user_row else '' }}" />
+            <small class="muted">Database/tenant this user will use after login.</small>
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="roleDisplay">
+            <span>Role</span>
+            <span class="search-field search-field--popup">
+              <input
+                type="text"
+                id="roleDisplay"
+                name="role_display"
+                value="{% if user_row and user_row.role_id %}{% set rd = namespace(label=user_row.role_id) %}{% for role in roles %}{% if role.role_id|upper == user_row.role_id|upper %}{% set rd.label = role.role_name ~ ' (' ~ role.role_id ~ ')' %}{% endif %}{% endfor %}{{ rd.label }}{% else %}No role assigned (all menus){% endif %}"
+                placeholder="Select role..."
+                readonly
+              />
+              <button type="button" class="search-clear" id="roleClear" aria-label="Clear role" style="display: {{ 'block' if user_row and user_row.role_id else 'none' }};">×</button>
+              <button type="button" class="search-picker" id="rolePicker" aria-label="Open role list">▾</button>
+            </span>
+            <input type="hidden" id="role_id" name="role_id" value="{{ user_row.role_id if user_row and user_row.role_id else '' }}" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="needcounter">
+            <span>Need Counter</span>
+            <select id="needcounter" name="needcounter">
+              <option value="Y" {% if user_row and (user_row.needcounter or 'N') == 'Y' %}selected{% endif %}>Yes</option>
+              <option value="N" {% if not user_row or (user_row.needcounter or 'N') == 'N' %}selected{% endif %}>No</option>
+            </select>
+            <small class="muted">Whether this user needs counter verification during login.</small>
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="active_flag">
+            <span>Status</span>
+            <select id="active_flag" name="active_flag">
+              <option value="Y" {% if not user_row or (user_row.active_flag or 'Y') == 'Y' %}selected{% endif %}>Active</option>
+              <option value="N" {% if user_row and user_row.active_flag == 'N' %}selected{% endif %}>Inactive</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="multilocations_view">
+            <span>Multilocations view</span>
+            <select id="multilocations_view" name="multilocations_view">
+              <option value="N" {% if not user_row or (user_row.multilocations_view or 'N') == 'N' %}selected{% endif %}>No</option>
+              <option value="Y" {% if user_row and (user_row.multilocations_view or 'N') == 'Y' %}selected{% endif %}>Yes</option>
+            </select>
+            <small class="muted">Allow this user to switch tenant from the dashboard header.</small>
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="locationDisplay">
+            <span>Location</span>
+            <input
+              type="text"
+              id="locationDisplay"
+              value="{{ user_row.location if user_row else '' }}"
+              readonly
+              autocomplete="off"
+              class="input input-readonly"
+              placeholder=""
+              title="Filled from Tenants maintenance when you pick a tenant; read-only."
+            />
+            <small class="muted">Set by the selected tenant’s <strong>location code</strong> in Tenants (read-only).</small>
+            <span id="allowedTenantsWrap" class="location-from-tenant-extras{% if not user_row or (user_row.multilocations_view or 'N') != 'Y' %} hidden{% endif %}">
+              <small class="muted"><strong>Tenant IDs</strong> allowed in the dashboard switcher (leave empty = all tenants).</small>
+              <div id="allowedTenantsChips" class="allowed-tenant-chips" aria-live="polite"></div>
+              <input type="hidden" id="allowed_tenant_ids" name="allowed_tenant_ids" value="{{ (user_row and user_row.allowed_tenant_ids) or '' }}" />
+              <button type="button" class="btn-location-from-tenant" id="allowedTenantsAddBtn">Add tenants…</button>
+            </span>
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="transit_only">
+            <span>Transit Only</span>
+            <input type="checkbox" id="transit_only" name="transit_only" value="Y" {% if user_row and (user_row.transit_only or 'N') == 'Y' %}checked{% endif %} />
+            <small class="muted">If checked, Store Transfer will show only transit-enabled locations.</small>
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="customer_creation">
+            <span>Customer Creation</span>
+            <input type="checkbox" id="customer_creation" name="customer_creation" value="Y" {% if user_row and (user_row.customer_creation or 'N') == 'Y' %}checked{% endif %} />
+            <small class="muted">If checked, this user can convert customer requests and create customers centrally.</small>
+          </label>
+        </div>
+        <div class="form-group form-group--full">
+          <label for="password">
+            <span>New Password</span>
+            <input type="password" id="password" name="password" placeholder="Leave blank to keep current password" />
+            <small class="muted">Leave blank to keep the existing password.</small>
+          </label>
+        </div>
+      </div>
+      <div class="cf-form-panel" style="margin-top:16px;">
+        <h2 class="cf-section-title">Default warehouses</h2>
+        <p class="muted" style="font-size:12px;margin:0 0 12px;">When set, the user sees only that warehouse on the matching screen. Leave blank for all warehouses.</p>
+        <div class="customer-details">
+          <div class="form-group">
+            <label for="defaultWhSalesDisplay">
+              <span>Sales</span>
+              <span class="search-field search-field--popup">
+                <input type="text" id="defaultWhSalesDisplay" value="{{ user_row.default_wh_sales_display if user_row else '' }}" placeholder="All warehouses" readonly autocomplete="off" title="F1: warehouse list" />
+                <button type="button" class="search-clear" id="defaultWhSalesClear" aria-label="Clear" style="display: {{ 'block' if user_row and user_row.default_wh_sales else 'none' }};">×</button>
+                <button type="button" class="search-picker" id="defaultWhSalesPicker" aria-label="Open warehouse list">▾</button>
+              </span>
+              <input type="hidden" id="default_wh_sales" name="default_wh_sales" value="{{ user_row.default_wh_sales if user_row and user_row.default_wh_sales else '' }}" />
+            </label>
+          </div>
+          <div class="form-group">
+            <label for="defaultWhSalesReturnDisplay">
+              <span>Sales return</span>
+              <span class="search-field search-field--popup">
+                <input type="text" id="defaultWhSalesReturnDisplay" value="{{ user_row.default_wh_sales_return_display if user_row else '' }}" placeholder="All warehouses" readonly autocomplete="off" title="F1: warehouse list" />
+                <button type="button" class="search-clear" id="defaultWhSalesReturnClear" aria-label="Clear" style="display: {{ 'block' if user_row and user_row.default_wh_sales_return else 'none' }};">×</button>
+                <button type="button" class="search-picker" id="defaultWhSalesReturnPicker" aria-label="Open warehouse list">▾</button>
+              </span>
+              <input type="hidden" id="default_wh_sales_return" name="default_wh_sales_return" value="{{ user_row.default_wh_sales_return if user_row and user_row.default_wh_sales_return else '' }}" />
+            </label>
+          </div>
+          <div class="form-group">
+            <label for="defaultWhPurchaseDisplay">
+              <span>Purchase / GRN</span>
+              <span class="search-field search-field--popup">
+                <input type="text" id="defaultWhPurchaseDisplay" value="{{ user_row.default_wh_purchase_display if user_row else '' }}" placeholder="All warehouses" readonly autocomplete="off" title="F1: warehouse list" />
+                <button type="button" class="search-clear" id="defaultWhPurchaseClear" aria-label="Clear" style="display: {{ 'block' if user_row and user_row.default_wh_purchase else 'none' }};">×</button>
+                <button type="button" class="search-picker" id="defaultWhPurchasePicker" aria-label="Open warehouse list">▾</button>
+              </span>
+              <input type="hidden" id="default_wh_purchase" name="default_wh_purchase" value="{{ user_row.default_wh_purchase if user_row and user_row.default_wh_purchase else '' }}" />
+            </label>
+          </div>
+          <div class="form-group">
+            <label for="defaultWhPurchaseReturnDisplay">
+              <span>Purchase return</span>
+              <span class="search-field search-field--popup">
+                <input type="text" id="defaultWhPurchaseReturnDisplay" value="{{ user_row.default_wh_purchase_return_display if user_row else '' }}" placeholder="All warehouses" readonly autocomplete="off" title="F1: warehouse list" />
+                <button type="button" class="search-clear" id="defaultWhPurchaseReturnClear" aria-label="Clear" style="display: {{ 'block' if user_row and user_row.default_wh_purchase_return else 'none' }};">×</button>
+                <button type="button" class="search-picker" id="defaultWhPurchaseReturnPicker" aria-label="Open warehouse list">▾</button>
+              </span>
+              <input type="hidden" id="default_wh_purchase_return" name="default_wh_purchase_return" value="{{ user_row.default_wh_purchase_return if user_row and user_row.default_wh_purchase_return else '' }}" />
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="page-po__btn-primary">Save Role</button>
+      </div>
+    </form>
+      </div>
+    </div>
+  </section>
+
+  <div class="modal hidden" id="tenantModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="tenantModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h4>Select Tenant</h4>
+        <button type="button" class="modal__close" data-close="tenantModal">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="modal__search">
+          <span class="search-field search-field--wide">
+            <input type="text" id="tenantModalSearch" placeholder="Search tenant..." />
+            <button type="button" class="search-clear" id="tenantModalClear">×</button>
+          </span>
+        </div>
+        <div class="scroll-table modal__table">
+          <table class="table" id="tenantModalTable">
+            <thead>
+              <tr>
+                <th>Tenant ID</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr data-tenant-id="" data-tenant-display="-- No tenant --">
+                <td>—</td>
+                <td>-- No tenant --</td>
+              </tr>
+              {% for t in available_tenants %}
+                <tr data-tenant-id="{{ t.tenant_id }}" data-tenant-display="{{ (t.display_name or t.tenant_id) }}" data-location-code="{% if t.locationcode is not none and t.locationcode != '' %}{{ t.locationcode }}{% endif %}">
+                  <td><strong style="font-weight:700;color:#0369a1;">{{ t.tenant_id }}</strong></td>
+                  <td>{{ t.display_name or t.tenant_id }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="multiTenantPickModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="multiTenantPickModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h4>Add tenants <span style="font-size:13px;color:#64748b;font-weight:500;">(tenant ID listed first)</span></h4>
+        <button type="button" class="modal__close" data-close="multiTenantPickModal">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="modal__search">
+          <span class="search-field search-field--wide">
+            <input type="text" id="multiTenantPickSearch" placeholder="Search by tenant ID or name…" />
+            <button type="button" class="search-clear" id="multiTenantPickClear">×</button>
+          </span>
+        </div>
+        <div class="scroll-table modal__table">
+          <table class="table" id="multiTenantPickTable">
+            <thead>
+              <tr><th>Tenant ID</th><th>Display name</th></tr>
+            </thead>
+            <tbody>
+              {% for t in available_tenants %}
+                <tr class="tenant-pick-multi-row" data-tenant-id="{{ t.tenant_id }}" data-display-name="{{ t.display_name or t.tenant_id }}">
+                  <td><strong style="font-weight:700;color:#0369a1;">{{ t.tenant_id }}</strong></td>
+                  <td>{{ t.display_name or t.tenant_id }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="userWhModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="userWhModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h4>Select warehouse</h4>
+        <button type="button" class="modal__close" data-close="userWhModal">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="modal__search">
+          <span class="search-field search-field--wide">
+            <input type="text" id="userWhModalSearch" placeholder="Search code or name…" autocomplete="off" />
+            <button type="button" class="search-clear" id="userWhModalClear">×</button>
+          </span>
+        </div>
+        <div class="scroll-table modal__table">
+          <table class="table" id="userWhModalTable">
+            <thead><tr><th>Code</th><th>Name</th></tr></thead>
+            <tbody><tr><td colspan="2" class="muted" style="text-align:center;padding:12px;">Open a picker to load warehouses…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal hidden" id="roleModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="roleModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h4>Select Role</h4>
+        <button type="button" class="modal__close" data-close="roleModal">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="modal__search">
+          <span class="search-field search-field--wide">
+            <input type="text" id="roleModalSearch" placeholder="Search role..." />
+            <button type="button" class="search-clear" id="roleModalClear">×</button>
+          </span>
+        </div>
+        <div class="scroll-table modal__table">
+          <table class="table" id="roleModalTable">
+            <thead>
+              <tr>
+                <th>Role ID</th>
+                <th>Role Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr data-role-id="" data-role-display="No role (full access)">
+                <td>—</td>
+                <td>No role (full access)</td>
+              </tr>
+              {% for role in roles %}
+                <tr data-role-id="{{ role.role_id }}" data-role-display="{{ role.role_name }} ({{ role.role_id }})">
+                  <td>{{ role.role_id }}</td>
+                  <td>{{ role.role_name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    window.USER_WAREHOUSES_API = {{ warehouses_api_url|tojson }};
+  </script>
+  <script src="{{ url_for('static', filename='js/user_warehouse_picker.js') }}?v=1"></script>
+  <script src="{{ url_for('static', filename='js/user_role_edit.js') }}"></script>
+{% endblock %}

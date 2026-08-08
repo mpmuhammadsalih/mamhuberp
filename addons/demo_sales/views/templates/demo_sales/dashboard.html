@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('demo_sales.static', filename='css/demo_sales.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="page-po addon-demo-sales" style="max-width: 960px;">
+  <h1 class="page-po__title addon-demo-sales__title">Demo Sales — Cockpit</h1>
+  <p class="page-po__muted">This page comes from <code>addons/demo_sales/views/templates/</code> and CSS from <code>addons/demo_sales/static/</code>; data from <code>services/dashboard.py</code>.</p>
+  <div class="addon-demo-sales__kpi-grid">
+    <div class="addon-demo-sales__kpi-card">
+      <div class="addon-demo-sales__kpi-label">Open quotes</div>
+      <div class="addon-demo-sales__kpi-val">{{ kpi.open_quotes }}</div>
+    </div>
+    <div class="addon-demo-sales__kpi-card">
+      <div class="addon-demo-sales__kpi-label">Orders today</div>
+      <div class="addon-demo-sales__kpi-val">{{ kpi.orders_today }}</div>
+    </div>
+    <div class="addon-demo-sales__kpi-card">
+      <div class="addon-demo-sales__kpi-label">Pipeline (demo)</div>
+      <div class="addon-demo-sales__kpi-val">{{ "%.0f"|format(kpi.pipeline_value) }}</div>
+    </div>
+  </div>
+  <p class="addon-demo-sales__nav">
+    <a href="{{ url_for('demo_sales.orders') }}">Orders</a>
+    ·
+    <a href="{{ url_for('demo_sales.pipeline') }}">Pipeline</a>
+  </p>
+</div>
+{% endblock %}

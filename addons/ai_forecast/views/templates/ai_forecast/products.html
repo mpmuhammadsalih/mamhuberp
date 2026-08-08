@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "ai_forecast/_nav.html" import ai_nav %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('ai_forecast.static', filename='css/ai_forecast.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="ai-fc-page">
+  <div class="ai-fc-topbar">
+    <div><h1 class="ai-fc-title">Product Performance</h1><p class="ai-fc-sub">Fast / medium / slow / dead · score 0–100</p></div>
+    {{ ai_nav('products') }}
+  </div>
+  <div class="ai-fc-card"><div class="ai-fc-card__body" style="overflow:auto;">
+    <table class="ai-fc-table"><thead><tr><th>Score</th><th>Item</th><th>Name</th><th>Class</th><th>Revenue</th><th>Turnover</th><th>Return %</th><th>Stock</th></tr></thead><tbody id="aiFcTb"></tbody></table>
+  </div></div>
+</div>
+<script>
+fetch({{ url_for('ai_forecast.api_products')|tojson }}).then(r=>r.json()).then(d=>{
+  document.getElementById('aiFcTb').innerHTML = (d.rows||[]).map(r=>`<tr>
+    <td class="num"><strong>${r.performance_score}</strong></td><td>${r.itemcode}</td><td>${r.itemname||''}</td><td>${r.classification||''}</td>
+    <td class="num">${Number(r.revenue||0).toFixed(2)}</td><td class="num">${r.stock_turnover}</td><td class="num">${(Number(r.return_ratio||0)*100).toFixed(1)}%</td><td class="num">${r.current_stock}</td></tr>`).join('');
+});
+</script>
+{% endblock %}

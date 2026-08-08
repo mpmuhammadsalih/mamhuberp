@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .co-table { width: 100%; border-collapse: collapse !important; }
+  .co-table th, .co-table td {
+    border: 1px solid #cfd4da !important; padding: 7px 10px !important; white-space: nowrap; font-size: 13px;
+  }
+  .co-table thead th {
+    background: #eef2f7 !important; position: sticky; top: 0; z-index: 2;
+    cursor: pointer; user-select: none;
+  }
+  .co-table thead th:after { content: " ⇅"; opacity: .35; font-size: 11px; }
+  .co-table thead th[data-order="asc"]:after  { content: " ▲"; opacity: 1; }
+  .co-table thead th[data-order="desc"]:after { content: " ▼"; opacity: 1; }
+  .co-table tbody tr:nth-child(even) { background: #fbfcfe; }
+  .co-table tbody tr:hover { background: #f0f5ff !important; }
+  .co-table tfoot tr th { background: #e9edf3 !important; font-weight: 700; }
+  .co-table td a { color: inherit; text-decoration: none; }
+  .co-table td a:hover { text-decoration: underline; color: #1a56a4; }
+</style>
+
+<div class="page-po" style="max-width: 1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Employee Outstanding</h1>
+      <p class="page-po__muted">Outstanding grouped by employee — aging 30 / 60 / 90 / 120 / 120+ days.</p>
+    </div>
+  </div>
+
+  <div style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+    <input type="text" class="input" id="empSearch" placeholder="Search by employee code or name…" style="max-width:300px;">
+    <a class="page-po__btn-secondary" href="{{ url_for('reports.employee_outstanding_export') }}">Export</a>
+  </div>
+
+  <div class="table-wrap">
+    <table class="co-table" id="empTable">
+      <thead>
+        <tr>
+          <th style="text-align:center;">Sl.No</th>
+          <th>Employee Code</th>
+          <th>Employee Name</th>
+          <th style="text-align:right;">0–30</th>
+          <th style="text-align:right;">31–60</th>
+          <th style="text-align:right;">61–90</th>
+          <th style="text-align:right;">91–120</th>
+          <th style="text-align:right;">120+</th>
+          <th style="text-align:right;">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          {% set total = (row.d30 or 0) + (row.d60 or 0) + (row.d90 or 0) + (row.d120 or 0) + (row.d120p or 0) %}
+          <tr data-code="{{ row.employeecode or '' }}" data-name="{{ (row.employeename or '')|lower }}">
+            <td style="text-align:center;">{{ loop.index }}</td>
+            <td>{{ row.employeecode }}</td>
+            <td>{{ row.employeename or '-' }}</td>
+            <td style="text-align:right;">
+              <a href="{{ url_for('reports.employee_outstanding_details', employeecode=row.employeecode, bucket='30') }}">{{ "%.2f"|format(row.d30 or 0) }}</a>
+            </td>
+            <td style="text-align:right;">
+              <a href="{{ url_for('reports.employee_outstanding_details', employeecode=row.employeecode, bucket='60') }}">{{ "%.2f"|format(row.d60 or 0) }}</a>
+            </td>
+            <td style="text-align:right;">
+              <a href="{{ url_for('reports.employee_outstanding_details', employeecode=row.employeecode, bucket='90') }}">{{ "%.2f"|format(row.d90 or 0) }}</a>
+            </td>
+            <td style="text-align:right;">
+              <a href="{{ url_for('reports.employee_outstanding_details', employeecode=row.employeecode, bucket='120') }}">{{ "%.2f"|format(row.d120 or 0) }}</a>
+            </td>
+            <td style="text-align:right;">
+              <a href="{{ url_for('reports.employee_outstanding_details', employeecode=row.employeecode, bucket='120p') }}">{{ "%.2f"|format(row.d120p or 0) }}</a>
+            </td>
+            <td style="text-align:right;">
+              <a href="{{ url_for('reports.employee_outstanding_details', employeecode=row.employeecode, bucket='all') }}">{{ "%.2f"|format(total) }}</a>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="9" class="muted" style="text-align:center;">No outstanding balances found.</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        {% set td30   = rows | sum(attribute='d30')   %}
+        {% set td60   = rows | sum(attribute='d60')   %}
+        {% set td90   = rows | sum(attribute='d90')   %}
+        {% set td120  = rows | sum(attribute='d120')  %}
+        {% set td120p = rows | sum(attribute='d120p') %}
+        {% set tgrand = (td30 or 0)+(td60 or 0)+(td90 or 0)+(td120 or 0)+(td120p or 0) %}
+        <tr>
+          <th colspan="3">Total</th>
+          <th style="text-align:right;"><a href="{{ url_for('reports.employee_outstanding_details', bucket='30')   }}">{{ "%.2f"|format(td30   or 0) }}</a></th>
+          <th style="text-align:right;"><a href="{{ url_for('reports.employee_outstanding_details', bucket='60')   }}">{{ "%.2f"|format(td60   or 0) }}</a></th>
+          <th style="text-align:right;"><a href="{{ url_for('reports.employee_outstanding_details', bucket='90')   }}">{{ "%.2f"|format(td90   or 0) }}</a></th>
+          <th style="text-align:right;"><a href="{{ url_for('reports.employee_outstanding_details', bucket='120')  }}">{{ "%.2f"|format(td120  or 0) }}</a></th>
+          <th style="text-align:right;"><a href="{{ url_for('reports.employee_outstanding_details', bucket='120p') }}">{{ "%.2f"|format(td120p or 0) }}</a></th>
+          <th style="text-align:right;"><a href="{{ url_for('reports.employee_outstanding_details', bucket='all')  }}">{{ "%.2f"|format(tgrand)       }}</a></th>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const table = document.getElementById("empTable");
+  if (!table) return;
+  const tbody = table.querySelector("tbody");
+  const headers = table.querySelectorAll("thead th");
+
+  headers.forEach((th, idx) => {
+    th.addEventListener("click", () => {
+      const order = th.getAttribute("data-order") === "asc" ? "desc" : "asc";
+      headers.forEach(h => h.removeAttribute("data-order"));
+      th.setAttribute("data-order", order);
+      const rows = Array.from(tbody.querySelectorAll("tr:not([style*='display: none'])"));
+      rows.sort((a, b) => {
+        const av = (a.children[idx]?.textContent || "").trim();
+        const bv = (b.children[idx]?.textContent || "").trim();
+        const an = parseFloat(av.replace(/,/g, ""));
+        const bn = parseFloat(bv.replace(/,/g, ""));
+        const res = (!isNaN(an) && !isNaN(bn)) ? an - bn : av.localeCompare(bv);
+        return order === "asc" ? res : -res;
+      });
+      rows.forEach(r => tbody.appendChild(r));
+    });
+  });
+
+  const searchInput = document.getElementById("empSearch");
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      const term = searchInput.value.trim().toLowerCase();
+      Array.from(tbody.querySelectorAll("tr")).forEach(r => {
+        const code = (r.dataset.code || "").toLowerCase();
+        const name = (r.dataset.name || "").toLowerCase();
+        r.style.display = (!term || code.includes(term) || name.includes(term)) ? "" : "none";
+      });
+    });
+  }
+});
+</script>
+{% endblock %}

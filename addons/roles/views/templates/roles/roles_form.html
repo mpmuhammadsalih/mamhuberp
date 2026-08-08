@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .setup-im-page .roles-details .form-group.form-group--full { grid-column: span 2; }
+  .setup-im-page .roles-menu-section { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #e5eaf2; }
+  .setup-im-page .roles-menu-section:last-of-type { border-bottom: none; }
+  .setup-im-page .roles-group-heading { margin: 0 0 10px; font-size: 13px; font-weight: 700; color: #14324a; }
+  .setup-im-page .roles-menu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 8px 16px; }
+  .setup-im-page .roles-menu-grid--mobile { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+  .setup-im-page .roles-menu-grid .roles-submenu-heading { grid-column: 1 / -1; font-size: 12px; font-weight: 600; color: #6c757d; margin-top: 10px; margin-bottom: 2px; }
+  .setup-im-page .roles-menu-grid .roles-submenu-heading:first-child { margin-top: 0; }
+  .setup-im-page .roles-menu-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 8px 12px;
+    font-size: 13px;
+    color: #495057;
+  }
+  .setup-im-page .roles-menu-row--mobile { grid-template-columns: 1fr auto; }
+  .setup-im-page .roles-menu-row .checkbox-label { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .setup-im-page .roles-menu-row .roles-col-flag {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6c757d;
+    white-space: nowrap;
+    text-align: center;
+    min-width: 72px;
+  }
+  .setup-im-page .roles-menu-grid-head {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 8px 12px;
+    padding: 0 0 6px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #e5eaf2;
+    font-size: 11px;
+    font-weight: 700;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .setup-im-page .roles-menu-grid-head--mobile { grid-template-columns: 1fr auto; }
+  .setup-im-page .roles-menu-grid-head span:nth-child(2),
+  .setup-im-page .roles-menu-grid-head span:nth-child(3) { text-align: center; min-width: 72px; }
+  .setup-im-page .roles-actions { display: none; }
+  .setup-im-page .roles-perm-tabs {
+    display: flex;
+    gap: 8px;
+    margin: 0 0 14px;
+    border-bottom: 1px solid #e5eaf2;
+    padding-bottom: 0;
+  }
+  .setup-im-page .roles-perm-tab {
+    appearance: none;
+    border: none;
+    background: transparent;
+    padding: 8px 16px 10px;
+    margin-bottom: -1px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #64748b;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+  }
+  .setup-im-page .roles-perm-tab:hover { color: #14324a; }
+  .setup-im-page .roles-perm-tab--active {
+    color: #14324a;
+    border-bottom-color: #2563eb;
+  }
+  .setup-im-page .roles-perm-panel[hidden] { display: none !important; }
+  .setup-im-page .roles-mobile-hint {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #1e40af;
+  }
+  @media (max-width: 1024px) {
+    .setup-im-page .roles-details .form-group.form-group--full { grid-column: span 1; }
+  }
+</style>
+<div class="im-page setup-im-page setup-im-extra-wide">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>Roles &amp; Permissions / <span class="im-ref">{{ role.role_id if role else 'New' }}</span>{% if not role %} <span class="status-badge status-badge--new">New</span>{% endif %}</h1>
+      <div class="im-actions">
+        <button type="submit" form="rolesForm" class="im-btn-save">{{ "Update Role" if role else "Create Role" }}</button>
+        <a class="im-btn-secondary" href="{{ url_for('roles.roles_list') }}">List</a>
+      </div>
+    </div>
+  </div>
+
+  <section class="setup-im-shell customer-form-shell itemmaster-container">
+    <div class="cf-form-stack">
+      <div class="cf-form-panel">
+        <h2 class="cf-section-title">Role details</h2>
+        <form id="rolesForm" method="post">
+          <div class="customer-details roles-details">
+            <div class="form-group">
+              <label for="role_id">
+                <span>Role ID</span>
+                <input type="text" id="role_id" name="role_id" class="input" value="{{ role.role_id if role else next_role_id }}" {% if role or next_role_id %}readonly{% endif %} required />
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="role_name">
+                <span>Role Name</span>
+                <input type="text" id="role_name" name="role_name" class="input" value="{{ role.role_name if role else '' }}" required />
+              </label>
+            </div>
+            <div class="form-group form-group--full">
+              <label for="description">
+                <span>Description</span>
+                <input type="text" id="description" name="description" class="input" value="{{ role.description if role else '' }}" />
+              </label>
+            </div>
+          </div>
+
+          <h2 class="cf-section-title" style="margin-top: 10px;">Menu access</h2>
+          {% if orphan_permissions %}
+          <div style="margin: 0 0 12px; padding: 10px 12px; background: #fff8e6; border: 1px solid #f0d78c; border-radius: 6px; font-size: 13px; color: #7a5b00;">
+            <strong>Legacy menu permissions</strong> (not shown below) are still stored for this role and may grant extra access until you save:
+            <code style="display:block;margin-top:6px;font-size:12px;">{{ orphan_permissions|join(', ') }}</code>
+            Saving this role removes permissions that are not in the lists below.
+          </div>
+          {% endif %}
+
+          <div class="roles-perm-tabs" role="tablist" aria-label="Permission scope">
+            <button type="button" class="roles-perm-tab roles-perm-tab--active" data-roles-tab="erp" role="tab" aria-selected="true">ERP (web)</button>
+            <button type="button" class="roles-perm-tab" data-roles-tab="mobile" role="tab" aria-selected="false">Mobile app</button>
+          </div>
+
+          <div id="rolesTabErp" class="roles-perm-panel" role="tabpanel">
+            <p style="margin: 0 0 12px; font-size: 13px; color: #6c757d;">Web ERP sidebar menus. Check <strong>Quick access</strong> to show that menu as an icon in the top bar.</p>
+            <div class="customer-details" style="margin-top: 0 !important; border-top: none !important;">
+              {% for group in menu_groups %}
+                <div class="roles-menu-section" style="grid-column: 1 / -1;">
+                  <div class="roles-group-heading">{{ group.title }}</div>
+                  <div class="roles-menu-grid">
+                    <div class="roles-menu-grid-head">
+                      <span>Menu</span>
+                      <span>Access</span>
+                      <span>Quick</span>
+                    </div>
+                    {% for item in group["items"] %}
+                      {% if item.get("roles_subsection") %}
+                        <div class="roles-submenu-heading">{{ item["roles_subsection"] }}</div>
+                      {% endif %}
+                      <div class="roles-menu-row" data-menu-path="{{ item.menu_path }}">
+                        <span class="checkbox-label"><span>{{ item.label }}</span></span>
+                        <label class="roles-col-flag checkbox-label">
+                          <input type="checkbox" class="roles-menu-access" name="menu_permissions" value="{{ item.menu_path }}" {% if item.menu_path in selected_permissions %}checked{% endif %} />
+                          <span>Allow</span>
+                        </label>
+                        <label class="roles-col-flag checkbox-label">
+                          <input type="checkbox" class="roles-menu-quick" name="quick_access_permissions" value="{{ item.menu_path }}" {% if item.menu_path in selected_quick_access %}checked{% endif %} {% if item.menu_path not in selected_permissions %}disabled{% endif %} />
+                          <span>Top bar</span>
+                        </label>
+                      </div>
+                    {% endfor %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div id="rolesTabMobile" class="roles-perm-panel" role="tabpanel" hidden>
+            <p class="roles-mobile-hint">
+              <strong>Nexa Mobile</strong> (Flutter) drawer and quick actions.
+              Granting a mobile menu also adds the linked API keys to the user JWT for backend access.
+            </p>
+            <div class="customer-details" style="margin-top: 0 !important; border-top: none !important;">
+              {% for group in mobile_menu_groups %}
+                <div class="roles-menu-section" style="grid-column: 1 / -1;">
+                  <div class="roles-group-heading">{{ group.title }}</div>
+                  <div class="roles-menu-grid roles-menu-grid--mobile">
+                    <div class="roles-menu-grid-head roles-menu-grid-head--mobile">
+                      <span>Mobile menu</span>
+                      <span>Access</span>
+                    </div>
+                    {% for item in group["items"] %}
+                      {% if item.get("roles_subsection") %}
+                        <div class="roles-submenu-heading">{{ item["roles_subsection"] }}</div>
+                      {% endif %}
+                      <div class="roles-menu-row roles-menu-row--mobile" data-menu-path="{{ item.menu_path }}">
+                        <span class="checkbox-label"><span>{{ item.label }}</span></span>
+                        <label class="roles-col-flag checkbox-label">
+                          <input type="checkbox" class="roles-menu-access" name="menu_permissions" value="{{ item.menu_path }}" {% if item.menu_path in selected_permissions %}checked{% endif %} />
+                          <span>Allow</span>
+                        </label>
+                      </div>
+                    {% endfor %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="roles-actions">
+            <button type="submit" class="page-po__btn-primary">{{ "Update Role" if role else "Create Role" }}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+</div>
+<script>
+(function () {
+  var rolesForm = document.getElementById('rolesForm');
+  if (rolesForm) {
+    rolesForm.addEventListener('submit', function () {
+      document.querySelectorAll('.roles-menu-quick:disabled').forEach(function (el) {
+        el.disabled = false;
+      });
+    });
+  }
+
+  function syncQuickAccessRow(row) {
+    var access = row.querySelector(".roles-menu-access");
+    var quick = row.querySelector(".roles-menu-quick");
+    if (!access || !quick) return;
+    if (!access.checked) {
+      quick.checked = false;
+      quick.disabled = true;
+    } else {
+      quick.disabled = false;
+    }
+  }
+
+  document.querySelectorAll(".roles-menu-row").forEach(function (row) {
+    syncQuickAccessRow(row);
+    var access = row.querySelector(".roles-menu-access");
+    var quick = row.querySelector(".roles-menu-quick");
+    if (access) {
+      access.addEventListener("change", function () {
+        syncQuickAccessRow(row);
+      });
+    }
+    if (quick) {
+      quick.addEventListener("change", function () {
+        if (quick.checked && access && !access.checked) {
+          access.checked = true;
+          syncQuickAccessRow(row);
+        }
+      });
+    }
+  });
+
+  var tabs = document.querySelectorAll(".roles-perm-tab");
+  var panelErp = document.getElementById("rolesTabErp");
+  var panelMobile = document.getElementById("rolesTabMobile");
+  tabs.forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      var target = tab.getAttribute("data-roles-tab");
+      tabs.forEach(function (t) {
+        t.classList.toggle("roles-perm-tab--active", t === tab);
+        t.setAttribute("aria-selected", t === tab ? "true" : "false");
+      });
+      if (panelErp) panelErp.hidden = target !== "erp";
+      if (panelMobile) panelMobile.hidden = target !== "mobile";
+    });
+  });
+})();
+</script>
+{% endblock %}

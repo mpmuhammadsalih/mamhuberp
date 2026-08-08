@@ -1,0 +1,1681 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="crn-container">
+<style>
+  body { overflow-x: auto; min-height: 100vh; background: #fff; color: #212529; }
+  .crn-page { max-width: 1200px; margin: 0 auto; padding: 0 16px 24px 16px; }
+  .crn-topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 0; border-bottom: 1px solid #dee2e6; }
+  .crn-topbar h1 { margin: 0; font-size: 16px; font-weight: 400; color: #212529; }
+  .crn-topbar .crn-btn-secondary { padding: 4px 10px; font-size: 12px; }
+  .crn-topbar .crn-btn-primary { padding: 4px 10px; font-size: 12px; }
+  .crn-btn-secondary { background: transparent; border: 1px solid #dee2e6; color: #495057; padding: 8px 16px; border-radius: 4px; font-size: 13px; cursor: pointer; text-decoration: none; }
+  .crn-btn-secondary:hover { background: #f8f9fa; color: #495057; }
+  .crn-btn-primary { background: #28a745 !important; border: none !important; color: #fff !important; padding: 8px 16px; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .crn-btn-primary:hover:not(:disabled) { background: #218838 !important; }
+  .crn-btn-primary:disabled { background: #adb5bd !important; cursor: not-allowed; opacity: 0.8; }
+  .crn-btn-load { background: #007bff !important; border: none !important; color: #fff !important; padding: 8px 16px; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .crn-btn-load:hover:not(:disabled) { background: #0056b3 !important; }
+  .crn-section { margin-bottom: 16px; padding: 0; border-bottom: 1px solid #dee2e6; }
+  .crn-header-row { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+  .crn-header-row .form-group { display: flex; flex-direction: row; align-items: center; gap: 6px; flex-shrink: 0; margin: 0; }
+  .crn-header-row .form-group label { margin-bottom: 0; flex-shrink: 0; width: auto; min-width: 0; display: inline; }
+  .crn-header-row .form-group .input { min-width: 100px; }
+  .crn-header-row .form-group #voucherno { width: 85px; min-width: 85px; max-width: 100px; }
+  .crn-header-row .form-group .search-field { min-width: 140px; }
+  .crn-section-title { font-size: 14px; font-weight: 600; color: #212529; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #007bff; display: inline-block; }
+  .crn-container .form-group label, .crn-container .customer-select-wrap label { color: #495057; font-weight: 400; font-size: 13px; margin-bottom: 4px; display: block; }
+  .crn-container .input { border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; padding: 6px 0; font-size: 13px; background: transparent; }
+  .crn-container .input:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .crn-container .input[readonly] { background: transparent; color: #6c757d; }
+  .crn-container .search-field { border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; }
+  .crn-container .search-field:focus-within { border-bottom-color: var(--nexa-focus-color); }
+  /* Dropdown-style for Customer & Salesman */
+  .crn-dropdown-field { display: flex; align-items: center; gap: 4px; border: 1px solid #ced4da; border-radius: 4px; background: #fff; padding: 4px 8px; min-height: 28px; }
+  .crn-dropdown-field:focus-within { border-color: var(--nexa-focus-color); box-shadow: 0 0 0 2px rgba(0,123,255,0.15); }
+  .crn-dropdown-field input { font-size: 12px; border: none; padding: 2px 4px; background: transparent; min-width: 0; }
+  .crn-dropdown-field input::placeholder { color: #9ca3af; font-size: 12px; }
+  .crn-dropdown-field .search-clear { width: 16px; height: 16px; font-size: 14px; padding: 0; color: #6b7280; }
+  .crn-dropdown-field .search-picker { border: 1px solid #ced4da; background: #f1f3f4; border-radius: 4px; padding: 2px 6px; font-size: 11px; color: #495057; min-width: 24px; }
+  .crn-dropdown-field .search-picker:hover { background: #e9ecef; }
+  .crn-container .table thead { background: #f8f9fa !important; }
+  .crn-container .table thead th { background: #f8f9fa !important; color: #495057 !important; padding: 10px 12px; font-weight: 600; font-size: 12px; border: none; border-bottom: 1px solid #dee2e6; }
+  .crn-container .table tbody td { padding: 8px 12px; border: none; border-bottom: 1px solid #dee2e6; font-size: 13px; }
+  .crn-container .table tbody tr:hover { background: #f8f9fa !important; }
+  .crn-container .table tbody tr[style*="background-color: #dbeafe"] { background: #e7f1ff !important; border-left: 4px solid #007bff; }
+  .crn-container .table tfoot { background: #f8f9fa !important; }
+  .crn-container .table tfoot td { font-weight: 700; color: #212529; padding: 10px 12px; }
+  .crn-container .scroll-table { border: 1px solid #dee2e6; border-radius: 4px; background: #fff; position: relative; }
+  #outstandingSection .scroll-table { max-height: 720px; display: flex; flex-direction: column; overflow: hidden; }
+  #outstandingTable { display: flex; flex-direction: column; flex: 1; min-height: 0; border-collapse: collapse; width: 100%; font-size: 11px; table-layout: fixed; }
+  #outstandingTable thead { flex-shrink: 0; display: table; width: 100%; table-layout: fixed; background: #f8f9fa !important; }
+  #outstandingTable thead th { background: #f8f9fa !important; color: #495057 !important; padding: 4px 6px; font-size: 11px; font-weight: 600; border: 1px solid #dee2e6; white-space: nowrap; }
+  #outstandingTable thead th.sortable { cursor: pointer; user-select: none; }
+  #outstandingTable thead th.sortable:hover { background: #e9ecef !important; }
+  #outstandingTable thead th .sort-icon { color: #6c757d; font-weight: 700; margin-left: 2px; }
+  #outstandingTable tbody { flex: 1 1 auto; overflow-y: auto; min-height: 0; display: block; font-size: 11px; }
+  #outstandingTable tbody tr { display: table; width: 100%; table-layout: fixed; }
+  #outstandingTable tbody td { padding: 4px 6px; border: 1px solid #dee2e6; font-size: 11px; }
+  #outstandingTable tfoot { flex-shrink: 0; display: table; width: 100%; table-layout: fixed; background: #f8f9fa !important; border-top: 1px solid #dee2e6; }
+  #outstandingTable tfoot td { padding: 4px 6px; font-size: 11px; font-weight: 700; border: 1px solid #dee2e6; }
+  #outstandingTable thead tr, #outstandingTable tfoot tr { position: static; }
+  #outstandingTable input.pay-amount { font-size: 11px; }
+  #outstandingTable #selectAllInvoices { width: 14px; height: 14px; cursor: pointer; }
+  #outstandingTable .invoice-checkbox { width: 14px; height: 14px; cursor: pointer; }
+  #outstandingTable thead th:nth-child(1), #outstandingTable tbody td:nth-child(1) { width: 50px; min-width: 50px; }
+  #outstandingTable thead th:nth-child(2), #outstandingTable tbody td:nth-child(2) { width: 50px; min-width: 50px; }
+  #outstandingTable thead th:nth-child(3), #outstandingTable tbody td:nth-child(3) { width: 90px; min-width: 90px; }
+  #outstandingTable thead th:nth-child(4), #outstandingTable tbody td:nth-child(4) { width: 95px; min-width: 95px; }
+  #outstandingTable thead th:nth-child(5), #outstandingTable tbody td:nth-child(5) { width: 90px; min-width: 90px; }
+  #outstandingTable thead th:nth-child(6), #outstandingTable tbody td:nth-child(6) { width: 90px; min-width: 90px; }
+  #outstandingTable thead th:nth-child(7), #outstandingTable tbody td:nth-child(7) { width: 95px; min-width: 95px; }
+  #outstandingTable thead th:nth-child(8), #outstandingTable tbody td:nth-child(8) { width: 95px; min-width: 95px; }
+  #outstandingTable thead th:nth-child(9), #outstandingTable tbody td:nth-child(9) { width: 95px; min-width: 95px; }
+  #outstandingSection h3 { font-size: 14px; font-weight: 600; color: #212529; margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 2px solid #007bff; }
+  #paymentSection { border: 1px solid #dee2e6; border-radius: 4px; padding: 0 16px 16px 16px; background: #f8f9fa; }
+  #coEmployeeSection { padding-top: 0; }
+  #coEmployeeSection .crn-section-title { margin-top: 0; }
+  #coEmployeeSection .crn-co-row { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+  #coEmployeeSection .crn-co-row .form-group { display: flex; flex-direction: row; align-items: center; gap: 6px; flex-shrink: 0; margin: 0; }
+  #coEmployeeSection .crn-co-row .form-group label { margin-bottom: 0; flex-shrink: 0; display: inline; }
+  #coEmployeeSection .crn-co-row .form-group .input { min-width: 100px; }
+  #coEmployeeSection .crn-co-row .form-group .search-field { min-width: 140px; }
+  #saveMessage { padding: 10px 14px; border-radius: 4px; font-size: 13px; margin-top: 8px; border: 1px solid #dee2e6; }
+  #saveMessage[style*="color: #059669"], #saveMessage[style*="green"] { background: #d4edda; color: #155724; border-color: #c3e6cb; }
+  #saveMessage[style*="color: #b91c1c"], #saveMessage[style*="red"] { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+  #saveMessage[style*="color: #f59e0b"], #saveMessage[style*="orange"] { background: #fff3cd; color: #856404; border-color: #ffeeba; }
+  .crn-modal-thead { background: #f8f9fa !important; }
+  .crn-modal-thead th { background: #f8f9fa !important; color: #495057 !important; }
+  @keyframes cash-receipt-save-spin { to { transform: rotate(360deg); } }
+</style>
+<style>
+  /* Customer select – picker style */
+  .customer-select-wrap {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+  .customer-select-wrap label {
+    margin-bottom: 0;
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 500;
+    color: #374151;
+  }
+  .customer-select-wrap .crn-dropdown-field {
+    flex: 1;
+    min-width: 200px;
+  }
+  .customer-select-trigger {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 10px 14px;
+    background: #fff;
+    border: none;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 0;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .customer-select-trigger:hover {
+    border-bottom-color: #adb5bd;
+  }
+  .customer-select-trigger:focus {
+    outline: none;
+    border-bottom-color: #007bff;
+  }
+  .customer-select-trigger .customer-value {
+    flex: 1;
+    font-size: 14px;
+    color: #111827;
+    text-align: left;
+  }
+  .customer-select-trigger .customer-placeholder {
+    color: #9ca3af;
+    font-size: 14px;
+  }
+  .customer-select-trigger .customer-chevron {
+    width: 20px;
+    height: 20px;
+    color: #6b7280;
+    flex-shrink: 0;
+  }
+  .customer-select-trigger .customer-clear {
+    margin-left: auto;
+    margin-right: 4px;
+    display: none;
+    align-items: center;
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 3px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+  .customer-select-trigger .customer-clear:hover {
+    opacity: 1;
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+  .customer-select-trigger:not(.empty) .customer-clear {
+    display: flex;
+  }
+  .customer-select-trigger .customer-clear svg {
+    width: 100%;
+    height: 100%;
+    color: #6b7280;
+  }
+  .customer-select-trigger .customer-chevron svg {
+    width: 100%;
+    height: 100%;
+    transition: transform 0.2s;
+  }
+  .customer-select-trigger.open .customer-chevron svg {
+    transform: rotate(180deg);
+  }
+
+  /* Popup overlay */
+  .receipt-popup-overlay {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(17, 24, 39, 0.5);
+    z-index: 10000 !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    animation: receipt-fadeIn 0.2s ease;
+  }
+  @keyframes receipt-fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .receipt-popup {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+    max-width: 600px;
+    width: 100%;
+    max-height: 85vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: receipt-slideUp 0.25s ease;
+  }
+  @keyframes receipt-slideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .receipt-popup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 20px;
+    border-bottom: 1px solid #dee2e6;
+    background: #f8f9fa;
+  }
+  .receipt-popup-header h3 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 600;
+    color: #212529;
+  }
+  .receipt-popup-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: #495057;
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+    transition: background 0.15s, color 0.15s;
+  }
+  .receipt-popup-close:hover {
+    background: #e9ecef;
+    color: #212529;
+  }
+  .receipt-popup-body {
+    padding: 12px 16px 16px;
+    overflow: auto;
+  }
+  .receipt-popup-body .search-wrap {
+    margin-bottom: 10px;
+  }
+  .receipt-popup-body .search-wrap .input {
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    padding: 10px 14px 10px 36px;
+    font-size: 14px;
+    background: #f8fafc url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8' width='18' height='18'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'/%3E%3C/svg%3E") no-repeat 12px center;
+  }
+  .receipt-popup-body .search-wrap .input:focus {
+    outline: none;
+    border-color: #2563eb;
+    background-color: #fff;
+  }
+  .customer-list-wrap {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fff;
+  }
+  .customer-popup-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid #f1f5f9;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .customer-popup-row:last-child {
+    border-bottom: none;
+  }
+  .customer-popup-row:hover {
+    background: #f8fafc;
+  }
+  .customer-popup-row .cust-code {
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #007bff;
+    min-width: 72px;
+    background: #f8f9fa;
+    padding: 6px 10px;
+    border-radius: 4px;
+    text-align: center;
+  }
+  .customer-popup-row .cust-name {
+    flex: 1;
+    font-size: 14px;
+    color: #495057;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .customer-popup-row .cust-outstanding {
+    flex-shrink: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #155724;
+    min-width: 90px;
+    text-align: right;
+    padding-right: 8px;
+    background: #d4edda;
+    padding: 6px 12px;
+    border-radius: 4px;
+  }
+  .customer-popup-row .cust-pick {
+    flex-shrink: 0;
+    font-size: 12px;
+    color: #007bff;
+    font-weight: 500;
+  }
+</style>
+<div id="cashReceiptSaveOverlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; align-items: center; justify-content: center; flex-direction: column; gap: 16px;">
+  <div class="cash-receipt-save-spinner" style="width: 56px; height: 56px; border: 4px solid #e2e8f0; border-top-color: #3b82f6; border-radius: 50%; animation: cash-receipt-save-spin 0.8s linear infinite;"></div>
+  <p style="margin: 0; color: #fff; font-weight: 600; font-size: 16px;">Saving receipt…</p>
+</div>
+
+<div class="crn-page" data-transaction-audit="Receipt"
+     data-transaction-no-selector="#voucherno"
+     data-save-button="#btnSave"
+     data-track-root=".crn-page"
+     data-save-url-pattern="/accounts/cash-receipt/api/save|cash-receipt.*save">
+  <div class="crn-topbar">
+    <h1>New Cash Receipt</h1>
+    <div class="crn-topbar-actions" style="display: flex; align-items: center; gap: 10px;">
+      <button type="button" id="btnSave" class="crn-btn-primary">Save Receipt</button>
+      <a href="{{ url_for('temporary_collection.cash_receipt_list') }}" class="crn-btn-secondary">Back to list</a>
+    </div>
+  </div>
+
+  <div class="crn-section">
+    <div class="form-grid crn-header-row">
+      <div class="form-group" style="flex-shrink: 0;">
+        <label for="voucherno">Voucher No</label>
+        <input type="text" id="voucherno" class="input" value="{{ voucherno or '' }}" readonly />
+      </div>
+      <div class="form-group" style="flex-shrink: 0;">
+        <label for="payDate">Payment date</label>
+        <input type="date" id="payDate" class="input" value="{{ payment_date or '' }}" readonly />
+      </div>
+      <div class="form-group" style="flex-shrink: 0;">
+        <label for="dateFromFilter">From Date</label>
+        <input type="date" id="dateFromFilter" class="input" />
+      </div>
+      <div class="form-group" style="flex-shrink: 0;">
+        <label for="dateToFilter">To Date</label>
+        <input type="date" id="dateToFilter" class="input" />
+      </div>
+    </div>
+    <p id="saveMessage" class="muted" style="margin-top: 8px; display: none;"></p>
+  </div>
+
+  <div class="crn-section">
+    <div class="form-grid" style="display: flex; flex-wrap: nowrap; gap: 12px; align-items: center;">
+      <div class="form-group customer-select-wrap" style="flex: 1; min-width: 300px; max-width: 640px; flex-shrink: 0;">
+        <label for="customer_display">Customer</label>
+        <span class="search-field search-field--popup crn-dropdown-field" style="min-width: 0; width: 100%;">
+          <input
+            type="text"
+            id="customer_display"
+            name="customer_display"
+            placeholder="Click to search customer code..."
+            readonly
+            style="min-width: 0; width: 100%; box-sizing: border-box;"
+          />
+          <button type="button" class="search-clear" id="customerClear" aria-label="Clear customer" style="display: none;">×</button>
+          <button type="button" class="search-picker" id="customerPicker" aria-label="Open customer list">▾</button>
+        </span>
+        <input type="hidden" id="customer_code" name="customer_code" value="" />
+      </div>
+      <div class="form-group" style="flex-shrink: 0;">
+        <button type="button" id="btnLoadOutstanding" class="crn-btn-load" disabled style="white-space: nowrap;">Load Outstanding</button>
+      </div>
+      <div class="form-group customer-select-wrap" style="margin: 0; flex-shrink: 0;">
+        <label for="salesman_display">Salesman <span style="color: #dc3545;">*</span></label>
+        <span class="search-field search-field--popup crn-dropdown-field" style="min-width: 160px; width: 160px;">
+          <input
+            type="text"
+            id="salesman_display"
+            name="salesman_display"
+            placeholder="Click to search..."
+            readonly
+            style="min-width: 0; width: 100%; box-sizing: border-box;"
+          />
+          <button type="button" class="search-clear" id="salesmanClear" aria-label="Clear salesman" style="display: none;">×</button>
+          <button type="button" class="search-picker" id="salesmanPicker" aria-label="Open salesman list">▾</button>
+        </span>
+        <input type="hidden" id="salesman_code" name="salesman_code" value="" />
+      </div>
+    </div>
+  </div>
+
+  <div id="coEmployeeSection" class="crn-section" style="display: none;">
+    <div class="form-grid crn-co-row">
+      <div class="form-group" style="flex-shrink: 0;">
+        <label for="employee_display">C/O Employee</label>
+        <span class="search-field search-field--popup crn-dropdown-field" style="min-width: 160px;">
+          <input type="text" id="employee_display" name="employee_display" placeholder="Click to select employee..." readonly style="min-width: 0; width: 100%; box-sizing: border-box;" />
+          <button type="button" class="search-clear" id="employeeClear" aria-label="Clear employee" style="display: none;">×</button>
+          <button type="button" class="search-picker" id="employeePicker" aria-label="Open employee list">▾</button>
+        </span>
+        <input type="hidden" id="employee_code" name="employee_code" value="" />
+      </div>
+      <div class="form-group" style="flex-shrink: 0;">
+        <label for="coExpectedDate">Expected Date <span style="color: #dc3545;">*</span></label>
+        <input type="date" id="coExpectedDate" class="input" required />
+      </div>
+      <div class="form-group" style="flex: 1; min-width: 160px; flex-shrink: 0;">
+        <label for="coRemarks">Remarks</label>
+        <input type="text" id="coRemarks" class="input" placeholder="Optional remarks..." style="width: 100%; min-width: 120px;" />
+      </div>
+      <div class="form-group" style="flex-shrink: 0;">
+        <button type="button" id="btnUpdateCoEmployee" class="crn-btn-primary" style="background: #fd7e14 !important;">Update C/O Employee</button>
+      </div>
+    </div>
+    <p id="coEmployeeMessage" class="muted" style="margin-top: 6px; display: none;"></p>
+  </div>
+
+  <!-- Customer selection popup -->
+  <div class="modal hidden" id="customerModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="customerModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h4>Select Customer</h4>
+        <button type="button" class="modal__close" data-close="customerModal">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="modal__search">
+          <span class="search-field search-field--wide">
+            <input type="text" id="customerModalSearch" placeholder="Search customer..." />
+            <button type="button" class="search-clear" id="customerModalClear">×</button>
+          </span>
+        </div>
+        <div class="scroll-table modal__table">
+          <table class="table" id="customerModalTable">
+            <thead class="crn-modal-thead">
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Outstanding</th>
+              </tr>
+            </thead>
+            <tbody id="customerModalBody">
+              {% for c in customers %}
+                <tr data-code="{{ c.code or '' }}" data-name="{{ (c.name or c.code or '')|e }}">
+                  <td>{{ c.code or '-' }}</td>
+                  <td>{{ (c.name or '-')|truncate(50) }}</td>
+                  <td style="text-align: right; font-weight: 600; color: #059669;">{{ "%.2f"|format((c.outstanding or 0)|float) }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="outstandingSection" class="crn-section" style="display: none;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
+      <h3 class="crn-section-title" style="margin: 0; padding-bottom: 0; border: none;">Outstanding Invoices</h3>
+      <div style="display: flex; gap: 8px;">
+        <button type="button" id="btnReportPdf" class="crn-btn-secondary" style="display: none;" title="Generate PDF report of outstanding invoices for customer">Report PDF</button>
+        <button type="button" id="btnExportOutstanding" class="crn-btn-secondary" style="display: none;" title="Export current outstanding invoices list to Excel (CSV)">Export to Excel</button>
+      </div>
+    </div>
+    <div class="scroll-table">
+      <table class="table" id="outstandingTable">
+        <colgroup>
+          <col style="width: 50px;" />
+          <col style="width: 50px;" />
+          <col style="width: 90px;" />
+          <col style="width: 95px;" />
+          <col style="width: 90px;" />
+          <col style="width: 90px;" />
+          <col style="width: 95px;" />
+          <col style="width: 95px;" />
+          <col style="width: 95px;" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="selectAllInvoices" title="Select All" style="cursor: pointer; width: 18px; height: 18px;" /></th>
+            <th class="sortable" data-sort-col="1" data-sort-type="number" title="Sort by Sl.No">Sl.No <span class="sort-icon">⇅</span></th>
+            <th class="sortable" data-sort-col="2" data-sort-type="text" title="Sort by Bill No">Bill No <span class="sort-icon">⇅</span></th>
+            <th class="sortable" data-sort-col="3" data-sort-type="date" title="Sort by Bill Date">Bill Date <span class="sort-icon">⇅</span></th>
+            <th class="sortable" data-sort-col="4" data-sort-type="text" title="Sort by Salesman">Salesman <span class="sort-icon">⇅</span></th>
+            <th class="sortable" data-sort-col="5" data-sort-type="text" title="Sort by C/O Employee">C/O Employee <span class="sort-icon">⇅</span></th>
+            <th class="sortable" data-sort-col="6" data-sort-type="number" title="Sort by Bill amount" style="text-align: right;">Bill Amount <span class="sort-icon">⇅</span></th>
+            <th class="sortable" data-sort-col="7" data-sort-type="number" title="Sort by Outstanding" style="text-align: right;">Outstanding <span class="sort-icon">⇅</span></th>
+            <th class="sortable" data-sort-col="8" data-sort-type="number" title="Sort by Pay amount" style="text-align: right;">Pay amount <span class="sort-icon">⇅</span></th>
+          </tr>
+        </thead>
+        <tbody id="outstandingBody">
+        </tbody>
+        <tfoot>
+          <tr class="table-total">
+            <td colspan="7" style="text-align: right; font-weight: 700;">Total</td>
+            <td id="totalOutstanding" style="text-align: right; font-weight: 700;">0.00</td>
+            <td id="totalPay" style="text-align: right; font-weight: 700;">0.00</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div id="paymentSection" class="crn-section" style="display: none;">
+    <div class="form-grid" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: end;">
+      <div class="form-group" style="flex: 1; min-width: 250px;">
+        <label for="remark">Remark</label>
+        <input type="text" id="remark" class="input" placeholder="Optional remark..." style="width: 100%;" />
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Salesman Selection Popup -->
+<div class="modal hidden" id="salesmanModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="salesmanModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>Select Salesman</h4>
+      <button type="button" class="modal__close" data-close="salesmanModal">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__search">
+        <span class="search-field search-field--wide">
+          <input type="text" id="salesmanModalSearch" placeholder="Search salesman..." />
+          <button type="button" class="search-clear" id="salesmanModalClear">×</button>
+        </span>
+      </div>
+      <div class="scroll-table modal__table">
+        <table class="table" id="salesmanModalTable">
+          <thead class="crn-modal-thead">
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+            </tr>
+          </thead>
+          <tbody id="salesmanModalBody">
+            {% for sm in salesmen %}
+              <tr data-code="{{ sm.code or '' }}" data-name="{{ (sm.name or sm.code or '')|e }}">
+                <td>{{ sm.code or '-' }}</td>
+                <td>{{ (sm.name or '-')|truncate(50) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Employee selection popup (C/O Employee) -->
+<div class="modal hidden" id="employeeModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="employeeModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>Select C/O Employee</h4>
+      <button type="button" class="modal__close" data-close="employeeModal">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__search">
+        <span class="search-field search-field--wide">
+          <input type="text" id="employeeModalSearch" placeholder="Search employee..." />
+          <button type="button" class="search-clear" id="employeeModalClear">×</button>
+        </span>
+      </div>
+      <div class="scroll-table modal__table">
+        <table class="table" id="employeeModalTable">
+          <thead class="crn-modal-thead">
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+            </tr>
+          </thead>
+          <tbody id="employeeModalBody">
+            {% for emp in employees|default([]) %}
+              <tr data-code="{{ emp.code or '' }}" data-name="{{ (emp.name or emp.code or '')|e }}">
+                <td>{{ emp.code or '-' }}</td>
+                <td>{{ (emp.name or '-')|truncate(50) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const customerDisplay = document.getElementById('customer_display');
+  const customerCode = document.getElementById('customer_code');
+  const customerPicker = document.getElementById('customerPicker');
+  const customerClear = document.getElementById('customerClear');
+  const customerModal = document.getElementById('customerModal');
+  const customerModalSearch = document.getElementById('customerModalSearch');
+  const customerModalClear = document.getElementById('customerModalClear');
+  const customerModalTable = document.getElementById('customerModalTable');
+  const btnLoadOutstanding = document.getElementById('btnLoadOutstanding');
+
+  // Ensure customer modal is closed and fields are cleared on page load
+  if (customerModal) {
+    customerModal.classList.add('hidden');
+  }
+  if (customerDisplay) {
+    customerDisplay.value = '';
+  }
+  if (customerCode) {
+    customerCode.value = '';
+  }
+  if (customerClear) {
+    customerClear.style.display = 'none';
+  }
+  const dateFromFilter = document.getElementById('dateFromFilter');
+  const dateToFilter = document.getElementById('dateToFilter');
+  const salesmanDisplay = document.getElementById('salesman_display');
+  const salesmanCode = document.getElementById('salesman_code');
+  const salesmanPicker = document.getElementById('salesmanPicker');
+  const salesmanClear = document.getElementById('salesmanClear');
+  const salesmanModal = document.getElementById('salesmanModal');
+  const salesmanModalSearch = document.getElementById('salesmanModalSearch');
+  const salesmanModalClear = document.getElementById('salesmanModalClear');
+  const salesmanModalTable = document.getElementById('salesmanModalTable');
+
+  // Ensure salesman modal is closed and fields are cleared on page load
+  if (salesmanModal) {
+    salesmanModal.classList.add('hidden');
+  }
+  if (salesmanDisplay) {
+    salesmanDisplay.value = '';
+  }
+  if (salesmanCode) {
+    salesmanCode.value = '';
+  }
+  if (salesmanClear) {
+    salesmanClear.style.display = 'none';
+  }
+  const outstandingSection = document.getElementById('outstandingSection');
+  const outstandingBody = document.getElementById('outstandingBody');
+  const totalOutstandingEl = document.getElementById('totalOutstanding');
+  const totalPayEl = document.getElementById('totalPay');
+  const paymentSection = document.getElementById('paymentSection');
+  const selectAllInvoices = document.getElementById('selectAllInvoices');
+  const coEmployeeSection = document.getElementById('coEmployeeSection');
+  const employeeDisplay = document.getElementById('employee_display');
+  const employeeCode = document.getElementById('employee_code');
+  const employeePicker = document.getElementById('employeePicker');
+  const employeeClear = document.getElementById('employeeClear');
+  const employeeModal = document.getElementById('employeeModal');
+  const employeeModalSearch = document.getElementById('employeeModalSearch');
+  const employeeModalClear = document.getElementById('employeeModalClear');
+  const employeeModalTable = document.getElementById('employeeModalTable');
+  const btnUpdateCoEmployee = document.getElementById('btnUpdateCoEmployee');
+  const coEmployeeMessage = document.getElementById('coEmployeeMessage');
+    const payDate = document.getElementById('payDate');
+    const voucherno = document.getElementById('voucherno');
+    const remark = document.getElementById('remark');
+    const btnSave = document.getElementById('btnSave');
+    const saveMessage = document.getElementById('saveMessage');
+  const btnExportOutstanding = document.getElementById('btnExportOutstanding');
+  const btnReportPdf = document.getElementById('btnReportPdf');
+
+  function onCustomerChange() {
+    const code = (customerCode && customerCode.value) ? customerCode.value.trim() : '';
+    btnLoadOutstanding.disabled = !code;
+    outstandingSection.style.display = 'none';
+    paymentSection.style.display = 'none';
+    if (coEmployeeSection) coEmployeeSection.style.display = 'none';
+    if (btnExportOutstanding) btnExportOutstanding.style.display = 'none';
+    if (btnReportPdf) btnReportPdf.style.display = 'none';
+    if (!code && outstandingBody) outstandingBody.innerHTML = '';
+  }
+
+  function openCustomerModal() {
+    if (!customerModal) return;
+    customerModal.classList.remove('hidden');
+    if (customerModalSearch) {
+      customerModalSearch.value = '';
+      filterCustomerRows('');
+      customerModalSearch.focus();
+    }
+  }
+
+  function closeCustomerModal() {
+    if (customerModal) {
+      customerModal.classList.add('hidden');
+    }
+  }
+
+  function filterCustomerRows(query) {
+    if (!customerModalTable) return;
+    const q = (query || '').trim().toLowerCase();
+    const rows = customerModalTable.querySelectorAll('tbody tr');
+    rows.forEach(function(row) {
+      const code = (row.getAttribute('data-code') || '').toLowerCase();
+      const name = (row.getAttribute('data-name') || '').toLowerCase();
+      const match = !q || code.indexOf(q) !== -1 || name.indexOf(q) !== -1;
+      row.style.display = match ? '' : 'none';
+    });
+  }
+
+  function clearCustomer() {
+    if (customerDisplay) customerDisplay.value = '';
+    if (customerCode) customerCode.value = '';
+    if (customerClear) customerClear.style.display = 'none';
+    onCustomerChange();
+  }
+
+  // Customer modal setup - same pattern as sales invoice
+  if (customerPicker) {
+    customerPicker.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      openCustomerModal();
+    });
+  } else {
+    console.warn('customerPicker button not found');
+  }
+  if (customerDisplay) {
+    customerDisplay.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      openCustomerModal();
+    });
+  } else {
+    console.warn('customerDisplay input not found');
+  }
+  if (customerClear) {
+    customerClear.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      clearCustomer();
+    });
+    customerClear.style.display = 'none';
+  }
+
+  if (customerModal) {
+    customerModal.addEventListener('click', function(e) {
+      const target = e.target;
+      if (target && (target.dataset.close === 'customerModal' || target.classList.contains('modal__close'))) {
+        closeCustomerModal();
+      }
+    });
+  }
+
+  if (customerModalSearch) {
+    customerModalSearch.addEventListener('input', function(e) {
+      const value = e.target.value;
+      filterCustomerRows(value);
+      if (customerModalClear) {
+        customerModalClear.style.display = value ? 'block' : 'none';
+      }
+    });
+  }
+
+  if (customerModalClear) {
+    customerModalClear.addEventListener('click', function() {
+      if (customerModalSearch) {
+        customerModalSearch.value = '';
+        filterCustomerRows('');
+        customerModalClear.style.display = 'none';
+        customerModalSearch.focus();
+      }
+    });
+    customerModalClear.style.display = 'none';
+  }
+
+  if (customerModalTable) {
+    customerModalTable.addEventListener('click', function(e) {
+      const row = e.target.closest('tbody tr');
+      if (!row || !row.dataset.code) return;
+      const code = row.getAttribute('data-code') || '';
+      const name = row.getAttribute('data-name') || '';
+      if (customerDisplay) {
+        customerDisplay.value = code ? `${code} - ${name}`.trim() : '';
+      }
+      if (customerCode) {
+        customerCode.value = code;
+      }
+      if (customerClear) {
+        customerClear.style.display = code ? 'block' : 'none';
+      }
+      closeCustomerModal();
+      onCustomerChange();
+    });
+  }
+
+  // Salesman modal setup - same pattern as customer
+  function openSalesmanModal() {
+    if (!salesmanModal) return;
+    salesmanModal.classList.remove('hidden');
+    if (salesmanModalSearch) {
+      salesmanModalSearch.value = '';
+      filterSalesmanRows('');
+      salesmanModalSearch.focus();
+    }
+  }
+
+  function closeSalesmanModal() {
+    if (salesmanModal) {
+      salesmanModal.classList.add('hidden');
+    }
+  }
+
+  function filterSalesmanRows(query) {
+    if (!salesmanModalTable) return;
+    const q = (query || '').trim().toLowerCase();
+    const rows = salesmanModalTable.querySelectorAll('tbody tr');
+    rows.forEach(function(row) {
+      const code = (row.getAttribute('data-code') || '').toLowerCase();
+      const name = (row.getAttribute('data-name') || '').toLowerCase();
+      const match = !q || code.indexOf(q) !== -1 || name.indexOf(q) !== -1;
+      row.style.display = match ? '' : 'none';
+    });
+  }
+
+  function clearSalesman() {
+    if (salesmanDisplay) salesmanDisplay.value = '';
+    if (salesmanCode) salesmanCode.value = '';
+    if (salesmanClear) salesmanClear.style.display = 'none';
+  }
+
+  if (salesmanPicker) {
+    salesmanPicker.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      openSalesmanModal();
+    });
+  }
+  if (salesmanDisplay) {
+    salesmanDisplay.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      openSalesmanModal();
+    });
+  }
+  if (salesmanClear) {
+    salesmanClear.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      clearSalesman();
+    });
+    salesmanClear.style.display = 'none';
+  }
+
+  if (salesmanModal) {
+    salesmanModal.addEventListener('click', function(e) {
+      const target = e.target;
+      if (target && (target.dataset.close === 'salesmanModal' || target.classList.contains('modal__close'))) {
+        closeSalesmanModal();
+      }
+    });
+  }
+
+  if (salesmanModalSearch) {
+    salesmanModalSearch.addEventListener('input', function(e) {
+      const value = e.target.value;
+      filterSalesmanRows(value);
+      if (salesmanModalClear) {
+        salesmanModalClear.style.display = value ? 'block' : 'none';
+      }
+    });
+  }
+
+  if (salesmanModalClear) {
+    salesmanModalClear.addEventListener('click', function() {
+      if (salesmanModalSearch) {
+        salesmanModalSearch.value = '';
+        filterSalesmanRows('');
+        salesmanModalClear.style.display = 'none';
+        salesmanModalSearch.focus();
+      }
+    });
+    salesmanModalClear.style.display = 'none';
+  }
+
+  if (salesmanModalTable) {
+    salesmanModalTable.addEventListener('click', function(e) {
+      const row = e.target.closest('tbody tr');
+      if (!row || !row.dataset.code) return;
+      const code = row.getAttribute('data-code') || '';
+      const name = row.getAttribute('data-name') || '';
+      if (salesmanDisplay) {
+        salesmanDisplay.value = code ? `${code} - ${name}`.trim() : '';
+      }
+      if (salesmanCode) {
+        salesmanCode.value = code;
+      }
+      if (salesmanClear) {
+        salesmanClear.style.display = code ? 'block' : 'none';
+      }
+      closeSalesmanModal();
+    });
+  }
+
+  // Escape key to close modals
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && customerModal && !customerModal.classList.contains('hidden')) {
+      closeCustomerModal();
+    }
+    if (e.key === 'Escape' && salesmanModal && !salesmanModal.classList.contains('hidden')) {
+      closeSalesmanModal();
+    }
+    if (e.key === 'Escape' && employeeModal && !employeeModal.classList.contains('hidden')) {
+      if (employeeModal) employeeModal.classList.add('hidden');
+    }
+  });
+
+  // Employee (C/O) modal
+  if (employeeModal) employeeModal.classList.add('hidden');
+  function filterEmployeeRows(query) {
+    if (!employeeModalTable) return;
+    const q = (query || '').trim().toLowerCase();
+    const rows = employeeModalTable.querySelectorAll('tbody tr');
+    rows.forEach(function(row) {
+      const code = (row.getAttribute('data-code') || '').toLowerCase();
+      const name = (row.getAttribute('data-name') || '').toLowerCase();
+      row.style.display = (!q || code.indexOf(q) !== -1 || name.indexOf(q) !== -1) ? '' : 'none';
+    });
+  }
+  if (employeePicker) {
+    employeePicker.addEventListener('click', function() {
+      if (employeeModal) {
+        employeeModal.classList.remove('hidden');
+        if (employeeModalSearch) {
+          employeeModalSearch.value = '';
+          filterEmployeeRows('');
+          employeeModalSearch.focus();
+        }
+      }
+    });
+  }
+  if (employeeDisplay) {
+    employeeDisplay.addEventListener('click', function() {
+      if (employeeModal) {
+        employeeModal.classList.remove('hidden');
+        if (employeeModalSearch) {
+          employeeModalSearch.value = '';
+          filterEmployeeRows('');
+          employeeModalSearch.focus();
+        }
+      }
+    });
+  }
+  if (employeeClear) {
+    employeeClear.addEventListener('click', function() {
+      if (employeeDisplay) employeeDisplay.value = '';
+      if (employeeCode) employeeCode.value = '';
+      employeeClear.style.display = 'none';
+    });
+  }
+  employeeModal && employeeModal.addEventListener('click', function(e) {
+    if (e.target && (e.target.dataset.close === 'employeeModal' || e.target.classList.contains('modal__close'))) {
+      employeeModal.classList.add('hidden');
+    }
+  });
+  if (employeeModalSearch) {
+    employeeModalSearch.addEventListener('input', function(e) {
+      filterEmployeeRows(e.target.value);
+      if (employeeModalClear) employeeModalClear.style.display = e.target.value ? 'block' : 'none';
+    });
+  }
+  if (employeeModalClear) {
+    employeeModalClear.addEventListener('click', function() {
+      if (employeeModalSearch) {
+        employeeModalSearch.value = '';
+        filterEmployeeRows('');
+        employeeModalClear.style.display = 'none';
+        employeeModalSearch.focus();
+      }
+    });
+  }
+  if (employeeModalTable) {
+    employeeModalTable.addEventListener('click', function(e) {
+      const row = e.target.closest('tbody tr');
+      if (!row || !row.dataset.code) return;
+      const code = row.getAttribute('data-code') || '';
+      const name = row.getAttribute('data-name') || '';
+      if (employeeDisplay) employeeDisplay.value = code ? (code + ' - ' + name).trim() : '';
+      if (employeeCode) employeeCode.value = code;
+      if (employeeClear) employeeClear.style.display = code ? 'block' : 'none';
+      employeeModal.classList.add('hidden');
+    });
+  }
+
+  // Update C/O Employee button
+  if (btnUpdateCoEmployee) {
+    btnUpdateCoEmployee.addEventListener('click', function() {
+      const empCode = (employeeCode && employeeCode.value) ? employeeCode.value.trim() : '';
+      if (!empCode) {
+        if (coEmployeeMessage) {
+          coEmployeeMessage.textContent = 'Select an employee first.';
+          coEmployeeMessage.style.display = 'block';
+          coEmployeeMessage.style.color = '#b91c1c';
+        }
+        return;
+      }
+      const billnos = [];
+      outstandingBody.querySelectorAll('.invoice-checkbox:checked').forEach(function(cb) {
+        const row = cb.closest('tr');
+        const billno = row ? (row.getAttribute('data-billno') || '').trim() : '';
+        if (billno) billnos.push(billno);
+      });
+      if (billnos.length === 0) {
+        if (coEmployeeMessage) {
+          coEmployeeMessage.textContent = 'Select at least one invoice (check the rows to update).';
+          coEmployeeMessage.style.display = 'block';
+          coEmployeeMessage.style.color = '#b91c1c';
+        }
+        return;
+      }
+      var coExpectedDateEl = document.getElementById('coExpectedDate');
+      var expectedDateVal = (coExpectedDateEl && coExpectedDateEl.value) ? coExpectedDateEl.value.trim() : '';
+      if (!expectedDateVal) {
+        if (coEmployeeMessage) {
+          coEmployeeMessage.textContent = 'Expected Date is required.';
+          coEmployeeMessage.style.display = 'block';
+          coEmployeeMessage.style.color = '#b91c1c';
+        }
+        return;
+      }
+      if (coEmployeeMessage) {
+        coEmployeeMessage.textContent = 'Updating...';
+        coEmployeeMessage.style.display = 'block';
+        coEmployeeMessage.style.color = '#374151';
+      }
+      var coRemarksEl = document.getElementById('coRemarks');
+      var payload = { employeecode: empCode, billnos: billnos, expecteddate: expectedDateVal };
+      if (coRemarksEl && (coRemarksEl.value || '').trim()) payload.remarks = (coRemarksEl.value || '').trim();
+      btnUpdateCoEmployee.disabled = true;
+      fetch('{{ url_for("temporary_collection.cash_receipt_update_co_employee") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          btnUpdateCoEmployee.disabled = false;
+          if (coEmployeeMessage) {
+            coEmployeeMessage.style.display = 'block';
+            if (data.success) {
+              coEmployeeMessage.textContent = data.message || ('Updated ' + (data.updated || 0) + ' invoice(s).');
+              coEmployeeMessage.style.color = '#059669';
+            } else {
+              coEmployeeMessage.textContent = data.error || 'Update failed.';
+              coEmployeeMessage.style.color = '#b91c1c';
+            }
+          }
+        })
+        .catch(function(err) {
+          btnUpdateCoEmployee.disabled = false;
+          if (coEmployeeMessage) {
+            coEmployeeMessage.textContent = 'Error: ' + (err.message || 'Request failed');
+            coEmployeeMessage.style.display = 'block';
+            coEmployeeMessage.style.color = '#b91c1c';
+          }
+        });
+    });
+  }
+
+  // Payment date is set from backend and locked (readonly)
+  // No need to set it manually
+
+  function formatNum(n) {
+    return (typeof n === 'number' && !isNaN(n)) ? n.toFixed(2) : '0.00';
+  }
+
+  // Select All functionality
+  if (selectAllInvoices) {
+    selectAllInvoices.addEventListener('change', function() {
+      const isChecked = this.checked;
+      const checkboxes = outstandingBody.querySelectorAll('.invoice-checkbox');
+      const payInputs = outstandingBody.querySelectorAll('input.pay-amount');
+      
+      checkboxes.forEach(function(cb, index) {
+        cb.checked = isChecked;
+        const row = cb.closest('tr');
+        const payInput = row ? row.querySelector('input.pay-amount') : null;
+        if (payInput) {
+          const max = parseFloat(payInput.getAttribute('data-max') || '0');
+          if (isChecked) {
+            payInput.value = formatNum(max);
+            row.style.backgroundColor = '#dbeafe'; // Light blue background
+          } else {
+            payInput.value = '0.00';
+            row.style.backgroundColor = ''; // Reset to default
+          }
+          payInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      });
+      refreshTotals();
+    });
+  }
+  
+  // Individual checkbox functionality
+  document.addEventListener('change', function(e) {
+    if (e.target && e.target.classList.contains('invoice-checkbox')) {
+      const checkbox = e.target;
+      const row = checkbox.closest('tr');
+      const payInput = row ? row.querySelector('input.pay-amount') : null;
+      if (payInput) {
+        const max = parseFloat(payInput.getAttribute('data-max') || '0');
+        if (checkbox.checked) {
+          payInput.value = formatNum(max);
+          row.style.backgroundColor = '#dbeafe'; // Light blue background
+        } else {
+          payInput.value = '0.00';
+          row.style.backgroundColor = ''; // Reset to default
+        }
+        payInput.dispatchEvent(new Event('input', { bubbles: true }));
+        refreshTotals();
+        
+        // Update select all checkbox state
+        if (selectAllInvoices) {
+          const allCheckboxes = outstandingBody.querySelectorAll('.invoice-checkbox');
+          const checkedCount = outstandingBody.querySelectorAll('.invoice-checkbox:checked').length;
+          selectAllInvoices.checked = checkedCount === allCheckboxes.length && allCheckboxes.length > 0;
+          selectAllInvoices.indeterminate = checkedCount > 0 && checkedCount < allCheckboxes.length;
+        }
+      }
+    }
+  });
+  
+  function refreshTotals() {
+    const rows = outstandingBody.querySelectorAll('tr[data-outstanding]');
+    let sumOut = 0, sumPay = 0;
+    rows.forEach(function(tr) {
+      const out = parseFloat(tr.getAttribute('data-outstanding') || '0');
+      const payInput = tr.querySelector('input.pay-amount');
+      const pay = payInput ? (parseFloat(payInput.value) || 0) : 0;
+      sumOut += out;
+      sumPay += pay;
+    });
+    if (totalOutstandingEl) totalOutstandingEl.textContent = formatNum(sumOut);
+    if (totalPayEl) totalPayEl.textContent = formatNum(sumPay);
+  }
+
+  var outstandingSortCol = -1;
+  var outstandingSortDir = 1;
+  function getOutstandingCellSortValue(tr, colIndex, type) {
+    var cell = tr.cells[colIndex];
+    if (!cell) return '';
+    var payInput = cell.querySelector('input.pay-amount');
+    if (payInput) return parseFloat(payInput.value) || 0;
+    var raw = (cell.textContent || '').trim();
+    if (type === 'number') return parseFloat(raw.replace(/,/g, '')) || 0;
+    if (type === 'date') return raw || '';
+    return (raw || '').toLowerCase();
+  }
+  function sortOutstandingTable(colIndex, type) {
+    var rows = Array.from(outstandingBody.querySelectorAll('tr[data-outstanding]'));
+    if (rows.length === 0) return;
+    if (outstandingSortCol === colIndex) outstandingSortDir = -outstandingSortDir;
+    else { outstandingSortCol = colIndex; outstandingSortDir = 1; }
+    rows.sort(function(a, b) {
+      var aVal = getOutstandingCellSortValue(a, colIndex, type);
+      var bVal = getOutstandingCellSortValue(b, colIndex, type);
+      var cmp = 0;
+      if (type === 'number') cmp = aVal - bVal;
+      else if (type === 'date') cmp = (aVal || '').localeCompare(bVal || '');
+      else cmp = String(aVal).localeCompare(String(bVal));
+      return outstandingSortDir * (cmp < 0 ? -1 : cmp > 0 ? 1 : 0);
+    });
+    rows.forEach(function(tr) { outstandingBody.appendChild(tr); });
+    rows.forEach(function(tr, i) {
+      if (tr.cells[1]) tr.cells[1].textContent = i + 1;
+    });
+    var icons = document.querySelectorAll('#outstandingTable thead th.sortable .sort-icon');
+    icons.forEach(function(span, i) {
+      var th = span.closest('th');
+      var col = th ? parseInt(th.getAttribute('data-sort-col'), 10) : -1;
+      span.textContent = (outstandingSortCol === col) ? (outstandingSortDir === 1 ? ' ▲' : ' ▼') : ' ⇅';
+    });
+  }
+  document.querySelectorAll('#outstandingTable thead th.sortable').forEach(function(th) {
+    th.addEventListener('click', function(e) {
+      if (e.target && (e.target.type === 'checkbox' || e.target.closest('input'))) return;
+      var col = parseInt(th.getAttribute('data-sort-col'), 10);
+      var type = th.getAttribute('data-sort-type') || 'text';
+      sortOutstandingTable(col, type);
+    });
+  });
+
+  btnLoadOutstanding.addEventListener('click', function() {
+    const code = (customerCode && customerCode.value) ? customerCode.value.trim() : '';
+    if (!code) return;
+    btnLoadOutstanding.disabled = true;
+    btnLoadOutstanding.textContent = 'Loading...';
+    
+    // Build query parameters
+    const params = new URLSearchParams();
+    params.set('customer_code', code);
+    if (dateFromFilter && dateFromFilter.value) {
+      params.set('date_from', dateFromFilter.value);
+    }
+    if (dateToFilter && dateToFilter.value) {
+      params.set('date_to', dateToFilter.value);
+    }
+    if (salesmanCode && salesmanCode.value) {
+      params.set('salesman_code', salesmanCode.value);
+    }
+    
+    fetch('{{ url_for("temporary_collection.cash_receipt_outstanding") }}?' + params.toString())
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        const items = data.items || [];
+        outstandingBody.innerHTML = '';
+        if (items.length === 0) {
+          outstandingBody.innerHTML = '<tr><td colspan="9" class="table-empty">No outstanding invoices for this customer.</td></tr>';
+        } else {
+          items.forEach(function(item, i) {
+            const billAmount = parseFloat(item.billamount) || 0;
+            const out = parseFloat(item.outstanding) || 0;
+            const tr = document.createElement('tr');
+            tr.setAttribute('data-billno', item.billno || '');
+            tr.setAttribute('data-billamount', String(billAmount));
+            tr.setAttribute('data-outstanding', String(out));
+            tr.setAttribute('data-salesmancode', item.salesmancode || '');
+            tr.setAttribute('data-employeecode', item.employeecode || '');
+            tr.setAttribute('data-employeename', item.employeename || '');
+            const salesmanDisplay = (item.salesmancode || '') + (item.salesmanname ? ' ' + item.salesmanname : '');
+            const employeeDisplay = (item.employeecode || '') + (item.employeename ? ' - ' + item.employeename : '');
+            tr.innerHTML =
+              '<td><input type="checkbox" class="invoice-checkbox" data-billno="' + (item.billno || '') + '" style="cursor: pointer; width: 18px; height: 18px;" /></td>' +
+              '<td>' + (i + 1) + '</td>' +
+              '<td>' + (item.billno || '-') + '</td>' +
+              '<td>' + (item.billdate || '-') + '</td>' +
+              '<td>' + (salesmanDisplay || '-') + '</td>' +
+              '<td>' + (employeeDisplay || '-') + '</td>' +
+              '<td style="text-align: right;">' + formatNum(billAmount) + '</td>' +
+              '<td style="text-align: right;">' + formatNum(out) + '</td>' +
+              '<td style="text-align: right;"><input type="number" class="input pay-amount" min="0" step="0.01" value="0.00" data-max="' + out + '" style="width: 100px; padding: 4px 8px; text-align: right;" /></td>';
+            outstandingBody.appendChild(tr);
+            
+            // Add long press functionality to set pay amount to outstanding
+            let longPressTimer = null;
+            const payInput = tr.querySelector('input.pay-amount');
+            
+            function updateRowColor() {
+              const v = parseFloat(payInput.value) || 0;
+              if (v > 0) {
+                tr.style.backgroundColor = '#dbeafe'; // Light blue background
+              } else {
+                tr.style.backgroundColor = ''; // Reset to default
+              }
+            }
+            
+            function handleLongPress() {
+              if (payInput) {
+                const currentValue = parseFloat(payInput.value) || 0;
+                // Toggle: if amount > 0, set to 0; otherwise set to outstanding
+                if (currentValue > 0) {
+                  payInput.value = '0.00';
+                } else {
+                  payInput.value = formatNum(out);
+                }
+                payInput.dispatchEvent(new Event('input', { bubbles: true }));
+                refreshTotals();
+                updateRowColor(); // Update row color when amount is set/cleared
+              }
+            }
+            
+            function startLongPress(e) {
+              if (e.type === 'mousedown' && e.button !== 0) return; // Only left mouse button
+              longPressTimer = setTimeout(handleLongPress, 500); // 500ms long press
+              e.preventDefault();
+            }
+            
+            function cancelLongPress() {
+              if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+              }
+            }
+            
+            // Add event listeners for long press on the row (but not on the input itself)
+            tr.addEventListener('mousedown', startLongPress);
+            tr.addEventListener('touchstart', startLongPress, { passive: false });
+            tr.addEventListener('mouseup', cancelLongPress);
+            tr.addEventListener('mouseleave', cancelLongPress);
+            tr.addEventListener('touchend', cancelLongPress);
+            tr.addEventListener('touchcancel', cancelLongPress);
+            
+            // Prevent long press on input field itself
+            if (payInput) {
+              payInput.addEventListener('mousedown', function(e) {
+                e.stopPropagation();
+              });
+              payInput.addEventListener('touchstart', function(e) {
+                e.stopPropagation();
+              });
+              // Add event listeners for pay amount changes to update row color and checkbox
+              payInput.addEventListener('input', function() {
+                updateRowColor();
+                // Update checkbox state
+                const v = parseFloat(this.value) || 0;
+                const max = parseFloat(this.getAttribute('data-max') || '0');
+                const checkbox = tr.querySelector('.invoice-checkbox');
+                if (checkbox) {
+                  checkbox.checked = v > 0 && Math.abs(v - max) < 0.01;
+                  // Update select all checkbox state
+                  if (selectAllInvoices) {
+                    const allCheckboxes = outstandingBody.querySelectorAll('.invoice-checkbox');
+                    const checkedCount = outstandingBody.querySelectorAll('.invoice-checkbox:checked').length;
+                    selectAllInvoices.checked = checkedCount === allCheckboxes.length && allCheckboxes.length > 0;
+                    selectAllInvoices.indeterminate = checkedCount > 0 && checkedCount < allCheckboxes.length;
+                  }
+                }
+              });
+              payInput.addEventListener('change', function() {
+                updateRowColor();
+                // Update checkbox state
+                const v = parseFloat(this.value) || 0;
+                const max = parseFloat(this.getAttribute('data-max') || '0');
+                const checkbox = tr.querySelector('.invoice-checkbox');
+                if (checkbox) {
+                  checkbox.checked = v > 0 && Math.abs(v - max) < 0.01;
+                  // Update select all checkbox state
+                  if (selectAllInvoices) {
+                    const allCheckboxes = outstandingBody.querySelectorAll('.invoice-checkbox');
+                    const checkedCount = outstandingBody.querySelectorAll('.invoice-checkbox:checked').length;
+                    selectAllInvoices.checked = checkedCount === allCheckboxes.length && allCheckboxes.length > 0;
+                    selectAllInvoices.indeterminate = checkedCount > 0 && checkedCount < allCheckboxes.length;
+                  }
+                }
+              });
+            }
+          });
+          outstandingBody.querySelectorAll('input.pay-amount').forEach(function(inp) {
+            const row = inp.closest('tr');
+            function updateRowColor() {
+              const v = parseFloat(inp.value) || 0;
+              if (v > 0) {
+                row.style.backgroundColor = '#dbeafe'; // Light blue background
+              } else {
+                row.style.backgroundColor = ''; // Reset to default
+              }
+            }
+            inp.addEventListener('input', function() {
+              refreshTotals();
+              updateRowColor();
+              // Update checkbox state based on pay amount
+              const row = this.closest('tr');
+              const checkbox = row ? row.querySelector('.invoice-checkbox') : null;
+              if (checkbox) {
+                const v = parseFloat(this.value) || 0;
+                const max = parseFloat(this.getAttribute('data-max') || '0');
+                checkbox.checked = v > 0 && Math.abs(v - max) < 0.01; // Checked if amount equals outstanding
+                // Update select all checkbox state
+                if (selectAllInvoices) {
+                  const allCheckboxes = outstandingBody.querySelectorAll('.invoice-checkbox');
+                  const checkedCount = outstandingBody.querySelectorAll('.invoice-checkbox:checked').length;
+                  selectAllInvoices.checked = checkedCount === allCheckboxes.length && allCheckboxes.length > 0;
+                  selectAllInvoices.indeterminate = checkedCount > 0 && checkedCount < allCheckboxes.length;
+                }
+              }
+            });
+            inp.addEventListener('change', function() {
+              const max = parseFloat(this.getAttribute('data-max') || '0');
+              const v = parseFloat(this.value) || 0;
+              if (v > max) this.value = formatNum(max);
+              refreshTotals();
+              updateRowColor();
+              // Update checkbox state based on pay amount
+              const row = this.closest('tr');
+              const checkbox = row ? row.querySelector('.invoice-checkbox') : null;
+              if (checkbox) {
+                const finalV = parseFloat(this.value) || 0;
+                checkbox.checked = finalV > 0 && Math.abs(finalV - max) < 0.01;
+                // Update select all checkbox state
+                if (selectAllInvoices) {
+                  const allCheckboxes = outstandingBody.querySelectorAll('.invoice-checkbox');
+                  const checkedCount = outstandingBody.querySelectorAll('.invoice-checkbox:checked').length;
+                  selectAllInvoices.checked = checkedCount === allCheckboxes.length && allCheckboxes.length > 0;
+                  selectAllInvoices.indeterminate = checkedCount > 0 && checkedCount < allCheckboxes.length;
+                }
+              }
+            });
+            // Initial check for existing value
+            updateRowColor();
+          });
+        }
+        outstandingSection.style.display = 'block';
+        if (coEmployeeSection) coEmployeeSection.style.display = 'block';
+        paymentSection.style.display = items.length > 0 ? 'block' : 'none';
+        if (btnExportOutstanding) btnExportOutstanding.style.display = items.length > 0 ? 'inline-block' : 'none';
+        if (btnReportPdf) btnReportPdf.style.display = items.length > 0 ? 'inline-block' : 'none';
+        refreshTotals();
+        
+        // Reset select all checkbox
+        if (selectAllInvoices) {
+          selectAllInvoices.checked = false;
+        }
+      })
+      .catch(function(err) {
+        outstandingBody.innerHTML = '<tr><td colspan="9" class="table-empty">Error loading outstanding. Try again.</td></tr>';
+        outstandingSection.style.display = 'block';
+        if (btnExportOutstanding) btnExportOutstanding.style.display = 'none';
+        if (btnReportPdf) btnReportPdf.style.display = 'none';
+      })
+      .finally(function() {
+        btnLoadOutstanding.disabled = false;
+        btnLoadOutstanding.textContent = 'Load outstanding';
+      });
+  });
+
+  function escapeCsvCell(val) {
+    if (val == null) return '';
+    var s = String(val).trim();
+    if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  }
+
+  if (btnExportOutstanding) {
+    btnExportOutstanding.addEventListener('click', function() {
+      var table = document.getElementById('outstandingTable');
+      var thead = table && table.querySelector('thead tr');
+      var tbody = table && table.querySelector('#outstandingBody');
+      if (!thead || !tbody) return;
+      var dataRows = tbody.querySelectorAll('tr[data-billno]');
+      if (dataRows.length === 0) return;
+      var headers = [];
+      thead.querySelectorAll('th').forEach(function(th, idx) {
+        if (idx === 0) return;
+        headers.push(escapeCsvCell(th.textContent.trim()));
+      });
+      if (headers.length === 0) headers = ['Sl.No', 'Bill No', 'Bill Date', 'Salesman', 'C/O Employee', 'Bill Amount', 'Outstanding', 'Pay amount'];
+      var lines = [headers.join(',')];
+      dataRows.forEach(function(tr) {
+        var cells = tr.querySelectorAll('td');
+        if (cells.length < 9) return;
+        var row = [];
+        for (var i = 1; i <= 6; i++) row.push(escapeCsvCell(cells[i] ? cells[i].textContent.trim() : ''));
+        row.push(escapeCsvCell(tr.getAttribute('data-outstanding') || '0'));
+        var payInput = tr.querySelector('input.pay-amount');
+        row.push(escapeCsvCell(payInput ? payInput.value : '0'));
+        lines.push(row.join(','));
+      });
+      var csv = lines.join('\r\n');
+      var blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+      var link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      var cust = (customerCode && customerCode.value) ? customerCode.value.trim() : 'customer';
+      link.download = 'outstanding_invoices_' + cust + '_' + new Date().toISOString().slice(0, 10) + '.csv';
+      link.click();
+      URL.revokeObjectURL(link.href);
+    });
+  }
+
+  if (btnReportPdf) {
+    btnReportPdf.addEventListener('click', function() {
+      var code = (customerCode && customerCode.value) ? customerCode.value.trim() : '';
+      if (!code) return;
+      var params = new URLSearchParams();
+      params.set('customer_code', code);
+      if (dateFromFilter && dateFromFilter.value) params.set('date_from', dateFromFilter.value);
+      if (dateToFilter && dateToFilter.value) params.set('date_to', dateToFilter.value);
+      if (salesmanCode && salesmanCode.value) params.set('salesman_code', salesmanCode.value);
+      var url = '{{ url_for("temporary_collection.cash_receipt_outstanding_pdf") }}?' + params.toString();
+      window.open(url, '_blank');
+    });
+  }
+
+  var saveInProgress = false;
+  var cashReceiptSaveCompleted = false;
+  function applyCashReceiptSaveNonce(data) {
+    if (data && typeof data.save_nonce === 'string' && data.save_nonce) {
+      window.__GLOBAL_SAVE_NONCE = data.save_nonce;
+    }
+  }
+  btnSave.addEventListener('click', function() {
+    if (cashReceiptSaveCompleted) {
+      alert('This receipt was already saved. Use Back to list, or open New Cash Receipt again for another receipt.');
+      return;
+    }
+    if (saveInProgress) return;
+    const code = (customerCode && customerCode.value) ? customerCode.value.trim() : '';
+    if (!code) {
+      saveMessage.textContent = 'Select a customer.';
+      saveMessage.style.display = 'block';
+      saveMessage.style.color = '#b91c1c';
+      return;
+    }
+    const salesmanCodeValue = (salesmanCode && salesmanCode.value) ? salesmanCode.value.trim() : '';
+    if (!salesmanCodeValue) {
+      saveMessage.textContent = 'Select a salesman.';
+      saveMessage.style.display = 'block';
+      saveMessage.style.color = '#b91c1c';
+      return;
+    }
+    const dateVal = (payDate && payDate.value) ? payDate.value.trim() : '';
+    if (!dateVal) {
+      saveMessage.textContent = 'Enter payment date.';
+      saveMessage.style.display = 'block';
+      saveMessage.style.color = '#b91c1c';
+      return;
+    }
+    const items = [];
+    outstandingBody.querySelectorAll('tr[data-billno]').forEach(function(tr) {
+      const billno = (tr.getAttribute('data-billno') || '').trim();
+      const inp = tr.querySelector('input.pay-amount');
+      const amount = inp ? (parseFloat(inp.value) || 0) : 0;
+      const salesmancode = (tr.getAttribute('data-salesmancode') || '').trim();
+      if (billno && amount > 0) {
+        items.push({ billno: billno, amount: amount, salesmancode: salesmancode });
+      }
+    });
+    if (items.length === 0) {
+      saveMessage.textContent = 'Add at least one invoice with pay amount > 0.';
+      saveMessage.style.display = 'block';
+      saveMessage.style.color = '#b91c1c';
+      return;
+    }
+    var token =
+      typeof window !== 'undefined' && typeof window.__GLOBAL_SAVE_NONCE === 'string'
+        ? window.__GLOBAL_SAVE_NONCE.trim()
+        : '';
+    if (!token) {
+      saveMessage.textContent = 'Save token missing. Reload the page and try again.';
+      saveMessage.style.display = 'block';
+      saveMessage.style.color = '#b91c1c';
+      return;
+    }
+    saveInProgress = true;
+    saveMessage.style.display = 'block';
+    saveMessage.textContent = 'Saving...';
+    saveMessage.style.color = '#374151';
+    btnSave.disabled = true;
+    var saveOverlay = document.getElementById('cashReceiptSaveOverlay');
+    if (saveOverlay) { saveOverlay.style.display = 'flex'; }
+    fetch('{{ url_for("temporary_collection.cash_receipt_save") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        save_nonce: token,
+        customer_code: code,
+        salesman_code: salesmanCodeValue,
+        paydate: dateVal,
+        voucherno: (voucherno && voucherno.value) ? voucherno.value.trim() : '',
+        remark: (remark && remark.value) ? remark.value.trim() : '',
+        items: items
+      })
+    })
+      .then(function(r) {
+        return r.json().then(function(j) {
+          return { ok: r.ok, status: r.status, data: j || {} };
+        }).catch(function() {
+          return { ok: r.ok, status: r.status, data: {} };
+        });
+      })
+      .then(function(p) {
+        var data = p.data || {};
+        applyCashReceiptSaveNonce(data);
+        if (saveOverlay) saveOverlay.style.display = 'none';
+        if (data.success) {
+          window.dispatchEvent(new CustomEvent('nexa-transaction-save-success', { detail: data }));
+          cashReceiptSaveCompleted = true;
+          btnSave.disabled = true;
+          btnSave.title = 'Already saved';
+          if (data.voucherno_changed) {
+            saveMessage.textContent = data.message || ('Receipt saved. Receipt No: ' + (data.receipt_no || '') + ' (changed from ' + (data.original_voucherno || '') + ')');
+            saveMessage.style.color = '#f59e0b'; // Orange/warning color
+          } else {
+            saveMessage.textContent = 'Receipt saved. Receipt No: ' + (data.receipt_no || '');
+            saveMessage.style.color = '#059669';
+          }
+          
+          // Handle PDF receipt if available
+          if (data.pdf_base64 && data.pdf_filename) {
+            try {
+              // Validate PDF data
+              if (!data.pdf_base64 || data.pdf_base64.length === 0) {
+                throw new Error('PDF data is empty');
+              }
+              
+              // Convert base64 to blob
+              const pdfBytes = atob(data.pdf_base64);
+              const pdfArray = new Uint8Array(pdfBytes.length);
+              for (let i = 0; i < pdfBytes.length; i++) {
+                pdfArray[i] = pdfBytes.charCodeAt(i);
+              }
+              const blob = new Blob([pdfArray], { type: 'application/pdf' });
+              
+              // Validate blob size
+              if (blob.size === 0) {
+                throw new Error('PDF file is empty');
+              }
+              
+              // Create download link
+              const downloadUrl = URL.createObjectURL(blob);
+              const downloadLink = document.createElement('a');
+              downloadLink.href = downloadUrl;
+              downloadLink.download = data.pdf_filename;
+              downloadLink.style.display = 'none';
+              document.body.appendChild(downloadLink);
+              downloadLink.click();
+              document.body.removeChild(downloadLink);
+              
+              // Create print window
+              setTimeout(function() {
+                const printUrl = URL.createObjectURL(blob);
+                const printWindow = window.open(printUrl, '_blank');
+                if (printWindow) {
+                  printWindow.onload = function() {
+                    printWindow.print();
+                    setTimeout(function() {
+                      URL.revokeObjectURL(printUrl);
+                    }, 1000);
+                  };
+                  printWindow.onerror = function() {
+                    URL.revokeObjectURL(printUrl);
+                    console.error('Error opening PDF for printing');
+                  };
+                }
+                setTimeout(function() {
+                  URL.revokeObjectURL(downloadUrl);
+                }, 1000);
+              }, 500);
+            } catch (pdfErr) {
+              console.error('PDF handling error:', pdfErr);
+              alert('Error processing PDF: ' + (pdfErr.message || 'Unknown error') + '\n\nReceipt was saved successfully.');
+            }
+          } else if (data.pdf_error) {
+            // Show error message if PDF generation failed
+            console.error('PDF generation error:', data.pdf_error);
+            alert('Receipt saved successfully, but PDF could not be generated: ' + data.pdf_error);
+          }
+          
+          setTimeout(function() {
+            window.location.href = '{{ url_for("temporary_collection.cash_receipt_list") }}';
+          }, 2000);
+        } else {
+          window.dispatchEvent(new CustomEvent('nexa-transaction-save-failed', { detail: data }));
+          var errText =
+            data.error ||
+            (data.replay_blocked ? 'Duplicate or invalid save. Try Save once more.' : 'Save failed.');
+          if (data.replay_blocked) {
+            alert(errText);
+          }
+          saveMessage.textContent = errText;
+          saveMessage.style.color = '#b91c1c';
+          saveInProgress = false;
+          btnSave.disabled = false;
+          btnSave.title = '';
+        }
+      })
+      .catch(function(err) {
+        window.dispatchEvent(new CustomEvent('nexa-transaction-save-failed', { detail: { error: err.message } }));
+        if (saveOverlay) saveOverlay.style.display = 'none';
+        saveMessage.textContent = 'Error: ' + (err.message || 'Request failed');
+        saveMessage.style.color = '#b91c1c';
+        saveInProgress = false;
+        btnSave.disabled = false;
+        btnSave.title = '';
+      });
+  });
+})();
+</script>
+<script src="{{ url_for('static', filename='js/transaction_recording_client.js') }}?v=7"></script>
+{% endblock %}

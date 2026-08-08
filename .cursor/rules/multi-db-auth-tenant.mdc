@@ -1,0 +1,47 @@
+---
+description: Use auth DB for login/roles/tenants; tenant DB for business data. Default when adding DB code.
+alwaysApply: true
+---
+
+# Multi-DB: Auth DB vs Tenant DB
+
+This project supports **multi-DB mode**: one **auth DB** (login, users, roles, tenants) and **tenant DBs** (business data per tenant). When adding or changing database code, follow this by default.
+
+## Which connection to use
+
+| Tables / Use case | Connection | In code |
+|-------------------|------------|--------|
+| **Auth DB** – `login_users`, `roles`, `role_permissions`, `tenant_databases` | Auth only | `_get_connection_auth()` or `_safe_rows_auth(query, params)` |
+| **Tenant DB** – LOCATIONMASTER, COUNTER, sales, reports, and all other business tables | Per-tenant (or default) | `_get_connection()` or `_safe_rows(query, params)` |
+
+## Rules
+
+1. **Any read/write of** `login_users`, `roles`, `role_permissions`, or `tenant_databases` **must** use **auth** connection:
+   - `with _get_connection_auth() as conn:` for raw connections
+   - `_safe_rows_auth(query, params)` for SELECT that returns list of dicts
+
+2. **All other tables** (business data) use **tenant** connection:
+   - `_get_connection()` (uses session/g.current_tenant_id in multi-DB; single DB when not multi-DB)
+   - `_safe_rows(query, params)` or `_fetch_rows(query, params)` for queries
+
+3. **New helpers** that touch auth tables: define them in `db.py` and use `_get_connection_auth()` / `_safe_rows_auth()` only. Do not use `_get_connection()` or `_safe_rows()` for auth tables.
+
+## Examples
+
+```python
+# Auth DB – login_users, roles, role_permissions, tenant_databases
+rows = _safe_rows_auth("SELECT tenant_id FROM login_users WHERE username = :u", {"u": username})
+with _get_connection_auth() as conn:
+    cur.execute("INSERT INTO tenant_databases (...) VALUES (...)", params)
+
+# Tenant DB – business data
+rows = _safe_rows("SELECT * FROM LOCATIONMASTER WHERE ...", params)
+with _get_connection() as conn:
+    cur.execute("SELECT * FROM COUNTER WHERE ...", params)
+```
+
+## Checklist when adding features
+
+- [ ] New table: is it auth (users/roles/tenants) or business? Choose auth vs tenant connection.
+- [ ] New function in `db.py`: if it touches `login_users`, `roles`, `role_permissions`, or `tenant_databases`, use `_get_connection_auth()` / `_safe_rows_auth()` only.
+- [ ] New blueprint/API: if it only manages users/roles/tenants, it will call db helpers that already use auth; otherwise use existing db helpers that use `_get_connection()`.

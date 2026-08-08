@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block content %}
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 10mm;
+    }
+    .si-print-wrap { max-width: 980px; margin: 0 auto; background: #fff; border: 1px solid #dbe5f1; border-radius: 10px; overflow: hidden; }
+    .si-print-topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: #f8fbff; border-bottom: 1px solid #dbe5f1; }
+    .si-print-title { margin: 0; font-size: 18px; color: #1a56a4; }
+    .si-print-sub { margin: 2px 0 0; color: #6b7280; font-size: 12px; }
+    .si-doc-head { text-align: center; padding: 10px 14px 6px; }
+    .si-doc-company { font-weight: 700; color: #1a56a4; font-size: 16px; }
+    .si-doc-type { margin-top: 2px; font-size: 18px; color: #1a56a4; font-weight: 700; }
+    .si-doc-rule { height: 4px; background: #1a56a4; margin: 8px 14px; border-radius: 2px; }
+    .si-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin: 0 14px 10px; border: 1px solid #b0b8c4; }
+    .si-info-col { padding: 8px 10px; background: #e8f0fb; }
+    .si-info-col + .si-info-col { border-left: 1px solid #b0b8c4; }
+    .si-info-row { display: grid; grid-template-columns: 120px 1fr; gap: 8px; padding: 4px 0; border-bottom: 1px solid #d7e1ee; font-size: 13px; }
+    .si-info-row:last-child { border-bottom: none; }
+    .si-info-label { color: #4b5563; font-weight: 600; }
+    .si-table-wrap { margin: 0 14px 10px; border: 1px solid #b0b8c4; border-radius: 4px; overflow: hidden; }
+    .si-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .si-table thead th { background: #1a56a4; color: #fff; font-weight: 700; padding: 7px 6px; text-align: center; border-right: 1px solid #2f69b2; }
+    .si-table thead th:last-child { border-right: none; }
+    .si-table tbody td { padding: 6px; border-top: 1px solid #e5e7eb; border-right: 1px solid #edf1f6; }
+    .si-table tbody td:last-child { border-right: none; }
+    .si-table tbody tr:nth-child(even) { background: #f7f8fa; }
+    .si-right { text-align: right; }
+    .si-center { text-align: center; }
+    .si-summary { margin: 0 14px 14px auto; width: 320px; border: 1px solid #b0b8c4; border-collapse: collapse; font-size: 13px; }
+    .si-summary td { padding: 7px 10px; border-top: 1px solid #d7e1ee; }
+    .si-summary tr:first-child td { border-top: none; }
+    .si-summary td:first-child { text-align: right; color: #374151; font-weight: 600; }
+    .si-summary td:last-child { text-align: right; font-weight: 700; }
+    .si-summary tr:last-child td { background: #e8f0fb; font-size: 14px; }
+    @media print {
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      html, body {
+        width: 210mm;
+      }
+      .si-print-topbar button { display: none !important; }
+      .si-print-wrap { border: none; border-radius: 0; }
+      .app-shell, .main-content { padding: 0 !important; margin: 0 !important; }
+    }
+  </style>
+
+  <section class="si-print-wrap">
+    <div class="si-print-topbar">
+      <div>
+        <h1 class="si-print-title">Sales Print</h1>
+        <p class="si-print-sub">Bill No: {{ billno }}</p>
+      </div>
+      <button type="button" class="button button--primary" id="printButton">Print</button>
+    </div>
+
+    <div class="si-doc-head">
+      <div class="si-doc-company">{{ session.get("location_name") or "Nexus Erp" }}</div>
+      <div class="si-doc-type">SALES INVOICE</div>
+    </div>
+    <div class="si-doc-rule"></div>
+
+    <div class="si-info-grid">
+      <div class="si-info-col">
+        <div class="si-info-row"><div class="si-info-label">Customer Code</div><div>{{ header.customercode or "" }}</div></div>
+        <div class="si-info-row"><div class="si-info-label">Customer Name</div><div>{{ header.customername or "" }}</div></div>
+        <div class="si-info-row"><div class="si-info-label">Address</div><div>{{ header.address or "" }}</div></div>
+      </div>
+      <div class="si-info-col">
+        <div class="si-info-row"><div class="si-info-label">Invoice No</div><div>{{ billno }}</div></div>
+        <div class="si-info-row"><div class="si-info-label">Date</div><div>{{ header.billdate or "" }}</div></div>
+        <div class="si-info-row"><div class="si-info-label">Time</div><div>{{ header.billtime or "" }}</div></div>
+        <div class="si-info-row"><div class="si-info-label">Prepared By</div><div>{{ session.get("user") or "" }}</div></div>
+        <div class="si-info-row"><div class="si-info-label">Remarks</div><div>{{ header.remarks or "" }}</div></div>
+      </div>
+    </div>
+
+    <div class="si-table-wrap">
+      <table class="si-table">
+        <thead>
+          <tr>
+            <th>Sl.No</th>
+            <th>Item Code</th>
+            <th>Item Name</th>
+            <th>UOM</th>
+            <th>Qty</th>
+            <th>Rate</th>
+            <th>Discount</th>
+            <th>Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in lines %}
+            <tr>
+              <td class="si-center">{{ row.slno }}</td>
+              <td class="si-center">{{ row.itemcode }}</td>
+              <td>{{ row.itemname or "" }}</td>
+              <td class="si-center">{{ row.unitofmeasurement }}</td>
+              <td class="si-right">{{ "{:.2f}".format(row.quantity or 0) }}</td>
+              <td class="si-right">{{ "{:.3f}".format(row.rate or 0) }}</td>
+              <td class="si-right">{{ "{:.2f}".format(row.itdisc or 0) }}</td>
+              <td class="si-right">{{ "{:.2f}".format((row.quantity or 0) * (row.rate or 0) - (row.itdisc or 0)) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <table class="si-summary">
+      <tr>
+        <td>Total Discount</td>
+        <td>{{ "{:.2f}".format(header.discountamount or 0) }}</td>
+      </tr>
+      <tr>
+        <td>Net Amount</td>
+        <td>{{ "{:.2f}".format(header.netbillamount or 0) }}</td>
+      </tr>
+    </table>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    const billno = {{ billno }};
+    const handlePrintComplete = async () => {
+      try {
+        await fetch('/sales/print-complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ billno }),
+        });
+      } catch (e) {
+        console.error('Failed to mark print complete', e);
+      }
+    };
+
+    const printNow = () => {
+      window.print();
+    };
+
+    window.addEventListener('afterprint', () => {
+      handlePrintComplete();
+    });
+
+    const printButton = document.getElementById('printButton');
+    if (printButton) {
+      printButton.addEventListener('click', printNow);
+    }
+
+    // Print is manual via Print button only.
+  </script>
+{% endblock %}

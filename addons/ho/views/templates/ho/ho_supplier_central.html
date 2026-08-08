@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body { background: #fff !important; }
+  .ho-wrap { width: 100%; max-width: none; margin: 0; }
+  .ho-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .ho-actions .input { min-width: 260px; }
+  .ho-table-wrap { border: 1px solid #dee2e6; border-radius: 6px; overflow: auto; max-height: 68vh; }
+  #hoSupplierTable { width: 100%; min-width: 980px; border-collapse: collapse; font-size: 13px; }
+  #hoSupplierTable th, #hoSupplierTable td { border-bottom: 1px solid #dee2e6; padding: 8px 10px; white-space: nowrap; }
+  #hoSupplierTable thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; }
+  #hoSupplierTable td:nth-child(1), #hoSupplierTable td:nth-child(11) { text-align: center; }
+</style>
+
+<div class="page-po ho-wrap">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">HO - Supplier Central</h1>
+      <p class="page-po__muted">Create and sync suppliers from HO to selected tenant databases.</p>
+    </div>
+  </div>
+
+  <form method="get" class="ho-actions">
+    <input type="text" class="input" name="search" value="{{ search or '' }}" placeholder="Search supplier code / name" />
+    <button type="submit" class="page-po__btn-secondary">Search</button>
+    <a href="{{ url_for('ho.supplier_central') }}" class="page-po__btn-secondary">Reset</a>
+    <a href="{{ url_for('ho.supplier_central_form') }}" class="page-po__btn-primary">Create New</a>
+  </form>
+
+  <div class="ho-table-wrap">
+    <table id="hoSupplierTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Location</th>
+          <th>Supplier Code</th>
+          <th>Supplier Name</th>
+          <th>Type</th>
+          <th>Contact Person</th>
+          <th>Payable Account</th>
+          <th>Purchase Account</th>
+          <th>Input VAT Account</th>
+          <th>Advance Account</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in suppliers %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ s.locationcode or source_location_code }}</td>
+            <td>{{ s.suppliercode }}</td>
+            <td>{{ s.suppliername or '' }}</td>
+            <td>{{ s.suppliertype or '' }}</td>
+            <td>{{ s.contactperson or '' }}</td>
+            <td>{{ s.payableaccount or '' }}</td>
+            <td>{{ s.purchaseaccount or '' }}</td>
+            <td>{{ s.vatinputaccount or '' }}</td>
+            <td>{{ s.advanceaccount or '' }}</td>
+            <td>
+              <a class="page-po__btn-secondary" style="padding:2px 8px; font-size:12px;"
+                 href="{{ url_for('ho.supplier_central_form', supplier_code=s.suppliercode) }}">Open Full</a>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="11" class="muted">No suppliers found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% from "ai_forecast/_nav.html" import ai_nav %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('ai_forecast.static', filename='css/ai_forecast.css') }}?v=2" />
+{% endblock %}
+{% block content %}
+<div class="ai-fc-page" id="aiFcDashboard">
+  <div class="ai-fc-topbar">
+    <div class="ai-fc-topbar__intro">
+      <h1 class="ai-fc-title">AI Forecast Cockpit</h1>
+      <p class="ai-fc-sub">
+        Branch {{ location_code }}{% if location_name %} · {{ location_name }}{% endif %}
+        — sales & purchase forecasting, reorder intelligence, and risk alerts
+      </p>
+    </div>
+    {{ ai_nav('cockpit') }}
+  </div>
+
+  <div class="ai-fc-toolbar">
+    <button type="button" class="ai-fc-btn" id="aiFcRefreshBtn">Refresh data</button>
+    {% if openai_configured %}
+    <button type="button" class="ai-fc-btn ai-fc-btn--ai" id="aiFcNarrativeBtn">Generate AI summary</button>
+    {% else %}
+    <span class="ai-fc-hint">Set OPENAI_API_KEY in .env for AI narrative summaries</span>
+    {% endif %}
+    <label class="ai-fc-horizon">
+      <span>Forecast horizon</span>
+      <select id="aiFcHorizon">
+        <option value="7">7 days</option>
+        <option value="30" selected>30 days</option>
+        <option value="60">60 days</option>
+        <option value="90">90 days</option>
+      </select>
+    </label>
+    <span class="ai-fc-status" id="aiFcStatus"></span>
+  </div>
+
+  <div id="aiFcError" class="ai-fc-alert ai-fc-alert--error hidden"></div>
+
+  <section class="ai-fc-kpi-grid" aria-label="Forecast KPIs">
+    <div class="ai-fc-kpi"><div class="ai-fc-kpi-label">Predicted sales qty</div><div class="ai-fc-kpi-val" id="aiFcKpiPredQty">—</div><div class="ai-fc-kpi-foot" id="aiFcKpiPredQtyFoot">30-day horizon</div></div>
+    <div class="ai-fc-kpi"><div class="ai-fc-kpi-label">Predicted sales amount</div><div class="ai-fc-kpi-val" id="aiFcKpiPredAmt">—</div><div class="ai-fc-kpi-foot">weighted trend</div></div>
+    <div class="ai-fc-kpi"><div class="ai-fc-kpi-label">Sales growth</div><div class="ai-fc-kpi-val" id="aiFcKpiGrowth">—</div><div class="ai-fc-kpi-foot">vs prior 30 days</div></div>
+    <div class="ai-fc-kpi"><div class="ai-fc-kpi-label">Last 30d sales qty</div><div class="ai-fc-kpi-val" id="aiFcKpiLast30">—</div><div class="ai-fc-kpi-foot" id="aiFcKpiYoY">YoY —</div></div>
+    <div class="ai-fc-kpi ai-fc-kpi--warn"><div class="ai-fc-kpi-label">Understock alerts</div><div class="ai-fc-kpi-val" id="aiFcKpiUnder">—</div><div class="ai-fc-kpi-foot"><a href="{{ url_for('ai_forecast.reorder_page') }}">View reorder →</a></div></div>
+    <div class="ai-fc-kpi ai-fc-kpi--danger"><div class="ai-fc-kpi-label">Overstock warnings</div><div class="ai-fc-kpi-val" id="aiFcKpiOver">—</div><div class="ai-fc-kpi-foot">excess cover</div></div>
+    <div class="ai-fc-kpi"><div class="ai-fc-kpi-label">Suggested purchase qty</div><div class="ai-fc-kpi-val" id="aiFcKpiPurchase">—</div><div class="ai-fc-kpi-foot"><a href="{{ url_for('ai_forecast.purchase_forecast_page') }}">Purchase forecast →</a></div></div>
+    <div class="ai-fc-kpi ai-fc-kpi--ok"><div class="ai-fc-kpi-label">Fast moving SKUs</div><div class="ai-fc-kpi-val" id="aiFcKpiFast">—</div><div class="ai-fc-kpi-foot" id="aiFcKpiDead">Slow/dead —</div></div>
+  </section>
+
+  <section class="ai-fc-quick-links">
+    <a href="{{ url_for('ai_forecast.sales_forecast_page') }}" class="ai-fc-quick">Sales forecast</a>
+    <a href="{{ url_for('ai_forecast.purchase_forecast_page') }}" class="ai-fc-quick">Purchase forecast</a>
+    <a href="{{ url_for('ai_forecast.reorder_page') }}" class="ai-fc-quick">Smart reorder</a>
+    <a href="{{ url_for('ai_forecast.products_page') }}" class="ai-fc-quick">Product performance</a>
+    <a href="{{ url_for('ai_forecast.suppliers_page') }}" class="ai-fc-quick">Supplier analysis</a>
+    <a href="{{ url_for('ai_forecast.customers_page') }}" class="ai-fc-quick">Customer analysis</a>
+    <a href="{{ url_for('ai_forecast.reports_page') }}" class="ai-fc-quick">AI reports</a>
+  </section>
+
+  {% if openai_configured %}
+  <div class="ai-fc-card ai-fc-card--insights">
+    <div class="ai-fc-card__head">AI executive summary</div>
+    <div class="ai-fc-card__body ai-fc-narrative" id="aiFcNarrative">Click “Generate AI summary” for a narrative outlook based on live forecast data.</div>
+  </div>
+  {% endif %}
+
+  <div class="ai-fc-grid-2">
+    <div class="ai-fc-card">
+      <div class="ai-fc-card__head">Sales trend (90 days)</div>
+      <div class="ai-fc-card__body"><div class="ai-fc-chart-wrap"><canvas id="aiFcSalesChart"></canvas></div></div>
+    </div>
+    <div class="ai-fc-card">
+      <div class="ai-fc-card__head">Purchase trend — GRN (90 days)</div>
+      <div class="ai-fc-card__body"><div class="ai-fc-chart-wrap"><canvas id="aiFcPurchaseChart"></canvas></div></div>
+    </div>
+  </div>
+
+  <div class="ai-fc-card">
+    <div class="ai-fc-card__head">Forecast outlook — predicted vs recent actuals</div>
+    <div class="ai-fc-card__body"><div class="ai-fc-chart-wrap ai-fc-chart-wrap--short"><canvas id="aiFcOutlookChart"></canvas></div></div>
+  </div>
+
+  <div class="ai-fc-grid-2">
+    <div class="ai-fc-card">
+      <div class="ai-fc-card__head">Suggested reorder (priority)</div>
+      <div class="ai-fc-card__body ai-fc-table-scroll">
+        <table class="ai-fc-table" id="aiFcReorderTable">
+          <thead><tr><th>Item</th><th>Name</th><th>Stock</th><th>Suggest qty</th><th>Days cover</th><th>Class</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="ai-fc-card">
+      <div class="ai-fc-card__head">Top selling items</div>
+      <div class="ai-fc-card__body ai-fc-table-scroll">
+        <table class="ai-fc-table" id="aiFcTopItemsTable">
+          <thead><tr><th>Item</th><th>Name</th><th>Avg daily</th><th>Revenue (90d)</th><th>Class</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="ai-fc-grid-3">
+    <div class="ai-fc-card">
+      <div class="ai-fc-card__head">Low stock alerts</div>
+      <div class="ai-fc-card__body ai-fc-list" id="aiFcLowStock"></div>
+    </div>
+    <div class="ai-fc-card">
+      <div class="ai-fc-card__head">Overstock warnings</div>
+      <div class="ai-fc-card__body ai-fc-list" id="aiFcOverstock"></div>
+    </div>
+    <div class="ai-fc-card">
+      <div class="ai-fc-card__head">Supplier risk</div>
+      <div class="ai-fc-card__body ai-fc-list" id="aiFcSupplierRisk"></div>
+    </div>
+  </div>
+
+  <div class="ai-fc-grid-2">
+    <div class="ai-fc-card">
+      <div class="ai-fc-card__head">Product performance leaders</div>
+      <div class="ai-fc-card__body ai-fc-table-scroll">
+        <table class="ai-fc-table" id="aiFcProductTable">
+          <thead><tr><th>Score</th><th>Item</th><th>Name</th><th>Class</th><th>Revenue</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="ai-fc-card">
+      <div class="ai-fc-card__head">Top customers (180d)</div>
+      <div class="ai-fc-card__body ai-fc-table-scroll">
+        <table class="ai-fc-table" id="aiFcCustomerTable">
+          <thead><tr><th>Customer</th><th>Amount</th><th>Bills</th><th>Segment</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+window.__AI_FORECAST__ = {
+  apiDashboard: {{ url_for('ai_forecast.api_dashboard')|tojson }},
+  apiSalesForecast: {{ url_for('ai_forecast.api_sales_forecast')|tojson }},
+  apiNarrative: {% if openai_configured %}{{ url_for('ai_forecast.api_insights_narrative')|tojson }}{% else %}null{% endif %},
+  urls: {
+    reorder: {{ url_for('ai_forecast.reorder_page')|tojson }},
+    sales: {{ url_for('ai_forecast.sales_forecast_page')|tojson }},
+    products: {{ url_for('ai_forecast.products_page')|tojson }}
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('ai_forecast.static', filename='js/ai_forecast.js') }}?v=2"></script>
+{% endblock %}

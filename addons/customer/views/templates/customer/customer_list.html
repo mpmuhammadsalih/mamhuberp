@@ -1,0 +1,1083 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .page-po.nexa-list-page.cl-customerlist-page {
+    max-width: 1300px !important;
+    margin: 0 auto !important;
+    padding: 8px 0 20px !important;
+  }
+
+  /* KPI strip (aligned with Item Master list) */
+  .cl-customerlist-page .cl-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .cl-customerlist-page .cl-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 11px;
+    border: 1px solid #e5eaf2;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, .06);
+  }
+  .cl-customerlist-page .cl-stat-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    border-radius: 9px;
+    color: #fff;
+    font-size: 17px;
+  }
+  .cl-customerlist-page .cl-stat-icon--blue { background: linear-gradient(135deg, #2563eb, #38bdf8); }
+  .cl-customerlist-page .cl-stat-icon--green { background: linear-gradient(135deg, #16a34a, #22c55e); }
+  .cl-customerlist-page .cl-stat-icon--amber { background: linear-gradient(135deg, #f59e0b, #facc15); }
+  .cl-customerlist-page .cl-stat-icon--purple { background: linear-gradient(135deg, #7c3aed, #a78bfa); }
+  .cl-customerlist-page .cl-stat-icon--cyan { background: linear-gradient(135deg, #0891b2, #06b6d4); }
+  .cl-customerlist-page .cl-stat-label { margin: 0 0 4px; color: #475569; font-size: 11px; font-weight: 700; }
+  .cl-customerlist-page .cl-stat-value { margin: 0; color: #0f172a; font-size: clamp(16px, 1.45vw, 21px); font-weight: 850; line-height: 1.1; }
+  .cl-customerlist-page .cl-stat-sub { margin: 3px 0 0; color: #64748b; font-size: 11px; }
+  @media (max-width: 980px) {
+    .cl-customerlist-page .cl-stat-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+  }
+  @media (max-width: 560px) {
+    .cl-customerlist-page .cl-stat-grid { grid-template-columns: 1fr; }
+  }
+
+  /* Filter panel (server-side picks + dates) */
+  .cl-customerlist-page .cl-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    align-items: flex-end;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    border: 1px solid var(--nexa-grid-wrap-border, #dbe3ef);
+    border-radius: 10px;
+    background: #fafbfd;
+    box-sizing: border-box;
+  }
+  .cl-customerlist-page .cl-fg { display: flex; flex-direction: column; gap: 4px; }
+  .cl-customerlist-page .cl-fg label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: .35px;
+  }
+
+  .cl-customerlist-page .cl-pick-wrap {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    min-width: 148px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+  }
+  .cl-customerlist-page .cl-pick-display {
+    flex: 1;
+    font-size: 13px;
+    padding: 7px 10px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #334155;
+    font-family: inherit;
+  }
+  .cl-customerlist-page .cl-pick-display.placeholder { color: #94a3b8; }
+  .cl-customerlist-page .cl-pick-btn {
+    background: transparent;
+    border: none;
+    border-left: 1px solid #e2e8f0;
+    padding: 7px 10px;
+    cursor: pointer;
+    color: #1a56a4;
+    font-size: 13px;
+  }
+  .cl-customerlist-page .cl-pick-clear {
+    background: transparent;
+    border: none;
+    padding: 7px 8px;
+    cursor: pointer;
+    color: #94a3b8;
+    font-size: 15px;
+    line-height: 1;
+    display: none;
+  }
+  .cl-customerlist-page .cl-pick-clear:hover { color: #dc2626; }
+
+  .cl-customerlist-page .cl-fg input[type="date"] {
+    font-size: 13px;
+    padding: 7px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    min-width: 138px;
+    background: #fff;
+    box-sizing: border-box;
+    font-family: inherit;
+  }
+
+  #customerListNoResults.table-empty { display: none; }
+
+  .cl-customerlist-page .co-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    background: #dcfce7;
+    color: #166534;
+  }
+  .cl-customerlist-page .co-status--inactive { background: #fee2e2; color: #991b1b; }
+  .cl-customerlist-page .co-status--locked { background: #fef3c7; color: #92400e; }
+  .cl-customerlist-page .co-status--closed { background: #f1f5f9; color: #475569; }
+  .cl-customerlist-page .co-status--open { background: #dbeafe; color: #1e40af; }
+  .cl-customerlist-page .cl-scroll-status {
+    margin: 10px 0 2px;
+    padding: 9px 12px;
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 12px;
+    text-align: center;
+    cursor: pointer;
+  }
+  .cl-customerlist-page .cl-scroll-status.is-error {
+    border-color: #fecaca;
+    background: #fff1f2;
+    color: #b91c1c;
+  }
+
+  .cl-customerlist-page .co-table th.cl-num-col,
+  .cl-customerlist-page .co-table td.cl-num-col {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cl-customerlist-page .cl-row-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  /* Filter popup modals */
+  .cl-modal-bg { display: none; position: fixed; inset: 0; z-index: 1050; background: rgba(15, 23, 42, .4); }
+  .cl-modal-bg.open { display: flex; align-items: flex-start; justify-content: center; padding-top: 80px; }
+  .cl-modal-box {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, .18);
+    width: 380px;
+    max-width: 96vw;
+    display: flex;
+    flex-direction: column;
+    max-height: 480px;
+    border: 1px solid #e2e8f0;
+  }
+  .cl-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid #e5eaf2;
+  }
+  .cl-modal-head h4 { margin: 0; font-size: 14px; font-weight: 800; color: #0f172a; }
+  .cl-modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: #64748b; line-height: 1; padding: 0 4px; }
+  .cl-modal-search { padding: 10px 14px 6px; }
+  .cl-modal-search input {
+    width: 100%;
+    padding: 8px 11px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 13px;
+    box-sizing: border-box;
+    font-family: inherit;
+  }
+  .cl-modal-list { overflow-y: auto; flex: 1; }
+  .cl-modal-item {
+    padding: 10px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    border-bottom: 1px solid #f1f5f9;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .cl-modal-item:hover, .cl-modal-item:focus { background: #f0f9ff; outline: none; }
+  .cl-modal-item.selected { background: #dbeafe; font-weight: 700; color: #1d4ed8; }
+  .cl-modal-item .cl-item-code { font-size: 11px; color: #64748b; min-width: 36px; }
+  .cl-modal-footer { padding: 10px 14px; border-top: 1px solid #e5eaf2; display: flex; gap: 8px; }
+  .cl-modal-all {
+    flex: 1;
+    padding: 8px;
+    font-size: 13px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #f8fafc;
+    cursor: pointer;
+    color: #475569;
+    font-family: inherit;
+  }
+  .cl-modal-all:hover { background: #f1f5f9; }
+</style>
+
+<div class="page-po nexa-list-page cl-customerlist-page" data-items-api="{{ customer_items_api_url or url_for('customer.customer_list_api_items') }}" data-filter-options-api="{{ url_for('customer.customer_list_api_filter_options') }}" data-current-page="{{ current_page or 0 }}" data-total-pages="{{ total_pages or 1 }}" data-items-per-page="{{ items_per_page or 50 }}" data-total-count="{{ total_count or k_total or 0 }}">
+  {% set k = customer_kpis if customer_kpis is defined else {} %}
+  {% set k_total = k.total | default(0, true) %}
+  {% set k_active = k.active | default(0, true) %}
+  {% set k_locked = k.locked | default(0, true) %}
+  {% set k_cash = k.cash | default(0, true) %}
+  {% set k_credit = k.credit | default(0, true) %}
+  <section class="cl-stat-grid" aria-label="Customer summary">
+    <div class="cl-stat-card">
+      <span class="cl-stat-icon cl-stat-icon--blue"><i class="bi bi-people-fill" aria-hidden="true"></i></span>
+      <div>
+        <p class="cl-stat-label">Total Customers</p>
+        <p class="cl-stat-value" id="clKpiTotal">{{ "{:,}".format(k_total|int) }}</p>
+        <p class="cl-stat-sub">Database total for current filters</p>
+      </div>
+    </div>
+    <div class="cl-stat-card">
+      <span class="cl-stat-icon cl-stat-icon--green"><i class="bi bi-person-check-fill" aria-hidden="true"></i></span>
+      <div>
+        <p class="cl-stat-label">Active</p>
+        <p class="cl-stat-value" id="clKpiActive">{{ "{:,}".format(k_active|int) }}</p>
+        <p class="cl-stat-sub">Status flag Y · filtered</p>
+      </div>
+    </div>
+    <div class="cl-stat-card">
+      <span class="cl-stat-icon cl-stat-icon--amber"><i class="bi bi-lock-fill" aria-hidden="true"></i></span>
+      <div>
+        <p class="cl-stat-label">Locked</p>
+        <p class="cl-stat-value" id="clKpiLocked">{{ "{:,}".format(k_locked|int) }}</p>
+        <p class="cl-stat-sub">Status flag N · filtered</p>
+      </div>
+    </div>
+    <div class="cl-stat-card">
+      <span class="cl-stat-icon cl-stat-icon--purple"><i class="bi bi-cash-stack" aria-hidden="true"></i></span>
+      <div>
+        <p class="cl-stat-label">Cash Invoice</p>
+        <p class="cl-stat-value" id="clKpiCash">{{ "{:,}".format(k_cash|int) }}</p>
+        <p class="cl-stat-sub">Invoice type 1 · filtered</p>
+      </div>
+    </div>
+    <div class="cl-stat-card">
+      <span class="cl-stat-icon cl-stat-icon--cyan"><i class="bi bi-credit-card-2-front" aria-hidden="true"></i></span>
+      <div>
+        <p class="cl-stat-label">Credit Invoice</p>
+        <p class="cl-stat-value" id="clKpiCredit">{{ "{:,}".format(k_credit|int) }}</p>
+        <p class="cl-stat-sub">Invoice type 2 · filtered</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Customer List</h1>
+      <p class="page-po__muted">View and manage customers.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('customer.customer_create') }}" class="page-po__btn-primary">+ New Customer</a>
+      <a href="{{ url_for('customer.customer_export') }}" class="page-po__btn-secondary" style="text-decoration:none;">Export</a>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div class="nexa-list-toolbar">
+    <input type="text" id="clSearch" class="input" placeholder="Search code or name…"
+           value="{{ search_term or '' }}" autocomplete="off" style="min-width:220px; max-width:320px;" />
+    <button type="button" id="clBtnFilter" class="page-po__btn-secondary" style="padding:4px 10px; font-size:11px;">Search</button>
+    <button type="button" id="clBtnClear" class="page-po__btn-secondary" style="padding:4px 10px; font-size:11px;">Clear</button>
+    <span id="customerListMeta" class="nexa-num" style="margin-left:4px;"><strong id="clCount">{{ customers|length }}</strong> showing</span>
+  </div>
+
+  <div class="cl-filters" aria-label="List filters">
+    <div class="cl-fg">
+      <label>Invoice Type</label>
+      <div class="cl-pick-wrap">
+        <button type="button" class="cl-pick-display {% if not invoice_filter %}placeholder{% endif %}" id="clInvoiceDisplay"
+                onclick="clOpenModal('invoice')">{{ 'Cash' if invoice_filter=='1' else ('Credit' if invoice_filter=='2' else 'All') }}</button>
+        <button type="button" class="cl-pick-clear" id="clInvoiceClear" title="Clear"
+                style="{{ '' if invoice_filter else 'display:none' }}" onclick="clClearPick('invoice')">×</button>
+        <button type="button" class="cl-pick-btn" onclick="clOpenModal('invoice')">▾</button>
+        <input type="hidden" id="clInvoiceVal" value="{{ invoice_filter or '' }}" />
+      </div>
+    </div>
+
+    <div class="cl-fg">
+      <label>Status</label>
+      <div class="cl-pick-wrap">
+        <button type="button" class="cl-pick-display {% if not status_filter %}placeholder{% endif %}" id="clStatusDisplay"
+                onclick="clOpenModal('status')">{{ 'Active' if status_filter=='Y' else ('Locked' if status_filter=='N' else 'All') }}</button>
+        <button type="button" class="cl-pick-clear" id="clStatusClear" title="Clear"
+                style="{{ '' if status_filter else 'display:none' }}" onclick="clClearPick('status')">×</button>
+        <button type="button" class="cl-pick-btn" onclick="clOpenModal('status')">▾</button>
+        <input type="hidden" id="clStatusVal" value="{{ status_filter or '' }}" />
+      </div>
+    </div>
+
+    <div class="cl-fg">
+      <label>Category</label>
+      <div class="cl-pick-wrap">
+        <button type="button" class="cl-pick-display {% if not category_filter %}placeholder{% endif %}" id="clCategoryDisplay"
+                onclick="clOpenModal('category')">
+          {%- if category_filter -%}
+            {{ category_filter }}
+          {%- else -%}All{%- endif -%}
+        </button>
+        <button type="button" class="cl-pick-clear" id="clCategoryClear" title="Clear"
+                style="{{ '' if category_filter else 'display:none' }}" onclick="clClearPick('category')">×</button>
+        <button type="button" class="cl-pick-btn" onclick="clOpenModal('category')">▾</button>
+        <input type="hidden" id="clCategoryVal" value="{{ category_filter or '' }}" />
+      </div>
+    </div>
+
+    <div class="cl-fg">
+      <label>Created From</label>
+      <input type="date" id="clDateFrom" value="{{ date_from or '' }}" />
+    </div>
+    <div class="cl-fg">
+      <label>Created To</label>
+      <input type="date" id="clDateTo" value="{{ date_to or '' }}" />
+    </div>
+  </div>
+
+  <div class="co-table-wrap">
+    <table class="co-table" id="customerTable">
+      <thead>
+        <tr>
+          <th style="text-align:center; width:56px;">Sl.No</th>
+          <th>Code</th>
+          <th>Customer Name</th>
+          <th>Invoice Type</th>
+          <th>Status</th>
+          <th>Account Status</th>
+          <th>Category</th>
+          <th class="cl-num-col">Credit Limit</th>
+          <th class="cl-num-col">Outstanding (GL)</th>
+          <th>Created Date</th>
+          <th style="text-align:center;">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="customerListBody">
+        {% if customers %}
+          {% for c in customers %}
+            <tr class="customer-row"
+                data-code="{{ (c.customercode or '')|string }}"
+                data-name="{{ (c.customername or '')|string }}">
+              <td class="sl-no">{{ loop.index }}</td>
+              <td>
+                <a href="{{ url_for('customer.customer_view', location_code=c.locationcode, customer_code=c.customercode) }}" class="grn-link">{{ c.customercode or '-' }}</a>
+              </td>
+              <td>{{ c.customername or '-' }}</td>
+              <td>{{ c.customer_billing_type or 'CASH' }}</td>
+              <td>
+                {% if (c.customerflag|string)|upper == 'Y' %}
+                  <span class="co-status">Active</span>
+                {% elif (c.customerflag|string)|upper == 'N' %}
+                  <span class="co-status co-status--locked">Locked</span>
+                {% else %}-{% endif %}
+              </td>
+              <td>
+                {% if (c.customerclosed|string)|upper == 'Y' %}
+                  <span class="co-status co-status--closed">Closed</span>
+                {% else %}
+                  <span class="co-status co-status--open">Open</span>
+                {% endif %}
+              </td>
+              <td>{{ c.customercategoryname or c.customercategory or '-' }}</td>
+              <td class="cl-num-col nexa-num">{{ '%.2f'|format((c.creditlimit or 0)|float) }}</td>
+              <td class="cl-num-col nexa-num">{{ '%.2f'|format((c.gl_outstanding or 0)|float) }}</td>
+              <td>{{ c.createddate.strftime('%d-%m-%Y') if c.createddate else '-' }}</td>
+              <td style="text-align:center;">
+                <span class="cl-row-actions">
+                  <a href="{{ url_for('customer.customer_view', location_code=c.locationcode, customer_code=c.customercode) }}"
+                     class="btn-view" title="View">View</a>
+                  <a href="{{ url_for('customer.customer_edit', location_code=c.locationcode, customer_code=c.customercode) }}"
+                     class="btn-view" title="Edit">Edit</a>
+                </span>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr id="customerListLoading"><td colspan="11" style="text-align:center;padding:20px;color:#6b7280;">Loading customers...</td></tr>
+        {% endif %}
+        <tr id="customerListNoResults" class="table-empty" style="display:none;">
+          <td colspan="11" style="text-align:center;color:#6b7280;">No matching customers.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div id="customerInfiniteScrollStatus" class="cl-scroll-status">
+    Loading customers...
+  </div>
+  <div id="customerInfiniteScrollSentinel" style="height:1px;"></div>
+</div>
+
+<!-- ── Invoice Type modal ──────────────────────────────────────── -->
+<div class="cl-modal-bg" id="clModalInvoice">
+  <div class="cl-modal-box">
+    <div class="cl-modal-head">
+      <h4>Select Invoice Type</h4>
+      <button class="cl-modal-close" onclick="clCloseModal('invoice')">×</button>
+    </div>
+    <div class="cl-modal-list" id="clInvoiceList">
+      <div class="cl-modal-item" tabindex="0" data-val="1" data-label="Cash"   onclick="clPickItem('invoice','1','Cash')">   <span class="cl-item-code">1</span> Cash</div>
+      <div class="cl-modal-item" tabindex="0" data-val="2" data-label="Credit" onclick="clPickItem('invoice','2','Credit')"> <span class="cl-item-code">2</span> Credit</div>
+    </div>
+    <div class="cl-modal-footer">
+      <button class="cl-modal-all" onclick="clPickItem('invoice','','All')">Show All</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Status modal ────────────────────────────────────────────── -->
+<div class="cl-modal-bg" id="clModalStatus">
+  <div class="cl-modal-box">
+    <div class="cl-modal-head">
+      <h4>Select Status</h4>
+      <button class="cl-modal-close" onclick="clCloseModal('status')">×</button>
+    </div>
+    <div class="cl-modal-list" id="clStatusList">
+      <div class="cl-modal-item" tabindex="0" data-val="Y" data-label="Active" onclick="clPickItem('status','Y','Active')"><span class="cl-item-code">Y</span> Active</div>
+      <div class="cl-modal-item" tabindex="0" data-val="N" data-label="Locked" onclick="clPickItem('status','N','Locked')"><span class="cl-item-code">N</span> Locked</div>
+    </div>
+    <div class="cl-modal-footer">
+      <button class="cl-modal-all" onclick="clPickItem('status','','All')">Show All</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Category modal ─────────────────────────────────────────── -->
+<div class="cl-modal-bg" id="clModalCategory">
+  <div class="cl-modal-box">
+    <div class="cl-modal-head">
+      <h4>Select Category</h4>
+      <button class="cl-modal-close" onclick="clCloseModal('category')">×</button>
+    </div>
+    <div class="cl-modal-search">
+      <input type="text" id="clCategorySearch" placeholder="Search…" oninput="clSearchList('category',this.value)" />
+    </div>
+    <div class="cl-modal-list" id="clCategoryList">
+      {% for cat in category_list or [] %}
+        <div class="cl-modal-item {% if category_filter == (cat.code|string) %}selected{% endif %}"
+             tabindex="0" data-val="{{ cat.code }}" data-label="{{ cat.name or cat.code }}"
+             data-search="{{ ((cat.code|string) ~ ' ' ~ (cat.name or ''))|lower }}"
+             onclick="clPickItem('category','{{ cat.code }}','{{ cat.name or cat.code }}')">
+          <span class="cl-item-code">{{ cat.code }}</span> {{ cat.name or cat.code }}
+        </div>
+      {% else %}
+        <div class="cl-modal-item" style="color:#adb5bd;cursor:default;">No categories found.</div>
+      {% endfor %}
+    </div>
+    <div class="cl-modal-footer">
+      <button class="cl-modal-all" onclick="clPickItem('category','','All')">Show All</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  /* ── Modal map ─────────────────────────────────────────────── */
+  var CL = {
+    invoice:  { modal:'clModalInvoice',  display:'clInvoiceDisplay',  hidden:'clInvoiceVal',  clear:'clInvoiceClear',  search:null              },
+    status:   { modal:'clModalStatus',   display:'clStatusDisplay',   hidden:'clStatusVal',   clear:'clStatusClear',   search:null              },
+    category: { modal:'clModalCategory', display:'clCategoryDisplay', hidden:'clCategoryVal', clear:'clCategoryClear', search:'clCategorySearch' }
+  };
+
+  window.clOpenModal = function(key) {
+    var cfg = CL[key];
+    if (!cfg) return;
+    if (key === 'category') ensureFilterOptionsLoaded();
+    var bg = document.getElementById(cfg.modal);
+    if (!bg) return;
+    bg.classList.add('open');
+    var currentVal = (document.getElementById(cfg.hidden) || {}).value || '';
+    // Highlight current selection
+    bg.querySelectorAll('.cl-modal-item').forEach(function(el) {
+      el.classList.toggle('selected', el.dataset.val === currentVal);
+    });
+    if (cfg.search) {
+      var s = document.getElementById(cfg.search);
+      if (s) { s.value = ''; clSearchList(key, ''); setTimeout(function(){ s.focus(); }, 60); }
+    } else {
+      // Focus currently selected or first item
+      var sel = bg.querySelector('.cl-modal-item.selected') || bg.querySelector('.cl-modal-item');
+      if (sel) setTimeout(function(){ sel.focus(); }, 60);
+    }
+  };
+
+  window.clCloseModal = function(key) {
+    var cfg = CL[key];
+    if (!cfg) return;
+    var bg = document.getElementById(cfg.modal);
+    if (bg) bg.classList.remove('open');
+  };
+
+  window.clPickItem = function(key, val, label) {
+    var cfg = CL[key];
+    if (!cfg) return;
+    var hiddenEl  = document.getElementById(cfg.hidden);
+    var displayEl = document.getElementById(cfg.display);
+    var clearEl   = document.getElementById(cfg.clear);
+    if (hiddenEl)  hiddenEl.value = val;
+    if (displayEl) { displayEl.textContent = label || 'All'; displayEl.classList.toggle('placeholder', !val); }
+    if (clearEl)   clearEl.style.display = val ? '' : 'none';
+    clCloseModal(key);
+  };
+
+  window.clClearPick = function(key) { clPickItem(key, '', 'All'); };
+
+  window.clSearchList = function(key, q) {
+    var listId = key === 'category' ? 'clCategoryList' : null;
+    if (!listId) return;
+    var list = document.getElementById(listId);
+    if (!list) return;
+    var term = (q || '').toLowerCase().trim();
+    list.querySelectorAll('.cl-modal-item[data-search]').forEach(function(el) {
+      el.style.display = (!term || el.dataset.search.indexOf(term) !== -1) ? '' : 'none';
+    });
+  };
+
+  // ── Enter on search → first visible item ──────────────────────
+  ['clCategorySearch'].forEach(function(sid) {
+    var el = document.getElementById(sid);
+    if (!el) return;
+    el.addEventListener('keydown', function(e) {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      var listEl = el.closest('.cl-modal-box').querySelector('.cl-modal-list');
+      var first = listEl && listEl.querySelector('.cl-modal-item[data-val]:not([style*="display: none"])');
+      if (first) first.focus();
+    });
+  });
+
+  // ── Arrow keys + Enter in modal lists ────────────────────────
+  document.querySelectorAll('.cl-modal-list').forEach(function(list) {
+    list.addEventListener('keydown', function(e) {
+      var items = Array.from(list.querySelectorAll('.cl-modal-item[tabindex="0"]:not([style*="display: none"])'));
+      var idx = items.indexOf(document.activeElement);
+      if (e.key === 'Enter') { e.preventDefault(); if (idx >= 0) items[idx].click(); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); if (idx < items.length-1) items[idx+1].focus(); }
+      else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (idx > 0) items[idx-1].focus();
+        else {
+          // Go back to search box if available
+          var searchBox = list.closest('.cl-modal-box') && list.closest('.cl-modal-box').querySelector('.cl-modal-search input');
+          if (searchBox) searchBox.focus();
+        }
+      }
+    });
+  });
+
+  // ── Escape closes any open modal ─────────────────────────────
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    Object.keys(CL).forEach(function(key) {
+      var bg = document.getElementById(CL[key].modal);
+      if (bg && bg.classList.contains('open')) bg.classList.remove('open');
+    });
+  });
+
+  // ── Click backdrop to close ───────────────────────────────────
+  document.querySelectorAll('.cl-modal-bg').forEach(function(bg) {
+    bg.addEventListener('click', function(e) {
+      if (e.target === bg) bg.classList.remove('open');
+    });
+  });
+
+  /* ── Filter / Clear buttons ─────────────────────────────────── */
+  function buildUrl() {
+    var url = '{{ url_for("customer.customer_list") }}?_=1';
+    var q  = (document.getElementById('clSearch')    || {}).value || '';
+    var ic = (document.getElementById('clInvoiceVal') || {}).value || '';
+    var st = (document.getElementById('clStatusVal')  || {}).value || '';
+    var ct = (document.getElementById('clCategoryVal')|| {}).value || '';
+    var df = (document.getElementById('clDateFrom')   || {}).value || '';
+    var dt = (document.getElementById('clDateTo')     || {}).value || '';
+    if (q.trim())  url += '&search='    + encodeURIComponent(q.trim());
+    if (ic) url += '&invoice='   + encodeURIComponent(ic);
+    if (st) url += '&status='    + encodeURIComponent(st);
+    if (ct) url += '&category='  + encodeURIComponent(ct);
+    if (df) url += '&date_from=' + encodeURIComponent(df);
+    if (dt) url += '&date_to='   + encodeURIComponent(dt);
+    window.location.href = url;
+  }
+
+  var btnFilter = document.getElementById('clBtnFilter');
+  var btnClear  = document.getElementById('clBtnClear');
+  if (btnFilter) btnFilter.addEventListener('click', buildUrl);
+  if (btnClear)  btnClear.addEventListener('click', function() {
+    window.location.href = '{{ url_for("customer.customer_list") }}';
+  });
+
+  /* ── Live client-side search by code / name ─────────────────── */
+  var searchInput = document.getElementById('clSearch');
+  var tbody       = document.getElementById('customerListBody');
+  var noResults   = document.getElementById('customerListNoResults');
+  var countEl     = document.getElementById('clCount');
+  var pageRoot    = document.querySelector('.cl-customerlist-page');
+  var scrollStatus = document.getElementById('customerInfiniteScrollStatus');
+  var scrollSentinel = document.getElementById('customerInfiniteScrollSentinel');
+  var itemsApi = pageRoot && pageRoot.dataset ? (pageRoot.dataset.itemsApi || '{{ url_for("customer.customer_list_api_items") }}') : '{{ url_for("customer.customer_list_api_items") }}';
+  var filterOptionsApi = pageRoot && pageRoot.dataset ? (pageRoot.dataset.filterOptionsApi || '{{ url_for("customer.customer_list_api_filter_options") }}') : '{{ url_for("customer.customer_list_api_filter_options") }}';
+  var scrollPageRaw = Number(pageRoot && pageRoot.dataset ? pageRoot.dataset.currentPage || '0' : '0');
+  var scrollPage = Number.isFinite(scrollPageRaw) ? scrollPageRaw : 0;
+  var scrollTotalPages = Number(pageRoot && pageRoot.dataset ? pageRoot.dataset.totalPages || '1' : '1') || 1;
+  var scrollPerPage = 100;
+  var scrollTotalCount = Number(pageRoot && pageRoot.dataset ? pageRoot.dataset.totalCount || '0' : '0') || 0;
+  var scrollLoaded = tbody ? tbody.querySelectorAll('.customer-row').length : 0;
+  var scrollLoading = false;
+  var scrollDone = false;
+  var filterOptionsLoaded = false;
+  var filterOptionsLoading = false;
+  window.CL_CUSTOMER_FIRST_PAGE_LOADED = false;
+
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function(ch) {
+      return ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'})[ch];
+    });
+  }
+
+  function statusHtml(flag) {
+    var f = String(flag || '').toUpperCase();
+    if (f === 'Y') return '<span class="co-status">Active</span>';
+    if (f === 'N') return '<span class="co-status co-status--locked">Locked</span>';
+    return '-';
+  }
+
+  function accountStatusHtml(closed) {
+    return String(closed || '').toUpperCase() === 'Y'
+      ? '<span class="co-status co-status--closed">Closed</span>'
+      : '<span class="co-status co-status--open">Open</span>';
+  }
+
+  function invoiceText(code) {
+    var c = Number(code);
+    if (c === 1) return 'Cash';
+    if (c === 2) return 'Credit';
+    return '-';
+  }
+
+  function fmtMoney(v) {
+    var n = Number(v);
+    if (!Number.isFinite(n)) return '-';
+    return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function customerUrl(row, edit) {
+    var loc = encodeURIComponent(row.locationcode || '');
+    var code = encodeURIComponent(row.customercode || '');
+    return '/master/customer/' + loc + '/' + code + (edit ? '/edit' : '');
+  }
+
+  function createCustomerRow(item, absoluteIndex) {
+    var tr = document.createElement('tr');
+    tr.className = 'customer-row';
+    tr.dataset.code = item.customercode == null ? '' : String(item.customercode);
+    tr.dataset.name = item.customername || '';
+    var viewHref = customerUrl(item, false);
+    var editHref = customerUrl(item, true);
+    tr.innerHTML =
+      '<td class="sl-no">' + absoluteIndex + '</td>' +
+      '<td><a href="' + esc(viewHref) + '" class="grn-link">' + esc(item.customercode || '-') + '</a></td>' +
+      '<td>' + esc(item.customername || '-') + '</td>' +
+      '<td>' + esc(item.customer_billing_type || 'CASH') + '</td>' +
+      '<td>' + statusHtml(item.customerflag) + '</td>' +
+      '<td>' + accountStatusHtml(item.customerclosed) + '</td>' +
+      '<td>' + esc(item.customercategoryname || item.customercategory || '-') + '</td>' +
+      '<td class="cl-num-col nexa-num">' + esc(fmtMoney(item.creditlimit)) + '</td>' +
+      '<td class="cl-num-col nexa-num">' + esc(fmtMoney(item.gl_outstanding)) + '</td>' +
+      '<td>' + esc(item.createddate || '-') + '</td>' +
+      '<td style="text-align:center;"><span class="cl-row-actions">' +
+      '<a href="' + esc(viewHref) + '" class="btn-view" title="View">View</a>' +
+      '<a href="' + esc(editHref) + '" class="btn-view" title="Edit">Edit</a>' +
+      '</span></td>';
+    return tr;
+  }
+
+  function fmtInt(v) {
+    var n = Number(v || 0);
+    return Number.isFinite(n) ? n.toLocaleString() : '0';
+  }
+
+  function updateKpis(kpis) {
+    if (!kpis) return;
+    var map = {
+      clKpiTotal: kpis.total,
+      clKpiActive: kpis.active,
+      clKpiLocked: kpis.locked,
+      clKpiCash: kpis.cash,
+      clKpiCredit: kpis.credit
+    };
+    Object.keys(map).forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = fmtInt(map[id]);
+    });
+  }
+
+  function setScrollStatus(msg, isError) {
+    if (!scrollStatus) return;
+    scrollStatus.textContent = msg;
+    scrollStatus.classList.toggle('is-error', !!isError);
+    scrollStatus.style.cursor = (!scrollDone && !scrollLoading) ? 'pointer' : 'default';
+  }
+
+  function itemsApiUrl(nextPage) {
+    var params = new URLSearchParams(window.location.search);
+    params.set('page', String(nextPage));
+    params.set('per_page', String(scrollPerPage));
+    params.set('total_count', String(scrollTotalCount || 0));
+    return itemsApi + '?' + params.toString();
+  }
+
+  async function loadNextCustomersPage() {
+    if (!tbody || scrollLoading || scrollDone) return;
+    if (pageRoot && pageRoot.dataset) {
+      var pageNow = Number(pageRoot.dataset.currentPage || scrollPage || 0);
+      var pagesNow = Number(pageRoot.dataset.totalPages || scrollTotalPages || 1);
+      var totalNow = Number(pageRoot.dataset.totalCount || scrollTotalCount || 0);
+      scrollPage = Number.isFinite(pageNow) ? pageNow : scrollPage;
+      scrollTotalPages = Number.isFinite(pagesNow) ? pagesNow : scrollTotalPages;
+      scrollTotalCount = Number.isFinite(totalNow) ? totalNow : scrollTotalCount;
+    }
+    scrollLoaded = tbody.querySelectorAll('.customer-row').length;
+    if (scrollPage >= scrollTotalPages) {
+      scrollDone = true;
+      setScrollStatus('All ' + scrollLoaded + ' customers loaded.');
+      return;
+    }
+    scrollLoading = true;
+    var nextPage = scrollPage + 1;
+    var started = performance.now();
+    setScrollStatus('Loading more customers... (' + scrollLoaded + ' of ' + scrollTotalCount + ')');
+    try {
+      var res = await fetch(itemsApiUrl(nextPage), { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      var data = await res.json().catch(function() { return {}; });
+      if (!res.ok || !data.success) throw new Error(data.error || data.message || ('Load failed (' + res.status + ')'));
+      var items = Array.isArray(data.items) ? data.items : [];
+      var emptyRows = Array.from(tbody.querySelectorAll('tr:not(.customer-row):not(#customerListNoResults)'));
+      emptyRows.forEach(function(r) { r.remove(); });
+      updateKpis(data.kpis);
+      items.forEach(function(item, idx) {
+        tbody.insertBefore(createCustomerRow(item, scrollLoaded + idx + 1), noResults || null);
+      });
+      scrollLoaded += items.length;
+      scrollPage = Number(data.page || nextPage) || nextPage;
+      scrollTotalPages = Number(data.total_pages || scrollTotalPages) || scrollTotalPages;
+      scrollTotalCount = Number(data.total_count || scrollTotalCount) || scrollTotalCount;
+      if (pageRoot && pageRoot.dataset) {
+        pageRoot.dataset.currentPage = String(scrollPage);
+        pageRoot.dataset.totalPages = String(scrollTotalPages);
+        pageRoot.dataset.totalCount = String(scrollTotalCount);
+      }
+      if (countEl) countEl.textContent = scrollLoaded;
+      console.info('[TIMING customer scroll] page=' + scrollPage + ' rows=' + items.length + ' loaded=' + scrollLoaded + '/' + scrollTotalCount + ' elapsed_ms=' + (performance.now() - started).toFixed(1));
+      if (searchInput && searchInput.value.trim()) filterRows();
+      if (scrollPage >= scrollTotalPages || items.length === 0) {
+        scrollDone = true;
+        setScrollStatus('All ' + scrollLoaded + ' customers loaded.');
+      } else {
+        setScrollStatus('Showing ' + scrollLoaded + ' of ' + scrollTotalCount + ' customers. Scroll down or click here to load more.');
+      }
+    } catch (err) {
+      setScrollStatus((err && err.message) ? err.message : 'Could not load more customers.', true);
+    } finally {
+      scrollLoading = false;
+    }
+  }
+
+  function initCustomerInfiniteScroll() {
+    if (!scrollSentinel || !tbody) return;
+    if (scrollTotalPages <= scrollPage) {
+      scrollDone = true;
+      setScrollStatus('All ' + scrollLoaded + ' customers loaded.');
+      return;
+    }
+    setScrollStatus('Showing ' + scrollLoaded + ' of ' + scrollTotalCount + ' customers. Scroll down or click here to load more.');
+    if ('IntersectionObserver' in window) {
+      var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting) loadNextCustomersPage();
+        });
+      }, { rootMargin: '500px 0px' });
+      observer.observe(scrollSentinel);
+    } else {
+      window.addEventListener('scroll', function() {
+        var remaining = document.documentElement.scrollHeight - window.innerHeight - window.scrollY;
+        if (remaining < 500) loadNextCustomersPage();
+      }, { passive: true });
+    }
+    if (scrollStatus) scrollStatus.addEventListener('click', loadNextCustomersPage);
+  }
+
+  function setPickLabel(kind, code, rows) {
+    if (!code) return;
+    var cfg = CL[kind];
+    if (!cfg) return;
+    var displayEl = document.getElementById(cfg.display);
+    if (!displayEl) return;
+    var found = (rows || []).find(function(row) { return String(row.code) === String(code); });
+    if (found) displayEl.textContent = found.name || found.code || code;
+  }
+
+  function populateFilterList(kind, rows) {
+    if (kind !== 'category') return;
+    var list = document.getElementById('clCategoryList');
+    if (!list) return;
+    list.innerHTML = '';
+    if (!rows || !rows.length) {
+      list.innerHTML = '<div class="cl-modal-item" style="color:#adb5bd;cursor:default;">No categories found.</div>';
+      return;
+    }
+    var selected = (document.getElementById(CL[kind].hidden) || {}).value || '';
+    rows.forEach(function(row) {
+      var div = document.createElement('div');
+      div.className = 'cl-modal-item' + (String(selected) === String(row.code) ? ' selected' : '');
+      div.tabIndex = 0;
+      div.dataset.val = row.code;
+      div.dataset.label = row.name || row.code;
+      div.dataset.search = String((row.code || '') + ' ' + (row.name || '')).toLowerCase();
+      div.innerHTML = '<span class="cl-item-code">' + esc(row.code || '') + '</span> ' + esc(row.name || row.code || '');
+      div.addEventListener('click', function() {
+        clPickItem(kind, String(row.code || ''), row.name || row.code || '');
+      });
+      list.appendChild(div);
+    });
+    setPickLabel(kind, selected, rows);
+  }
+
+  function ensureFilterOptionsLoaded() {
+    if (filterOptionsLoaded || filterOptionsLoading) return;
+    filterOptionsLoading = true;
+    fetch(filterOptionsApi, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (!data || !data.success) throw new Error('filter load failed');
+        populateFilterList('category', data.categories || []);
+        filterOptionsLoaded = true;
+      })
+      .catch(function(err) { console.warn('Customer filter options failed:', err); })
+      .finally(function() { filterOptionsLoading = false; });
+  }
+
+  function filterRows() {
+    var raw = searchInput ? searchInput.value.trim().toLowerCase() : '';
+    var words = raw ? raw.split(/\s+/).filter(Boolean) : [];
+    var rows = tbody ? tbody.querySelectorAll('.customer-row') : [];
+    var visible = 0;
+    rows.forEach(function(row) {
+      var code = (row.dataset.code || '').toLowerCase();
+      var name = (row.dataset.name || '').toLowerCase();
+      var show;
+      if (!words.length) {
+        show = true;
+      } else if (words.length === 1) {
+        show = code.indexOf(words[0]) !== -1 || name.indexOf(words[0]) !== -1;
+      } else {
+        // every word must appear in the name (split/partial match), OR full phrase matches code
+        var allInName = words.every(function(w) { return name.indexOf(w) !== -1; });
+        var phraseInCode = code.indexOf(raw) !== -1;
+        show = allInName || phraseInCode;
+      }
+      row.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    if (noResults) noResults.style.display = (visible === 0 && rows.length > 0) ? '' : 'none';
+    if (countEl) countEl.textContent = visible;
+    var sl = 0;
+    rows.forEach(function(row) {
+      if (row.style.display !== 'none') { sl++; var c = row.querySelector('.sl-no'); if (c) c.textContent = sl; }
+    });
+  }
+  if (searchInput) {
+    searchInput.addEventListener('input', filterRows);
+    searchInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') buildUrl(); });
+  }
+  // Initial and scroll loading are handled by the lightweight fallback loader below.
+})();
+</script>
+<script>
+(function() {
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function(ch) {
+      return ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'})[ch];
+    });
+  }
+  function statusHtml(flag) {
+    var f = String(flag || '').toUpperCase();
+    if (f === 'Y') return '<span class="co-status">Active</span>';
+    if (f === 'N') return '<span class="co-status co-status--locked">Locked</span>';
+    return '-';
+  }
+  function accountStatusHtml(closed) {
+    return String(closed || '').toUpperCase() === 'Y'
+      ? '<span class="co-status co-status--closed">Closed</span>'
+      : '<span class="co-status co-status--open">Open</span>';
+  }
+  function invoiceText(code) {
+    var c = Number(code);
+    return c === 1 ? 'Cash' : (c === 2 ? 'Credit' : '-');
+  }
+  function fmtMoney(v) {
+    var n = Number(v);
+    if (!Number.isFinite(n)) return '-';
+    return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function customerUrl(row, edit) {
+    return '/master/customer/' + encodeURIComponent(row.locationcode || '') + '/' + encodeURIComponent(row.customercode || '') + (edit ? '/edit' : '');
+  }
+  function setKpi(id, value) {
+    var el = document.getElementById(id);
+    var n = Number(value || 0);
+    if (el) el.textContent = Number.isFinite(n) ? n.toLocaleString() : '0';
+  }
+  function fallbackRow(item, idx) {
+    var viewHref = customerUrl(item, false);
+    var editHref = customerUrl(item, true);
+    var tr = document.createElement('tr');
+    tr.className = 'customer-row';
+    tr.dataset.code = item.customercode == null ? '' : String(item.customercode);
+    tr.dataset.name = item.customername || '';
+    tr.innerHTML =
+      '<td class="sl-no">' + idx + '</td>' +
+      '<td><a href="' + esc(viewHref) + '" class="grn-link">' + esc(item.customercode || '-') + '</a></td>' +
+      '<td>' + esc(item.customername || '-') + '</td>' +
+      '<td>' + esc(item.customer_billing_type || 'CASH') + '</td>' +
+      '<td>' + statusHtml(item.customerflag) + '</td>' +
+      '<td>' + accountStatusHtml(item.customerclosed) + '</td>' +
+      '<td>' + esc(item.customercategoryname || item.customercategory || '-') + '</td>' +
+      '<td class="cl-num-col nexa-num">' + esc(fmtMoney(item.creditlimit)) + '</td>' +
+      '<td class="cl-num-col nexa-num">' + esc(fmtMoney(item.gl_outstanding)) + '</td>' +
+      '<td>' + esc(item.createddate || '-') + '</td>' +
+      '<td style="text-align:center;"><span class="cl-row-actions">' +
+      '<a href="' + esc(viewHref) + '" class="btn-view" title="View">View</a>' +
+      '<a href="' + esc(editHref) + '" class="btn-view" title="Edit">Edit</a>' +
+      '</span></td>';
+    return tr;
+  }
+  var fallbackLoading = false;
+  var fallbackDone = false;
+  function fallbackLoadCustomers(pageOverride) {
+    var root = document.querySelector('.cl-customerlist-page');
+    var tbody = document.getElementById('customerListBody');
+    if (!root || !tbody || fallbackLoading || fallbackDone) return;
+    var api = (root.dataset && root.dataset.itemsApi) || '{{ url_for("customer.customer_list_api_items") }}';
+    var currentPage = Number(root.dataset.currentPage || '0') || 0;
+    var totalPages = Number(root.dataset.totalPages || '1') || 1;
+    var totalCount = Number(root.dataset.totalCount || '0') || 0;
+    var loaded = tbody.querySelectorAll('.customer-row').length;
+    if (pageOverride === 1 && loaded > 0) return;
+    if (currentPage >= totalPages && loaded > 0) {
+      fallbackDone = true;
+      var doneStatus = document.getElementById('customerInfiniteScrollStatus');
+      if (doneStatus) doneStatus.textContent = 'All ' + loaded + ' customers loaded.';
+      return;
+    }
+    var nextPage = pageOverride || (currentPage + 1);
+    var params = new URLSearchParams(window.location.search);
+    params.set('page', String(nextPage));
+    params.set('per_page', nextPage <= 1 ? '50' : '100');
+    if (totalCount > 0) params.set('total_count', String(totalCount));
+    fallbackLoading = true;
+    var statusLoading = document.getElementById('customerInfiniteScrollStatus');
+    if (statusLoading) statusLoading.textContent = 'Loading customers... (' + loaded + ' of ' + totalCount + ')';
+    fetch(api + '?' + params.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (!data || !data.success) throw new Error(data && data.error || 'Load failed');
+        if (nextPage <= 1) {
+          Array.from(tbody.querySelectorAll('tr:not(#customerListNoResults)')).forEach(function(r) { r.remove(); });
+          loaded = 0;
+        }
+        (data.items || []).forEach(function(item, idx) {
+          tbody.insertBefore(fallbackRow(item, loaded + idx + 1), document.getElementById('customerListNoResults'));
+        });
+        var k = data.kpis || {};
+        setKpi('clKpiTotal', k.total);
+        setKpi('clKpiActive', k.active);
+        setKpi('clKpiLocked', k.locked);
+        setKpi('clKpiCash', k.cash);
+        setKpi('clKpiCredit', k.credit);
+        var count = document.getElementById('clCount');
+        var newLoaded = tbody.querySelectorAll('.customer-row').length;
+        if (count) count.textContent = String(newLoaded);
+        var status = document.getElementById('customerInfiniteScrollStatus');
+        if (status) status.textContent = 'Showing ' + newLoaded + ' of ' + (data.total_count || 0) + ' customers. Scroll down or click here to load more.';
+        window.CL_CUSTOMER_FIRST_PAGE_LOADED = true;
+        var root = document.querySelector('.cl-customerlist-page');
+        if (root && root.dataset) {
+          root.dataset.currentPage = String(data.page || 1);
+          root.dataset.totalPages = String(data.total_pages || 1);
+          root.dataset.totalCount = String(data.total_count || 0);
+        }
+        if ((data.page || nextPage) >= (data.total_pages || 1) || !(data.items || []).length) {
+          fallbackDone = true;
+          if (status) status.textContent = 'All ' + newLoaded + ' customers loaded.';
+        }
+      })
+      .catch(function(err) {
+        var status = document.getElementById('customerInfiniteScrollStatus');
+        if (status) {
+          status.textContent = err && err.message ? err.message : 'Could not load customers.';
+          status.classList.add('is-error');
+        }
+      })
+      .finally(function() {
+        fallbackLoading = false;
+      });
+  }
+  function initFallbackCustomerScroll() {
+    var status = document.getElementById('customerInfiniteScrollStatus');
+    var sentinel = document.getElementById('customerInfiniteScrollSentinel');
+    if (status) status.addEventListener('click', function() { fallbackLoadCustomers(); });
+    if (sentinel && 'IntersectionObserver' in window) {
+      var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting) fallbackLoadCustomers();
+        });
+      }, { rootMargin: '500px 0px' });
+      observer.observe(sentinel);
+    } else {
+      window.addEventListener('scroll', function() {
+        var remaining = document.documentElement.scrollHeight - window.innerHeight - window.scrollY;
+        if (remaining < 500) fallbackLoadCustomers();
+      }, { passive: true });
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+      initFallbackCustomerScroll();
+      fallbackLoadCustomers(1);
+    });
+  } else {
+    initFallbackCustomerScroll();
+    fallbackLoadCustomers(1);
+  }
+  setTimeout(function() { fallbackLoadCustomers(1); }, 500);
+})();
+</script>
+{% endblock %}

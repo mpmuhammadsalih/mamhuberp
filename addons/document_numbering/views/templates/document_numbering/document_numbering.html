@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Document Numbering{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+
+<div class="page-po nexa-list-page nexa-setup-list-page">
+  <section class="nexa-stat-grid" aria-label="Document numbering summary">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-hash" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Series defined</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(rows|length) }}</p>
+        <p class="nexa-stat-sub">DOC_NUMBER_SERIES</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-check2-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Active</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(active_count) }}</p>
+        <p class="nexa-stat-sub">IS_ACTIVE = Y</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-diagram-3" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Modules</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(modules|length) }}</p>
+        <p class="nexa-stat-sub">Sales · Purchase · Inventory · Accounts</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div class="page-po__title-wrap">
+      <h1 class="page-po__title">Document numbering</h1>
+      <p class="page-po__muted">
+        Configure prefixes, starting numbers, padding, and manual entry rules for each transaction type.
+        Use <strong>Sync from database</strong> to set <em>Last used</em> from existing posted documents.
+        Set <code>BILLNO_AS_VARCHAR=1</code> in <code>.env</code> to store formatted bill numbers (e.g. <code>SI-000001</code>) in <code>BILLHDR.BILLNO</code>.
+      </p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <form class="nexa-list-filter-panel" method="get" action="{{ url_for('document_numbering.document_numbering_page') }}">
+    <label style="font-size:12px;font-weight:600;color:#475569;">
+      Module
+      <select name="module" style="margin-left:6px;padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;">
+        <option value="">All modules</option>
+        {% for m in modules %}
+        <option value="{{ m }}" {% if module_filter == m %}selected{% endif %}>{{ m }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label style="font-size:12px;font-weight:600;color:#475569;margin-left:12px;">
+      Branch
+      <select name="location" style="margin-left:6px;padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;">
+        {% for loc in locations %}
+        <option value="{{ loc.code }}" {% if location_filter|string == loc.code|string %}selected{% endif %}>{{ loc.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="page-po__btn-secondary">Filter</button>
+  </form>
+
+  <form method="post" action="{{ url_for('document_numbering.document_numbering_page') }}" id="doc-series-form">
+    <input type="hidden" name="filter_module" value="{{ module_filter }}" />
+    <input type="hidden" name="filter_location" value="{{ location_filter }}" />
+
+    <div class="nexa-list-toolbar" style="margin:12px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <button type="submit" name="action" value="save" class="page-po__btn-primary">Save all</button>
+      <button type="submit" name="action" value="sync" class="page-po__btn-secondary"
+              onclick="return confirm('Update Last used from MAX numbers in each document table?');">
+        Sync from database
+      </button>
+      <span class="nexa-num"><strong>{{ rows|length }}</strong> series shown</span>
+    </div>
+
+    {% if not rows %}
+    <div class="co-table-wrap">
+      <table class="co-table">
+        <tbody>
+          <tr>
+            <td style="text-align:center;padding:14px;color:#64748b;font-style:italic;">No document series found.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="co-table-wrap" style="overflow-x:auto;">
+      <table class="co-table doc-series-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Document</th>
+            <th>Module</th>
+            <th>Prefix</th>
+            <th>Suffix</th>
+            <th>Start</th>
+            <th>Last used</th>
+            <th>Inc</th>
+            <th>Pad</th>
+            <th>Date in no.</th>
+            <th>Date fmt</th>
+            <th>Manual</th>
+            <th>Active</th>
+            <th>Next preview</th>
+            <th>Branch</th>
+            <th>Reset</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr>
+            <td style="text-align:center;">{{ loop.index }}
+              <input type="hidden" name="series_id" value="{{ r.series_id }}" />
+            </td>
+            <td>
+              <strong>{{ r.doc_label }}</strong><br />
+              <code style="font-size:11px;color:#64748b;">{{ r.doc_type }}</code>
+            </td>
+            <td>{{ r.module_name or '—' }}</td>
+            <td><input type="text" name="prefix_{{ r.series_id }}" value="{{ r.prefix }}" maxlength="30" class="doc-series-input" /></td>
+            <td><input type="text" name="suffix_{{ r.series_id }}" value="{{ r.suffix }}" maxlength="30" class="doc-series-input" /></td>
+            <td><input type="number" name="starting_no_{{ r.series_id }}" value="{{ r.starting_no }}" min="1" class="doc-series-input doc-series-input--num" /></td>
+            <td><input type="number" name="last_no_used_{{ r.series_id }}" value="{{ r.last_no_used }}" min="0" class="doc-series-input doc-series-input--num" /></td>
+            <td><input type="number" name="increment_by_{{ r.series_id }}" value="{{ r.increment_by }}" min="1" class="doc-series-input doc-series-input--num" /></td>
+            <td><input type="number" name="padding_{{ r.series_id }}" value="{{ r.padding }}" min="0" max="12" class="doc-series-input doc-series-input--num" /></td>
+            <td style="text-align:center;">
+              <input type="checkbox" name="use_date_prefix_{{ r.series_id }}" value="Y" {% if (r.use_date_prefix or '')|upper == 'Y' %}checked{% endif %} />
+            </td>
+            <td>
+              <select name="date_format_{{ r.series_id }}" class="doc-series-input">
+                <option value="YYYYMMDD" {% if r.date_format == 'YYYYMMDD' %}selected{% endif %}>YYYYMMDD</option>
+                <option value="YYYYMM" {% if r.date_format == 'YYYYMM' %}selected{% endif %}>YYYYMM</option>
+                <option value="YYYY" {% if r.date_format == 'YYYY' %}selected{% endif %}>YYYY</option>
+              </select>
+            </td>
+            <td style="text-align:center;">
+              <input type="checkbox" name="allow_manual_{{ r.series_id }}" value="Y" {% if (r.allow_manual or '')|upper == 'Y' %}checked{% endif %} />
+            </td>
+            <td style="text-align:center;">
+              <input type="checkbox" name="is_active_{{ r.series_id }}" value="Y" {% if (r.is_active or 'Y')|upper == 'Y' %}checked{% endif %} />
+            </td>
+            <td><code>{{ r.next_preview }}</code></td>
+            <td>{% if r.locationcode is none or r.locationcode == '' %}All{% else %}{{ r.locationcode }}{% endif %}</td>
+            <td style="text-align:center;">{{ r.resetno or 1 }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </form>
+</div>
+
+<style>
+.doc-series-table th { font-size: 11px; white-space: nowrap; }
+.doc-series-table td { vertical-align: middle; font-size: 13px; }
+.doc-series-input {
+  width: 100%;
+  min-width: 64px;
+  max-width: 120px;
+  padding: 4px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.doc-series-input--num { max-width: 72px; min-width: 56px; }
+</style>
+{% endblock %}

@@ -1,0 +1,2 @@
+"""Addon manifest — Ho."""
+MANIFEST = {'technical_name': 'ho', 'name': 'Ho', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Migrated from blueprints/ho.py', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/ho'}, 'flask': {'blueprint': 'ho', 'blueprint_ref': 'addons.ho:bp', 'models_package': 'addons.ho.models', 'routes_module': 'addons.ho.controllers.routes'}}

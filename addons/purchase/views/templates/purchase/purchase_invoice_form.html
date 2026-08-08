@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body { overflow-x: auto; min-height: 100vh; background: #fff !important; color: #212529; }
+  .layout .content { background: #fff; }
+  .po-page { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+  .po-topbar { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #dee2e6; }
+  .po-topbar h1 { margin: 0; font-size: 24px; font-weight: 400; color: #212529; }
+  .po-topbar h1 .po-ref { font-weight: 600; }
+  .po-topbar .po-actions { display: flex; gap: 12px; align-items: center; }
+  .po-btn-save { background: #28a745 !important; border: none; color: #fff !important; padding: 8px 20px; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .po-link { color: #007bff; text-decoration: none; font-size: 13px; cursor: pointer; background: none; border: none; padding: 0; }
+  .po-link:hover { text-decoration: underline; }
+  .po-details { display: grid; grid-template-columns: 1fr 1fr; gap: 0 48px; margin-bottom: 24px; }
+  .po-details .form-group { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; min-height: 32px; }
+  .po-details .form-group label { margin: 0; min-width: 150px; font-size: 13px; font-weight: 400; color: #495057; flex-shrink: 0; }
+  .po-details .form-group .input { flex: 1; font-size: 13px; padding: 6px 0; border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; background: transparent; }
+  .po-details .form-group .input:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .po-details .form-group .input[readonly] { background: transparent; color: #6c757d; }
+  .po-details .form-group.span-2 { grid-column: span 2; }
+  .po-ref-large { font-size: 20px; font-weight: 700; color: #212529; margin-bottom: 16px; }
+  .po-section-title { font-size: 14px; font-weight: 600; color: #212529; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #007bff; display: inline-block; }
+  .scroll-table { overflow: auto; max-height: 52vh; background: #fff; -webkit-overflow-scrolling: touch; border: 1px solid #dee2e6; border-radius: 4px; }
+  #linesTable { width: 100%; min-width: 780px; border-collapse: collapse; font-size: 13px; }
+  #linesTable thead { position: sticky; top: 0; z-index: 1; background: #f8f9fa !important; }
+  #linesTable thead th { background: #f8f9fa !important; color: #495057 !important; padding: 10px 12px !important; font-weight: 600; font-size: 12px; text-align: left; white-space: nowrap; border-bottom: 1px solid #dee2e6; }
+  #linesTable tbody td { padding: 8px 12px !important; border: none; border-bottom: 1px solid #dee2e6; vertical-align: middle; }
+  #linesTable tbody tr:hover { background: #f8f9fa !important; }
+  #linesTable .input { margin: 0; border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; padding: 4px 0; font-size: 13px; background: transparent; }
+  #linesTable .input:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .search-field { display: inline-flex; border-bottom: 1px solid #dee2e6; align-items: center; flex: 1; }
+  .search-picker { background: transparent; color: #007bff; border: none; padding: 6px 8px; cursor: pointer; font-size: 12px; }
+  .button--secondary { background: transparent; border: 1px solid #dee2e6; color: #495057; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+  .modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal.hidden { display: none; }
+  .modal__overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.4); cursor: pointer; }
+  .modal__content { position: relative; background: #fff; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); max-width: 500px; width: 100%; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
+  .modal__header { padding: 12px 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+  .modal__body { padding: 12px; overflow: auto; max-height: 320px; }
+  .modal__close { border: none; background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }
+  @media (max-width: 1024px) { .po-details { grid-template-columns: 1fr; } }
+</style>
+<div class="po-page" data-transaction-audit="Purchase"
+     data-transaction-no-selector="#purchaseinvoiceno"
+     data-save-button="#btnSave"
+     data-track-root=".po-page"
+     data-save-url-pattern="api_pi_save|/purchase/invoice/api/save">
+  <div class="po-topbar">
+    <h1>Purchase Invoice / <span class="po-ref" id="piTitleRef">{{ next_pino or 'New' }}</span></h1>
+    <div class="po-actions">
+      <button type="button" class="po-btn-save" id="btnSave">Save</button>
+      <a href="{{ url_for('purchase.purchase_invoice_list') }}" class="po-link">List</a>
+    </div>
+  </div>
+  <div class="po-ref-large" id="piRefLarge">{{ next_pino or 'New' }}</div>
+  <div class="po-details">
+    <div>
+      <div class="form-group">
+        <label>Purchase Invoice No</label>
+        <input type="text" id="purchaseinvoiceno" class="input" value="{{ next_pino }}" readonly />
+      </div>
+      <div class="form-group">
+        <label>Invoice Date</label>
+        <input type="date" id="invoicedate" class="input" />
+      </div>
+      <div class="form-group">
+        <label>Supplier Invoice No</label>
+        <input type="text" id="supplierinvoiceno" class="input" placeholder="Supplier invoice no" />
+      </div>
+      <div class="form-group">
+        <label>Supplier Invoice Date</label>
+        <input type="date" id="supplierinvoicedate" class="input" />
+      </div>
+      <div class="form-group">
+        <label>SubTotal</label>
+        <input type="number" id="subtotal" class="input" step="0.01" value="0" />
+      </div>
+      <div class="form-group">
+        <label>Discount</label>
+        <input type="number" id="discount" class="input" step="0.01" value="0" />
+      </div>
+    </div>
+    <div>
+      <div class="form-group">
+        <label>Supplier</label>
+        <span class="search-field">
+          <input type="text" id="supplierDisplay" class="input" placeholder="Click to select supplier..." readonly />
+          <button type="button" class="search-picker" id="supplierPicker">▾</button>
+        </span>
+        <input type="hidden" id="suppliercode" value="" />
+      </div>
+      <div class="form-group">
+        <label>VAT Amount</label>
+        <input type="number" id="vatamount" class="input" step="0.01" value="0" />
+      </div>
+      <div class="form-group">
+        <label>Total Amount</label>
+        <input type="number" id="totalamount" class="input" step="0.01" value="0" />
+      </div>
+      <div class="form-group">
+        <label>Load from GRN</label>
+        <span class="search-field">
+          <input type="number" id="receiptnoLoad" class="input" placeholder="Receipt No" min="0" />
+          <button type="button" class="search-picker" id="btnLoadReceipt">Load</button>
+        </span>
+      </div>
+    </div>
+    <div class="form-group span-2">
+      <label>Remarks</label>
+      <input type="text" id="remarks" class="input" placeholder="Remarks" />
+    </div>
+  </div>
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+    <span class="po-section-title">Invoice lines</span>
+    <button type="button" class="button--secondary" id="btnAddRow">+ Add row</button>
+  </div>
+  <div class="scroll-table">
+    <table class="table" id="linesTable">
+      <thead>
+        <tr>
+          <th>Item Code</th>
+          <th>Item Name</th>
+          <th>UOM</th>
+          <th>Qty</th>
+          <th>Rate</th>
+          <th>Amount</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="linesBody">
+        <tr class="line-row">
+          <td><input type="text" class="input itemcode" data-name="" style="width:90px;" placeholder="Code" /></td>
+          <td><input type="text" class="input itemname" readonly style="width:180px;" /></td>
+          <td><input type="text" class="input uom" value="NOS" style="width:70px;" /></td>
+          <td><input type="number" class="input qty" step="0.01" value="0" style="width:80px;" /></td>
+          <td><input type="number" class="input rate" step="0.01" value="0" style="width:90px;" /></td>
+          <td><input type="number" class="input amount" step="0.01" readonly style="width:90px;" /></td>
+          <td><button type="button" class="btnRemove button--secondary" style="padding:2px 8px;">×</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<!-- Supplier modal -->
+<div class="modal hidden" id="supplierModal">
+  <div class="modal__overlay" data-close="supplierModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>Select Supplier</h4>
+      <button type="button" class="modal__close" data-close="supplierModal">×</button>
+    </div>
+    <div class="modal__body">
+      <input type="text" id="supplierSearch" class="input" placeholder="Search..." style="margin-bottom:8px;" />
+      <table class="table" id="supplierTable">
+        <thead><tr><th>Code</th><th>Name</th></tr></thead>
+        <tbody id="supplierBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<script>
+(function() {
+  const apiNextNo = {{ url_for('purchase.api_pi_next_no')|tojson }};
+  const apiSuppliers = {{ url_for('purchase.api_pi_suppliers')|tojson }};
+  const apiSave = {{ url_for('purchase.api_pi_save')|tojson }};
+  const apiLoadFromReceipt = {{ url_for('purchase.api_pi_load_from_receipt', receipt_no=0)|tojson }}.replace('/0', '');
+  const suppliers = {{ suppliers|tojson if suppliers else '[]' }};
+  const items = {{ items|tojson if items else '[]' }};
+
+  const pinoEl = document.getElementById('purchaseinvoiceno');
+  const piTitleRef = document.getElementById('piTitleRef');
+  const piRefLarge = document.getElementById('piRefLarge');
+  const invoicedateEl = document.getElementById('invoicedate');
+  const supplierDisplay = document.getElementById('supplierDisplay');
+  const suppliercodeEl = document.getElementById('suppliercode');
+  const supplierPicker = document.getElementById('supplierPicker');
+  const subtotalEl = document.getElementById('subtotal');
+  const discountEl = document.getElementById('discount');
+  const vatamountEl = document.getElementById('vatamount');
+  const totalamountEl = document.getElementById('totalamount');
+  const remarksEl = document.getElementById('remarks');
+  const btnSave = document.getElementById('btnSave');
+  const btnAddRow = document.getElementById('btnAddRow');
+  const btnLoadReceipt = document.getElementById('btnLoadReceipt');
+  const receiptnoLoadEl = document.getElementById('receiptnoLoad');
+  const linesBody = document.getElementById('linesBody');
+  const supplierModal = document.getElementById('supplierModal');
+  const supplierBody = document.getElementById('supplierBody');
+  const supplierSearch = document.getElementById('supplierSearch');
+  const supplierTable = document.getElementById('supplierTable');
+
+  var suppliersList = suppliers;
+
+  function updatePiRef() {
+    var v = (pinoEl && pinoEl.value) ? pinoEl.value : 'New';
+    if (piTitleRef) piTitleRef.textContent = v;
+    if (piRefLarge) piRefLarge.textContent = v;
+  }
+  if (pinoEl) pinoEl.addEventListener('input', updatePiRef);
+  updatePiRef();
+
+  if (!invoicedateEl.value) {
+    var d = new Date();
+    invoicedateEl.value = d.toISOString().slice(0, 10);
+  }
+
+  function renderSuppliers(list) {
+    var q = (supplierSearch && supplierSearch.value || '').toLowerCase();
+    var L = q ? list.filter(function(s) { return (String(s.code||'').toLowerCase().indexOf(q) !== -1) || (String(s.name||'').toLowerCase().indexOf(q) !== -1); }) : list;
+    supplierBody.innerHTML = L.length ? L.map(function(s) {
+      return '<tr data-code="' + (s.code||'') + '" data-name="' + (String(s.name||'').replace(/"/g,'&quot;')) + '"><td>' + (s.code||'') + '</td><td>' + (s.name||'') + '</td></tr>';
+    }).join('') : '<tr><td colspan="2">No suppliers</td></tr>';
+  }
+
+  supplierPicker.addEventListener('click', function() {
+    fetch(apiSuppliers).then(r=>r.json()).then(d=>{ if(d.suppliers) suppliersList = d.suppliers; renderSuppliers(suppliersList); });
+    supplierModal.classList.remove('hidden');
+    if (supplierSearch) { supplierSearch.value = ''; supplierSearch.focus(); }
+  });
+  supplierModal.addEventListener('click', function(e) {
+    if (e.target.dataset.close === 'supplierModal' || e.target.classList.contains('modal__close')) supplierModal.classList.add('hidden');
+  });
+  if (supplierSearch) supplierSearch.addEventListener('input', function() { renderSuppliers(suppliersList); });
+  supplierTable.addEventListener('click', function(e) {
+    var row = e.target.closest('tbody tr');
+    if (!row || !row.dataset.code) return;
+    supplierDisplay.value = (row.dataset.code || '') + ' - ' + (row.dataset.name || '');
+    suppliercodeEl.value = row.dataset.code || '';
+    supplierModal.classList.add('hidden');
+  });
+
+  function addLineRow() {
+    var tr = document.createElement('tr');
+    tr.className = 'line-row';
+    tr.innerHTML = '<td><input type="text" class="input itemcode" data-name="" style="width:90px;" placeholder="Code" /></td><td><input type="text" class="input itemname" readonly style="width:180px;" /></td><td><input type="text" class="input uom" value="NOS" style="width:70px;" /></td><td><input type="number" class="input qty" step="0.01" value="0" style="width:80px;" /></td><td><input type="number" class="input rate" step="0.01" value="0" style="width:90px;" /></td><td><input type="number" class="input amount" step="0.01" readonly style="width:90px;" /></td><td><button type="button" class="btnRemove button--secondary" style="padding:2px 8px;">×</button></td>';
+    linesBody.appendChild(tr);
+    bindLineRow(tr);
+  }
+  function bindLineRow(tr) {
+    var qty = tr.querySelector('.qty');
+    var rate = tr.querySelector('.rate');
+    var amount = tr.querySelector('.amount');
+    var itemcode = tr.querySelector('.itemcode');
+    function calc() { var q = parseFloat(qty.value)||0; var r = parseFloat(rate.value)||0; amount.value = (q*r).toFixed(2); updateTotals(); }
+    qty.addEventListener('input', calc);
+    rate.addEventListener('input', calc);
+    tr.querySelector('.btnRemove').addEventListener('click', function() { tr.remove(); updateTotals(); });
+    itemcode.addEventListener('blur', function() {
+      var code = itemcode.value.trim();
+      if (!code) return;
+      var it = items.find(function(i) { return String(i.code) === String(code); });
+      if (it) { tr.querySelector('.itemname').value = it.name || ''; tr.querySelector('.uom').value = it.uom || 'NOS'; itemcode.dataset.name = it.name || ''; }
+    });
+  }
+  function updateTotals() {
+    var sub = 0;
+    linesBody.querySelectorAll('.line-row').forEach(function(tr) {
+      sub += parseFloat(tr.querySelector('.amount').value) || 0;
+    });
+    subtotalEl.value = sub.toFixed(2);
+    var disc = parseFloat(discountEl.value) || 0;
+    var vat = parseFloat(vatamountEl.value) || 0;
+    totalamountEl.value = (sub - disc + vat).toFixed(2);
+  }
+  linesBody.querySelectorAll('.line-row').forEach(bindLineRow);
+  btnAddRow.addEventListener('click', addLineRow);
+
+  btnLoadReceipt.addEventListener('click', function() {
+    var rno = parseInt(receiptnoLoadEl.value, 10);
+    if (!rno) { alert('Enter Receipt No'); return; }
+    fetch(apiLoadFromReceipt + '/' + rno).then(r=>r.json()).then(function(d) {
+      if (!d.success || !d.lines || !d.lines.length) { alert('No lines found for Receipt ' + rno); return; }
+      linesBody.innerHTML = '';
+      d.lines.forEach(function(line) {
+        var amt = line.amount || (line.quantity * line.rate) || 0;
+        var tr = document.createElement('tr');
+        tr.className = 'line-row';
+        tr.innerHTML = '<td><input type="text" class="input itemcode" data-name="" style="width:90px;" value="' + (line.itemcode||'') + '" /></td><td><input type="text" class="input itemname" readonly style="width:180px;" value="' + (line.itemname||'') + '" /></td><td><input type="text" class="input uom" value="' + (line.uom||'NOS') + '" style="width:70px;" /></td><td><input type="number" class="input qty" step="0.01" value="' + (line.quantity||0) + '" style="width:80px;" /></td><td><input type="number" class="input rate" step="0.01" value="' + (line.rate||0) + '" style="width:90px;" /></td><td><input type="number" class="input amount" step="0.01" readonly style="width:90px;" value="' + amt + '" /></td><td><button type="button" class="btnRemove button--secondary" style="padding:2px 8px;">×</button></td>';
+        linesBody.appendChild(tr);
+        bindLineRow(tr);
+      });
+      updateTotals();
+    }).catch(function() { alert('Failed to load Receipt'); });
+  });
+
+  btnSave.addEventListener('click', function() {
+    var pino = parseInt(pinoEl.value, 10);
+    var invoicedate = invoicedateEl.value.trim();
+    var suppliercode = parseInt(suppliercodeEl.value, 10);
+    var supplierinvoiceno = document.getElementById('supplierinvoiceno').value.trim();
+    var supplierinvoicedate = document.getElementById('supplierinvoicedate').value.trim();
+    var subtotal = parseFloat(subtotalEl.value) || 0;
+    var discount = parseFloat(discountEl.value) || 0;
+    var vatamount = parseFloat(vatamountEl.value) || 0;
+    var totalamount = parseFloat(totalamountEl.value) || 0;
+    var remarks = remarksEl.value.trim();
+    if (!pino || !invoicedate) { alert('Invoice No and Date required'); return; }
+    if (!suppliercode) { alert('Please select Supplier'); return; }
+    var lines = [];
+    linesBody.querySelectorAll('.line-row').forEach(function(tr) {
+      var code = tr.querySelector('.itemcode').value.trim();
+      var qty = parseFloat(tr.querySelector('.qty').value) || 0;
+      var rate = parseFloat(tr.querySelector('.rate').value) || 0;
+      var amt = parseFloat(tr.querySelector('.amount').value) || 0;
+      if (code) lines.push({ itemcode: code, quantity: qty, rate: rate, amount: amt, uom: tr.querySelector('.uom').value || 'NOS' });
+    });
+    if (!lines.length) { alert('Add at least one line'); return; }
+    fetch(apiSave, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ purchaseinvoiceno: pino, invoicedate: invoicedate, suppliercode: suppliercode, supplierinvoiceno: supplierinvoiceno, supplierinvoicedate: supplierinvoicedate, subtotal: subtotal, discount: discount, vatamount: vatamount, totalamount: totalamount, remarks: remarks, lines: lines }) })
+      .then(r=>r.json())
+      .then(function(d) {
+        if (d.success) {
+          window.dispatchEvent(new CustomEvent('nexa-transaction-save-success', { detail: d }));
+          alert('Saved.'); if (d.next_purchaseinvoiceno) pinoEl.value = d.next_purchaseinvoiceno; linesBody.innerHTML = ''; addLineRow(); supplierDisplay.value = ''; suppliercodeEl.value = ''; subtotalEl.value = '0'; discountEl.value = '0'; vatamountEl.value = '0'; totalamountEl.value = '0'; remarksEl.value = '';
+        }
+        else { window.dispatchEvent(new CustomEvent('nexa-transaction-save-failed', { detail: d })); alert(d.error || 'Save failed'); }
+      })
+      .catch(function() { window.dispatchEvent(new CustomEvent('nexa-transaction-save-failed', { detail: {} })); alert('Save failed'); });
+  });
+})();
+</script>
+<script src="{{ url_for('static', filename='js/transaction_recording_client.js') }}?v=7"></script>
+{% endblock %}

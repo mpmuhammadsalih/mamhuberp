@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .ils-page { max-width: 980px; margin: 0 auto; padding: 24px 16px; }
+  .ils-top { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid #dee2e6; padding-bottom: 14px; margin-bottom: 14px; }
+  .ils-title { margin: 0; font-size: 24px; font-weight: 400; color: #212529; }
+  .ils-sub { margin: 4px 0 0; color: #6c757d; font-size: 13px; }
+  .ils-actions { display: flex; align-items: center; gap: 10px; }
+  .ils-btn { border: none; border-radius: 4px; padding: 8px 16px; font-size: 13px; cursor: pointer; font-weight: 500; }
+  .ils-btn-primary { background: #28a745; color: #fff; }
+  .ils-link { color: #007bff; text-decoration: none; font-size: 13px; }
+  .ils-link:hover { text-decoration: underline; }
+  .ils-msg-ok { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; border-radius: 4px; padding: 8px 10px; margin-bottom: 10px; font-size: 13px; }
+  .ils-msg-err { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; border-radius: 4px; padding: 8px 10px; margin-bottom: 10px; font-size: 13px; }
+  .ils-wrap { border: 1px solid #dee2e6; border-radius: 4px; overflow: auto; background: #fff; }
+  .ils-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 640px; }
+  .ils-table th, .ils-table td { border-bottom: 1px solid #dee2e6; padding: 9px 10px; white-space: nowrap; }
+  .ils-table th { background: #f8f9fa; font-size: 12px; color: #495057; text-transform: uppercase; font-weight: 600; }
+  .ils-table td:nth-child(3), .ils-table th:nth-child(3) { text-align: center; }
+</style>
+
+<div class="ils-page">
+  <form method="post">
+    <div class="ils-top">
+      <div>
+        <h1 class="ils-title">Inventory Location Setup</h1>
+        <p class="ils-sub">Configure Transit flag in TBLLOCATION (default N).</p>
+      </div>
+      <div class="ils-actions">
+        <button type="submit" class="ils-btn ils-btn-primary">Save</button>
+        <a class="ils-link" href="{{ url_for('purchase.stock_transfer') }}">Back</a>
+      </div>
+    </div>
+
+    {% if success %}
+      <div class="ils-msg-ok">{{ success }}</div>
+    {% endif %}
+    {% if error %}
+      <div class="ils-msg-err">{{ error }}</div>
+    {% endif %}
+
+    <div class="ils-wrap">
+      <table class="ils-table">
+        <thead>
+          <tr>
+            <th>Store Code</th>
+            <th>Description</th>
+            <th>Transit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>{{ row.code }}</td>
+              <td>{{ row.description or '' }}</td>
+              <td>
+                <input
+                  type="checkbox"
+                  name="transit_codes"
+                  value="{{ row.code }}"
+                  {% if (row.transit or 'N')|upper == 'Y' %}checked{% endif %}
+                />
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="3" style="color:#6c757d;">No location rows found.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </form>
+</div>
+{% endblock %}

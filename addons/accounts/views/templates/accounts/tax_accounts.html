@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Tax (VAT / GST){% endblock %}
+{% block content %}
+<style>
+  #taxTable {
+    width: 100%;
+    border-collapse: collapse !important;
+    table-layout: auto;
+  }
+  #taxTable th,
+  #taxTable td {
+    border: 1px solid #cfd4da !important;
+    padding: 8px 10px !important;
+    white-space: nowrap;
+  }
+  #taxTable thead th {
+    background: #eef2f7 !important;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  #taxTable tbody tr:nth-child(even) {
+    background: #fbfcfe;
+  }
+  #taxTable tbody tr:hover {
+    background: #f1f6ff !important;
+  }
+</style>
+<div class="page-po">
+  <div class="page-po__head">
+    <div>
+      <h1 class="page-po__title">Tax (VAT / GST)</h1>
+      <div class="page-po__subtitle">Tax-related chart of accounts</div>
+    </div>
+  </div>
+
+  <div class="page-po__section">
+    <form method="get" class="page-po__tools" style="margin-bottom: 12px; display: flex; gap: 8px; align-items: end;">
+      <div>
+        <label class="label">From</label>
+        <input type="date" class="input" name="date_from" value="{{ date_from or '' }}">
+      </div>
+      <div>
+        <label class="label">To</label>
+        <input type="date" class="input" name="date_to" value="{{ date_to or '' }}">
+      </div>
+      <button class="page-po__btn-primary" type="submit">Filter</button>
+    </form>
+    <div class="page-po__section-title">Tax Accounts</div>
+    <div class="table-wrap">
+      <table class="table" id="taxTable">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Name</th>
+            <th style="text-align: right;">Debit</th>
+            <th style="text-align: right;">Credit</th>
+            <th style="text-align: right;">Balance</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.code }}</td>
+            <td>{{ row.name }}</td>
+            <td style="text-align: right;">{{ '%.2f'|format(row.debit or 0) }}</td>
+            <td style="text-align: right;">{{ '%.2f'|format(row.credit or 0) }}</td>
+            <td style="text-align: right;">{{ '%.2f'|format(row.balance or 0) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="muted">No tax account postings found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

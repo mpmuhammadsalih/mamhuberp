@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}Cash Payment Vouchers{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  #cpvListTable.co-table { width: 100%; table-layout: auto; }
+  #cpvListTable.co-table thead th { position: sticky; top: 0; z-index: 2; }
+  .cpv-status-pill { display:inline-flex; align-items:center; padding:3px 8px; border-radius:999px; font-size:11px; font-weight:800; }
+  .cpv-status-pill--posted { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }
+  .cpv-status-pill--draft { background:#fffbeb; color:#92400e; border:1px solid #fde68a; }
+  .cpv-row { cursor:pointer; }
+  .cpv-row:hover { background:#f8fbff; }
+  .cpv-list-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:flex-end; }
+  .cpv-list-kpis { display:flex; flex-wrap:nowrap; justify-content:center; }
+  .cpv-list-kpis .nexa-stat-card { flex:0 1 280px; }
+</style>
+
+{% set ns = namespace(total=0, draft=0, posted=0, amount=0) %}
+{% for row in rows or [] %}
+  {% set ns.total = ns.total + 1 %}
+  {% set ns.amount = ns.amount + (row.total_amount or 0) %}
+  {% if (row.status or 'DRAFT')|upper == 'POSTED' %}
+    {% set ns.posted = ns.posted + 1 %}
+  {% else %}
+    {% set ns.draft = ns.draft + 1 %}
+  {% endif %}
+{% endfor %}
+
+<div class="page-po nexa-list-page nexa-setup-list-page">
+  <section class="nexa-stat-grid cpv-list-kpis" aria-label="Cash payment voucher summary">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-receipt" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Vouchers</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.total) }}</p>
+        <p class="nexa-stat-sub">Current list</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-check2-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Posted</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.posted) }}</p>
+        <p class="nexa-stat-sub">GL posted</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-pencil-square" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Draft</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.draft) }}</p>
+        <p class="nexa-stat-sub">Not posted</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-cash-stack" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Total amount</p>
+        <p class="nexa-stat-value">{{ "%.2f"|format(ns.amount or 0) }}</p>
+        <p class="nexa-stat-sub">Visible rows</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Cash Payment Voucher List</h1>
+      <p class="page-po__muted">View drafts and posted cash payment vouchers. Click a row to open it.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('accounts.cash_payment_voucher', new=1) }}" class="page-po__btn-primary">+ New voucher</a>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <form class="nexa-list-filter-panel" method="get" action="{{ url_for('accounts.cash_payment_voucher_list') }}">
+    <div class="form-group" style="margin-bottom:0;">
+      <label for="cpvSearch" style="font-size:11px;font-weight:700;color:#64748b;">Search</label>
+      <input id="cpvSearch" type="text" name="q" class="input" placeholder="Voucher, reference, narration, GL voucher..." value="{{ search_term or '' }}" style="min-width:280px;" />
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label for="cpvStatus" style="font-size:11px;font-weight:700;color:#64748b;">Status</label>
+      <select id="cpvStatus" name="status" class="input" style="min-width:150px;">
+        <option value="all" {% if (status_filter or 'all') == 'all' %}selected{% endif %}>All</option>
+        <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
+        <option value="posted" {% if status_filter == 'posted' %}selected{% endif %}>Posted</option>
+      </select>
+    </div>
+    <button type="submit" class="page-po__btn-secondary">Filter</button>
+    <a href="{{ url_for('accounts.cash_payment_voucher_list') }}" class="page-po__btn-secondary" style="text-decoration:none;">Clear</a>
+  </form>
+
+  <div class="co-table-wrap">
+    <table class="co-table" id="cpvListTable">
+      <thead>
+        <tr>
+          <th style="text-align:center;width:52px;">Sl.No</th>
+          <th>Voucher No</th>
+          <th>Date</th>
+          <th>Petty Cash</th>
+          <th>Reference</th>
+          <th>Narration</th>
+          <th>Status</th>
+          <th>GL Voucher</th>
+          <th class="num">Lines</th>
+          <th class="num">Amount</th>
+          <th style="text-align:center;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows or [] %}
+        {% set status_u = (row.status or 'DRAFT')|upper %}
+        <tr class="cpv-row" data-url="{{ url_for('accounts.cash_payment_voucher', voucher_no=row.voucher_no) }}">
+          <td style="text-align:center;">{{ loop.index }}</td>
+          <td>{{ row.voucher_no }}</td>
+          <td>{{ row.voucher_date.strftime('%Y-%m-%d') if row.voucher_date and row.voucher_date.strftime is defined else (row.voucher_date|string)[:10] }}</td>
+          <td>{{ row.petty_cash_account or '' }}</td>
+          <td>{{ row.reference_no or '' }}</td>
+          <td>{{ row.narration or '' }}</td>
+          <td><span class="cpv-status-pill {{ 'cpv-status-pill--posted' if status_u == 'POSTED' else 'cpv-status-pill--draft' }}">{{ status_u }}</span></td>
+          <td>{{ row.gl_voucher_no or '' }}</td>
+          <td class="num">{{ row.line_count or 0 }}</td>
+          <td class="num">{{ "%.2f"|format(row.total_amount or 0) }}</td>
+          <td style="text-align:center;">
+            <div class="cpv-list-actions">
+              <a class="btn-view" href="{{ url_for('accounts.cash_payment_voucher', voucher_no=row.voucher_no) }}">Open</a>
+              {% if status_u == 'POSTED' %}
+              <a class="btn-view" href="{{ url_for('accounts.cash_payment_voucher_pdf', voucher_no=row.voucher_no) }}" target="_blank" rel="noopener">PDF</a>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11" class="muted" style="text-align:center;padding:18px;">No cash payment vouchers found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const params = new URLSearchParams(window.location.search);
+    const autoPdfVoucher = params.get('open_cash_payment_voucher_pdf');
+    if (autoPdfVoucher) {
+      const pdfBase = "{{ url_for('accounts.cash_payment_voucher_pdf') }}?voucher_no=";
+      window.open(pdfBase + encodeURIComponent(autoPdfVoucher), '_blank', 'noopener');
+      params.delete('open_cash_payment_voucher_pdf');
+      const next = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (next ? '?' + next : '') + window.location.hash);
+    }
+
+    document.querySelectorAll('.cpv-row').forEach(function (row) {
+      row.addEventListener('click', function (ev) {
+        if (ev.target.closest('a, button')) return;
+        const url = row.dataset.url || '';
+        if (url) window.location.href = url;
+      });
+    });
+  })();
+</script>
+{% endblock %}

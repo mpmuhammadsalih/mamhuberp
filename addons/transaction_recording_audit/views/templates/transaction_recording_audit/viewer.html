@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/transaction_recording_audit.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="tra-page nexa-list-page" id="traViewerApp"
+     data-api-list="{{ api_list_url }}"
+     data-api-detail="{{ url_for('transaction_recording_audit.api_detail', audit_id=0) }}"
+     data-api-users="{{ api_users_url }}"
+     data-file-base="{{ file_url_base }}"
+     data-replay-base="{{ replay_url_base }}">
+
+  <section class="tra-kpi-grid" aria-label="Audit summary">
+    <div class="tra-kpi-card">
+      <span class="tra-kpi-icon tra-kpi-icon--blue"><i class="bi bi-camera-reels"></i></span>
+      <div>
+        <p class="tra-kpi-label">Records</p>
+        <p class="tra-kpi-value" id="traKpiCount">—</p>
+      </div>
+    </div>
+    <div class="tra-kpi-card">
+      <span class="tra-kpi-icon tra-kpi-icon--green"><i class="bi bi-check2-circle"></i></span>
+      <div>
+        <p class="tra-kpi-label">Saved</p>
+        <p class="tra-kpi-value" id="traKpiSaved">—</p>
+      </div>
+    </div>
+    <div class="tra-kpi-card">
+      <span class="tra-kpi-icon tra-kpi-icon--red"><i class="bi bi-x-circle"></i></span>
+      <div>
+        <p class="tra-kpi-label">Failed</p>
+        <p class="tra-kpi-value" id="traKpiFailed">—</p>
+      </div>
+    </div>
+    <div class="tra-kpi-card">
+      <span class="tra-kpi-icon tra-kpi-icon--amber"><i class="bi bi-speedometer2"></i></span>
+      <div>
+        <p class="tra-kpi-label">Dashboard</p>
+        <p class="tra-kpi-value"><a href="{{ dashboard_url }}" class="tra-link">Open</a></p>
+      </div>
+    </div>
+  </section>
+
+  <header class="tra-header">
+    <div>
+      <h1 class="tra-title"><i class="bi bi-shield-check"></i> Transaction Audit Viewer</h1>
+      <p class="tra-subtitle">Review screen captures, videos, and field-level change history for ERP transactions.</p>
+    </div>
+  </header>
+
+  <form class="tra-filters" id="traFilterForm">
+    <div class="tra-filter-grid">
+      <label>From Date<input type="date" name="date_from" id="traDateFrom" /></label>
+      <label>To Date<input type="date" name="date_to" id="traDateTo" /></label>
+      <label>User
+        <select name="user" id="traUser">
+          <option value="">All users</option>
+        </select>
+      </label>
+      <label>Transaction Type
+        <select name="transaction_type" id="traTxType">
+          <option value="">All types</option>
+          {% for code, label in transaction_types %}
+          <option value="{{ code }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Transaction No<input type="text" name="transaction_no" id="traTxNo" placeholder="e.g. PI1001" /></label>
+    </div>
+    <div class="tra-filter-actions">
+      <button type="submit" class="tra-btn tra-btn--primary"><i class="bi bi-search"></i> Search</button>
+      <button type="button" class="tra-btn" id="traResetFilters">Reset</button>
+    </div>
+  </form>
+
+  <div class="tra-table-wrap">
+    <table class="co-table tra-table" id="traTable">
+      <thead>
+        <tr>
+          <th>Transaction Type</th>
+          <th>Transaction No</th>
+          <th>User</th>
+          <th>Date</th>
+          <th>Start Time</th>
+          <th>End Time</th>
+          <th>Duration</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="traTableBody">
+        <tr><td colspan="9" class="tra-empty">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="tra-modal hidden" id="traMediaModal" aria-hidden="true">
+  <div class="tra-modal__overlay" data-close="traMediaModal"></div>
+  <div class="tra-modal__content">
+    <header class="tra-modal__head">
+      <h2 id="traMediaTitle">Media</h2>
+      <button type="button" class="tra-modal__close" data-close="traMediaModal">&times;</button>
+    </header>
+    <div class="tra-modal__body" id="traMediaBody"></div>
+  </div>
+</div>
+
+<div class="tra-modal hidden" id="traHistoryModal" aria-hidden="true">
+  <div class="tra-modal__overlay" data-close="traHistoryModal"></div>
+  <div class="tra-modal__content tra-modal__content--wide">
+    <header class="tra-modal__head">
+      <h2 id="traHistoryTitle">Change History</h2>
+      <button type="button" class="tra-modal__close" data-close="traHistoryModal">&times;</button>
+    </header>
+    <div class="tra-modal__body" id="traHistoryBody"></div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/transaction_recording_audit_viewer.js') }}?v=2"></script>
+{% endblock %}

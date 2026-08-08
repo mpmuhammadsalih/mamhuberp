@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .stas-page { max-width: 1180px; margin: 0 auto; padding: 24px 16px; }
+  .stas-top { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid #dee2e6; padding-bottom: 14px; margin-bottom: 14px; }
+  .stas-title { margin: 0; font-size: 24px; font-weight: 400; color: #212529; }
+  .stas-sub { margin: 4px 0 0; color: #6c757d; font-size: 13px; }
+  .stas-actions { display: flex; align-items: center; gap: 10px; }
+  .stas-btn { border: none; border-radius: 4px; padding: 8px 16px; font-size: 13px; cursor: pointer; font-weight: 500; }
+  .stas-btn-primary { background: #28a745; color: #fff; }
+  .stas-btn-plain { background: transparent; color: #495057; border: 1px solid #dee2e6; }
+  .stas-link { color: #007bff; text-decoration: none; font-size: 13px; }
+  .stas-link:hover { text-decoration: underline; }
+  .stas-row { display: grid; grid-template-columns: 260px 260px 1fr; gap: 14px; margin-bottom: 12px; align-items: end; }
+  .stas-field label { display: block; margin-bottom: 4px; font-size: 12px; color: #495057; }
+  .stas-input { width: 100%; border: none; border-bottom: 1px solid #dee2e6; background: transparent; padding: 6px 0; font-size: 13px; }
+  .stas-input:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .stas-table-wrap { border: 1px solid #dee2e6; border-radius: 4px; overflow: auto; background: #fff; }
+  .stas-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 520px; }
+  .stas-table th, .stas-table td { border-bottom: 1px solid #dee2e6; padding: 9px 10px; white-space: nowrap; }
+  .stas-table th { background: #f8f9fa; font-size: 12px; color: #495057; text-transform: uppercase; font-weight: 600; }
+  .stas-table td:nth-child(3), .stas-table th:nth-child(3) { text-align: center; }
+  .stas-empty { color: #6c757d; padding: 14px; font-size: 13px; }
+</style>
+
+<div class="stas-page">
+  <div class="stas-top">
+    <div>
+      <h1 class="stas-title">Transfer Approval Setup</h1>
+      <p class="stas-sub">Set user-wise store enable setup (TRANSIT hidden).</p>
+    </div>
+    <div class="stas-actions">
+      <button id="saveBtn" class="stas-btn stas-btn-primary" type="button">Save Setup</button>
+      <a class="stas-link" href="{{ url_for('purchase.stock_transfer') }}">Back to Store Transfer</a>
+    </div>
+  </div>
+
+  <div class="stas-row">
+    <div class="stas-field">
+      <label>User</label>
+      <select id="userSelect" class="stas-input"></select>
+    </div>
+    <div class="stas-field">
+      <label>Copy permissions from</label>
+      <select id="copyFromUserSelect" class="stas-input"></select>
+    </div>
+    <div class="stas-field">
+      <label>Quick action</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button id="copyFromBtn" class="stas-btn stas-btn-plain" type="button">Copy from user</button>
+        <button id="checkAllBtn" class="stas-btn stas-btn-plain" type="button">Enable all for all stores</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="stas-table-wrap">
+    <table class="stas-table">
+      <thead>
+        <tr>
+          <th>Store Code</th>
+          <th>Store Name</th>
+          <th>Enable</th>
+        </tr>
+      </thead>
+      <tbody id="setupBody"></tbody>
+    </table>
+  </div>
+  <div id="emptyNote" class="stas-empty" style="display:none;">No stores found.</div>
+</div>
+
+<script>
+  (function () {
+    const userSelect = document.getElementById("userSelect");
+    const copyFromUserSelect = document.getElementById("copyFromUserSelect");
+    const copyFromBtn = document.getElementById("copyFromBtn");
+    const setupBody = document.getElementById("setupBody");
+    const emptyNote = document.getElementById("emptyNote");
+    const saveBtn = document.getElementById("saveBtn");
+    const checkAllBtn = document.getElementById("checkAllBtn");
+    let stores = [];
+
+    function renderRows(existingRows) {
+      const map = {};
+      (existingRows || []).forEach((r) => {
+        const key = String(r.storecode || "").trim().toUpperCase();
+        if (!key) return;
+        map[key] = {
+          enabled: (
+            String(r.can_create || "N").toUpperCase() === "Y" ||
+            String(r.can_transfer_from || r.can_transfer || "N").toUpperCase() === "Y" ||
+            String(r.can_transfer_to || r.can_transfer || "N").toUpperCase() === "Y" ||
+            String(r.can_approve_from || r.can_approve || "N").toUpperCase() === "Y" ||
+            String(r.can_approve_to || r.can_approve || "N").toUpperCase() === "Y"
+          ),
+        };
+      });
+      if (!stores.length) {
+        setupBody.innerHTML = "";
+        emptyNote.style.display = "";
+        return;
+      }
+      emptyNote.style.display = "none";
+      setupBody.innerHTML = stores.map((s) => {
+        const code = String(s.code || "").trim().toUpperCase();
+        const row = map[code] || {};
+        const checkedEnabled = row.enabled ? "checked" : "";
+        return `
+          <tr data-store="${code}">
+            <td>${code}</td>
+            <td>${s.description || ""}</td>
+            <td><input type="checkbox" class="js-enable" ${checkedEnabled} /></td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    function collectRows() {
+      return [...setupBody.querySelectorAll("tr[data-store]")].map((tr) => ({
+        // Keep API payload backward compatible by writing all flags from one Enable checkbox.
+        storecode: tr.dataset.store || "",
+        can_create: tr.querySelector(".js-enable")?.checked ? "Y" : "N",
+        can_transfer_from: tr.querySelector(".js-enable")?.checked ? "Y" : "N",
+        can_transfer_to: tr.querySelector(".js-enable")?.checked ? "Y" : "N",
+        can_approve_from: tr.querySelector(".js-enable")?.checked ? "Y" : "N",
+        can_approve_to: tr.querySelector(".js-enable")?.checked ? "Y" : "N",
+      }));
+    }
+
+    async function loadUserRows() {
+      const username = String(userSelect.value || "").trim();
+      if (!username) {
+        renderRows([]);
+        return;
+      }
+      const r = await fetch(`/purchase/stock-transfer/approval-setup/api/load?username=${encodeURIComponent(username)}`);
+      const d = await r.json();
+      if (!r.ok || !d.success) {
+        alert(d.error || "Failed to load setup.");
+        return;
+      }
+      renderRows(d.rows || []);
+    }
+
+    async function loadRowsByUsername(username) {
+      const u = String(username || "").trim();
+      if (!u) return [];
+      const r = await fetch(`/purchase/stock-transfer/approval-setup/api/load?username=${encodeURIComponent(u)}`);
+      const d = await r.json();
+      if (!r.ok || !d.success) {
+        throw new Error(d.error || "Failed to load setup.");
+      }
+      return d.rows || [];
+    }
+
+    async function init() {
+      const r = await fetch("/purchase/stock-transfer/approval-setup/api/init");
+      const d = await r.json();
+      if (!r.ok || !d.success) {
+        alert(d.error || "Failed to load setup data.");
+        return;
+      }
+      stores = (d.stores || []).filter((s) => String(s.code || "").trim().toUpperCase() !== "TRANSIT");
+      const users = d.users || [];
+      userSelect.innerHTML = users.length
+        ? users.map((u) => `<option value="${u}">${u}</option>`).join("")
+        : `<option value="">No users</option>`;
+      copyFromUserSelect.innerHTML = users.length
+        ? [`<option value="">Select source user...</option>`].concat(users.map((u) => `<option value="${u}">${u}</option>`)).join("")
+        : `<option value="">No users</option>`;
+      await loadUserRows();
+      if (users.length) userSelect.focus();
+    }
+
+    userSelect.addEventListener("change", loadUserRows);
+    checkAllBtn.addEventListener("click", () => {
+      setupBody.querySelectorAll("input[type='checkbox']").forEach((cb) => {
+        cb.checked = true;
+      });
+    });
+    copyFromBtn.addEventListener("click", async () => {
+      const targetUser = String(userSelect.value || "").trim();
+      const sourceUser = String(copyFromUserSelect.value || "").trim();
+      if (!targetUser) {
+        alert("Select target user.");
+        return;
+      }
+      if (!sourceUser) {
+        alert("Select source user to copy from.");
+        return;
+      }
+      if (targetUser.toUpperCase() === sourceUser.toUpperCase()) {
+        alert("Source and target user are same.");
+        return;
+      }
+      try {
+        const sourceRows = await loadRowsByUsername(sourceUser);
+        renderRows(sourceRows);
+        alert(`Permissions copied from ${sourceUser}. Click Save Setup to apply.`);
+      } catch (err) {
+        alert(err && err.message ? err.message : "Failed to copy permissions.");
+      }
+    });
+    saveBtn.addEventListener("click", async () => {
+      const username = String(userSelect.value || "").trim();
+      if (!username) {
+        alert("Select user.");
+        return;
+      }
+      const payload = { username, rows: collectRows() };
+      const r = await fetch("/purchase/stock-transfer/approval-setup/api/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.success) {
+        alert(d.error || "Save failed.");
+        return;
+      }
+      alert("Transfer approval setup saved.");
+      window.location.href = "{{ url_for('purchase.stock_transfer') }}";
+    });
+
+    init();
+  })();
+</script>
+{% endblock %}

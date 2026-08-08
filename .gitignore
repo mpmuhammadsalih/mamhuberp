@@ -1,0 +1,32 @@
+# Secrets and local config
+.env
+.env.local
+*.pem
+Wallet/
+wallet/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.dist/
+build/
+
+# Logs and runtime
+logs/
+*.log
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Oracle client cache
+.oracle/

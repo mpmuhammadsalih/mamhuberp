@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}Purchase change log{% endblock %}
+
+{% block content %}
+
+<div class="page-po nexa-list-page pcl-page" id="pclPage"
+
+  data-api-list="{{ url_for('purchase.api_purchase_change_log_list') }}"
+
+  data-grn-query-tpl="{{ grn_query_url_tpl }}"
+
+  data-lpo-query-tpl="{{ lpo_query_url_tpl }}"
+
+  data-pr-query-tpl="{{ pr_query_url_tpl }}"
+
+  data-pr-req-query-tpl="{{ pr_req_query_url_tpl }}"
+
+  data-location="{{ session_location_code }}">
+
+<style>
+
+  .pcl-page .pcl-action { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+
+  .pcl-page .pcl-action--edit { background: #dbeafe; color: #1d4ed8; }
+
+  .pcl-page .pcl-action--delete { background: #fee2e2; color: #991b1b; }
+
+  .pcl-page .pcl-action--cancel { background: #ffedd5; color: #c2410c; }
+
+  .pcl-page .co-table tbody tr.pcl-row { cursor: default; }
+
+  .pcl-page .pcl-meta { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+  .pcl-page .pcl-detail { font-size: 11px; line-height: 1.45; }
+
+  .pcl-page .pcl-change { margin-bottom: 3px; }
+
+  .pcl-page .pcl-change-label { font-weight: 600; color: #334155; }
+
+  .pcl-page .pcl-before { color: #b91c1c; text-decoration: line-through; }
+
+  .pcl-page .pcl-arrow { color: #94a3b8; margin: 0 4px; }
+
+  .pcl-page .pcl-after { color: #15803d; font-weight: 600; }
+
+  .pcl-page .pcl-snap-toggle { margin-top: 6px; font-size: 11px; color: #2563eb; cursor: pointer; border: 0; background: none; padding: 0; text-decoration: underline; }
+
+  .pcl-page .pcl-snap-panel { margin-top: 6px; display: none; }
+
+  .pcl-page .pcl-snap-panel.is-open { display: block; }
+
+  .pcl-page .pcl-snap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  .pcl-page .pcl-snap-box { border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 8px; background: #f8fafc; max-height: 180px; overflow: auto; }
+
+  .pcl-page .pcl-snap-title { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 4px; }
+
+  .pcl-page .pcl-snap-line { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; color: #334155; }
+
+  @media (max-width: 900px) {
+
+    .pcl-page .pcl-snap-grid { grid-template-columns: 1fr; }
+
+  }
+
+</style>
+
+
+
+  <div class="page-po__topbar">
+
+    <div>
+
+      <h1 class="page-po__title page-po__title--with-icon">
+
+        <span class="page-po__title-icon"><i class="bi bi-clock-history"></i></span>
+
+        Purchase change log
+
+      </h1>
+
+      <p class="page-po__muted">
+
+        Review edited and deleted GRN, purchase orders, and purchase returns for this branch.
+
+        GRN and return edits show exact before and after values (invoice, supplier, lines, qty, rate, store).
+
+      </p>
+
+    </div>
+
+    <div class="page-po__topbar-actions">
+
+      {% include 'includes/list_refresh_bar.html' %}
+
+      <a href="{{ url_for('purchase.goods_receipt_list') }}" class="po-nav-link">GRN list</a>
+
+      <a href="{{ url_for('purchase.purchase_order_list') }}" class="po-nav-link">Purchase Order</a>
+
+      <a href="{{ url_for('purchase.purchase_return_list') }}" class="po-nav-link">Purchase Return</a>
+
+    </div>
+
+  </div>
+
+
+
+  <div class="po-tabs">
+
+    <button type="button" class="po-tab active" id="pclTabAll" data-tab="all">All</button>
+
+    <button type="button" class="po-tab" id="pclTabEdit" data-tab="edit">Edited</button>
+
+    <button type="button" class="po-tab" id="pclTabDelete" data-tab="delete">Deleted / canceled</button>
+
+  </div>
+
+
+
+  <form id="pclFilterForm" class="nexa-list-toolbar" action="#" method="get" autocomplete="off">
+
+    <select id="pclDocType" class="input" style="min-width:130px;">
+
+      <option value="all">All types</option>
+
+      <option value="GRN">GRN</option>
+
+      <option value="LPO">Purchase order</option>
+
+      <option value="PR">Purchase return</option>
+
+      <option value="PR_REQ">Return request</option>
+
+    </select>
+
+    <input type="date" id="pclDateFrom" class="input" title="From date" />
+
+    <input type="date" id="pclDateTo" class="input" title="To date" />
+
+    <input type="text" id="pclSearch" class="input" placeholder="Doc no, user, remarks…" style="min-width:180px;" />
+
+    <button type="submit" class="page-po__btn-primary" id="pclBtnRun" style="padding:4px 12px;font-size:11px;">Search</button>
+
+    <button type="button" class="page-po__btn-secondary" id="pclBtnClear" style="padding:4px 10px;font-size:11px;">Clear</button>
+
+    <span id="pclListMeta" class="nexa-num">—</span>
+
+  </form>
+
+
+
+  <div id="pclMessage" class="sv-scroll-status" role="alert" style="display:none;"></div>
+
+
+
+  <div class="co-table-wrap">
+
+    <table class="co-table" id="pclTable">
+
+      <thead>
+
+        <tr>
+
+          <th style="width:40px;">#</th>
+
+          <th>When</th>
+
+          <th>Action</th>
+
+          <th>Type</th>
+
+          <th>Doc no</th>
+
+          <th>User</th>
+
+          <th>Remarks / before → after</th>
+
+          <th style="width:90px;text-align:center;">Open</th>
+
+        </tr>
+
+      </thead>
+
+      <tbody id="pclTableBody">
+
+        <tr id="pclNoData">
+
+          <td colspan="8" style="text-align:center;padding:20px;color:#6b7280;font-style:italic;">
+
+            Loading…
+
+          </td>
+
+        </tr>
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+
+
+  <div id="pclScrollStatus" class="sv-scroll-status">—</div>
+
+</div>
+
+<script src="{{ url_for('static', filename='js/purchase_change_log.js') }}?v=3"></script>
+
+{% endblock %}
+

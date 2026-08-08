@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Closing History{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/period_closing.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="pc-page" id="pcHistoryApp" data-detail-base="{{ url_for('accounts.api_period_closing_history') }}/">
+  <header class="pc-header">
+    <div>
+      <p class="page-po__back" style="margin:0 0 6px;"><a href="{{ url_for('accounts.period_closing_page') }}">← Period Closing</a></p>
+      <h1 class="pc-title">Closing History</h1>
+      <p class="pc-sub">Audit trail of period closes and reopens.</p>
+    </div>
+  </header>
+
+  <form class="pc-toolbar" method="get" action="{{ url_for('accounts.period_closing_history_page') }}">
+    <div class="pc-field">
+      <label for="histFy">Financial Year</label>
+      <select id="histFy" name="financial_year" onchange="this.form.submit()">
+        <option value="">All years</option>
+        {% for y in fy_options or [] %}
+        <option value="{{ y.id }}" {% if financial_year == y.id %}selected{% endif %}>{{ y.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+
+  <div class="pc-card">
+    <div class="pc-card__body" style="padding:0;overflow:auto;">
+      <table class="pc-table" id="pcHistTable">
+        <thead>
+          <tr>
+            <th>Closing No</th>
+            <th>Period</th>
+            <th>Closing Type</th>
+            <th class="num">Revenue</th>
+            <th class="num">Expenses</th>
+            <th class="num">Profit</th>
+            <th>Closed By</th>
+            <th>Closed Date</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows or [] %}
+          <tr>
+            <td>{{ r.closing_number }}</td>
+            <td>{{ r.period }}</td>
+            <td>{{ r.closing_type }}</td>
+            <td class="num">{{ '%.2f'|format(r.revenue or 0) }}</td>
+            <td class="num">{{ '%.2f'|format(r.expenses or 0) }}</td>
+            <td class="num">{{ '%.2f'|format(r.profit or 0) }}</td>
+            <td>{{ r.closed_by or '—' }}</td>
+            <td>{{ r.closed_date or '—' }}</td>
+            <td>
+              {% set st = (r.status or '')|upper %}
+              <span class="pc-badge {% if st == 'CLOSED' %}pc-badge--closed{% elif st == 'REOPENED' %}pc-badge--reopened{% else %}pc-badge--open{% endif %}">{{ st or '—' }}</span>
+            </td>
+            <td>
+              <button type="button" class="pc-btn" style="padding:4px 10px;font-size:0.78rem;"
+                      onclick="pcViewLog({{ r.log_id }})">View</button>
+              <button type="button" class="pc-btn" style="padding:4px 10px;font-size:0.78rem;"
+                      onclick="window.print()">Print</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="10" style="padding:20px;color:#64748b;text-align:center;">No closing history yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="pc-modal hidden" id="pcHistModal" role="dialog" aria-modal="true">
+  <div class="pc-modal__backdrop" data-close="pcHistModal"></div>
+  <div class="pc-modal__dialog">
+    <div class="pc-modal__head">
+      <h3 id="pcHistTitle">Closing Detail</h3>
+      <button type="button" class="pc-btn" style="background:transparent;border-color:rgba(255,255,255,0.3);color:#fff;" data-close="pcHistModal">×</button>
+    </div>
+    <div class="pc-modal__body" id="pcHistBody"></div>
+    <div class="pc-modal__foot">
+      <button type="button" class="pc-btn" onclick="window.print()">Print</button>
+      <button type="button" class="pc-btn pc-btn--primary" data-close="pcHistModal">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var app = document.getElementById('pcHistoryApp');
+  var DETAIL_URL = (app && app.dataset.detailBase) ? app.dataset.detailBase : '/accounts/api/period-closing/history/';
+  function openM(id) {
+    var m = document.getElementById(id);
+    if (m) { m.classList.remove('hidden'); document.body.classList.add('pc-modal-open'); }
+  }
+  function closeM(id) {
+    var m = document.getElementById(id);
+    if (m) { m.classList.add('hidden'); document.body.classList.remove('pc-modal-open'); }
+  }
+  document.querySelectorAll('[data-close]').forEach(function (el) {
+    el.addEventListener('click', function () { closeM(el.getAttribute('data-close')); });
+  });
+  window.pcViewLog = async function (id) {
+    openM('pcHistModal');
+    var body = document.getElementById('pcHistBody');
+    body.innerHTML = '<p style="color:#64748b;">Loading…</p>';
+    try {
+      var res = await fetch(DETAIL_URL + id);
+      var data = await res.json();
+      if (!data.success) { body.innerHTML = '<p>' + (data.error || 'Not found') + '</p>'; return; }
+      var r = data.row || {};
+      document.getElementById('pcHistTitle').textContent = r.closing_number || 'Closing Detail';
+      body.innerHTML =
+        '<dl class="pc-confirm-grid">' +
+        '<dt>Period</dt><dd>' + (r.period || '—') + '</dd>' +
+        '<dt>Type</dt><dd>' + (r.closing_type || '—') + '</dd>' +
+        '<dt>Revenue</dt><dd>' + Number(r.revenue || 0).toLocaleString(undefined, {minimumFractionDigits: 2}) + '</dd>' +
+        '<dt>Expenses</dt><dd>' + Number(r.expenses || 0).toLocaleString(undefined, {minimumFractionDigits: 2}) + '</dd>' +
+        '<dt>Profit</dt><dd>' + Number(r.profit || 0).toLocaleString(undefined, {minimumFractionDigits: 2}) + '</dd>' +
+        '<dt>Closed By</dt><dd>' + (r.closed_by || '—') + '</dd>' +
+        '<dt>Closed Date</dt><dd>' + (r.closed_date || '—') + '</dd>' +
+        '<dt>Status</dt><dd>' + (r.status || '—') + '</dd>' +
+        '<dt>Voucher</dt><dd>' + (r.voucher_no || '—') + '</dd>' +
+        (r.reopen_reason ? ('<dt>Reopen Reason</dt><dd style="text-align:left;">' + r.reopen_reason + '</dd>') : '') +
+        '</dl>';
+    } catch (e) {
+      body.innerHTML = '<p>Failed to load detail.</p>';
+    }
+  };
+})();
+</script>
+{% endblock %}

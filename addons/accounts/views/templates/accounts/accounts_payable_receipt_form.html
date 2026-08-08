@@ -1,0 +1,727 @@
+{% extends "base.html" %}
+{% block title %}Supplier Payment Receipt{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .ap-receipt-page #invoiceAllocTable {
+    width: 100%;
+    border-collapse: collapse !important;
+    table-layout: fixed;
+  }
+  #invoiceAllocTable th,
+  #invoiceAllocTable td {
+    border: 1px solid #cfd4da !important;
+    padding: 6px 8px !important;
+    vertical-align: middle;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #invoiceAllocTable th:nth-child(1),
+  #invoiceAllocTable td:nth-child(1) {
+    width: 52px;
+    white-space: nowrap;
+  }
+  #invoiceAllocTable th:nth-child(2),
+  #invoiceAllocTable td:nth-child(2),
+  #invoiceAllocTable th:nth-child(5),
+  #invoiceAllocTable td:nth-child(5) {
+    white-space: nowrap;
+  }
+  #invoiceAllocTable th:nth-child(3),
+  #invoiceAllocTable td:nth-child(3),
+  #invoiceAllocTable th:nth-child(4),
+  #invoiceAllocTable td:nth-child(4) {
+    white-space: nowrap;
+    font-size: 12px;
+  }
+  #invoiceAllocTable th:nth-child(n+6):not(:last-child),
+  #invoiceAllocTable td:nth-child(n+6):not(:last-child) {
+    white-space: nowrap;
+    text-align: right;
+  }
+  #invoiceAllocTable thead th {
+    background: #eef2f7 !important;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    font-size: 11px;
+    line-height: 1.25;
+  }
+  #invoiceAllocTable thead th:last-child {
+    width: 82px;
+    max-width: 82px;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    white-space: normal;
+    text-align: right;
+  }
+  #invoiceAllocTable tbody tr:nth-child(even) {
+    background: #fbfcfe;
+  }
+  #invoiceAllocTable tbody tr:hover {
+    background: #f1f6ff !important;
+  }
+  #invoiceAllocTable tr.alloc-row--credit {
+    background: #fff8e6 !important;
+  }
+  #invoiceAllocTable td:last-child {
+    width: 82px;
+    max-width: 82px;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+  }
+  #invoiceAllocTable .alloc-amount {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 74px;
+    min-width: 0;
+    margin-left: auto;
+    padding: 4px 6px !important;
+    font-size: 12px;
+    text-align: right;
+  }
+  #invoiceAllocTable .alloc-select-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .ap-receipt-page .table-wrap {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  .ap-receipt-page .ap-cash-popup-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .ap-receipt-page .ap-cash-popup-row .input {
+    flex: 1;
+    min-width: 0;
+    background: #f8fafc;
+    cursor: pointer;
+  }
+  .ap-receipt-page .ap-cash-popup-btn {
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    background: #fff;
+    color: #212529;
+    padding: 7px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .ap-receipt-page .ap-cash-modal-bg {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.25);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+  }
+  .ap-receipt-page .ap-cash-modal-bg.show { display: flex; }
+  .ap-receipt-page .ap-cash-modal-card {
+    width: min(560px, 94vw);
+    max-height: 76vh;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+  }
+  .ap-receipt-page .ap-cash-modal-head {
+    padding: 10px 12px;
+    border-bottom: 1px solid #dee2e6;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .ap-receipt-page .ap-cash-modal-body { padding: 10px 12px; overflow: auto; }
+  .ap-receipt-page .ap-cash-modal-search {
+    width: 100%;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 7px 8px;
+    font-size: 12px;
+    margin-bottom: 8px;
+    box-sizing: border-box;
+  }
+  .ap-receipt-page .ap-cash-modal-list {
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    overflow: auto;
+    max-height: 52vh;
+  }
+  .ap-receipt-page .ap-cash-modal-row {
+    width: 100%;
+    border: 0;
+    border-bottom: 1px solid #edf2f7;
+    background: #fff;
+    text-align: left;
+    padding: 8px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .ap-receipt-page .ap-cash-modal-row:hover,
+  .ap-receipt-page .ap-cash-modal-row:focus { background: #e9f2ff; outline: none; }
+</style>
+<div class="im-page setup-im-page setup-im-extra-wide ap-receipt-page"
+     data-transaction-audit="Payment"
+     data-transaction-no="{{ supplier_code }}"
+     data-audit-intercept-form="#apSupplierPaymentReceiptForm"
+     data-track-root=".ap-receipt-page">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>AP / <span class="im-ref">Payment</span></h1>
+      <div class="im-actions">
+        <button type="submit" form="apSupplierPaymentReceiptForm" class="im-btn-save">Post payment</button>
+        <a href="{{ url_for('accounts.accounts_payable') }}" class="im-btn-secondary">AP list</a>
+      </div>
+    </div>
+  </div>
+
+  <section class="setup-im-shell customer-form-shell itemmaster-container">
+    <div class="cf-form-stack">
+      <div class="cf-form-panel">
+        <h2 class="cf-section-title">Supplier payment receipt</h2>
+        <p class="field-hint-inline" style="margin:6px 12px 8px;">Allocate open bills and apply <strong>supplier credits</strong> (yellow rows: Dr payable journals) on the same screen — net cash = invoices selected minus credits applied. Journal: use <strong>Cr</strong> payable + <strong>SUP:</strong> for bills; <strong>Dr</strong> payable + <strong>SUP:</strong> for credits to offset GRN, etc.</p>
+
+  <form method="post" class="page-po__section" id="apSupplierPaymentReceiptForm" autocomplete="off" style="margin:0;padding:0 12px 12px;border:none;background:transparent;">
+    <input type="hidden" name="locationcode" value="{{ location_code }}">
+    <input type="hidden" name="suppliercode" value="{{ supplier_code }}">
+    <input type="hidden" name="save_nonce" value="{{ global_save_nonce | default('') }}" />
+
+    <div style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px;">
+      <div class="form-group">
+        <label>Location</label>
+        <input class="input" type="text" value="{{ location_code or '' }}" readonly>
+      </div>
+      <div class="form-group">
+        <label>Supplier</label>
+        <input class="input" type="text" value="{{ supplier_code }} - {{ supplier_name }}" readonly>
+      </div>
+    </div>
+    <div style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px;">
+      <div class="form-group">
+        <label>Payable Account (Dr)</label>
+        <input class="input" type="text" value="{{ payable_account or '' }}" readonly>
+      </div>
+      <div class="form-group">
+        <label>Total Open Outstanding</label>
+        <input class="input" type="text" value="{{ '%.2f'|format(total_open or 0) }}" readonly>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom: 14px;">
+      <div class="page-po__section-title" style="margin-bottom: 8px;">Invoice Allocation</div>
+      <div id="allocDateFilterBar" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 14px;margin:0 0 10px;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc;">
+        <div class="form-group" style="margin:0;">
+          <label for="allocDateFrom" style="font-size:11px;font-weight:700;color:#64748b;">From</label>
+          <input id="allocDateFrom" type="date" class="input" style="width:150px;" />
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label for="allocDateTo" style="font-size:11px;font-weight:700;color:#64748b;">To</label>
+          <input id="allocDateTo" type="date" class="input" style="width:150px;" />
+        </div>
+        <button type="button" class="page-po__btn-secondary" id="allocDateFilterBtn" style="padding:6px 12px;">Filter</button>
+        <button type="button" class="page-po__btn-secondary" id="allocDateClearBtn" style="padding:6px 12px;">Clear</button>
+        <span id="allocDateFilterMeta" class="muted" style="font-size:12px;"></span>
+      </div>
+      <div class="table-wrap" style="max-height: 320px; overflow: auto;">
+        <table class="table" id="invoiceAllocTable">
+          <thead>
+            <tr>
+              <th style="width: 92px;">
+                <label class="alloc-select-all">
+                  <input type="checkbox" id="allocSelectAll">
+                  <span>All</span>
+                </label>
+              </th>
+              <th>Invoice Voucher</th>
+              <th style="width: 88px;">Date</th>
+              <th style="width: 72px;">Source</th>
+              <th>Reference</th>
+              <th style="width: 88px;">Invoice Amt</th>
+              <th style="width: 88px;">Paid</th>
+              <th style="width: 80px;">Open Amt</th>
+              <th title="Pay / Apply Credit">Pay</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for inv in open_invoices %}
+            <tr class="alloc-row{% if inv.is_credit_doc %} alloc-row--credit{% endif %}" data-date="{{ (inv.voucher_date|string)[:10] if inv.voucher_date else '' }}" data-open="{{ inv.open_amount or 0 }}" data-payable="{{ '1' if inv.is_payable else '0' }}" data-credit-doc="{{ '1' if inv.is_credit_doc else '0' }}" data-credit="{{ '1' if inv.is_credit else '0' }}" data-credit-max="{{ inv.credit_available or 0 }}">
+              <td>
+                <input type="checkbox" class="alloc-check">
+                <input type="hidden" name="invoice_voucher_no[]" value="{{ inv.voucher_no }}">
+              </td>
+              <td>
+                {% if inv.voucher_no %}
+                <a href="{{ url_for('accounts.journal_voucher_view', voucher_no=inv.voucher_no) }}" target="_blank" rel="noopener" title="Open journal voucher">{{ inv.voucher_no }}</a>
+                {% else %}—{% endif %}
+              </td>
+              <td>{{ inv.voucher_date or '' }}</td>
+              <td>{{ inv.source or '' }}</td>
+              <td>{{ inv.reference_no or '' }}{% if inv.is_credit %} <span class="muted">({{ inv.balance_hint }})</span>{% endif %}</td>
+              <td style="text-align: right;">{{ '%.2f'|format(inv.invoice_amount or 0) }}</td>
+              <td style="text-align: right;">{{ '%.2f'|format(inv.allocated_amount or 0) }}</td>
+              <td class="open-amt" style="text-align: right;">{{ '%.2f'|format(inv.open_amount or 0) }}</td>
+              <td>
+                <input
+                  class="input alloc-amount"
+                  style="text-align:right;"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  name="allocate_amount[]"
+                  value="0"
+
+                >
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="9" class="muted">No open documents found for this supplier.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div style="display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px;">
+      <div class="form-group">
+        <label>Invoices Selected</label>
+        <input class="input" id="invoice_total" type="text" value="0.00" readonly>
+      </div>
+      <div class="form-group">
+        <label>Credits Applied</label>
+        <input class="input" id="credit_total" type="text" value="0.00" readonly>
+      </div>
+      <div class="form-group">
+        <label for="discount_amount">Settlement Discount</label>
+        <input class="input" id="discount_amount" type="number" name="discount_amount" step="0.01" min="0" value="0" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label>Net Cash Payment</label>
+        <input class="input" id="amount" type="number" name="amount" step="0.01" min="0" required>
+      </div>
+    </div>
+    <p class="muted" style="margin:-4px 0 12px;font-size:0.85rem;">Net cash = invoices − credits − settlement discount. Discount posts to Discount Received (Purchase Discount).</p>
+    <div class="form-group" style="margin-bottom: 10px;">
+      <label for="credit_account_text">Cash/Bank Account (Cr)</label>
+      <div class="ap-cash-popup-row">
+        <input type="hidden" id="credit_account" name="credit_account" value="" />
+        <input class="input" id="credit_account_text" type="text" placeholder="Select cash / bank (Popup)" value="" readonly />
+        <button type="button" class="ap-cash-popup-btn" id="creditAccountPopupBtn">Popup</button>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom: 10px;">
+      <label>Payment Date</label>
+      <input class="input" type="date" name="payment_date" id="apPaymentDate" value="{{ payment_date }}" required>
+      <p class="muted" id="apPaymentDateHint" style="margin:6px 0 0;font-size:0.85rem;">
+        Closed accounting periods cannot be selected (Period Closing).
+      </p>
+    </div>
+    <div class="form-group" style="margin-bottom: 10px;">
+      <label>Reference No</label>
+      <input class="input" type="text" name="reference_no" placeholder="Optional reference">
+    </div>
+    <div class="form-group" style="margin-bottom: 12px;">
+      <label>Remarks</label>
+      <input class="input" type="text" name="remarks" placeholder="Optional remarks">
+    </div>
+
+  </form>
+      </div>
+    </div>
+  </section>
+
+  <div id="creditAccountPopupBg" class="ap-cash-modal-bg">
+    <div class="ap-cash-modal-card" role="dialog" aria-modal="true" aria-labelledby="creditAccountPopupTitle">
+      <div class="ap-cash-modal-head">
+        <div id="creditAccountPopupTitle">Select Cash / Bank Account</div>
+        <button type="button" class="ap-cash-popup-btn" id="creditAccountPopupClose">Close</button>
+      </div>
+      <div class="ap-cash-modal-body">
+        <input id="creditAccountPopupSearch" class="ap-cash-modal-search" type="text" placeholder="Search account code / name…" autocomplete="off" />
+        <div id="creditAccountPopupList" class="ap-cash-modal-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script type="application/json" id="apClosedPeriodsJson">{{ (closed_periods or [])|tojson }}</script>
+<script src="{{ url_for('static', filename='js/period_date_guard.js') }}?v=1"></script>
+<script>
+  (function () {
+    const cashBankAccounts = {{ (cash_bank_accounts or [])|tojson }};
+    const cashAccountHidden = document.getElementById("credit_account");
+    const cashAccountText = document.getElementById("credit_account_text");
+    const cashPopupBtn = document.getElementById("creditAccountPopupBtn");
+    const cashPopupBg = document.getElementById("creditAccountPopupBg");
+    const cashPopupClose = document.getElementById("creditAccountPopupClose");
+    const cashPopupSearch = document.getElementById("creditAccountPopupSearch");
+    const cashPopupList = document.getElementById("creditAccountPopupList");
+    const apPeriodGuard = (window.PeriodDateGuard && window.PeriodDateGuard.bind)
+      ? window.PeriodDateGuard.bind(
+          document.getElementById("apPaymentDate"),
+          window.PeriodDateGuard.fromJsonScript("apClosedPeriodsJson"),
+          { hintEl: document.getElementById("apPaymentDateHint") }
+        )
+      : null;
+
+    function escHtml(s) {
+      return String(s || "")
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;");
+    }
+
+    function accountLabel(acc) {
+      const code = String((acc && acc.code) || "").trim();
+      const name = String((acc && acc.name) || "").trim();
+      return name ? (code + " — " + name) : code;
+    }
+
+    function renderCashPopupList(filterText) {
+      if (!cashPopupList) return;
+      const q = String(filterText || "").trim().toLowerCase();
+      const matched = (cashBankAccounts || []).filter((acc) => {
+        if (!q) return true;
+        const hay = (String(acc.code || "") + " " + String(acc.name || "")).toLowerCase();
+        return hay.indexOf(q) >= 0;
+      });
+      let html = '<button type="button" class="ap-cash-modal-row" data-code="" data-label="">— Clear —</button>';
+      if (!matched.length) {
+        html += '<div style="padding:12px;color:#6c757d;font-size:12px;">No cash/bank accounts found.</div>';
+      } else {
+        html += matched.map((acc) => {
+          const code = String(acc.code || "").trim();
+          const label = accountLabel(acc);
+          return '<button type="button" class="ap-cash-modal-row" data-code="' + escHtml(code) + '" data-label="' + escHtml(label) + '">' + escHtml(label) + "</button>";
+        }).join("");
+      }
+      cashPopupList.innerHTML = html;
+      cashPopupList.querySelectorAll(".ap-cash-modal-row").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const code = btn.dataset.code || "";
+          const label = btn.dataset.label || "";
+          if (cashAccountHidden) cashAccountHidden.value = code;
+          if (cashAccountText) cashAccountText.value = code ? label : "";
+          closeCashPopup();
+        });
+      });
+    }
+
+    function openCashPopup() {
+      if (!cashPopupBg) return;
+      if (cashPopupSearch) cashPopupSearch.value = "";
+      renderCashPopupList("");
+      cashPopupBg.classList.add("show");
+      setTimeout(() => { if (cashPopupSearch) cashPopupSearch.focus(); }, 20);
+    }
+
+    function closeCashPopup() {
+      if (cashPopupBg) cashPopupBg.classList.remove("show");
+    }
+
+    if (cashPopupBtn) cashPopupBtn.addEventListener("click", openCashPopup);
+    if (cashAccountText) cashAccountText.addEventListener("click", openCashPopup);
+    if (cashPopupClose) cashPopupClose.addEventListener("click", closeCashPopup);
+    if (cashPopupBg) {
+      cashPopupBg.addEventListener("click", (e) => {
+        if (e.target === cashPopupBg) closeCashPopup();
+      });
+    }
+    if (cashPopupSearch) {
+      cashPopupSearch.addEventListener("input", () => renderCashPopupList(cashPopupSearch.value));
+    }
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && cashPopupBg && cashPopupBg.classList.contains("show")) {
+        e.preventDefault();
+        closeCashPopup();
+      }
+    });
+
+    const rows = Array.from(document.querySelectorAll("#invoiceAllocTable tbody tr.alloc-row"));
+    const selectAll = document.getElementById("allocSelectAll");
+    const amountInput = document.getElementById("amount");
+    const invoiceTotalInput = document.getElementById("invoice_total");
+    const creditTotalInput = document.getElementById("credit_total");
+    const discountInput = document.getElementById("discount_amount");
+    const allocDateFrom = document.getElementById("allocDateFrom");
+    const allocDateTo = document.getElementById("allocDateTo");
+    const allocDateFilterBtn = document.getElementById("allocDateFilterBtn");
+    const allocDateClearBtn = document.getElementById("allocDateClearBtn");
+    const allocDateFilterMeta = document.getElementById("allocDateFilterMeta");
+    if (!rows.length || !amountInput || !invoiceTotalInput || !creditTotalInput) return;
+
+    function toNumber(v) {
+      const n = Number(v || 0);
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    function rowDateIso(row) {
+      return String(row.getAttribute("data-date") || "").trim().slice(0, 10);
+    }
+
+    function applyAllocDateFilter() {
+      const df = String(allocDateFrom && allocDateFrom.value || "").trim();
+      const dt = String(allocDateTo && allocDateTo.value || "").trim();
+      let shown = 0;
+      rows.forEach((row) => {
+        const d = rowDateIso(row);
+        let show = true;
+        if (df && d && d < df) show = false;
+        if (dt && d && d > dt) show = false;
+        if ((df || dt) && !d) show = false;
+        row.style.display = show ? "" : "none";
+        if (!show) {
+          const chk = row.querySelector(".alloc-check");
+          const amtInput = row.querySelector(".alloc-amount");
+          if (chk) chk.checked = false;
+          if (amtInput) amtInput.value = "0";
+        } else {
+          shown += 1;
+        }
+      });
+      if (allocDateFilterMeta) {
+        allocDateFilterMeta.textContent = (df || dt)
+          ? ("Showing " + shown + " of " + rows.length + " documents")
+          : (rows.length ? (rows.length + " documents") : "");
+      }
+      if (typeof updateTotals === "function") updateTotals(true);
+    }
+
+    function rowCap(row) {
+      if (row.dataset.creditDoc === "1") {
+        return Math.max(0, toNumber(row.dataset.creditMax));
+      }
+      return Math.max(0, toNumber(row.dataset.open));
+    }
+
+    function isCreditRow(row) {
+      return row.dataset.creditDoc === "1";
+    }
+
+    function syncCashAccountRequired(netCash) {
+      if (!cashAccountHidden) return;
+      const need = netCash > 0.009;
+      cashAccountHidden.required = need;
+      if (!need) {
+        cashAccountHidden.value = "";
+        if (cashAccountText) cashAccountText.value = "";
+      }
+    }
+
+    function isRowVisible(row) {
+      return row.style.display !== "none";
+    }
+
+    function visibleRows() {
+      return rows.filter(isRowVisible);
+    }
+
+    function syncSelectAllState() {
+      if (!selectAll) return;
+      const vis = visibleRows();
+      const checkedCount = vis.filter((row) => {
+        const chk = row.querySelector(".alloc-check");
+        return chk && chk.checked;
+      }).length;
+      selectAll.checked = vis.length > 0 && checkedCount === vis.length;
+      selectAll.indeterminate = checkedCount > 0 && checkedCount < vis.length;
+    }
+
+    function readDiscount(maxDiscount) {
+      let discount = Math.max(0, toNumber(discountInput && discountInput.value));
+      discount = Math.round(discount * 100) / 100;
+      if (discount > maxDiscount + 0.009) {
+        discount = maxDiscount;
+        if (discountInput) discountInput.value = discount > 0 ? discount.toFixed(2) : "0";
+      }
+      return discount;
+    }
+
+    function updateTotals(syncAmount) {
+      let invoiceTotal = 0;
+      let creditTotal = 0;
+      rows.forEach((row) => {
+        const chk = row.querySelector(".alloc-check");
+        const amtInput = row.querySelector(".alloc-amount");
+        const cap = rowCap(row);
+        let val = toNumber(amtInput.value);
+        if (!chk.checked) {
+          val = 0;
+          amtInput.value = "0";
+        }
+        if (val > cap) {
+          val = cap;
+          amtInput.value = cap > 0 ? cap.toFixed(2) : "0";
+        }
+        if (val < 0) {
+          val = 0;
+          amtInput.value = "0";
+        }
+        if (isCreditRow(row)) {
+          creditTotal += val;
+        } else {
+          invoiceTotal += val;
+        }
+      });
+      invoiceTotal = Math.round(invoiceTotal * 100) / 100;
+      creditTotal = Math.round(creditTotal * 100) / 100;
+      const maxDiscount = Math.max(0, Math.round((invoiceTotal - creditTotal) * 100) / 100);
+      const discount = readDiscount(maxDiscount);
+      const netCash = Math.max(0, Math.round((invoiceTotal - creditTotal - discount) * 100) / 100);
+      invoiceTotalInput.value = invoiceTotal.toFixed(2);
+      creditTotalInput.value = creditTotal.toFixed(2);
+      if (syncAmount) {
+        amountInput.value = netCash > 0 || invoiceTotal > 0 || creditTotal > 0 || discount > 0 ? netCash.toFixed(2) : "";
+      }
+      syncCashAccountRequired(netCash);
+      syncSelectAllState();
+    }
+
+    if (selectAll) {
+      selectAll.addEventListener("change", () => {
+        visibleRows().forEach((row) => {
+          const chk = row.querySelector(".alloc-check");
+          const amtInput = row.querySelector(".alloc-amount");
+          const cap = rowCap(row);
+          if (!chk || !amtInput) return;
+          chk.checked = selectAll.checked;
+          amtInput.value = selectAll.checked && cap > 0 ? cap.toFixed(2) : "0";
+        });
+        updateTotals(true);
+      });
+    }
+
+    if (allocDateFilterBtn) {
+      allocDateFilterBtn.addEventListener("click", () => applyAllocDateFilter());
+    }
+    if (allocDateClearBtn) {
+      allocDateClearBtn.addEventListener("click", () => {
+        if (allocDateFrom) allocDateFrom.value = "";
+        if (allocDateTo) allocDateTo.value = "";
+        applyAllocDateFilter();
+      });
+    }
+    [allocDateFrom, allocDateTo].forEach((el) => {
+      if (!el) return;
+      el.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          applyAllocDateFilter();
+        }
+      });
+    });
+
+    rows.forEach((row) => {
+      const chk = row.querySelector(".alloc-check");
+      const amtInput = row.querySelector(".alloc-amount");
+      const cap = rowCap(row);
+
+      chk.addEventListener("change", () => {
+        if (chk.checked && toNumber(amtInput.value) <= 0) {
+          amtInput.value = cap > 0 ? cap.toFixed(2) : "0";
+        }
+        if (!chk.checked) {
+          amtInput.value = "0";
+        }
+        updateTotals(true);
+      });
+
+      amtInput.addEventListener("focus", () => {
+        requestAnimationFrame(() => amtInput.select());
+      });
+      amtInput.addEventListener("mouseup", (ev) => {
+        ev.preventDefault();
+      });
+
+      amtInput.addEventListener("input", () => {
+        if (toNumber(amtInput.value) > 0) {
+          chk.checked = true;
+        } else if (toNumber(amtInput.value) <= 0) {
+          chk.checked = false;
+        }
+        updateTotals(true);
+      });
+    });
+
+    const apReceiptForm = amountInput.closest("form");
+    if (apReceiptForm) {
+      apReceiptForm.addEventListener("submit", (ev) => {
+        if (apReceiptForm.dataset.apSubmitLocked === "1") {
+          ev.preventDefault();
+          ev.stopImmediatePropagation();
+          return;
+        }
+        updateTotals(true);
+        if (apPeriodGuard) {
+          const closedMsg = apPeriodGuard.message();
+          if (closedMsg) {
+            ev.preventDefault();
+            apPeriodGuard.refresh();
+            alert(closedMsg);
+            const dateEl = document.getElementById("apPaymentDate");
+            if (dateEl) dateEl.focus();
+            return;
+          }
+        }
+        const invoiceTotal = toNumber(invoiceTotalInput.value);
+        const creditTotal = toNumber(creditTotalInput.value);
+        const maxDiscount = Math.max(0, Math.round((invoiceTotal - creditTotal) * 100) / 100);
+        const discount = readDiscount(maxDiscount);
+        const netCash = Math.max(0, Math.round((invoiceTotal - creditTotal - discount) * 100) / 100);
+        if (creditTotal > invoiceTotal + 0.009) {
+          ev.preventDefault();
+          alert("Credits applied cannot exceed invoices selected.");
+          return;
+        }
+        if (discount > maxDiscount + 0.009) {
+          ev.preventDefault();
+          alert("Settlement discount cannot exceed net after credits (" + maxDiscount.toFixed(2) + ").");
+          return;
+        }
+        if (invoiceTotal <= 0 && creditTotal <= 0) {
+          ev.preventDefault();
+          alert("Select at least one invoice or supplier credit.");
+          return;
+        }
+        if (netCash > 0.009 && cashAccountHidden && !String(cashAccountHidden.value || "").trim()) {
+          ev.preventDefault();
+          alert("Select Cash/Bank Account (Cr).");
+          openCashPopup();
+          return;
+        }
+        if (discountInput) discountInput.value = discount.toFixed(2);
+        amountInput.value = netCash.toFixed(2);
+        apReceiptForm.dataset.apSubmitLocked = "1";
+        const submitBtn = apReceiptForm.querySelector('button[type="submit"]');
+        if (submitBtn) {
+          if (!submitBtn.dataset.traPrevLabel) {
+            submitBtn.dataset.traPrevLabel = submitBtn.textContent || "Post payment";
+          }
+          submitBtn.disabled = true;
+          submitBtn.textContent = "Posting…";
+        }
+        if (typeof window.showLoadingOverlay === "function") {
+          window.showLoadingOverlay("Posting payment…");
+        }
+      }, true);
+    }
+
+    if (discountInput) {
+      discountInput.addEventListener("input", () => updateTotals(true));
+      discountInput.addEventListener("change", () => updateTotals(true));
+    }
+    applyAllocDateFilter();
+  })();
+</script>
+<script src="{{ url_for('static', filename='js/transaction_recording_client.js') }}?v=8"></script>
+{% endblock %}

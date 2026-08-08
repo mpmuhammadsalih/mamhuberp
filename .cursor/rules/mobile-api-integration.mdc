@@ -1,0 +1,32 @@
+---
+description: Nexa Mobile JWT API merged into Dynamics (/api/v1)
+globs: mobile_backend/**/*
+alwaysApply: false
+---
+
+# Mobile backend
+
+All mobile API code lives in **`mobile_backend/`** at project root.
+
+| Path | Role |
+|------|------|
+| `mobile_backend/` | `/api/v1/*` routes, services, JWT auth, SQL |
+| `addons/mobile_api/` | Thin addon stub (manifest only) |
+| `D:\webapps\Nexa_Mobile_FastAPI\flutter_app` | Flutter UI (separate folder) |
+
+## Database
+
+Auth tables → `_get_connection_auth()`; ERP tables → tenant DB from JWT `tenant_id`.
+
+Use `mobile_backend/database/oracle_pool.py` — do not add a second Oracle pool.
+
+## New routes
+
+1. Service under `mobile_backend/services/`
+2. Router under `mobile_backend/routes/` with prefix `/api/v1/...`
+3. Register in `mobile_backend/__init__.py`
+4. `require_access_claims` + permission deps; return `success()` / `failure()`
+
+## Stock count POST
+
+Delegate to `addons/warehouse/stock_count_db.post_stock_count_to_inventory()` for full GL/stock update.

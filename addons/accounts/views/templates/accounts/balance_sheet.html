@@ -1,0 +1,437 @@
+{% extends "base.html" %}
+{% block title %}Balance Sheet{% endblock %}
+{% block content %}
+<style>
+  .bs-fs { max-width: 1100px; margin: 0 auto; }
+  .bs-fs * { box-sizing: border-box; }
+  .bs-toolbar {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 1.5rem; padding: 12px 14px;
+    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; font-family: system-ui, sans-serif;
+  }
+  .bs-toolbar .label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px; }
+  .bs-toolbar .input { padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; }
+  .bs-toolbar .bs-export {
+    display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    text-decoration: none; border: 1px solid #cbd5e1; background: #fff; color: #334155; margin-left: 4px;
+  }
+  .bs-toolbar .bs-export--primary { background: #1a56a4; color: #fff; border-color: #1a56a4; }
+  .bs-toolbar .bs-export:hover { filter: brightness(0.95); }
+  .bs-header {
+    font-family: "Times New Roman", Times, "Liberation Serif", Georgia, serif;
+    color: #111; margin-bottom: 1.25rem;
+  }
+  .bs-header__company { font-size: 1.35rem; font-weight: 700; margin: 0 0 6px; line-height: 1.2; }
+  .bs-header__period { font-size: 0.95rem; font-style: italic; color: #333; margin: 0 0 6px; }
+  .bs-header__note { font-size: 0.8rem; font-style: italic; color: #555; margin: 0; }
+  .bs-title {
+    font-family: "Times New Roman", Times, "Liberation Serif", Georgia, serif;
+    font-size: 1.05rem; font-weight: 700; letter-spacing: 0.06em; color: #6b0f1a; text-align: center;
+    margin: 1rem 0 0.75rem; padding-bottom: 6px; border-bottom: 2.5px solid #1a1a1a;
+  }
+  #bsAssetsTable,
+  #bsLiabilitiesTable,
+  #bsEquityTable {
+    width: 100%;
+    border-collapse: collapse !important;
+    table-layout: auto;
+    font-family: "Times New Roman", Times, "Liberation Serif", Georgia, serif;
+    font-size: 0.9rem;
+  }
+  #bsAssetsTable th,
+  #bsAssetsTable td,
+  #bsLiabilitiesTable th,
+  #bsLiabilitiesTable td,
+  #bsEquityTable th,
+  #bsEquityTable td {
+    border: 1px solid #cfd4da !important;
+    padding: 8px 10px !important;
+    white-space: nowrap;
+  }
+  #bsAssetsTable thead th,
+  #bsLiabilitiesTable thead th,
+  #bsEquityTable thead th {
+    background: #1a1a1a !important;
+    color: #fff !important;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  #bsAssetsTable tbody tr:nth-child(even),
+  #bsLiabilitiesTable tbody tr:nth-child(even),
+  #bsEquityTable tbody tr:nth-child(even) {
+    background: #fbfcfe;
+  }
+  #bsAssetsTable tbody tr:hover,
+  #bsLiabilitiesTable tbody tr:hover,
+  #bsEquityTable tbody tr:hover {
+    background: #f1f6ff !important;
+  }
+  #bsAssetsTable tbody tr.bs-group-row td,
+  #bsLiabilitiesTable tbody tr.bs-group-row td,
+  #bsEquityTable tbody tr.bs-group-row td {
+    font-weight: 600;
+    background: #f4f6f9;
+  }
+  #bsAssetsTable td.bs-indent,
+  #bsLiabilitiesTable td.bs-indent,
+  #bsEquityTable td.bs-indent {
+    white-space: normal;
+  }
+  #bsAssetsTable td.bs-amt,
+  #bsLiabilitiesTable td.bs-amt,
+  #bsEquityTable td.bs-amt {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    background: #e8e8e8;
+  }
+  #bsLiabilitiesTable tr.bs-total-row th,
+  #bsEquityTable tr.bs-total-row th,
+  #bsAssetsTable tr.bs-total-row th {
+    background: #e9edf3 !important;
+    color: #111 !important;
+    font-weight: 700;
+  }
+  .bs-check {
+    font-family: "Times New Roman", Times, "Liberation Serif", Georgia, serif;
+    font-size: 0.9rem; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+  }
+  .page-po__section-title {
+    font-family: "Times New Roman", Times, "Liberation Serif", Georgia, serif;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    color: #6b0f1a;
+  }
+  #bsAssetsTable tbody tr.bs-row-clickable,
+  #bsLiabilitiesTable tbody tr.bs-row-clickable,
+  #bsEquityTable tbody tr.bs-row-clickable {
+    cursor: pointer;
+  }
+  #bsAssetsTable tbody tr.bs-row-clickable:hover,
+  #bsLiabilitiesTable tbody tr.bs-row-clickable:hover,
+  #bsEquityTable tbody tr.bs-row-clickable:hover {
+    background: #dbeafe !important;
+  }
+  #bsDetailModal .modal__content {
+    width: min(1100px, 96vw);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+  }
+  #bsDetailModal .modal__body {
+    overflow: auto;
+    flex: 1;
+    min-height: 0;
+  }
+  #bsDetailLedgerTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  #bsDetailLedgerTable th,
+  #bsDetailLedgerTable td {
+    border: 1px solid #e2e8f0;
+    padding: 6px 8px;
+  }
+  #bsDetailLedgerTable thead th {
+    background: #f1f5f9;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  #bsDetailLedgerTable td.num {
+    text-align: right;
+    font-family: ui-monospace, monospace;
+  }
+  .bs-detail-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px 16px;
+    font-size: 13px;
+    margin-bottom: 12px;
+  }
+  .bs-detail-meta dt { color: #94a3b8; font-size: 11px; margin: 0; }
+  .bs-detail-meta dd { margin: 2px 0 0 0; font-weight: 600; color: #1e293b; }
+  .bs-detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .bs-detail-loading { color: #64748b; padding: 24px; text-align: center; }
+  .bs-detail-err { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
+  @media print {
+    .bs-toolbar { display: none; }
+    .bs-fs { max-width: none; }
+  }
+</style>
+{% macro bs_account_row(row) %}
+  {% set clickable = row.code and row.code != 'P&L' %}
+  <tr class="{% if row.is_group %}bs-group-row{% endif %}{% if clickable %} bs-row-clickable{% endif %}"
+      {% if clickable %}
+      tabindex="0"
+      role="button"
+      aria-label="View ledger for {{ row.code|e }}"
+      data-code="{{ row.code|e }}"
+      data-name="{{ (row.name or '')|e }}"
+      data-amount="{{ row.amount or 0 }}"
+      {% endif %}>
+    <td>{{ row.code }}</td>
+    <td class="bs-indent" style="padding-left: {{ 10 + (row.depth or 0) * 18 }}px;">{% if row.is_group %}▸ {% endif %}{{ row.name }}</td>
+    <td class="bs-amt">{% if row.is_group and not (row.amount or 0) %}{% else %}{{ '%.2f'|format(row.amount or 0) }}{% endif %}</td>
+  </tr>
+{% endmacro %}
+<div class="page-po bs-fs">
+  <form method="get" class="bs-toolbar" action="{{ url_for('accounts.balance_sheet') }}">
+    <div>
+      <span class="label">As of</span>
+      <input type="date" class="input" name="as_of_date" value="{{ as_of_date or '' }}">
+    </div>
+    <div>
+      <button class="page-po__btn-primary" type="submit">Update</button>
+    </div>
+    <div style="margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+      <span style="font-size: 12px; color: #64748b;">Print / export</span>
+      <a class="bs-export bs-export--primary" href="{{ url_for('accounts.balance_sheet_pdf', as_of_date=as_of_date or none, layout='single') }}" target="_blank" rel="noopener" title="Assets, then liabilities, then equity">PDF — 1 column</a>
+      <a class="bs-export bs-export--primary" href="{{ url_for('accounts.balance_sheet_pdf', as_of_date=as_of_date or none, layout='two_column') }}" target="_blank" rel="noopener" title="Assets left, liabilities and equity right">PDF — 2 column</a>
+      <a class="bs-export" href="{{ url_for('accounts.balance_sheet_excel', as_of_date=as_of_date or none) }}">Excel</a>
+    </div>
+  </form>
+
+  <div class="bs-header">
+    <h2 class="bs-header__company">{{ (company_name or "Company")|e }}</h2>
+    <p class="bs-header__period">{% if as_of_date_display %}Consolidated balance sheet as at <strong>{{ as_of_date_display|e }}</strong>.{% else %}Consolidated balance sheet.{% endif %}</p>
+    <p class="page-po__muted" style="margin: 10px 0 0; font-family: system-ui, sans-serif; font-size: 13px;">Click an account row to view GL transactions (through the as-of date).</p>
+  </div>
+  <h3 class="bs-title">CONSOLIDATED BALANCE SHEET</h3>
+
+  <div class="page-po__section">
+    <div class="page-po__section-title">Assets</div>
+    <div class="table-wrap">
+      <table class="table" id="bsAssetsTable">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Name</th>
+            <th class="bs-amt">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in asset_accounts %}
+          {{ bs_account_row(row) }}
+          {% else %}
+          <tr><td colspan="3" class="muted">No asset accounts found.</td></tr>
+          {% endfor %}
+          <tr class="bs-total-row">
+            <th colspan="2" style="text-align: right;">Total Assets</th>
+            <th class="bs-amt">{{ '%.2f'|format(total_assets or 0) }}</th>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="page-po__section">
+    <div class="page-po__section-title">Liabilities</div>
+    <div class="table-wrap">
+      <table class="table" id="bsLiabilitiesTable">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Name</th>
+            <th class="bs-amt">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in liability_accounts %}
+          {{ bs_account_row(row) }}
+          {% else %}
+          <tr><td colspan="3" class="muted">No liability accounts found.</td></tr>
+          {% endfor %}
+          <tr class="bs-total-row">
+            <th colspan="2" style="text-align: right;">Total Liabilities</th>
+            <th class="bs-amt">{{ '%.2f'|format(total_liabilities or 0) }}</th>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="page-po__section">
+    <div class="page-po__section-title">Equity</div>
+    <div class="table-wrap">
+      <table class="table" id="bsEquityTable">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Name</th>
+            <th class="bs-amt">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in equity_accounts %}
+          {{ bs_account_row(row) }}
+          {% else %}
+          <tr><td colspan="3" class="muted">No equity accounts found.</td></tr>
+          {% endfor %}
+          <tr class="bs-total-row">
+            <th colspan="2" style="text-align: right;">Total Equity</th>
+            <th class="bs-amt">{{ '%.2f'|format(total_equity or 0) }}</th>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="page-po__section bs-check">
+    <div class="page-po__section-title" style="margin-bottom: 8px;">Check</div>
+    <div>Liabilities + Equity: <strong>{{ '%.2f'|format(liabilities_plus_equity or 0) }}</strong></div>
+    <div>Difference (Assets − L+E): <strong>{{ '%.2f'|format(difference or 0) }}</strong></div>
+  </div>
+</div>
+
+<div class="modal hidden" id="bsDetailModal" role="dialog" aria-modal="true" aria-labelledby="bsDetailTitle">
+  <div class="modal__overlay" data-close="bsDetailModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3 id="bsDetailTitle">Account detail</h3>
+      <button type="button" class="modal__close" data-close="bsDetailModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body" id="bsDetailBody">
+      <div class="bs-detail-loading">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const LEDGER_API = {{ url_for('accounts.balance_sheet_ledger_api')|tojson }};
+  const LEDGER_PAGE = {{ url_for('accounts.account_ledger_page')|tojson }};
+  const AS_OF_DATE = {{ (as_of_date or '')|tojson }};
+
+  const modal = document.getElementById('bsDetailModal');
+  const bodyEl = document.getElementById('bsDetailBody');
+  const titleEl = document.getElementById('bsDetailTitle');
+
+  function openModal() {
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeModal() {
+    if (!modal) return;
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+  document.querySelectorAll('[data-close="bsDetailModal"]').forEach(function (el) {
+    el.addEventListener('click', closeModal);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) closeModal();
+  });
+
+  function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+  function fmtNum(n) {
+    const v = parseFloat(n);
+    if (isNaN(v) || Math.abs(v) < 0.005) return '—';
+    return v.toFixed(2);
+  }
+
+  function renderLedger(data) {
+    const acc = data.account || {};
+    const led = data.ledger || {};
+    const lines = led.lines || [];
+    let fullLedgerUrl = LEDGER_PAGE;
+    const q = new URLSearchParams();
+    if (acc.account_id) q.set('account_id', String(acc.account_id));
+    if (AS_OF_DATE) q.set('date_to', AS_OF_DATE);
+    if (q.toString()) fullLedgerUrl += '?' + q.toString();
+
+    let html = '<div class="bs-detail-actions">';
+    html += '<a class="page-po__btn-primary" style="text-decoration:none;display:inline-flex;align-items:center;" href="' + esc(fullLedgerUrl) + '">Open full account ledger</a>';
+    html += '</div>';
+    html += '<dl class="bs-detail-meta">';
+    html += '<div><dt>Code</dt><dd>' + esc(acc.code) + '</dd></div>';
+    html += '<div><dt>Name</dt><dd>' + esc(acc.name) + '</dd></div>';
+    html += '<div><dt>Type</dt><dd>' + esc(acc.type || '—') + '</dd></div>';
+    html += '<div><dt>As of</dt><dd>' + esc(AS_OF_DATE || led.date_to || '—') + '</dd></div>';
+    html += '<div><dt>Opening</dt><dd>' + fmtNum(led.opening_balance) + '</dd></div>';
+    html += '<div><dt>Period debit</dt><dd>' + fmtNum(led.total_debit) + '</dd></div>';
+    html += '<div><dt>Period credit</dt><dd>' + fmtNum(led.total_credit) + '</dd></div>';
+    html += '<div><dt>Closing</dt><dd>' + fmtNum(led.closing_balance) + '</dd></div>';
+    html += '</dl>';
+
+    html += '<div class="table-wrap"><table id="bsDetailLedgerTable"><thead><tr>';
+    html += '<th>Sl.</th><th>Date</th><th>Voucher</th><th>Reference</th><th>Narration</th><th>Source</th><th>Remarks</th><th>Party</th>';
+    html += '<th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th></tr></thead><tbody>';
+    html += '<tr><td>—</td><td colspan="7">Opening balance (before period)</td><td class="num">—</td><td class="num">—</td><td class="num">' + fmtNum(led.opening_balance) + '</td></tr>';
+    if (!lines.length) {
+      html += '<tr><td colspan="11" style="text-align:center;color:#94a3b8;padding:20px;">No GL lines through the as-of date.</td></tr>';
+    } else {
+      lines.forEach(function (row, i) {
+        const party = (row.party_type || row.party_code)
+          ? [row.party_type, row.party_code].filter(Boolean).join(' ')
+          : '—';
+        html += '<tr>';
+        html += '<td>' + (i + 1) + '</td>';
+        html += '<td>' + esc(row.voucher_date) + '</td>';
+        html += '<td>' + esc(row.voucher_no) + '</td>';
+        html += '<td>' + esc(row.reference_no) + '</td>';
+        html += '<td>' + esc(row.narration) + '</td>';
+        html += '<td>' + esc(row.source) + '</td>';
+        html += '<td>' + esc(row.remarks) + '</td>';
+        html += '<td>' + esc(party) + '</td>';
+        html += '<td class="num">' + fmtNum(row.debit) + '</td>';
+        html += '<td class="num">' + fmtNum(row.credit) + '</td>';
+        html += '<td class="num">' + fmtNum(row.running_balance) + '</td>';
+        html += '</tr>';
+      });
+      html += '<tr style="font-weight:600;background:#eff6ff;">';
+      html += '<td colspan="8">Totals / closing</td>';
+      html += '<td class="num">' + fmtNum(led.total_debit) + '</td>';
+      html += '<td class="num">' + fmtNum(led.total_credit) + '</td>';
+      html += '<td class="num">' + fmtNum(led.closing_balance) + '</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table></div>';
+    bodyEl.innerHTML = html;
+  }
+
+  function loadDetail(code, name) {
+    titleEl.textContent = (code ? code + ' — ' : '') + (name || 'Account detail');
+    bodyEl.innerHTML = '<div class="bs-detail-loading">Loading ledger…</div>';
+    openModal();
+    const params = new URLSearchParams({ account_code: code });
+    if (AS_OF_DATE) params.set('as_of_date', AS_OF_DATE);
+    fetch(LEDGER_API + '?' + params.toString(), { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.j || !res.j.success) {
+          const err = (res.j && res.j.error) ? res.j.error : 'Could not load ledger.';
+          bodyEl.innerHTML = '<div class="bs-detail-err">' + esc(err) + '</div>';
+          return;
+        }
+        renderLedger(res.j);
+      })
+      .catch(function () {
+        bodyEl.innerHTML = '<div class="bs-detail-err">Network error loading ledger.</div>';
+      });
+  }
+
+  document.querySelectorAll('#bsAssetsTable tbody tr.bs-row-clickable, #bsLiabilitiesTable tbody tr.bs-row-clickable, #bsEquityTable tbody tr.bs-row-clickable').forEach(function (tr) {
+    function activate() {
+      const code = tr.getAttribute('data-code');
+      const name = tr.getAttribute('data-name');
+      if (code) loadDetail(code, name);
+    }
+    tr.addEventListener('click', activate);
+    tr.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        activate();
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

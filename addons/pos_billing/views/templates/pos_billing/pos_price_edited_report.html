@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}POS Price Edited Report{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .pos-per-page { max-width: 1400px; margin: 0 auto; padding: 16px 20px 32px; }
+  .pos-per-filters { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-end; margin-bottom: 16px; }
+  .pos-per-filters label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #64748b; }
+  .pos-per-filters .input, .pos-per-filters select { min-width: 140px; font-size: 13px; }
+  .pos-per-table-wrap { overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; }
+  .pos-per-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .pos-per-table th, .pos-per-table td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; text-align: left; white-space: nowrap; }
+  .pos-per-table th { background: #f8fafc; font-weight: 600; color: #475569; position: sticky; top: 0; }
+  .pos-per-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .pos-per-meta { font-size: 13px; color: #64748b; margin-bottom: 12px; }
+  .pos-per-diff-up { color: #b45309; }
+  .pos-per-diff-down { color: #047857; }
+</style>
+<div class="pos-per-page setup-im-page">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>POS Price Edited Report <span class="im-ref">{{ branch_display }}</span></h1>
+      <div class="im-actions">
+        <button type="button" class="im-btn-save" id="btnLoadReport">Load</button>
+        <button type="button" class="im-btn-secondary" id="btnExportCsv">Export CSV</button>
+        <a class="im-btn-secondary" href="{{ url_for('pos_billing.pos_billing_page') }}">POS Billing</a>
+      </div>
+    </div>
+  </div>
+
+  <p class="pos-per-meta">Shows posted bill lines where the sold unit price differs from the catalog price recorded at scan (OLDPRICE vs RATE). Location {{ location_code }}.</p>
+
+  <div class="pos-per-filters">
+    <label>From <input type="date" id="filterFrom" class="input" value="{{ default_from }}" /></label>
+    <label>To <input type="date" id="filterTo" class="input" value="{{ default_to }}" /></label>
+    <label>Counter
+      <select id="filterCounter" class="input">
+        <option value="">All counters</option>
+      </select>
+    </label>
+    <label>Shift <input type="text" id="filterShift" class="input" placeholder="Optional" inputmode="numeric" /></label>
+  </div>
+
+  <p id="reportStatus" class="pos-per-meta" aria-live="polite">Select dates and tap Load.</p>
+
+  <div class="pos-per-table-wrap">
+    <table class="pos-per-table" id="reportTable">
+      <thead>
+        <tr>
+          <th>Bill</th>
+          <th>Date</th>
+          <th>Counter</th>
+          <th>Cashier</th>
+          <th>Sl</th>
+          <th>Item</th>
+          <th>Name</th>
+          <th>UOM</th>
+          <th class="num">Qty</th>
+          <th class="num">Original</th>
+          <th class="num">Edited</th>
+          <th class="num">Diff</th>
+          <th class="num">Impact</th>
+        </tr>
+      </thead>
+      <tbody id="reportBody"></tbody>
+    </table>
+  </div>
+</div>
+<script>
+  window.POS_PRICE_EDIT_REPORT = {
+    locationCode: {{ location_code|tojson }},
+    apiUrl: {{ api_url|tojson }},
+    exportUrl: {{ export_url|tojson }},
+    countersUrl: {{ api_counters_url|tojson }},
+  };
+</script>
+<script src="{{ url_for('static', filename='js/pos_price_edited_report.js') }}?v={{ pos_asset_version|default('1') }}"></script>
+{% endblock %}

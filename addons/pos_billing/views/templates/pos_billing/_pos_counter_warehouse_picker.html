@@ -1,0 +1,192 @@
+{% macro pos_counter_warehouse_field(initial_id='', initial_label='', warehouse_required=false) %}
+<span class="search-field search-field--popup">
+  <input type="text" id="warehouseDisplay" class="input" placeholder="Select warehouse..." readonly
+         value="{{ initial_label }}" aria-labelledby="warehouseDisplayLabel" />
+  <button type="button" class="search-clear" id="warehouseClear" aria-label="Clear warehouse"{% if not initial_id %} style="display:none;"{% endif %}>×</button>
+  <button type="button" class="search-picker" id="warehousePicker" aria-label="Choose warehouse">▾</button>
+</span>
+<input type="hidden" name="warehouse_id" id="warehouse_id" value="{{ initial_id }}"{% if warehouse_required %} data-warehouse-required="1"{% endif %} />
+{% endmacro %}
+
+{% macro pos_counter_warehouse_modal(branch_warehouses, warehouse_required=false) %}
+<div class="modal hidden" id="warehouseModal" role="dialog" aria-modal="true" aria-labelledby="warehouseModalTitle">
+  <div class="modal__overlay" data-close="warehouseModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3 id="warehouseModalTitle">Warehouse</h3>
+      <button type="button" class="modal__close" data-close="warehouseModal">×</button>
+    </div>
+    <div class="modal__body">
+      <label class="search">
+        Search
+        <span class="search-field search-field--wide">
+          <input type="text" id="warehouseSearch" placeholder="Search by code or name..." autocomplete="off" />
+          <button type="button" class="search-clear" id="warehouseModalSearchClear" aria-label="Clear search">×</button>
+        </span>
+      </label>
+      <div class="scroll-table modal__table">
+        <table class="table table-fixed" id="warehouseTable">
+          <thead><tr><th>Code</th><th>Name</th></tr></thead>
+          <tbody id="warehouseBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  var warehouses = {{ branch_warehouses|tojson }};
+  var warehouseRequired = {{ 'true' if warehouse_required else 'false' }};
+  var warehouseDisplay = document.getElementById('warehouseDisplay');
+  var warehouseIdEl = document.getElementById('warehouse_id');
+  var warehouseClear = document.getElementById('warehouseClear');
+  var warehousePicker = document.getElementById('warehousePicker');
+  var warehouseModal = document.getElementById('warehouseModal');
+  var warehouseSearch = document.getElementById('warehouseSearch');
+  var warehouseModalSearchClear = document.getElementById('warehouseModalSearchClear');
+  var warehouseBody = document.getElementById('warehouseBody');
+  var warehouseTable = document.getElementById('warehouseTable');
+  var form = document.getElementById('posCounterNewForm') || document.getElementById('posCounterEditForm');
+
+  if (!warehouseDisplay || !warehouseIdEl || !warehouses || !warehouses.length) return;
+
+  function whCode(row) {
+    return String((row && row.warehouse_code) || '').trim();
+  }
+
+  function whName(row) {
+    return String((row && row.warehouse_name) || '').trim();
+  }
+
+  function whLabel(row) {
+    var code = whCode(row);
+    var name = whName(row);
+    if (code && name) return code + ' — ' + name;
+    return code || name;
+  }
+
+  function syncWarehouseClearVisibility() {
+    if (!warehouseClear) return;
+    var has = (parseInt(warehouseIdEl.value, 10) || 0) > 0;
+    warehouseClear.style.display = has ? 'block' : 'none';
+  }
+
+  function renderWarehouses(list) {
+    if (!warehouseBody) return;
+    var q = (warehouseSearch && warehouseSearch.value || '').toLowerCase();
+    var filtered = q ? list.filter(function (w) {
+      return whCode(w).toLowerCase().indexOf(q) !== -1 || whName(w).toLowerCase().indexOf(q) !== -1;
+    }) : list;
+    warehouseBody.innerHTML = filtered.length ? filtered.map(function (w) {
+      var id = w.warehouse_id;
+      var code = whCode(w);
+      var name = whName(w);
+      return '<tr tabindex="0" data-id="' + id + '" data-code="' + code.replace(/"/g, '&quot;') + '" data-name="' + name.replace(/"/g, '&quot;') + '"><td>' + code + '</td><td>' + name + '</td></tr>';
+    }).join('') : '<tr><td colspan="2">No warehouses</td></tr>';
+  }
+
+  function openWarehouseModal() {
+    if (!warehouseModal) return;
+    warehouseModal.classList.remove('hidden');
+    if (warehouseSearch) {
+      warehouseSearch.value = '';
+      warehouseSearch.focus();
+    }
+    renderWarehouses(warehouses);
+  }
+
+  function closeWarehouseModal() {
+    if (warehouseModal) warehouseModal.classList.add('hidden');
+  }
+
+  function selectWarehouseRow(row) {
+    if (!row || !row.dataset.id) return;
+    warehouseIdEl.value = row.dataset.id || '';
+    if (warehouseDisplay) {
+      warehouseDisplay.value = whLabel({
+        warehouse_code: row.dataset.code || '',
+        warehouse_name: row.dataset.name || ''
+      });
+    }
+    closeWarehouseModal();
+    syncWarehouseClearVisibility();
+    if (warehouseDisplay) warehouseDisplay.focus();
+  }
+
+  if (warehousePicker) {
+    warehousePicker.addEventListener('click', function (e) {
+      e.preventDefault();
+      openWarehouseModal();
+    });
+  }
+  if (warehouseDisplay) {
+    warehouseDisplay.addEventListener('click', function () { openWarehouseModal(); });
+    warehouseDisplay.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        openWarehouseModal();
+      }
+    });
+  }
+  if (warehouseClear) {
+    warehouseClear.addEventListener('click', function (e) {
+      e.preventDefault();
+      warehouseIdEl.value = '';
+      if (warehouseDisplay) warehouseDisplay.value = '';
+      syncWarehouseClearVisibility();
+    });
+  }
+  if (warehouseModalSearchClear && warehouseSearch) {
+    warehouseModalSearchClear.addEventListener('click', function (e) {
+      e.preventDefault();
+      warehouseSearch.value = '';
+      renderWarehouses(warehouses);
+      warehouseSearch.focus();
+    });
+  }
+  if (warehouseSearch) {
+    warehouseSearch.addEventListener('input', function () { renderWarehouses(warehouses); });
+    warehouseSearch.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        var firstRow = warehouseBody && warehouseBody.querySelector('tr[data-id]');
+        if (firstRow) selectWarehouseRow(firstRow);
+      }
+    });
+  }
+  if (warehouseModal) {
+    warehouseModal.addEventListener('click', function (e) {
+      if (e.target.dataset.close === 'warehouseModal' || e.target.classList.contains('modal__close')) closeWarehouseModal();
+    });
+  }
+  if (warehouseTable) {
+    warehouseTable.addEventListener('click', function (e) {
+      var row = e.target.closest('tbody tr[data-id]');
+      if (row) selectWarehouseRow(row);
+    });
+    warehouseTable.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return;
+      var row = e.target.closest('tbody tr[data-id]');
+      if (row) {
+        e.preventDefault();
+        selectWarehouseRow(row);
+      }
+    });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && warehouseModal && !warehouseModal.classList.contains('hidden')) closeWarehouseModal();
+  });
+
+  if (form && warehouseRequired) {
+    form.addEventListener('submit', function (e) {
+      if ((parseInt(warehouseIdEl.value, 10) || 0) > 0) return;
+      e.preventDefault();
+      openWarehouseModal();
+      if (warehouseDisplay) warehouseDisplay.focus();
+    });
+  }
+
+  syncWarehouseClearVisibility();
+})();
+</script>
+{% endmacro %}

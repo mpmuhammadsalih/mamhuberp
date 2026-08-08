@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Fixed Asset Transfer{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/fixed_assets_pages.css') }}?v=4" />
+
+{% set kpi = fa_kpis or {} %}
+<div class="page-po nexa-list-page fa-list-page">
+  {% include 'fixed_assets/_fa_nav.html' %}
+
+  <section class="fa-stat-grid" aria-label="Transfer summary">
+    <div class="fa-stat-card">
+      <span class="fa-stat-icon fa-stat-icon--blue"><i class="bi bi-arrow-left-right" aria-hidden="true"></i></span>
+      <div>
+        <p class="fa-stat-label">Transfers</p>
+        <p class="fa-stat-value">{{ "{:,}".format(kpi.total or 0) }}</p>
+        <p class="fa-stat-sub">Location / custodian moves</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Asset transfer</h1>
+      <p class="page-po__muted">Move assets between branches/locations or change custodian — no GL entry (internal transfer).</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('fixed_assets.fa_transfer_form') }}" class="page-po__btn-primary">+ New transfer</a>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th style="text-align:center; width:52px;">Sl.No</th>
+          <th style="width:120px;">Transfer no</th>
+          <th style="width:120px;">Asset no</th>
+          <th>Asset name</th>
+          <th style="width:96px;">Date</th>
+          <th>From location</th>
+          <th>To location</th>
+          <th>From custodian</th>
+          <th>To custodian</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if not rows %}
+        <tr><td colspan="9" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">No transfers yet. <a href="{{ url_for('fixed_assets.fa_transfer_form') }}">Record one</a>.</td></tr>
+        {% else %}
+        {% for r in rows %}
+        <tr>
+          <td style="text-align:center;">{{ loop.index }}</td>
+          <td><span class="fa-code">{{ r.transfer_no }}</span></td>
+          <td><span class="fa-code">{{ r.asset_no }}</span></td>
+          <td>{{ r.asset_name }}</td>
+          <td>{{ r.transfer_date }}</td>
+          <td>{% if r.from_location_code %}{{ r.from_location_code }}{% if r.from_location_name %} — {{ r.from_location_name }}{% endif %}{% else %}—{% endif %}</td>
+          <td>{% if r.to_location_code %}{{ r.to_location_code }}{% if r.to_location_name %} — {{ r.to_location_name }}{% endif %}{% else %}—{% endif %}</td>
+          <td>{{ r.from_custodian or '—' }}</td>
+          <td>{{ r.to_custodian or '—' }}</td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

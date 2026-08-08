@@ -1,0 +1,328 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body {
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+  
+  /* Modern colorful card */
+  .card {
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.5);
+    border: none !important;
+    padding: 12px 16px;
+  }
+  
+  /* Colorful page header */
+  .page-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    padding: 10px 16px !important;
+    border-radius: 12px;
+    margin-bottom: 10px !important;
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+  }
+  .page-header h1 {
+    color: #ffffff !important;
+    font-weight: 700;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    font-size: 22px !important;
+    margin: 0;
+  }
+  .page-header .muted {
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  
+  /* Colorful buttons */
+  .button {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border: none !important;
+    border-radius: 10px;
+    box-shadow: 0 4px 14px rgba(102, 126, 234, 0.4);
+    transition: all 0.3s;
+    font-weight: 600;
+    color: #ffffff !important;
+    padding: 6px 14px !important;
+    font-size: 13px !important;
+  }
+  .button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+  }
+  
+  /* Table headers */
+  .table thead {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  }
+  .table thead th {
+    background: transparent !important;
+    color: #ffffff !important;
+    font-weight: 700;
+    padding: 8px 10px !important;
+  }
+  
+  /* Scroll table */
+  .scroll-table {
+    border-radius: 12px;
+    border: 2px solid #e2e8f0;
+    background: #ffffff;
+  }
+  
+  /* Search field */
+  .search-field {
+    border: 2px solid #e2e8f0;
+    border-radius: 10px;
+    transition: all 0.3s;
+  }
+  .search-field:focus-within {
+    border-color: #667eea;
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+  }
+  
+  h2 {
+    color: #4c51bf;
+    font-weight: 700;
+    font-size: 18px;
+    margin: 0 0 10px 0;
+  }
+</style>
+  <section class="card" style="max-width: 1400px; margin: 0 auto;">
+    <div class="page-header">
+      <div>
+        <h1>💳 Receivables</h1>
+        <p class="muted">Select a customer with outstanding balance, filter by bill date, and apply receivables.</p>
+      </div>
+    </div>
+    <form method="get" class="form form--inline payments-filters" id="paymentsFilterForm">
+      <label class="payments-customer">
+        Customer
+        <span class="search-field search-field--wide search-field--popup">
+          <input
+            type="text"
+            id="customerInput"
+            name="customer_display"
+            value="{{ customer_display }}"
+            placeholder="Click to search customer..."
+          />
+          <button type="button" class="search-clear" id="customerClear" aria-label="Clear customer">×</button>
+          <button type="button" class="search-picker" id="customerPicker" aria-label="Open customer list">▾</button>
+        </span>
+      </label>
+      <input type="hidden" name="customercode" id="customerCode" value="{{ customer_code }}" />
+      <label>
+        Salesman (optional)
+        <span class="search-field search-field--popup">
+          <input
+            type="text"
+            id="salesmanInput"
+            name="salesman_display"
+            value="{{ salesman_display }}"
+            placeholder="Click to search salesman..."
+            readonly
+          />
+          <button type="button" class="search-clear" id="salesmanClear" aria-label="Clear salesman" style="display: none;">×</button>
+          <button type="button" class="search-picker" id="salesmanPicker" aria-label="Open salesman list">▾</button>
+        </span>
+        <input type="hidden" name="salesmancode" id="salesmanCode" value="{{ salesman_code }}" />
+      </label>
+      <button type="submit" class="button">Load Bills</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Pending Bills</h2>
+    {% if invoices %}
+      {# Legacy template: ``payments`` blueprint removed — wire POST to cash receipt save if you revive this page. #}
+      <form method="post" action="#">
+        <input type="hidden" name="customercode" value="{{ customer_code }}" />
+        <input type="hidden" name="locationcode" value="{{ location.code }}" />
+        <div class="form form--inline payment-meta">
+          <label>
+            Voucher No
+            <input type="text" name="voucherno" value="{{ voucherno }}" required readonly />
+          </label>
+          <label>
+            Payment Date
+            <input type="date" name="paydate" value="{{ paydate }}" required readonly />
+          </label>
+          <label>
+            Remark
+            <input type="text" name="remark" />
+          </label>
+        </div>
+        <div class="scroll-table">
+          <table class="table table-fixed" id="payments-table">
+            <colgroup>
+              <col style="width: 6%">
+              <col style="width: 14%">
+              <col style="width: 14%">
+              <col style="width: 12%">
+              <col style="width: 12%">
+              <col style="width: 12%">
+              <col style="width: 16%">
+              <col style="width: 14%">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Sl No</th>
+                <th>Bill No</th>
+                <th>Bill Date</th>
+                <th>Bill Amount</th>
+                <th>Paid Amount</th>
+                <th>Balance</th>
+                <th>Pay Amount</th>
+                <th>Salesman Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in invoices %}
+                <tr>
+                  <td>{{ loop.index }}</td>
+                  <td>{{ row.invoice_no }}</td>
+                  <td>{{ row.bill_date }}</td>
+                  <td>{{ row.bill_amount }}</td>
+                  <td>{{ row.paid_amount }}</td>
+                  <td>{{ row.balance }}</td>
+                  <td>
+                    <div class="pay-field">
+                      <input
+                        type="text"
+                        name="pay_amount"
+                        min="0"
+                        step="0.01"
+                        max="{{ row.balance }}"
+                        class="pay-input"
+                        data-balance="{{ row.balance }}"
+                      />
+                    </div>
+                  </td>
+                  <td>{{ row.salesman_name }}</td>
+                </tr>
+                <input type="hidden" name="rowid" value="{{ row.rid }}" />
+                <input type="hidden" name="invoice_no" value="{{ row.invoice_no }}" />
+                <input type="hidden" name="balance" value="{{ row.balance }}" />
+                <input type="hidden" name="billamount" value="{{ row.bill_amount }}" />
+                <input type="hidden" name="salesmancode" value="{{ row.salesmancode }}" />
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr>
+                <th colspan="3">Total</th>
+                <th id="total-billamount">0</th>
+                <th id="total-paidamount">0</th>
+                <th id="total-balance">0</th>
+                <th id="total-payamount">0</th>
+                <th></th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <div class="payments-total">
+          <strong>Total Receivable:</strong>
+          <span id="payment-total">0</span>
+        </div>
+        <input type="hidden" name="total_amount" id="payment-total-input" value="0" />
+        <button type="submit" class="button">Submit Receivables</button>
+      </form>
+    {% else %}
+      {% if customer_code %}
+        <p class="muted">No pending bills found.</p>
+      {% else %}
+        <p class="muted">Select a customer to load pending bills.</p>
+      {% endif %}
+    {% endif %}
+  </section>
+
+  <div class="modal hidden" id="customerModal" role="dialog" aria-modal="true" aria-labelledby="customerModalTitle">
+    <div class="modal__overlay" data-close="customerModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3 id="customerModalTitle">Select Customer</h3>
+        <button type="button" class="modal__close" data-close="customerModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="customerModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="customerModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="customerModalTable">
+            <colgroup>
+              <col style="width: 20%">
+              <col style="width: 55%">
+              <col style="width: 25%">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Customer Code</th>
+                <th>Customer Name</th>
+                <th>Outstanding</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for customer in customers %}
+                <tr data-code="{{ customer.code }}" data-name="{{ customer.name }}" data-text="{{ (customer.code ~ ' ' ~ customer.name)|lower }}">
+                  <td>{{ customer.code }}</td>
+                  <td>{{ customer.name }}</td>
+                  <td>{{ customer.outstanding }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Salesman Popup Modal -->
+  <div class="modal hidden" id="salesmanModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="salesmanModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Select Salesman</h3>
+        <button type="button" class="modal__close" data-close="salesmanModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="salesmanModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="salesmanModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="salesmanModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr data-code="" data-name="All salesman" data-text="all salesman">
+                <td></td>
+                <td>All salesman</td>
+              </tr>
+              {% for salesman in salesmen %}
+                <tr data-code="{{ salesman.code }}" data-name="{{ salesman.name }}" data-text="{{ (salesman.code ~ ' ' ~ salesman.name)|lower }}">
+                  <td>{{ salesman.code }}</td>
+                  <td>{{ salesman.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/payments.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit session{% else %}New session{% endif %}{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .setup-im-page .sess-setup-actions { display: none; }
+</style>
+
+<div class="im-page setup-im-page">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>Session / <span class="im-ref">{{ next_session_code }}</span> {% if not is_edit %}<span class="status-badge status-badge--new">New</span>{% endif %}</h1>
+      <div class="im-actions">
+        <button type="submit" form="sessionForm" class="im-btn-save">{% if is_edit %}Save{% else %}Create{% endif %}</button>
+        <a href="{{ url_for('session_master.session_list') }}" class="im-btn-secondary">List</a>
+      </div>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, msg in messages %}
+        <p class="flash flash--{{ category }}" style="margin-bottom:12px;">{{ msg }}</p>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <section class="setup-im-shell customer-form-shell itemmaster-container">
+    <div class="cf-form-stack">
+      <div class="cf-form-panel">
+        <h2 class="cf-section-title">Session details</h2>
+  <form id="sessionForm" method="post" autocomplete="off" class="form-enter-focus-only" action="
+    {%- if is_edit -%}
+      {{ url_for('session_master.session_edit', location_code=location_code, session_code=next_session_code) }}
+    {%- else -%}
+      {{ url_for('session_master.session_create') }}
+    {%- endif -%}
+  ">
+    <input type="hidden" name="locationcode" id="locHidden" value="{{ location_code }}" />
+    <div class="customer-details">
+    {% if not is_edit %}
+    <input type="hidden" name="session_create_once" value="{{ session_create_once }}" />
+    <div class="form-group" style="grid-column: 1 / -1;">
+      <label for="location_pick"><span>Branch</span></label>
+      <select class="input" id="location_pick" aria-label="Branch">
+        {% for loc in locations %}
+          <option value="{{ loc.code }}" {% if loc.code|string == location_code|string %}selected{% endif %}>
+            {{ loc.code }} — {{ loc.name or loc.code }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    {% else %}
+    <input type="hidden" name="session_edit_once" value="{{ session_edit_once }}" />
+    <div class="form-group" style="grid-column: 1 / -1;">
+      <label><span>Branch</span></label>
+      <span class="muted" style="flex:1;font-size:13px;">{{ location_code }}{% if location_name %} — {{ location_name }}{% endif %} · Code <strong>{{ next_session_code }}</strong></span>
+    </div>
+    {% endif %}
+
+    <div class="form-group">
+      <label for="sessioncode_disp"><span>Session code</span></label>
+      <input class="input" id="sessioncode_disp" type="text" readonly value="{{ next_session_code }}" />
+    </div>
+
+    <div class="form-group">
+      <label for="sessionname"><span>Name</span> <span style="color:#b45309">*</span></label>
+      <input class="input" id="sessionname" name="sessionname" type="text" maxlength="50" required
+        value="{{ (row_norm.sessionname or '')|default('', true)|trim }}" />
+    </div>
+
+    </div>
+
+    <div class="sess-setup-actions sm-actions">
+      <button type="submit" class="page-po__btn-primary">{% if is_edit %}Save{% else %}Create{% endif %}</button>
+    </div>
+  </form>
+
+  {% if is_edit %}
+  <form method="post" class="sm-actions form-enter-focus-only" style="border-top:none;padding-top:12px;margin-top:0;"
+        action="{{ url_for('session_master.session_delete', location_code=location_code, session_code=next_session_code) }}"
+        onsubmit="return confirm('Delete this session?');">
+    <input type="hidden" name="session_delete_once" value="{{ session_delete_once }}" />
+    <button type="submit" class="page-po__btn-secondary" style="background:#fecaca;color:#991b1b;border-color:#f87171;">Delete</button>
+  </form>
+  {% endif %}
+      </div>
+    </div>
+  </section>
+</div>
+
+{% if not is_edit %}
+<script>
+(function() {
+  var pick = document.getElementById('location_pick');
+  var hidden = document.getElementById('locHidden');
+  if (!pick || !hidden) return;
+  pick.addEventListener('change', function() {
+    hidden.value = pick.value;
+    window.location = '{{ url_for("session_master.session_create") }}'.split('?')[0] + '?pref_loc=' + encodeURIComponent(pick.value);
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

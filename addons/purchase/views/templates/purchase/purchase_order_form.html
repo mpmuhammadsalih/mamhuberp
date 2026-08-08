@@ -1,0 +1,2935 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/po_ai.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/im_form_shell.css') }}?v=2" />
+{% set sales_invoice_import_enabled = sales_invoice_import_enabled if sales_invoice_import_enabled is defined else false %}
+{% set _ast = (lpo_header.approval_status if lpo_header is defined and lpo_header else '') %}
+{% set po_is_cancelled = (_ast|string)|upper == 'CANCELLED' %}
+{% set po_has_grn = po_has_grn if po_has_grn is defined else false %}
+<style>
+  main.container:has(> .po-page.im-form-shell-page) { padding-top: 0; }
+  .po-page.im-form-shell-page { max-width: 1400px; }
+  /* PO-specific: lines grid, totals, tools columns, modals */
+  .po-lines-toolbar { display: flex; justify-content: space-between; align-items: center; margin: 0 0 8px; padding: 0; gap: 12px; flex-wrap: wrap; }
+  .po-lines-toolbar .im-btn-secondary { font-size: 12px !important; padding: 6px 12px !important; width: auto !important; min-width: 0 !important; max-width: none !important; }
+  .po-totals-bar { display: flex; justify-content: flex-end; align-items: center; gap: 16px; padding: 12px 0 0; margin-top: 8px; flex-wrap: wrap; }
+  .po-totals-bar .po-total-label { font-size: 13px; color: #000; }
+  .po-totals-bar .po-total-value { font-size: 14px; font-weight: 600; color: #000; width: 120px; text-align: right; border: none; border-bottom: 1px solid #dee2e6; background: var(--im-field-fill); padding: 6px 0; }
+  .po-terms-body { font-size: 13px; color: #000; line-height: 1.5; margin: 0; }
+  .po-save-as-opts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; color: #000; }
+  .po-save-as-opts .po-save-as-label { font-weight: 600; }
+  .po-save-as-opts label { cursor: pointer; display: inline-flex; align-items: center; gap: 4px; margin: 0; font-weight: 400; }
+  .po-save-as-opts input { margin: 0; }
+  .po-txn-date-block {
+    margin: 0 0 10px;
+    padding: 12px 14px;
+    border: 1px solid #f5c6cb;
+    border-radius: 6px;
+    background: #fff5f5;
+    color: #842029;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .po-txn-date-block a { color: #0d6efd; font-weight: 600; }
+  .im-form-shell-page .po-ai-toggle-wrap { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .im-form-shell-page .po-ai-toggle-label { font-size: 11px; font-weight: 600; color: #000; }
+  .scroll-table { overflow: auto; max-height: 50vh; -webkit-overflow-scrolling: touch; width: 100%; }
+  .button--primary { background: #28a745 !important; border: none !important; color: #fff !important; padding: 8px 16px; border-radius: 4px; font-weight: 500; font-size: 13px; cursor: pointer; }
+  .button--secondary { background: var(--im-field-fill-strong); border: 1px solid #dee2e6; color: #000; padding: 8px 16px; border-radius: 4px; font-size: 13px; cursor: pointer; }
+  #linesTable { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+  #linesTable col.po-col-slno { width: 40px; }
+  #linesTable col.po-col-barcode { width: 128px; }
+  #linesTable col.po-col-itemcode { width: 88px; }
+  #linesTable col.po-col-itemname { width: 22%; }
+  #linesTable col.po-col-uom { width: 56px; }
+  #linesTable col.po-col-qty, #linesTable col.po-col-baseqty, #linesTable col.po-col-rate,
+  #linesTable col.po-col-amount { width: 76px; min-width: 76px; }
+  #linesTable col.po-col-discount, #linesTable col.po-col-foc,
+  #linesTable col.po-col-othercharge, #linesTable col.po-col-landingcost { width: 0; }
+  #linesTable col.po-col-add { width: 40px; }
+  #linesTable col.po-col-del { width: 52px; }
+  body.po-show-discount #linesTable col.po-col-discount { width: 76px; }
+  body.po-show-foc #linesTable col.po-col-foc { width: 52px; }
+  body.po-show-othercharge #linesTable col.po-col-othercharge { width: 76px; }
+  body.po-show-landingcost #linesTable col.po-col-landingcost { width: 76px; }
+  #linesTable thead { position: sticky; top: 0; z-index: 1; background: #f8f9fa !important; }
+  #linesTable thead th, #linesTable tbody td { overflow: hidden; text-overflow: ellipsis; }
+  #linesTable thead th { background: #f8f9fa !important; color: #000 !important; padding: 5px 8px !important; font-weight: 600; font-size: 12px; line-height: 1.25; text-align: left; white-space: nowrap; border-bottom: 1px solid #dee2e6; vertical-align: middle; }
+  #linesTable tbody td { padding: 3px 6px !important; border: none; border-bottom: 1px solid #dee2e6; vertical-align: middle; color: #000; }
+  #linesTable tbody tr { transition: background 0.15s; }
+  #linesTable .po-col-slno { width: 40px; text-align: center !important; }
+  #linesTable .po-col-barcode { width: 128px; min-width: 128px; max-width: 128px; }
+  #linesTable th.po-col-barcode, #linesTable td.po-col-barcode { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #linesTable tbody td.po-col-barcode .input.barcode { min-width: 0; width: 100%; font-variant-numeric: tabular-nums; box-sizing: border-box; }
+  #linesTable .po-col-itemcode { width: 88px; }
+  #linesTable .po-col-itemname { width: 22%; min-width: 120px; }
+  #linesTable th.po-col-itemname, #linesTable td.po-col-itemname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #linesTable tbody td.po-col-itemname .input { width: 100%; min-width: 0; box-sizing: border-box; }
+  #linesTable .po-col-uom { width: 56px; }
+  #linesTable .po-col-qty, #linesTable .po-col-baseqty, #linesTable .po-col-rate,
+  #linesTable .po-col-discount, #linesTable .po-col-amount, #linesTable .po-col-othercharge,
+  #linesTable .po-col-landingcost { width: 76px; }
+  #linesTable .po-col-foc { width: 52px; text-align: center !important; }
+  #linesTable .po-col-add { width: 40px; min-width: 40px; text-align: center !important; padding-left: 2px !important; padding-right: 2px !important; }
+  #linesTable .po-col-del { width: 52px; min-width: 52px; text-align: center !important; }
+  #linesTable th.po-col-add, #linesTable td.po-col-add,
+  #linesTable th.po-col-del, #linesTable td.po-col-del {
+    display: table-cell !important;
+    overflow: visible !important;
+  }
+  #linesTable thead th.po-col-qty, #linesTable thead th.po-col-baseqty, #linesTable thead th.po-col-rate,
+  #linesTable thead th.po-col-discount, #linesTable thead th.po-col-amount, #linesTable thead th.po-col-othercharge,
+  #linesTable thead th.po-col-landingcost { text-align: right; }
+  #linesTable tbody td.po-col-qty, #linesTable tbody td.po-col-baseqty, #linesTable tbody td.po-col-rate,
+  #linesTable tbody td.po-col-discount, #linesTable tbody td.po-col-amount, #linesTable tbody td.po-col-othercharge,
+  #linesTable tbody td.po-col-landingcost { text-align: right; font-variant-numeric: tabular-nums; }
+  #linesTable tbody td.po-col-slno, #linesTable tbody td.po-col-add, #linesTable tbody td.po-col-del, #linesTable tbody td.po-col-foc { text-align: center; }
+  #linesTable tbody td.po-col-itemname { color: #000; font-weight: 500; }
+  #linesTable .input { width: 100%; max-width: 100%; display: block; margin: 0; border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; padding: 2px 0; font-size: 12px; line-height: 1.3; min-height: 22px; box-sizing: border-box; background: transparent; }
+  #linesTable tbody td.po-col-qty .input, #linesTable tbody td.po-col-baseqty .input, #linesTable tbody td.po-col-rate .input,
+  #linesTable tbody td.po-col-discount .input, #linesTable tbody td.po-col-amount .input,
+  #linesTable tbody td.po-col-othercharge .input { text-align: right; }
+  #linesTable .input:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  #linesTable .input.mandatory-blank { border-bottom-color: #dc3545; background-color: #fff5f5; }
+  .po-row-action-icon { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 1px solid #dee2e6; border-radius: 4px; background: #fff; color: #000; font-size: 14px; line-height: 1; cursor: pointer; margin: 0 auto; flex-shrink: 0; }
+  .po-row-action-icon:hover { background: #007bff; color: #fff; border-color: #007bff; }
+  .po-add-line-icon { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 1px solid #dee2e6; border-radius: 4px; background: #fff; color: #000; font-size: 18px; line-height: 1; cursor: pointer; margin: 0 auto; flex-shrink: 0; }
+  .po-add-line-icon:hover { background: #007bff; color: #fff; border-color: #007bff; }
+  #linesTable tbody tr.po-line-form-row { background: #fff; }
+  #linesTable tbody tr.po-line-form-row td .input { width: 100%; min-width: 0; box-sizing: border-box; margin: 0; }
+  #linesTable tbody tr.table-empty td { text-align: center; color: #6c757d; font-style: italic; padding: 14px 12px !important; }
+  /* Sales invoice import: RAWABICODE matched but invoice UOM not in base/alternate UOM */
+  #linesTable tbody tr.po-line-uom-mismatch td { color: #b91c1c !important; background-color: #fff1f2 !important; }
+  #linesTable tbody tr.po-line-uom-mismatch:hover td { background-color: #ffe4e6 !important; }
+  #linesTable tbody tr.po-line-uom-mismatch td.po-col-itemname { color: #b91c1c !important; font-weight: 600; }
+  /* No ITEMMASTER match on current tenant — stronger full-row red */
+  #linesTable tbody tr.po-line-no-master-match td {
+    color: #7f1d1d !important;
+    background-color: #fecaca !important;
+    border-bottom-color: #f87171 !important;
+  }
+  #linesTable tbody tr.po-line-no-master-match:hover td { background-color: #fca5a5 !important; }
+  #linesTable tbody tr.po-line-no-master-match td.po-col-itemname { color: #7f1d1d !important; font-weight: 700; }
+  #linesTable tbody tr.po-line-no-master-match .po-row-action-icon { border-color: #dc2626; color: #991b1b; background: #fee2e2; }
+  #linesTable tbody tr[data-line]:hover:not(.po-line-uom-mismatch):not(.po-line-no-master-match) { background: #f8f9fa !important; }
+  .po-add-line { color: #000; text-decoration: none; font-size: 13px; cursor: pointer; background: none; border: none; padding: 0; display: inline-block; }
+  .po-add-line:hover { text-decoration: underline; }
+  /* Supplier: Item Master–style popup shell (readonly + clear); open list with F1 only — no ▾ picker */
+  .po-details .po-supplier-popup.search-field--popup,
+  .po-details .po-warehouse-popup.search-field--popup {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    max-width: none;
+  }
+  .modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal.hidden { display: none; }
+  .modal__overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.4); cursor: pointer; }
+  .modal__content { position: relative; background: #fff; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); max-width: 500px; width: 100%; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
+  .modal__header { padding: 12px 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+  .modal__body { padding: 12px; overflow: auto; max-height: 320px; }
+  /* Supplier and Item picker modals – same layout and gap (Code/Item Code, Name/Item Name) */
+  #supplierTable, #warehouseTable, #itemTable { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
+  #supplierTable thead, #warehouseTable thead, #itemTable thead { background: #334155 !important; }
+  #supplierTable thead th, #warehouseTable thead th, #itemTable thead th { background: #334155 !important; color: #fff !important; padding: 8px 10px; font-weight: 600; font-size: 12px; text-align: left; }
+  #supplierTable thead th:nth-child(1), #warehouseTable thead th:nth-child(1), #itemTable thead th:nth-child(1) { width: 110px; }
+  #supplierTable thead th:nth-child(2), #warehouseTable thead th:nth-child(2), #itemTable thead th:nth-child(2) { min-width: 0; }
+  #supplierTable tbody td, #warehouseTable tbody td, #itemTable tbody td { padding: 8px 12px; border: 1px solid #e2e8f0; text-align: left; }
+  #supplierTable tbody tr:hover, #warehouseTable tbody tr:hover, #itemTable tbody tr:hover { background: #f1f5f9; cursor: pointer; }
+  #supplierModal .modal__header { padding: 6px 12px; }
+  #supplierModal .modal__header h3 { margin: 0; padding: 0; font-size: 15px; font-weight: 600; line-height: 1.25; color: #0f172a; }
+  #supplierModal .modal__body {
+    padding: 6px 12px 10px;
+    max-height: 65vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-sizing: border-box;
+  }
+  #supplierModal #supplierSearch {
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0 0 6px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 0 10px;
+    line-height: 26px;
+    min-height: 26px;
+  }
+  #supplierModal .modal__body .scroll-table.modal__table { flex: 1; min-height: 120px; }
+  #warehouseModal .modal__header { padding: 6px 12px; }
+  #warehouseModal .modal__header h3 { margin: 0; padding: 0; font-size: 15px; font-weight: 600; line-height: 1.25; color: #0f172a; }
+  #warehouseModal .modal__body {
+    padding: 6px 12px 10px;
+    max-height: 65vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-sizing: border-box;
+  }
+  #warehouseModal #warehouseSearch {
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0 0 6px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 0 10px;
+    line-height: 26px;
+    min-height: 26px;
+  }
+  #warehouseModal .modal__body .scroll-table.modal__table { flex: 1; min-height: 120px; }
+  /* Item popup — match GRN compact header + search field */
+  #itemModal .modal__content { width: 520px; max-width: 95vw; box-sizing: border-box; }
+  #itemModal .modal__header { padding: 6px 12px; }
+  #itemModal .modal__header h4 { margin: 0; padding: 0; font-size: 15px; font-weight: 600; line-height: 1.25; }
+  #itemModal .modal__body { padding: 6px 12px 10px; max-height: 65vh; overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box; }
+  #itemModal #itemSearch {
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0 0 6px;
+    flex-shrink: 0;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 0 10px;
+    line-height: 26px;
+    min-height: 26px;
+  }
+  #itemModal #itemBody { overflow-y: auto; overflow-x: hidden; flex: 1; min-height: 120px; }
+  #itemModal .item-row { display: block; padding: 6px 10px; border-bottom: 1px solid #e2e8f0; cursor: pointer; outline: none; }
+  #itemModal .item-row:hover, #itemModal .item-row:focus { background: #f0f9ff; }
+  #itemModal .item-row .item-line1 { font-weight: 600; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #itemModal .item-row .item-line-stock { font-size: 12px; color: #0369a1; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #itemModal .item-row .item-line2 { font-size: 12px; color: #64748b; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #itemModal .item-row .item-empty { color: #94a3b8; font-style: italic; padding: 8px 10px; text-align: center; }
+  #uomModal .modal__content { max-width: 420px; }
+  #uomModal .modal__body { padding-top: 8px; padding-bottom: 12px; padding-left: 12px; padding-right: 12px; }
+  #uomModal #uomTable { margin: 0; }
+  #uomTable thead { background: #334155 !important; }
+  #uomTable thead th { background: #334155 !important; color: #fff !important; padding: 8px 10px; font-weight: 600; }
+  #uomTable tbody td { padding: 8px 12px; border: 1px solid #e2e8f0; }
+  #uomTable tbody tr:hover { background: #f1f5f9; cursor: pointer; }
+  .po-save-overlay { position: fixed; inset: 0; z-index: 3000; background: rgba(15, 23, 42, 0.35); display: flex; align-items: center; justify-content: center; }
+  .po-save-overlay.hidden { display: none; }
+  .po-save-overlay__box { background: #fff; color: #1e293b; border-radius: 10px; padding: 14px 18px; min-width: 230px; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.24); display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 500; }
+  .po-save-spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #cbd5e1; border-top-color: #2563eb; animation: po-save-spin 0.7s linear infinite; }
+  @keyframes po-save-spin { to { transform: rotate(360deg); } }
+  .po-tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 2px solid #e2e8f0; }
+  .po-tabs .tab { padding: 10px 20px; font-weight: 600; font-size: 14px; color: #64748b; background: #f1f5f9; border: 1px solid #e2e8f0; border-bottom: none; border-radius: 10px 10px 0 0; cursor: pointer; }
+  .po-tabs .tab:hover { color: #0369a1; background: #e0f2fe; }
+  .po-tabs .tab.tab--active { color: #0369a1; background: #fff; border-color: #cbd5e1; margin-bottom: -2px; padding-bottom: 12px; }
+  .po-tab-panel { display: none; }
+  .po-tab-panel.panel--active { display: block; }
+  /* Item line form: compact so all fields fit in one row when Tools add more */
+  .po-line-form .po-line-form-row .form-group label { font-size: 11px; margin-bottom: 2px; }
+  .po-line-form .po-line-form-row .form-group .input { font-size: 12px; padding: 4px 6px; }
+  .po-line-form .po-line-form-row .form-group button { font-size: 12px; padding: 4px 10px; }
+  /* Tools: hide optional columns by default; barcode always visible before item code */
+  .po-field-discount, .po-field-foc, .po-field-othercharge { display: none !important; }
+  #linesTable th.po-col-barcode, #linesTable td.po-col-barcode { display: table-cell !important; }
+  #linesTable th.po-col-baseqty, #linesTable td.po-col-baseqty { display: table-cell !important; }
+  #linesTable th.po-col-amount, #linesTable td.po-col-amount {
+    display: table-cell !important;
+    width: 76px !important;
+    min-width: 76px !important;
+    max-width: 76px;
+  }
+  body.po-show-discount .po-field-discount { display: block !important; }
+  body.po-show-foc .po-field-foc { display: flex !important; }
+  body.po-show-othercharge .po-field-othercharge { display: block !important; }
+  #linesTable th.po-col-discount, #linesTable td.po-col-discount,
+  #linesTable th.po-col-foc, #linesTable td.po-col-foc,
+  #linesTable th.po-col-othercharge, #linesTable td.po-col-othercharge,
+  #linesTable th.po-col-landingcost, #linesTable td.po-col-landingcost { display: none !important; }
+  body.po-show-discount #linesTable th.po-col-discount, body.po-show-discount #linesTable td.po-col-discount { display: table-cell !important; }
+  body.po-show-foc #linesTable th.po-col-foc, body.po-show-foc #linesTable td.po-col-foc { display: table-cell !important; }
+  body.po-show-othercharge #linesTable th.po-col-othercharge, body.po-show-othercharge #linesTable td.po-col-othercharge { display: table-cell !important; }
+  body.po-show-landingcost #linesTable th.po-col-landingcost, body.po-show-landingcost #linesTable td.po-col-landingcost { display: table-cell !important; }
+  .status-badge { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; vertical-align: middle; }
+  .status-draft { background: #eef2ff; color: #4338ca; }
+  .status-submitted { background: #fff7ed; color: #c2410c; }
+  .status-approved { background: #ecfdf5; color: #047857; }
+  .status-rejected { background: #fef2f2; color: #b91c1c; }
+  .status-cancelled { background: #f4f4f5; color: #52525b; border: 1px solid #d4d4d8; }
+  /* ===== Business-Central style inline editing (ported from GRN) ===== */
+  #linesTable tbody tr[data-line] td.po-col-itemcode,
+  #linesTable tbody tr[data-line] td.po-col-barcode,
+  #linesTable tbody tr[data-line] td.po-col-uom,
+  #linesTable tbody tr[data-line] td.po-col-qty,
+  #linesTable tbody tr[data-line] td.po-col-rate,
+  #linesTable tbody tr[data-line] td.po-col-amount,
+  #linesTable tbody tr[data-line] td.po-col-discount,
+  #linesTable tbody tr[data-line] td.po-col-othercharge,
+  #linesTable tbody tr[data-line] td.po-col-foc { cursor: cell; }
+  #linesTable tbody tr[data-line] td.po-col-itemcode:hover,
+  #linesTable tbody tr[data-line] td.po-col-barcode:hover,
+  #linesTable tbody tr[data-line] td.po-col-uom:hover,
+  #linesTable tbody tr[data-line] td.po-col-qty:hover,
+  #linesTable tbody tr[data-line] td.po-col-rate:hover,
+  #linesTable tbody tr[data-line] td.po-col-amount:hover,
+  #linesTable tbody tr[data-line] td.po-col-discount:hover,
+  #linesTable tbody tr[data-line] td.po-col-othercharge:hover,
+  #linesTable tbody tr[data-line] td.po-col-foc:hover { outline: 1px solid #93c5fd; outline-offset: -1px; }
+  #linesTable tbody tr[data-line] td.po-col-itemname { cursor: pointer; color: #1d4ed8; text-decoration: underline dotted; }
+  #linesTable tbody tr[data-line] td.po-col-itemname:hover { background: #f0f9ff; }
+  #linesTable .po-inline-input { width: 100%; box-sizing: border-box; border: 1px solid #2563eb; border-radius: 3px; padding: 1px 3px; font-size: 12px; line-height: 1.3; min-height: 22px; background: #fff; }
+  #linesTable td.po-col-qty .po-inline-input, #linesTable td.po-col-rate .po-inline-input,
+  #linesTable td.po-col-amount .po-inline-input,
+  #linesTable td.po-col-discount .po-inline-input, #linesTable td.po-col-othercharge .po-inline-input { text-align: right; }
+  #linesTable tbody td.po-cell-invalid { background: #fee2e2 !important; color: #991b1b; font-weight: 600; box-shadow: inset 0 0 0 1px #ef4444; cursor: cell; }
+  #linesTable tbody td.po-cell-checking { background: #fef9c3 !important; }
+  #poToastHost { position: fixed; top: 16px; right: 16px; z-index: 100000; display: flex; flex-direction: column; gap: 8px; max-width: 380px; }
+  .po-toast { background: #1f2937; color: #fff; padding: 11px 12px; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.28); display: flex; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.45; animation: poToastIn .18s ease-out; }
+  .po-toast--error { background: #b91c1c; }
+  .po-toast--warn { background: #b45309; }
+  .po-toast--success { background: #15803d; }
+  .po-toast__msg { flex: 1; }
+  .po-toast__close { background: transparent; border: 0; color: inherit; font-size: 17px; cursor: pointer; line-height: 1; opacity: .85; padding: 0; }
+  .po-toast__close:hover { opacity: 1; }
+  .po-toast--out { opacity: 0; transform: translateY(-6px); transition: opacity .2s, transform .2s; }
+  @keyframes poToastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+</style>
+<div class="im-page im-form-shell-page po-page"
+     data-transaction-audit="PO"
+     data-transaction-no-selector="#lpono"
+     data-save-button="#btnSave"
+     data-track-root=".po-page"
+     data-save-url-pattern="/purchase/order/api/save|api_lpo_save">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>Purchase Order / <span class="im-ref" id="poTitleRef">{{ next_lpono or 'New' }}</span>
+        {% if _ast %}
+        <span id="poApprovalBadge" class="status-badge status-{{ (_ast or 'DRAFT')|lower }}">{{ _ast }}</span>
+        {% else %}
+        <span id="poApprovalBadge" class="status-badge status-draft" style="display: none;" aria-hidden="true"></span>
+        {% endif %}
+      </h1>
+      <div class="im-actions">
+        {% if not query_mode and not po_is_cancelled %}
+        {% set _ast_up = (_ast|string)|trim|upper if _ast else '' %}
+        <div class="po-save-as-opts" title="Save as Draft or Approved">
+          <span class="po-save-as-label">Save as</span>
+          <label><input type="radio" name="poApprovalSaveAs" value="draft" {% if _ast_up == 'DRAFT' %}checked{% endif %} /> Draft</label>
+          <label><input type="radio" name="poApprovalSaveAs" value="approved" {% if _ast_up != 'DRAFT' %}checked{% endif %} /> Approved</label>
+        </div>
+        {% endif %}
+        {% if not query_mode %}
+        <div class="po-ai-toggle-wrap">
+          <span class="po-ai-toggle-label">AI</span>
+          <label class="po-ai-toggle im-ai-toggle" for="poAiToggle">
+            <input type="checkbox" id="poAiToggle" autocomplete="off" role="switch" aria-label="Purchase Order AI assistant" />
+            <span class="po-ai-toggle-slider"></span>
+          </label>
+        </div>
+        {% endif %}
+        <button type="button" class="im-btn-save po-btn-save" id="btnSave" {% if query_mode or po_is_cancelled %}disabled{% endif %} {% if query_mode %}title="View only"{% elif po_is_cancelled %}title="Canceled"{% endif %}>Save</button>
+        <button type="button" class="im-btn-secondary po-toolbar-btn" id="btnDiscard">Discard</button>
+        <a href="{{ url_for('purchase.purchase_order_list') }}" class="im-btn-secondary">List</a>
+        {% if lpo_header is defined and lpo_header and not po_is_cancelled and not po_has_grn %}
+        <button type="button" class="im-btn-secondary po-toolbar-btn" id="btnCancelPo" style="color:#b91c1c !important;border-color:#f5c6cb !important;">Cancel</button>
+        {% endif %}
+        {% if not query_mode %}<button type="button" class="im-btn-secondary po-toolbar-btn" id="btnNew">New</button>{% endif %}
+        <button type="button" id="btnTools" class="im-btn-secondary po-toolbar-btn">Tools</button>
+      </div>
+    </div>
+  </div>
+
+  <section class="itemmaster-container po-form-body">
+  {% if transaction_date_blocked|default(false) and not query_mode %}
+  <div class="po-txn-date-block">
+    {{ transaction_date_error or 'No open transaction date. Set it in Transaction Date Setup before posting.' }}
+    {% if transaction_date_setup_url %}
+    <a href="{{ transaction_date_setup_url }}">Open Transaction Date Setup</a>
+    {% endif %}
+  </div>
+  {% endif %}
+  <h2 class="im-section-title">Order details</h2>
+  <div class="form-section im-panel-body">
+  <div class="form-grid--2cols po-details">
+    <div class="form-group">
+      <label for="lpono">LPO No</label>
+      <input type="text" id="lpono" class="input input-readonly" readonly tabindex="-1" value="{{ next_lpono or '' }}" />
+    </div>
+    <div class="form-group">
+      <label>LPO Date</label>
+      <input type="date" id="lpodate" class="input"
+             value="{% if lpo_header is defined and lpo_header %}{{ lpo_header.lpodate or '' }}{% else %}{{ open_transaction_date or '' }}{% endif %}"
+             {% if open_transaction_date_from %}min="{{ open_transaction_date_from }}"{% endif %}
+             {% if open_transaction_date_to %}max="{{ open_transaction_date_to }}"{% endif %}
+             {% if not open_transaction_date_from or open_transaction_date_from == open_transaction_date_to %}readonly{% endif %}
+             title="Date must be within the open range from Transaction Date Setup" />
+    </div>
+    <div class="form-group">
+      <label for="supplierDisplay">Supplier</label>
+      <span class="search-field search-field--popup po-supplier-popup">
+        <input type="text" id="supplierDisplay" class="input" placeholder="F1 supplier list · Enter next field" title="F1: supplier list. Enter: move to next field." readonly autocomplete="off" tabindex="0" />
+        <button type="button" class="search-clear" id="supplierClear" aria-label="Clear supplier" {% if query_mode %}style="display: none;"{% elif lpo_header is defined and lpo_header and lpo_header.suppliercode %}style="display: block;"{% else %}style="display: none;"{% endif %}>×</button>
+      </span>
+      <input type="hidden" id="suppliercode" value="" />
+    </div>
+    {% if warehouse_enabled %}
+    <div class="form-group">
+      <label for="warehouseDisplay">Warehouse</label>
+      <span class="search-field search-field--popup po-warehouse-popup">
+        <input type="text" id="warehouseDisplay" class="input" placeholder="F1 warehouse list · Enter next field" title="F1: warehouse list. Enter: move to next field." readonly autocomplete="off" tabindex="0" {% if query_mode %}disabled{% endif %} />
+        <button type="button" class="search-clear" id="warehouseClear" aria-label="Clear warehouse" {% if query_mode %}style="display: none;"{% elif lpo_header is defined and lpo_header and lpo_header.warehouse_id %}style="display: block;"{% else %}style="display: none;"{% endif %}>×</button>
+      </span>
+      <input type="hidden" id="warehouse_id" value="{% if lpo_header is defined and lpo_header and lpo_header.warehouse_id %}{{ lpo_header.warehouse_id }}{% endif %}" />
+    </div>
+    {% endif %}
+    <div class="form-group">
+      <label>Discount</label>
+      <input type="number" id="discount" class="input" step="0.01" value="{% if lpo_header is defined and lpo_header %}{{ lpo_header.discount or 0 }}{% else %}0{% endif %}" />
+    </div>
+    <div class="form-group">
+      <label>Other Charge</label>
+      <input type="number" id="othercharge" class="input" step="0.01" value="{% if lpo_header is defined and lpo_header %}{{ lpo_header.othercharge or 0 }}{% else %}0{% endif %}" />
+    </div>
+    <div class="form-group span-2">
+      <label>Remarks</label>
+      <input type="text" id="remarks" class="input" placeholder="Remarks" value="{% if lpo_header is defined and lpo_header %}{{ lpo_header.remarks or '' }}{% endif %}" />
+    </div>
+    {% if lpo_header is defined and lpo_header and (lpo_header.createddate or lpo_header.modifieddate or lpo_header.createdby) %}
+    <div class="form-group">
+      <label>Created</label>
+      <input type="text" class="input input-readonly" readonly value="{% if lpo_header.createdby %}{{ lpo_header.createdby }}{% endif %}{% if lpo_header.createddate %} · {{ lpo_header.createddate }}{% endif %}" />
+    </div>
+    <div class="form-group">
+      <label>Last modified</label>
+      <input type="text" class="input input-readonly" readonly value="{% if lpo_header.modifiedby %}{{ lpo_header.modifiedby }}{% endif %}{% if lpo_header.modifieddate %} · {{ lpo_header.modifieddate }}{% endif %}" />
+    </div>
+    {% endif %}
+    <div class="form-group span-2">
+      <label class="po-supplier-items-only" style="display:flex;align-items:center;gap:8px;font-weight:normal;font-size:13px;color:#334155;cursor:pointer;margin:0;">
+        <input type="checkbox" id="chkSupplierItems" {% if query_mode %}disabled{% endif %} />
+        Supplier items only
+      </label>
+      <p class="muted" style="margin:4px 0 0;font-size:12px;line-height:1.3;">When checked, the item list includes only items whose supplier on item master matches the supplier selected above.</p>
+    </div>
+  </div>
+  </div>
+
+  <h2 class="im-section-title">Order lines</h2>
+  <div class="form-section im-panel-body">
+  <div class="po-lines-toolbar">
+    <span class="muted" style="font-size:12px;">Add lines below or import from a sales invoice</span>
+    {% if sales_invoice_import_enabled and not query_mode %}
+    <button type="button" class="im-btn-secondary" id="btnSiImport">Import from sales invoice…</button>
+    {% endif %}
+  </div>
+  <div class="scroll-table">
+      <table class="table" id="linesTable">
+        <colgroup>
+          <col class="po-col-slno" />
+          <col class="po-col-barcode" />
+          <col class="po-col-itemcode" />
+          <col class="po-col-itemname" />
+          <col class="po-col-uom" />
+          <col class="po-col-qty" />
+          <col class="po-col-baseqty" />
+          <col class="po-col-rate" />
+          <col class="po-col-amount" />
+          <col class="po-col-add" />
+          <col class="po-col-del" />
+          <col class="po-col-discount" />
+          <col class="po-col-foc" />
+          <col class="po-col-othercharge" />
+          <col class="po-col-landingcost" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="po-col-slno">Sl.No</th>
+            <th class="po-col-barcode">Barcode</th>
+            <th class="po-col-itemcode">Item Code</th>
+            <th class="po-col-itemname">Item Name</th>
+            <th class="po-col-uom">Uom</th>
+            <th class="po-col-qty">Qty</th>
+            <th class="po-col-baseqty">BaseQty</th>
+            <th class="po-col-rate">Rate</th>
+            <th class="po-col-amount">Amount</th>
+            <th class="po-col-add"></th>
+            <th class="po-col-del">Del</th>
+            <th class="po-col-discount">Discount</th>
+            <th class="po-col-foc">FOC</th>
+            <th class="po-col-othercharge">Other Chg</th>
+            <th class="po-col-landingcost">Landing Cost</th>
+          </tr>
+        </thead>
+        <tbody id="linesBody">
+          {% if load_details %}
+          {% for line in load_details %}
+          {% set amt = (line.quantity or 0) * (line.rate or 0) - (line.discount or 0) if not line.foc else 0 %}
+          {% set base_for_land = (line.baseqty or 0) %}
+          {% set land = ((amt + (line.othercharge or 0)) / base_for_land) if base_for_land and base_for_land > 0 else 0 %}
+          <tr class="line-row" data-line data-itemcode="{{ line.itemcode }}" data-itemname="{{ line.get('itemname') or '' }}" data-barcode="{{ line.barcode or '' }}" data-uom="{{ line.uom or 'NOS' }}" data-quantity="{{ line.quantity }}" data-baseqty="{{ line.baseqty or 0 }}" data-rate="{{ line.rate }}" data-bonus="0" data-discount="{{ line.discount or 0 }}" data-foc="{{ '1' if line.foc else '0' }}" data-amount="{{ amt }}" data-othercharge="{{ line.othercharge or 0 }}">
+            <td class="slno po-col-slno">{{ loop.index }}</td>
+            <td class="po-col-barcode">{{ line.barcode or '' }}</td>
+            <td class="po-col-itemcode">{{ line.itemcode }}</td>
+            <td class="po-col-itemname">{{ line.get('itemname') or '' }}</td>
+            <td class="po-col-uom">{{ line.uom or 'NOS' }}</td>
+            <td class="po-col-qty" style="text-align: right;">{{ "%.2f"|format((line.quantity or 0)|float) }}</td>
+            <td class="po-col-baseqty" style="text-align: right;">{{ "%.3f"|format((line.baseqty or 0)|float) }}</td>
+            <td class="po-col-rate" style="text-align: right;">{{ "%.3f"|format((line.rate or 0)|float) }}</td>
+            <td class="po-col-amount" style="text-align: right;">{{ "%.3f"|format(amt|float) }}</td>
+            <td class="po-col-add"></td>
+            <td class="po-col-del"><button type="button" class="btnRemove po-row-action-icon" title="Remove row" aria-label="Remove row">&times;</button></td>
+            <td class="po-col-discount" style="text-align: right;">{{ "%.2f"|format((line.discount or 0)|float) }}</td>
+            <td class="po-col-foc" style="text-align: center;">{{ 'Y' if line.foc else '' }}</td>
+            <td class="po-col-othercharge" style="text-align: right;">{{ "%.2f"|format((line.othercharge or 0)|float) }}</td>
+            <td class="po-col-landingcost" style="text-align: right;">{{ "%.2f"|format(land|float) }}</td>
+          </tr>
+          {% endfor %}
+          {% else %}
+          <tr class="table-empty">
+            <td colspan="15">No items added. Use the entry row at the bottom of the grid to add lines.</td>
+          </tr>
+          {% endif %}
+          <tr id="poLineEntryRow" class="po-line-form-row line-entry">
+            <td class="po-col-slno"></td>
+            <td class="po-col-barcode"><input type="text" id="poLineBarcode" class="input barcode" placeholder="Scan or enter barcode" /></td>
+            <td class="po-col-itemcode"><input type="text" id="poLineItemCode" class="input itemcode" placeholder="Item code" /><input type="hidden" id="poLineItemCodeHidden" value="" /></td>
+            <td class="po-col-itemname"><input type="text" id="poLineItemName" class="input" readonly placeholder="Item Name" /></td>
+            <td class="po-col-uom"><input type="text" id="poLineUom" class="input uom" value="NOS" readonly tabindex="0" placeholder="F1 UOM list" title="F1: pick base or alternate UOM (after item is selected)" /></td>
+            <td class="po-col-qty"><input type="number" id="poLineQty" class="input" step="0.01" value="0" /></td>
+            <td class="po-col-baseqty"><input type="number" id="poLineBaseQty" class="input" step="0.001" value="0" readonly /></td>
+            <td class="po-col-rate"><input type="number" id="poLineRate" class="input" step="0.001" value="0" /></td>
+            <td class="po-col-amount"><input type="number" id="poLineAmount" class="input" step="0.001" value="0" title="Edit amount to back-calculate rate" /></td>
+            <td class="po-col-add"><button type="button" id="btnAddLine" class="po-add-line-icon" title="Add a line" aria-label="Add a line">+</button></td>
+            <td class="po-col-del"><button type="button" id="btnClearLine" class="po-row-action-icon" title="Clear line" aria-label="Clear line">&#8998;</button></td>
+            <td class="po-col-discount"><input type="number" id="poLineDiscount" class="input" step="0.01" value="0" /></td>
+            <td class="po-col-foc"><label style="display:flex;align-items:center;justify-content:center;gap:4px;margin:0;cursor:pointer;font-size:12px;"><input type="checkbox" id="poLineFoc" title="Free of Cost" /> FOC</label></td>
+            <td class="po-col-othercharge"><input type="number" id="poLineOtherCharge" class="input" step="0.01" value="0" /></td>
+            <td class="po-col-landingcost"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="po-totals-bar">
+      <span class="po-total-label">Total Amount</span>
+      <input type="number" id="totalAmount" class="input po-total-value" step="0.01" readonly value="0" />
+    </div>
+  </div>
+
+  <h2 class="im-section-title">Terms and conditions</h2>
+  <div class="form-section im-panel-body">
+    <p class="po-terms-body">Standard purchase order terms apply. Delivery and payment as per agreement.</p>
+  </div>
+  </section>
+</div>
+{% if warehouse_enabled %}
+<div class="modal hidden" id="warehouseModal" role="dialog" aria-modal="true" aria-labelledby="warehouseModalTitle">
+  <div class="modal__overlay" data-close="warehouseModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3 id="warehouseModalTitle">Warehouse</h3>
+      <button type="button" class="modal__close" data-close="warehouseModal">×</button>
+    </div>
+    <div class="modal__body">
+      <label class="search">
+        Search
+        <span class="search-field search-field--wide">
+          <input type="text" id="warehouseSearch" placeholder="Search by code or name..." autocomplete="off" />
+          <button type="button" class="search-clear" id="warehouseModalSearchClear" aria-label="Clear search">×</button>
+        </span>
+      </label>
+      <div class="scroll-table modal__table">
+        <table class="table table-fixed" id="warehouseTable">
+          <thead><tr><th>Code</th><th>Name</th></tr></thead>
+          <tbody id="warehouseBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+<!-- Supplier modal (layout aligned with Item Master main category picker) -->
+<div class="modal hidden" id="supplierModal" role="dialog" aria-modal="true" aria-labelledby="supplierModalTitle">
+  <div class="modal__overlay" data-close="supplierModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3 id="supplierModalTitle">Supplier</h3>
+      <button type="button" class="modal__close" data-close="supplierModal">×</button>
+    </div>
+    <div class="modal__body">
+      <label class="search">
+        Search
+        <span class="search-field search-field--wide">
+          <input type="text" id="supplierSearch" placeholder="Search by code or name..." autocomplete="off" />
+          <button type="button" class="search-clear" id="supplierModalSearchClear" aria-label="Clear search">×</button>
+        </span>
+      </label>
+      <div class="scroll-table modal__table">
+        <table class="table table-fixed" id="supplierTable">
+          <thead><tr><th>Code</th><th>Name</th></tr></thead>
+          <tbody id="supplierBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Item modal: list design (code · name / barcode | UOM | cost) -->
+<div class="modal hidden" id="itemModal">
+  <div class="modal__overlay" data-close="itemModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>Select Item (alternate UOM)</h4>
+      <button type="button" class="modal__close" data-close="itemModal">×</button>
+    </div>
+    <div class="modal__body">
+      <input type="text" id="itemSearch" class="input" placeholder="Search by code, barcode or name..." />
+      <div id="itemBody" class="item-list"></div>
+    </div>
+  </div>
+</div>
+<!-- UOM modal (F1 from UOM) - all UOMs from ITEMALTERNATEUOMMAP (base + variants) -->
+<div class="modal hidden" id="uomModal">
+  <div class="modal__overlay" data-close="uomModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>Select UOM (Item variants)</h4>
+      <button type="button" class="modal__close" data-close="uomModal">×</button>
+    </div>
+    <div class="modal__body">
+      <table class="table" id="uomTable">
+        <thead><tr><th>UOM</th><th>Cost</th></tr></thead>
+        <tbody id="uomBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<!-- Tools popup: show/hide Discount, FOC, Other Charges (default 0 = hidden) -->
+<div class="modal hidden" id="toolsModal">
+  <div class="modal__overlay" data-close="toolsModal"></div>
+  <div class="modal__content" style="max-width: 360px;">
+    <div class="modal__header">
+      <h4>Line options</h4>
+      <button type="button" class="modal__close" data-close="toolsModal">×</button>
+    </div>
+    <div class="modal__body" style="padding: 16px;">
+      <p style="margin: 0 0 12px 0; color: #64748b; font-size: 13px;">Show these fields and columns (unchecked = hidden, value 0):</p>
+      <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer;"><input type="checkbox" id="toolsShowDiscount" /> Discount</label>
+      <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer;"><input type="checkbox" id="toolsShowFoc" /> FOC</label>
+      <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer;"><input type="checkbox" id="toolsShowOtherCharge" /> Other Charges</label>
+      <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 0; cursor: pointer;"><input type="checkbox" id="toolsShowLandingCost" /> Landing Cost</label>
+    </div>
+  </div>
+</div>
+<!-- Import PO lines from another tenant's sales invoice -->
+{% if sales_invoice_import_enabled and not query_mode %}
+<div class="modal hidden" id="siImportModal">
+  <div class="modal__overlay" data-close="siImportModal"></div>
+  <div class="modal__content" style="max-width: 520px;">
+    <div class="modal__header">
+      <h4>Import from sales invoice</h4>
+      <button type="button" class="modal__close" data-close="siImportModal">×</button>
+    </div>
+    <div class="modal__body" style="max-height: 420px;">
+      <div class="form-group" style="margin-bottom: 10px;">
+        <label style="display:block;font-size:12px;margin-bottom:4px;color:#475569;">Tenant (source DB)</label>
+        <select id="siImportTenant" class="input" style="width:100%;border:1px solid #cbd5e1;border-radius:6px;padding:8px;"></select>
+      </div>
+      <div class="form-group" style="margin-bottom: 10px;">
+        <label style="display:block;font-size:12px;margin-bottom:4px;color:#475569;">Bill No.</label>
+        <input type="text" id="siImportBillNo" class="input" placeholder="Sales invoice number" style="width:100%;border:1px solid #cbd5e1;border-radius:6px;padding:8px;" inputmode="numeric" />
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <button type="button" class="button--primary" id="siImportFetchBtn">Fetch</button>
+        <button type="button" class="button--secondary" id="siImportApplyBtn" disabled>Add matched lines</button>
+      </div>
+      <div id="siImportMsg" style="font-size: 13px; color: #b91c1c; min-height: 1.2em;"></div>
+      <div id="siImportPreview" style="display:none;margin-top:12px;font-size:12px;color:#334155;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;white-space:pre-wrap;"></div>
+    </div>
+  </div>
+</div>
+{% endif %}
+<div id="poSaveOverlay" class="po-save-overlay hidden" aria-hidden="true">
+  <div class="po-save-overlay__box">
+    <div class="po-save-spinner" aria-hidden="true"></div>
+    <div>Saving Purchase Order... Please wait</div>
+  </div>
+</div>
+{% if not query_mode %}
+<div id="poAiBackdrop" class="po-ai-panel__backdrop hidden" aria-hidden="true"></div>
+<aside id="poAiPanel" class="po-ai-panel" aria-label="Purchase Order AI assistant" aria-hidden="true">
+  <div class="po-ai-panel__head">
+    <h2 class="po-ai-panel__title">PO Assistant</h2>
+    <button type="button" class="po-ai-panel__close" id="poAiPanelClose" aria-label="Close AI panel">&times;</button>
+  </div>
+  <div class="po-ai-panel__body">
+    <div class="po-ai-nl">
+      <label for="poAiNlInput" style="font-size:12px;font-weight:600;color:#495057;display:block;margin-bottom:4px;">Natural language PO</label>
+      <textarea id="poAiNlInput" placeholder="e.g. Order 100 units of item 5021 and 50 of barcode ABC123 from usual supplier"></textarea>
+      <div class="po-ai-nl-actions">
+        <button type="button" class="po-ai-btn po-ai-btn--primary" id="poAiNlParseBtn">Parse</button>
+        <button type="button" class="po-ai-btn" id="poAiNlApplyBtn">Add selected lines</button>
+        <button type="button" class="po-ai-btn" id="poAiRefreshBtn">Refresh insights</button>
+      </div>
+      <div id="poAiNlPreview" class="po-ai-nl-preview" style="display:none;"></div>
+      <div class="po-ai-status" id="poAiStatus"></div>
+    </div>
+    <div id="poAiInsightsRoot"></div>
+  </div>
+</aside>
+{% endif %}
+<script>
+(function() {
+  const apiNextNo = {{ url_for('purchase.api_lpo_next_no')|tojson }};
+  const apiSuppliers = {{ url_for('purchase.api_lpo_suppliers')|tojson }};
+  const apiItems = {{ url_for('purchase.api_lpo_items')|tojson }};
+  const apiSave = {{ url_for('purchase.api_lpo_save')|tojson }};
+  const apiCancelPo = {{ url_for('purchase.api_lpo_cancel')|tojson }};
+  const apiCart = {{ url_for('purchase.api_lpo_cart_load')|tojson }};
+  const apiCartSave = apiCart;
+  const apiCartNew = {{ url_for('purchase.api_lpo_cart_new')|tojson }};
+  const apiCartSupplier = {{ url_for('purchase.api_lpo_cart_supplier')|tojson }};
+  const warehouseEnabled = {{ 'true' if warehouse_enabled else 'false' }};
+  const apiWarehouses = warehouseEnabled ? {{ url_for('purchase.api_lpo_warehouses')|tojson }} : null;
+  const apiSiTenants = {% if sales_invoice_import_enabled and not query_mode %}{{ url_for('purchase.api_po_sales_invoice_import_tenants')|tojson }}{% else %}null{% endif %};
+  const apiSiFetch = {% if sales_invoice_import_enabled and not query_mode %}{{ url_for('purchase.api_po_sales_invoice_import_fetch')|tojson }}{% else %}null{% endif %};
+  const openTxnDate = {{ (open_transaction_date or '')|tojson }};
+  const openTxnDateFrom = {{ (open_transaction_date_from or open_transaction_date or '')|tojson }};
+  const openTxnDateTo = {{ (open_transaction_date_to or open_transaction_date_from or open_transaction_date or '')|tojson }};
+  const txnDateBlocked = {{ transaction_date_blocked|default(false)|tojson }};
+  const txnDateError = {{ (transaction_date_error or '')|tojson }};
+  function poNotifyLinesChanged() {
+    try { document.dispatchEvent(new CustomEvent('po-lines-changed')); } catch (e) {}
+  }
+  function poNotifyHeaderChanged() {
+    try { document.dispatchEvent(new CustomEvent('po-header-changed')); } catch (e) {}
+  }
+
+  window.PurchaseOrderAi = {
+    collectPoState: function() {
+      var apprSave = document.querySelector('input[name="poApprovalSaveAs"]:checked');
+      return {
+        lpono: (lponoEl && lponoEl.value) ? String(lponoEl.value).trim() : '',
+        lpodate: lpodateEl.value.trim(),
+        suppliercode: parseInt(suppliercodeEl.value, 10) || 0,
+        discount: parseFloat(discountEl.value) || 0,
+        othercharge: parseFloat(otherchargeEl.value) || 0,
+        remarks: remarksEl.value.trim(),
+        warehouse_id: warehouseEnabled && warehouseIdEl ? (parseInt(warehouseIdEl.value, 10) || null) : null,
+        approval_save_as: apprSave && apprSave.value ? apprSave.value : 'draft',
+        lines: collectLines()
+      };
+    },
+    appendAiLines: function(rows) {
+      if (!rows || !rows.length || queryMode) return 0;
+      var mapped = rows.map(function(r) {
+        return {
+          itemcode: r.itemcode,
+          itemname: r.itemname || '',
+          barcode: r.barcode || '',
+          quantity: parseFloat(r.quantity) || 0,
+          rate: parseFloat(r.rate) || 0,
+          discount: 0,
+          uom: r.uom || 'NOS'
+        };
+      }).filter(function(r) { return r.itemcode && r.quantity > 0; });
+      var n = importAppendMatchedRows(mapped);
+      if (n) poNotifyLinesChanged();
+      return n;
+    }
+  };
+
+  const listUrl = {{ url_for('purchase.purchase_order_list')|tojson }};
+  const poAiEnabled = {{ 'true' if not query_mode else 'false' }};
+  const poAiOpenAi = {{ 'true' if openai_configured|default(false) else 'false' }};
+  window.__PO_AI__ = poAiEnabled ? {
+    insights: {{ url_for('purchase.api_po_ai_insights')|tojson }},
+    validate: {{ url_for('purchase.api_po_ai_validate')|tojson }},
+    nlCreate: poAiOpenAi ? {{ url_for('purchase.api_po_ai_nl_create')|tojson }} : null
+  } : {};
+
+  const suppliers = {{ suppliers|tojson if suppliers else '[]' }};
+  const items = {{ items|tojson if items else '[]' }};
+  const queryMode = {{ 'true' if query_mode else 'false' }};
+  const lpoHeader = {% if lpo_header is defined and lpo_header %}{{ lpo_header|tojson }}{% else %}null{% endif %};
+  const existingSavedLpo = !queryMode && !!lpoHeader;
+  let poBodyDirty = false;
+  const apprInit = document.querySelector('input[name="poApprovalSaveAs"]:checked');
+  const initialSaveAsApproved = !!(apprInit && apprInit.value === 'approved');
+  let templpono = 0;
+
+  const lponoEl = document.getElementById('lpono');
+  const poTitleRef = document.getElementById('poTitleRef');
+  function lponoFromInput(raw) {
+    return String(raw == null ? '' : raw).trim();
+  }
+  function lponoIsValid(raw) {
+    const s = lponoFromInput(raw);
+    if (!s) return false;
+    if (/^\d+$/.test(s)) {
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) && n > 0;
+    }
+    return true;
+  }
+  function lponoForPayload(raw) {
+    const s = lponoFromInput(raw);
+    if (!s) return '';
+    if (/^\d+$/.test(s)) {
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) && n > 0 ? n : '';
+    }
+    return s;
+  }
+  function updatePoRef() {
+    const v = (lponoEl && lponoEl.value) ? lponoEl.value : 'New';
+    if (poTitleRef) poTitleRef.textContent = v;
+  }
+  const lpodateEl = document.getElementById('lpodate');
+  const supplierDisplay = document.getElementById('supplierDisplay');
+  const suppliercodeEl = document.getElementById('suppliercode');
+  const chkSupplierItems = document.getElementById('chkSupplierItems');
+  const supplierClear = document.getElementById('supplierClear');
+  const supplierModalSearchClear = document.getElementById('supplierModalSearchClear');
+  const supplierModal = document.getElementById('supplierModal');
+  const supplierBody = document.getElementById('supplierBody');
+  const supplierSearch = document.getElementById('supplierSearch');
+  const supplierTable = document.getElementById('supplierTable');
+
+  function syncSupplierClearVisibility() {
+    if (!supplierClear) return;
+    const has = !queryMode && (parseInt(suppliercodeEl.value, 10) || 0) > 0;
+    supplierClear.style.display = has ? 'block' : 'none';
+  }
+
+  const discountEl = document.getElementById('discount');
+  const otherchargeEl = document.getElementById('othercharge');
+  const remarksEl = document.getElementById('remarks');
+  const warehouseDisplay = document.getElementById('warehouseDisplay');
+  const warehouseIdEl = document.getElementById('warehouse_id');
+  const warehouseClear = document.getElementById('warehouseClear');
+  const warehouseModal = document.getElementById('warehouseModal');
+  const warehouseBody = document.getElementById('warehouseBody');
+  const warehouseTable = document.getElementById('warehouseTable');
+  const warehouseSearch = document.getElementById('warehouseSearch');
+  const warehouseModalSearchClear = document.getElementById('warehouseModalSearchClear');
+  let warehousesList = [];
+  let warehousesLoaded = false;
+  let warehouseFetchAbort = null;
+  let suppressWarehouseSearchInput = false;
+  const btnSave = document.getElementById('btnSave');
+  const linesBody = document.getElementById('linesBody');
+  function poEntryRow() {
+    return document.getElementById('poLineEntryRow');
+  }
+  function poInsertBeforeEntry(node) {
+    if (!linesBody || !node) return;
+    var entry = poEntryRow();
+    if (entry && entry.parentNode === linesBody) linesBody.insertBefore(node, entry);
+    else linesBody.appendChild(node);
+  }
+  function poEnsureEntryRowAtBottom() {
+    if (!linesBody) return;
+    var entry = poEntryRow();
+    if (entry && entry.parentNode === linesBody && linesBody.lastElementChild !== entry) {
+      linesBody.appendChild(entry);
+    }
+  }
+  const totalAmountEl = document.getElementById('totalAmount');
+  const itemModal = document.getElementById('itemModal');
+  const itemBody = document.getElementById('itemBody');
+  const itemSearch = document.getElementById('itemSearch');
+  const uomModal = document.getElementById('uomModal');
+  const uomBody = document.getElementById('uomBody');
+  const uomTable = document.getElementById('uomTable');
+  const btnTools = document.getElementById('btnTools');
+  const toolsModal = document.getElementById('toolsModal');
+  const poSaveOverlay = document.getElementById('poSaveOverlay');
+  const toolsShowDiscount = document.getElementById('toolsShowDiscount');
+  const toolsShowFoc = document.getElementById('toolsShowFoc');
+  const toolsShowOtherCharge = document.getElementById('toolsShowOtherCharge');
+  const toolsShowLandingCost = document.getElementById('toolsShowLandingCost');
+  let isSaving = false;
+
+  function setSavingState(saving) {
+    isSaving = !!saving;
+    if (btnSave) {
+      if (!btnSave.dataset.defaultText) btnSave.dataset.defaultText = btnSave.textContent || 'Save';
+      btnSave.disabled = isSaving || !!queryMode;
+      btnSave.textContent = isSaving ? 'Saving...' : btnSave.dataset.defaultText;
+    }
+    if (poSaveOverlay) {
+      poSaveOverlay.classList.toggle('hidden', !isSaving);
+      poSaveOverlay.setAttribute('aria-hidden', isSaving ? 'false' : 'true');
+    }
+  }
+
+  function applyToolsVisibility() {
+    document.body.classList.add('po-show-barcode');
+    document.body.classList.add('po-show-baseqty');
+    if (toolsShowDiscount && toolsShowDiscount.checked) document.body.classList.add('po-show-discount'); else document.body.classList.remove('po-show-discount');
+    if (toolsShowFoc && toolsShowFoc.checked) document.body.classList.add('po-show-foc'); else document.body.classList.remove('po-show-foc');
+    if (toolsShowOtherCharge && toolsShowOtherCharge.checked) document.body.classList.add('po-show-othercharge'); else document.body.classList.remove('po-show-othercharge');
+    if (toolsShowLandingCost && toolsShowLandingCost.checked) document.body.classList.add('po-show-landingcost'); else document.body.classList.remove('po-show-landingcost');
+    try {
+      if (sessionStorage) {
+        sessionStorage.setItem('po_tools_discount', (toolsShowDiscount && toolsShowDiscount.checked) ? '1' : '0');
+        sessionStorage.setItem('po_tools_foc', (toolsShowFoc && toolsShowFoc.checked) ? '1' : '0');
+        sessionStorage.setItem('po_tools_othercharge', (toolsShowOtherCharge && toolsShowOtherCharge.checked) ? '1' : '0');
+        sessionStorage.setItem('po_tools_landingcost', (toolsShowLandingCost && toolsShowLandingCost.checked) ? '1' : '0');
+      }
+    } catch (e) {}
+  }
+  (function initTools() {
+    try {
+      if (sessionStorage) {
+        document.body.classList.add('po-show-barcode');
+        document.body.classList.add('po-show-baseqty');
+        if (sessionStorage.getItem('po_tools_discount') === '1' && toolsShowDiscount) { toolsShowDiscount.checked = true; document.body.classList.add('po-show-discount'); }
+        if (sessionStorage.getItem('po_tools_foc') === '1' && toolsShowFoc) { toolsShowFoc.checked = true; document.body.classList.add('po-show-foc'); }
+        if (sessionStorage.getItem('po_tools_othercharge') === '1' && toolsShowOtherCharge) { toolsShowOtherCharge.checked = true; document.body.classList.add('po-show-othercharge'); }
+        if (sessionStorage.getItem('po_tools_landingcost') === '1' && toolsShowLandingCost) { toolsShowLandingCost.checked = true; document.body.classList.add('po-show-landingcost'); }
+      }
+    } catch (e) {}
+  })();
+  if (btnTools) btnTools.addEventListener('click', function() { toolsModal.classList.remove('hidden'); });
+  if (toolsModal) toolsModal.addEventListener('click', function(e) { if (e.target.dataset.close === 'toolsModal' || e.target.classList.contains('modal__close')) toolsModal.classList.add('hidden'); });
+  document.body.classList.add('po-show-barcode');
+  applyToolsVisibility();
+  [toolsShowDiscount, toolsShowFoc, toolsShowOtherCharge, toolsShowLandingCost].forEach(function(cb) { if (cb) cb.addEventListener('change', applyToolsVisibility); });
+
+  let suppliersList = suppliers;
+  let itemsList = items;
+  let currentItemRow = null;
+  let currentUomRow = null;
+  const uomFactorCache = {};
+  const apiItemUoms = {{ url_for('purchase.api_lpo_item_uoms', item_code=0)|tojson }}.replace('/0', '');
+
+  if (!queryMode && document.querySelector('.po-page')) {
+    document.querySelector('.po-page').addEventListener('input', function() { poBodyDirty = true; });
+    document.querySelector('.po-page').addEventListener('change', function(e) {
+      var t = e.target;
+      if (t && t.name === 'poApprovalSaveAs') return;
+      poBodyDirty = true;
+    });
+  }
+
+  function poApplyTxnDateBounds() {
+    if (!lpodateEl) return;
+    if (openTxnDateFrom) lpodateEl.min = openTxnDateFrom;
+    else lpodateEl.removeAttribute('min');
+    if (openTxnDateTo) lpodateEl.max = openTxnDateTo;
+    else lpodateEl.removeAttribute('max');
+    var multiDay = openTxnDateFrom && openTxnDateTo && openTxnDateFrom !== openTxnDateTo;
+    if (queryMode) {
+      lpodateEl.setAttribute('readonly', 'readonly');
+    } else if (multiDay) {
+      lpodateEl.removeAttribute('readonly');
+    } else if (openTxnDateFrom) {
+      lpodateEl.setAttribute('readonly', 'readonly');
+    }
+    var cur = (lpodateEl.value || '').trim();
+    if (!cur && openTxnDate) lpodateEl.value = openTxnDate;
+    else if (cur && openTxnDateFrom && cur < openTxnDateFrom) lpodateEl.value = openTxnDate || openTxnDateFrom;
+    else if (cur && openTxnDateTo && cur > openTxnDateTo) lpodateEl.value = openTxnDate || openTxnDateTo;
+  }
+  poApplyTxnDateBounds();
+  if (txnDateBlocked && !queryMode) {
+    const btnSaveEl = document.getElementById('btnSave');
+    if (btnSaveEl) {
+      btnSaveEl.disabled = true;
+      btnSaveEl.title = txnDateError || 'No open transaction date';
+    }
+  }
+  if (lpoHeader && lpoHeader.suppliercode) {
+    suppliercodeEl.value = String(lpoHeader.suppliercode);
+    fetch(apiSuppliers).then(function(r) { return r.json(); }).then(function(d) {
+      const s = (d.suppliers || []).find(function(x) { return String(x.code) === String(lpoHeader.suppliercode); });
+      supplierDisplay.value = s ? (s.code + ' - ' + (s.name || '')) : String(lpoHeader.suppliercode);
+      syncSupplierClearVisibility();
+    });
+  } else {
+    syncSupplierClearVisibility();
+  }
+  if (warehouseEnabled && lpoHeader && lpoHeader.warehouse_id && warehouseDisplay && warehouseIdEl) {
+    warehouseIdEl.value = String(lpoHeader.warehouse_id);
+    if (lpoHeader.warehouse_display) {
+      warehouseDisplay.value = lpoHeader.warehouse_display;
+      syncWarehouseClearVisibility();
+    } else if (apiWarehouses) {
+      ensureWarehousesLoaded(function() {
+        const w = (warehousesList || []).find(function(x) { return String(x.code) === String(lpoHeader.warehouse_id); });
+        if (w) {
+          const whCode = String(w.warehouse_code || w.code || '').trim();
+          warehouseDisplay.value = whCode ? (whCode + ' - ' + (w.name || '')) : String(lpoHeader.warehouse_id);
+        } else {
+          warehouseDisplay.value = String(lpoHeader.warehouse_id);
+        }
+        syncWarehouseClearVisibility();
+      });
+    }
+  }
+
+  function syncWarehouseClearVisibility() {
+    if (!warehouseClear) return;
+    const has = !queryMode && warehouseEnabled && (parseInt(warehouseIdEl && warehouseIdEl.value, 10) || 0) > 0;
+    warehouseClear.style.display = has ? 'block' : 'none';
+  }
+  if (warehouseEnabled) syncWarehouseClearVisibility();
+
+  function warehousePickerCode(row) {
+    if (!row) return '';
+    return String(row.warehouse_code || row.code || '').trim();
+  }
+
+  function warehousePickerLabel(row) {
+    if (!row) return '';
+    var code = warehousePickerCode(row);
+    var name = String(row.name || '').trim();
+    if (code && name) return code + ' - ' + name;
+    return code || name || String(row.code || '');
+  }
+
+  function ensureWarehousesLoaded(done) {
+    if (warehousesLoaded && warehousesList.length) {
+      if (typeof done === 'function') done();
+      return;
+    }
+    if (warehouseFetchAbort) warehouseFetchAbort.abort();
+    warehouseFetchAbort = new AbortController();
+    fetch(apiWarehouses, { signal: warehouseFetchAbort.signal })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.warehouses) warehousesList = d.warehouses;
+        warehousesLoaded = true;
+        if (typeof done === 'function') done();
+      })
+      .catch(function(err) {
+        if (err && err.name === 'AbortError') return;
+        if (typeof done === 'function') done();
+      });
+  }
+
+  function renderWarehouses(list) {
+    if (!warehouseBody) return;
+    var q = (warehouseSearch && warehouseSearch.value || '').toLowerCase();
+    var L = q ? list.filter(function(w) {
+      var code = warehousePickerCode(w).toLowerCase();
+      var name = String(w.name || '').toLowerCase();
+      return code.indexOf(q) !== -1 || name.indexOf(q) !== -1;
+    }) : list;
+    warehouseBody.innerHTML = L.length ? L.map(function(w) {
+      var whCode = warehousePickerCode(w);
+      return '<tr tabindex="0" data-id="' + (w.code || '') + '" data-code="' + (String(whCode).replace(/"/g, '&quot;')) + '" data-name="' + (String(w.name || '').replace(/"/g, '&quot;')) + '"><td>' + (whCode || '') + '</td><td>' + (w.name || '') + '</td></tr>';
+    }).join('') : '<tr><td colspan="2">No warehouses</td></tr>';
+  }
+
+  function openWarehouseModal() {
+    if (queryMode || !warehouseEnabled || !apiWarehouses) return;
+    if (warehouseModal && !warehouseModal.classList.contains('hidden')) {
+      if (warehouseSearch) warehouseSearch.focus();
+      return;
+    }
+    if (warehouseModal) warehouseModal.classList.remove('hidden');
+    if (warehouseSearch) {
+      suppressWarehouseSearchInput = true;
+      warehouseSearch.value = '';
+      suppressWarehouseSearchInput = false;
+      warehouseSearch.focus();
+    }
+    if (warehouseBody) warehouseBody.innerHTML = '<tr><td colspan="2">Loading…</td></tr>';
+    ensureWarehousesLoaded(function() {
+      renderWarehouses(warehousesList);
+    });
+  }
+
+  function selectWarehouseRow(row) {
+    if (!row || !row.dataset.id) return;
+    if (warehouseDisplay) warehouseDisplay.value = (row.dataset.code || '') + ' - ' + (row.dataset.name || '');
+    if (warehouseIdEl) warehouseIdEl.value = row.dataset.id || '';
+    if (warehouseModal) warehouseModal.classList.add('hidden');
+    syncWarehouseClearVisibility();
+    if (warehouseDisplay) warehouseDisplay.focus();
+    poBodyDirty = true;
+    if (!queryMode && templpono) syncCartToTemp();
+  }
+
+  if (warehouseClear && !queryMode) warehouseClear.addEventListener('click', function(e) {
+    e.preventDefault();
+    if (warehouseDisplay) warehouseDisplay.value = '';
+    if (warehouseIdEl) warehouseIdEl.value = '';
+    syncWarehouseClearVisibility();
+    poBodyDirty = true;
+    if (templpono) syncCartToTemp();
+  });
+  if (warehouseModalSearchClear && warehouseSearch) {
+    warehouseModalSearchClear.addEventListener('click', function(e) {
+      e.preventDefault();
+      warehouseSearch.value = '';
+      renderWarehouses(warehousesList);
+      warehouseSearch.focus();
+    });
+  }
+  if (warehouseModal) {
+    warehouseModal.addEventListener('click', function(e) {
+      if (e.target.dataset.close === 'warehouseModal' || e.target.classList.contains('modal__close')) warehouseModal.classList.add('hidden');
+    });
+  }
+  if (warehouseSearch) warehouseSearch.addEventListener('input', function() {
+    if (suppressWarehouseSearchInput) return;
+    renderWarehouses(warehousesList);
+  });
+  if (warehouseSearch) warehouseSearch.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      var firstRow = warehouseBody && warehouseBody.querySelector('tr[data-id]');
+      if (firstRow) firstRow.focus();
+    }
+  });
+  if (warehouseTable) {
+    warehouseTable.addEventListener('click', function(e) {
+      var row = e.target.closest('tbody tr');
+      selectWarehouseRow(row);
+    });
+    warehouseTable.addEventListener('keydown', function(e) {
+      var row = e.target.closest('tbody tr');
+      if (e.key === 'Enter') {
+        if (row && row.dataset.id) {
+          e.preventDefault();
+          selectWarehouseRow(row);
+        }
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        if (!row || !row.dataset.id) return;
+        var rows = Array.prototype.slice.call(warehouseBody.querySelectorAll('tr[data-id]'));
+        var idx = rows.indexOf(row);
+        if (idx === -1) return;
+        e.preventDefault();
+        if (e.key === 'ArrowDown' && idx < rows.length - 1) rows[idx + 1].focus();
+        if (e.key === 'ArrowUp' && idx > 0) rows[idx - 1].focus();
+      }
+    });
+  }
+
+  function renderSuppliers(list) {
+    const q = (supplierSearch && supplierSearch.value || '').toLowerCase();
+    let L = q ? list.filter(function(s) { return (String(s.code||'').toLowerCase().indexOf(q) !== -1) || (String(s.name||'').toLowerCase().indexOf(q) !== -1); }) : list;
+    supplierBody.innerHTML = L.length ? L.map(function(s) {
+      return '<tr tabindex="0" data-code="' + (s.code||'') + '" data-name="' + (String(s.name||'').replace(/"/g,'&quot;')) + '"><td>' + (s.code||'') + '</td><td>' + (s.name||'') + '</td></tr>';
+    }).join('') : '<tr><td colspan="2">No suppliers</td></tr>';
+  }
+
+  function openSupplierModal() {
+    if (queryMode) return;
+    fetch(apiSuppliers).then(function(r) { return r.json(); }).then(function(d) {
+      if (d.suppliers) suppliersList = d.suppliers;
+      renderSuppliers(suppliersList);
+    });
+    if (supplierModal) supplierModal.classList.remove('hidden');
+    if (supplierSearch) {
+      supplierSearch.value = '';
+      supplierSearch.focus();
+    }
+  }
+  function selectSupplierRow(row) {
+    if (!row || !row.dataset.code) return;
+    supplierDisplay.value = (row.dataset.code || '') + ' - ' + (row.dataset.name || '');
+    suppliercodeEl.value = row.dataset.code || '';
+    if (supplierModal) supplierModal.classList.add('hidden');
+    syncSupplierClearVisibility();
+    poNotifyHeaderChanged();
+    if (warehouseEnabled && warehouseDisplay && !queryMode) {
+      warehouseDisplay.focus();
+    } else {
+      supplierDisplay.focus();
+    }
+    if (!queryMode && templpono) {
+      fetch(apiCartSupplier, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ templpono: templpono, suppliercode: parseInt(suppliercodeEl.value, 10) || 0 }) })
+        .then(function(r) { return r.json(); })
+        .catch(function() {});
+    }
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'F1' || queryMode) return;
+    var ae = document.activeElement;
+    if (ae && ae.id === 'supplierDisplay') {
+      e.preventDefault();
+      e.stopPropagation();
+      openSupplierModal();
+      return;
+    }
+    if (warehouseEnabled && ae && ae.id === 'warehouseDisplay') {
+      e.preventDefault();
+      e.stopPropagation();
+      openWarehouseModal();
+    }
+  }, true);
+
+  if (supplierClear && !queryMode) supplierClear.addEventListener('click', function(e) {
+    e.preventDefault();
+    supplierDisplay.value = '';
+    suppliercodeEl.value = '';
+    syncSupplierClearVisibility();
+    poBodyDirty = true;
+    if (templpono) {
+      fetch(apiCartSupplier, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ templpono: templpono, suppliercode: 0 }) })
+        .then(function(r) { return r.json(); })
+        .catch(function() {});
+    }
+  });
+  if (supplierModalSearchClear && supplierSearch) {
+    supplierModalSearchClear.addEventListener('click', function(e) {
+      e.preventDefault();
+      supplierSearch.value = '';
+      renderSuppliers(suppliersList);
+      supplierSearch.focus();
+    });
+  }
+  supplierModal.addEventListener('click', function(e) {
+    if (e.target.dataset.close === 'supplierModal' || e.target.classList.contains('modal__close')) supplierModal.classList.add('hidden');
+  });
+  if (supplierSearch) supplierSearch.addEventListener('input', function() { renderSuppliers(suppliersList); });
+  if (supplierSearch) supplierSearch.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      var firstRow = supplierBody.querySelector('tr[data-code]');
+      if (firstRow) firstRow.focus();
+    }
+  });
+  supplierTable.addEventListener('click', function(e) {
+    var row = e.target.closest('tbody tr');
+    selectSupplierRow(row);
+  });
+  supplierTable.addEventListener('keydown', function(e) {
+    var row = e.target.closest('tbody tr');
+    if (e.key === 'Enter') {
+      if (row && row.dataset.code) {
+        e.preventDefault();
+        selectSupplierRow(row);
+      }
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (!row) return;
+      var rows = Array.prototype.slice.call(supplierBody.querySelectorAll('tr[data-code]'));
+      var idx = rows.indexOf(row);
+      if (idx === -1) return;
+      e.preventDefault();
+      if (e.key === 'ArrowDown' && idx < rows.length - 1) rows[idx + 1].focus();
+      if (e.key === 'ArrowUp' && idx > 0) rows[idx - 1].focus();
+    }
+  });
+
+  function renderItems(list) {
+    const q = (itemSearch && itemSearch.value || '').toLowerCase();
+    const L = q ? list.filter(function(i) {
+      return (String(i.code||'').toLowerCase().indexOf(q) !== -1) ||
+             (String(i.barcode||'').toLowerCase().indexOf(q) !== -1) ||
+             (String(i.name||'').toLowerCase().indexOf(q) !== -1);
+    }) : list;
+    if (!L.length) {
+      itemBody.innerHTML = '<div class="item-row item-empty">No items</div>';
+      return;
+    }
+    itemBody.innerHTML = L.map(function(i) {
+      const code = (i.code||'');
+      const barcode = (i.barcode||'').replace(/"/g,'&quot;');
+      const name = (String(i.name||'').replace(/"/g,'&quot;'));
+      const uom = (i.uom||'NOS').replace(/"/g,'&quot;');
+      const cost = (i.cost != null ? Number(i.cost) : 0);
+      const stock = (i.currentstock != null ? Number(i.currentstock) : 0);
+      const line1 = code + (i.name ? ' · ' + (i.name||'') : '');
+      const stockLine = 'Stock: ' + (isFinite(stock) ? stock.toFixed(3) : '0.000');
+      const line2 = [barcode, uom, cost.toFixed(3)].filter(Boolean).join(' | ');
+      return '<div class="item-row" tabindex="0" data-code="' + code + '" data-name="' + name + '" data-barcode="' + barcode + '" data-uom="' + uom + '" data-cost="' + cost + '"><div class="item-line1">' + (line1 || '—') + '</div><div class="item-line-stock">' + stockLine + '</div><div class="item-line2">' + (line2 || '—') + '</div></div>';
+    }).join('');
+  }
+  const poLineBarcode = document.getElementById('poLineBarcode');
+  const poLineItemCode = document.getElementById('poLineItemCode');
+  const poLineItemCodeHidden = document.getElementById('poLineItemCodeHidden');
+  const poLineItemName = document.getElementById('poLineItemName');
+  const poLineUom = document.getElementById('poLineUom');
+  const poLineBaseQty = document.getElementById('poLineBaseQty');
+  const poLineQty = document.getElementById('poLineQty');
+  function cacheUomFactors(itemCode, uoms) {
+    const key = String(itemCode || '').trim();
+    if (!key || !Array.isArray(uoms)) return;
+    const m = {};
+    uoms.forEach(function(u) {
+      const uu = String(u && u.uom || '').trim().toUpperCase();
+      if (!uu) return;
+      const f = parseFloat(u.factor != null ? u.factor : 1);
+      m[uu] = (!isNaN(f) && f > 0) ? f : 1;
+    });
+    uomFactorCache[key] = m;
+  }
+  function poCanonicalItemCodeNum(raw) {
+    var x = parseFloat(String(raw || '').trim().replace(/,/g, ''));
+    if (!isFinite(x) || x <= 0) return null;
+    var ic = Math.trunc(x);
+    return ic > 0 ? ic : null;
+  }
+  function poUomNormPo(u) {
+    return String(u || '').trim().toUpperCase();
+  }
+  function poNormLineBarcode(v) {
+    return String(v || '').trim();
+  }
+  function poNormLineFoc(v) {
+    if (v && typeof v === 'object' && 'checked' in v) return v.checked ? '1' : '0';
+    if (v === true || v === 1 || v === '1' || v === 'Y' || v === 'y') return '1';
+    return '0';
+  }
+  function poLineDuplicateKey(parts) {
+    return [
+      String(parts.itemcode || '').trim(),
+      poUomNormPo(parts.uom),
+      poNormLineBarcode(parts.barcode),
+      poNormLineFoc(parts.foc)
+    ].join('\x1e');
+  }
+  function poDataRowDuplicateKey(tr) {
+    if (!tr || !tr.dataset) return '';
+    return poLineDuplicateKey({
+      itemcode: tr.dataset.itemcode,
+      uom: tr.dataset.uom,
+      barcode: tr.dataset.barcode,
+      foc: tr.dataset.foc
+    });
+  }
+  function poFindDuplicateDataLine(itemcode, uom, barcode, foc) {
+    var want = poLineDuplicateKey({
+      itemcode: itemcode,
+      uom: uom,
+      barcode: barcode,
+      foc: foc
+    });
+    var dupRows = linesBody.querySelectorAll('tr[data-line]');
+    for (var di = 0; di < dupRows.length; di++) {
+      if (poDataRowDuplicateKey(dupRows[di]) === want) return dupRows[di];
+    }
+    return null;
+  }
+  function getUomFactor(itemCode, uom) {
+    const key = String(itemCode || '').trim();
+    const uu = String(uom || '').trim().toUpperCase();
+    if (!key || !uu) return 1;
+    const m = uomFactorCache[key] || {};
+    const f = parseFloat(m[uu] != null ? m[uu] : 1);
+    return (!isNaN(f) && f > 0) ? f : 1;
+  }
+  function updateBaseQtyDisplay() {
+    if (!poLineBaseQty) return;
+    const qty = parseFloat(poLineQty && poLineQty.value || 0) || 0;
+    const code = (poLineItemCodeHidden && poLineItemCodeHidden.value || poLineItemCode && poLineItemCode.value || '').trim();
+    const uom = (poLineUom && poLineUom.value || '').trim() || 'NOS';
+    const factor = getUomFactor(code, uom);
+    const baseQty = qty * factor;
+    poLineBaseQty.value = baseQty.toFixed(3);
+  }
+
+  const poLineRate = document.getElementById('poLineRate');
+  const poLineDiscount = document.getElementById('poLineDiscount');
+  const poLineFoc = document.getElementById('poLineFoc');
+  const poLineAmount = document.getElementById('poLineAmount');
+  const poLineOtherCharge = document.getElementById('poLineOtherCharge');
+  const btnAddLine = document.getElementById('btnAddLine');
+  const btnClearLine = document.getElementById('btnClearLine');
+  var poEditingItemCode = null;
+
+  function poSetLineItemFieldsLocked(locked) {
+    if (poLineItemCode) poLineItemCode.readOnly = !!locked;
+    if (poLineBarcode) poLineBarcode.readOnly = !!locked;
+  }
+  function poItemCodesMatch(a, b) {
+    var ia = poCanonicalItemCodeNum(a);
+    var ib = poCanonicalItemCodeNum(b);
+    return ia != null && ib != null && ia === ib;
+  }
+  function poRejectDifferentItemThanEditing(newCode) {
+    if (!poEditingItemCode) return false;
+    if (poItemCodesMatch(newCode, poEditingItemCode)) return false;
+    alert('You cannot change the item while editing this line. Update quantity, rate, or UOM only.');
+    if (poLineItemCodeHidden) poLineItemCodeHidden.value = poEditingItemCode;
+    if (poLineItemCode) poLineItemCode.value = poEditingItemCode;
+    if (poLineItemCode) poLineItemCode.focus();
+    return true;
+  }
+
+  function purchaseOrderEscapeNavigationBlockedByModal() {
+    return ['supplierModal', 'warehouseModal', 'itemModal', 'uomModal', 'toolsModal'].some(function(id) {
+      var m = document.getElementById(id);
+      return m && !m.classList.contains('hidden');
+    });
+  }
+
+  (function setupPoHeaderEnterNavigation() {
+    var chain = [lpodateEl, supplierDisplay];
+    if (warehouseEnabled && warehouseDisplay) chain.push(warehouseDisplay);
+    chain.push(discountEl, otherchargeEl, remarksEl);
+    chain = chain.filter(function(el) { return !!el; });
+    chain.forEach(function(el, idx) {
+      el.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          if (queryMode) return;
+          if (purchaseOrderEscapeNavigationBlockedByModal()) return;
+          if (idx <= 0) return;
+          e.preventDefault();
+          var prevEl = chain[idx - 1];
+          if (!prevEl) return;
+          prevEl.focus();
+          if (typeof prevEl.select === 'function' && prevEl.type !== 'date') {
+            try { prevEl.select(); } catch (errEsc) {}
+          }
+          return;
+        }
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        var next = chain[idx + 1];
+        if (next) {
+          next.focus();
+          if (typeof next.select === 'function' && next.type !== 'date') {
+            try { next.select(); } catch (err) {}
+          }
+          return;
+        }
+        if (poLineBarcode && poLineBarcode.offsetParent !== null) {
+          poLineBarcode.focus();
+          try { poLineBarcode.select(); } catch (err2) {}
+        } else if (poLineItemCode && poLineItemCode.offsetParent !== null) {
+          poLineItemCode.focus();
+          try { poLineItemCode.select(); } catch (err2) {}
+        }
+      });
+    });
+  })();
+
+  function selectItemRow(row) {
+    if (!row || !row.dataset.code) return;
+    if (currentItemRow && currentItemRow.classList && currentItemRow.classList.contains('line-row')) {
+      if (typeof poApplyPickedItemToRow === 'function') {
+        poApplyPickedItemToRow(currentItemRow, { code: row.dataset.code, name: row.dataset.name, barcode: row.dataset.barcode, uom: row.dataset.uom || 'NOS', cost: row.dataset.cost });
+        if (typeof poEnsureBlankGridRow === 'function') poEnsureBlankGridRow();
+      }
+      itemModal.classList.add('hidden');
+      currentItemRow = null;
+      return;
+    }
+    if (!currentItemRow && poRejectDifferentItemThanEditing(row.dataset.code || '')) return;
+    if (currentItemRow && currentItemRow.querySelector('.itemcode')) {
+      currentItemRow.querySelector('.itemcode').value = row.dataset.code || '';
+      currentItemRow.querySelector('.itemcode').dataset.name = row.dataset.name || '';
+      var bc = currentItemRow.querySelector('.barcode');
+      if (bc) bc.value = row.dataset.barcode || '';
+      currentItemRow.querySelector('.itemname').value = row.dataset.name || '';
+      currentItemRow.querySelector('.uom').value = row.dataset.uom || 'NOS';
+      var rateEl = currentItemRow.querySelector('.rate');
+      if (rateEl) {
+        rateEl.value = (row.dataset.cost != null && row.dataset.cost !== '' ? parseFloat(row.dataset.cost) : 0).toFixed(3);
+        rateEl.dispatchEvent(new Event('input'));
+      }
+    } else {
+      if (poLineItemCodeHidden) poLineItemCodeHidden.value = row.dataset.code || '';
+      if (poLineItemCode) poLineItemCode.value = row.dataset.code || '';
+      if (poLineItemName) poLineItemName.value = row.dataset.name || '';
+      if (poLineBarcode) poLineBarcode.value = row.dataset.barcode || '';
+      poSyncLineUomFromAlternateMap(row.dataset.code || '', row.dataset.uom || 'NOS');
+      if (poLineBaseQty) poLineBaseQty.value = '0.000';
+      if (poLineRate && row.dataset.cost != null && row.dataset.cost !== '') {
+        poLineRate.value = (parseFloat(row.dataset.cost) || 0).toFixed(3);
+        if (typeof updateLineAmount === 'function') updateLineAmount();
+      }
+    }
+    var inputToFocus = currentItemRow ? currentItemRow.querySelector('.itemcode') : (poLineItemCode || null);
+    itemModal.classList.add('hidden');
+    currentItemRow = null;
+    if (inputToFocus) inputToFocus.focus();
+  }
+  function supplierItemsFilterQuery() {
+    if (!chkSupplierItems || !chkSupplierItems.checked) return '';
+    var sc = parseInt((suppliercodeEl && suppliercodeEl.value) || '0', 10) || 0;
+    if (sc <= 0) return '';
+    return '&supplier_items_only=1&suppliercode=' + encodeURIComponent(String(sc));
+  }
+  let suppressItemSearchInput = false;
+  let itemFetchAbort = null;
+  function fetchItemList(searchTerm, limit, done) {
+    var url = apiItems + '?limit=' + (limit || 200);
+    if (searchTerm && String(searchTerm).trim()) url += '&search=' + encodeURIComponent(String(searchTerm).trim());
+    url += supplierItemsFilterQuery();
+    if (itemFetchAbort) itemFetchAbort.abort();
+    itemFetchAbort = new AbortController();
+    fetch(url, { signal: itemFetchAbort.signal })
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(d) {
+        if (d && Array.isArray(d.items)) itemsList = d.items;
+        else itemsList = [];
+        if (done) done();
+        else renderItems(itemsList);
+      })
+      .catch(function(err) {
+        if (err && err.name === 'AbortError') return;
+        itemsList = [];
+        if (itemBody) {
+          itemBody.innerHTML = '<div class="item-row item-empty">Failed to load items. Try again or search by code.</div>';
+        }
+        if (done) done();
+        else renderItems(itemsList);
+      });
+  }
+  function openItemModal(row) {
+    if (chkSupplierItems && chkSupplierItems.checked) {
+      var scOpen = parseInt((suppliercodeEl && suppliercodeEl.value) || '0', 10) || 0;
+      if (!scOpen) {
+        alert('Select a supplier first to show only that supplier\'s items.');
+        return;
+      }
+    }
+    if (itemModal && !itemModal.classList.contains('hidden')) {
+      if (itemSearch) itemSearch.focus();
+      return;
+    }
+    currentItemRow = row;
+    itemModal.classList.remove('hidden');
+    if (itemSearch) {
+      suppressItemSearchInput = true;
+      itemSearch.value = '';
+      suppressItemSearchInput = false;
+      itemSearch.focus();
+    }
+    itemBody.innerHTML = '<div class="item-row item-empty">Loading…</div>';
+    fetchItemList('', 100, function() { renderItems(itemsList); });
+  }
+  function poLineItemCodeValue() {
+    return ((poLineItemCodeHidden && poLineItemCodeHidden.value) || (poLineItemCode && poLineItemCode.value) || '').trim();
+  }
+  function poLineUomValue() {
+    return (poLineUom && poLineUom.value || '').trim();
+  }
+  function poFocusFieldAfterUom() {
+    if (poLineQty && poLineQty.offsetParent !== null) {
+      poLineQty.focus();
+      try { poLineQty.select(); } catch (errQty) {}
+      return;
+    }
+    if (poLineRate && poLineRate.offsetParent !== null) {
+      poLineRate.focus();
+      try { poLineRate.select(); } catch (errRt) {}
+    }
+  }
+  function poSyncLineUomFromAlternateMap(itemCode, fallbackUom) {
+    var code = String(itemCode || '').trim();
+    if (!code) return;
+    fetch(apiItemUoms + '/' + encodeURIComponent(code)).then(function(r) { return r.json(); }).then(function(d) {
+      if (!d.success || !d.uoms || !d.uoms.length) {
+        if (fallbackUom && poLineUom) poLineUom.value = fallbackUom;
+        updateBaseQtyDisplay();
+        return;
+      }
+      cacheUomFactors(code, d.uoms);
+      var pick = d.uoms[0];
+      if (poLineUom) poLineUom.value = (pick.uom || fallbackUom || 'NOS').trim() || 'NOS';
+      if (poLineBarcode && pick.barcode != null && String(pick.barcode).trim()) {
+        poLineBarcode.value = String(pick.barcode).trim();
+      }
+      if (poLineRate && pick.cost != null && pick.cost !== '') {
+        poLineRate.value = Number(pick.cost).toFixed(3);
+        if (typeof updateLineAmount === 'function') updateLineAmount();
+      }
+      updateBaseQtyDisplay();
+    }).catch(function() {
+      if (fallbackUom && poLineUom) poLineUom.value = fallbackUom;
+      updateBaseQtyDisplay();
+    });
+  }
+  function openPoLineUomModal() {
+    if (queryMode) return;
+    var itemcode = poLineItemCodeValue();
+    if (!itemcode) {
+      alert('Select an item first (item code or barcode), then press F1 on UOM to pick base or alternate UOM.');
+      if (poLineItemCode) poLineItemCode.focus();
+      return;
+    }
+    currentUomRow = null;
+    fetch(apiItemUoms + '/' + encodeURIComponent(itemcode)).then(function(r) { return r.json(); }).then(function(d) {
+      if (!d.success || !d.uoms || !d.uoms.length) { alert('No UOMs found for this item.'); return; }
+      cacheUomFactors(itemcode, d.uoms || []);
+      uomBody.innerHTML = d.uoms.map(function(u) {
+        var barcode = (u.barcode != null ? String(u.barcode) : '').replace(/"/g, '&quot;');
+        return '<tr tabindex="0" data-uom="' + (u.uom||'').replace(/"/g, '&quot;') + '" data-cost="' + (u.cost != null ? u.cost : '') + '" data-factor="' + (u.factor != null ? u.factor : 1) + '" data-barcode="' + barcode + '"><td>' + (u.uom||'') + '</td><td style="text-align:right;">' + (u.cost != null ? Number(u.cost).toFixed(3) : '') + '</td></tr>';
+      }).join('');
+      uomModal.classList.remove('hidden');
+      var firstUomRow = uomBody.querySelector('tr[data-uom]');
+      if (firstUomRow) firstUomRow.focus();
+    }).catch(function() { alert('Failed to load UOMs.'); });
+  }
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'F1' || e.keyCode === 112) {
+      if (queryMode) return;
+      const target = e.target;
+      const itemcodeInput = target.classList && target.classList.contains('itemcode') ? target : (target.closest ? target.closest('.itemcode') : null);
+      const barcodeInput = target.classList && target.classList.contains('barcode') ? target : (target.closest ? target.closest('.barcode') : null);
+      const uomInput = target.classList && target.classList.contains('uom') ? target : (target.closest ? target.closest('.uom') : null);
+      if (target && (target.id === 'poLineItemCode' || target.id === 'poLineBarcode')) {
+        e.preventDefault();
+        openItemModal(null);
+        return;
+      }
+      if (target && target.id === 'poLineUom') {
+        e.preventDefault();
+        openPoLineUomModal();
+        return;
+      }
+      if (itemcodeInput) {
+        const row = itemcodeInput.closest('.line-row');
+        if (row) { e.preventDefault(); openItemModal(row); }
+      } else if (barcodeInput) {
+        const row = barcodeInput.closest('.line-row');
+        if (row) { e.preventDefault(); openItemModal(row); }
+      } else if (uomInput) {
+        const row = uomInput.closest('.line-row');
+        if (!row) {
+          if (uomInput.id === 'poLineUom') {
+            e.preventDefault();
+            openPoLineUomModal();
+          }
+          return;
+        }
+        e.preventDefault();
+        const itemcode = (row.querySelector('.itemcode') && row.querySelector('.itemcode').value || '').trim();
+        if (!itemcode) { alert('Select Item first.'); return; }
+        currentUomRow = row;
+        fetch(apiItemUoms + '/' + encodeURIComponent(itemcode)).then(function(r) { return r.json(); }).then(function(d) {
+          if (!d.success || !d.uoms || !d.uoms.length) { alert('No UOMs found for this item.'); currentUomRow = null; return; }
+          cacheUomFactors(itemcode, d.uoms || []);
+          uomBody.innerHTML = d.uoms.map(function(u) {
+            var barcode = (u.barcode != null ? String(u.barcode) : '').replace(/"/g, '&quot;');
+            return '<tr tabindex="0" data-uom="' + (u.uom||'').replace(/"/g, '&quot;') + '" data-cost="' + (u.cost != null ? u.cost : '') + '" data-factor="' + (u.factor != null ? u.factor : 1) + '" data-barcode="' + barcode + '"><td>' + (u.uom||'') + '</td><td style="text-align:right;">' + (u.cost != null ? Number(u.cost).toFixed(3) : '') + '</td></tr>';
+          }).join('');
+          uomModal.classList.remove('hidden');
+          var firstUomRow = uomBody.querySelector('tr[data-uom]');
+          if (firstUomRow) firstUomRow.focus();
+        }).catch(function() { alert('Failed to load UOMs.'); currentUomRow = null; });
+      }
+    }
+  });
+  if (poLineUom && !queryMode) {
+    poLineUom.addEventListener('click', function() { openPoLineUomModal(); });
+  }
+  itemModal.addEventListener('click', function(e) {
+    if (e.target.dataset.close === 'itemModal' || e.target.classList.contains('modal__close')) { itemModal.classList.add('hidden'); currentItemRow = null; }
+  });
+  var itemSearchDebounce = null;
+  if (itemSearch) itemSearch.addEventListener('input', function() {
+    if (suppressItemSearchInput) return;
+    var term = (itemSearch.value || '').trim();
+    if (itemSearchDebounce) clearTimeout(itemSearchDebounce);
+    if (!term) {
+      renderItems(itemsList);
+      return;
+    }
+    itemSearchDebounce = setTimeout(function() {
+      itemSearchDebounce = null;
+      itemBody.innerHTML = '<div class="item-row item-empty">Searching…</div>';
+      fetchItemList(term, 200, function() { renderItems(itemsList); });
+    }, 280);
+  });
+  if (itemSearch) itemSearch.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      var firstRow = itemBody.querySelector('.item-row[data-code]');
+      if (firstRow) firstRow.focus();
+    }
+  });
+  itemBody.addEventListener('click', function(e) {
+    var row = e.target.closest('.item-row');
+    if (row && row.dataset.code) selectItemRow(row);
+  });
+  itemBody.addEventListener('keydown', function(e) {
+    var row = e.target.closest('.item-row');
+    if (e.key === 'Enter') {
+      if (row && row.dataset.code) {
+        e.preventDefault();
+        selectItemRow(row);
+      }
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (!row || !row.dataset.code) return;
+      var rows = Array.prototype.slice.call(itemBody.querySelectorAll('.item-row[data-code]'));
+      var idx = rows.indexOf(row);
+      if (idx === -1) return;
+      e.preventDefault();
+      if (e.key === 'ArrowDown' && idx < rows.length - 1) rows[idx + 1].focus();
+      if (e.key === 'ArrowUp' && idx > 0) rows[idx - 1].focus();
+    }
+  });
+
+  uomModal.addEventListener('click', function(e) {
+    if (e.target.dataset.close === 'uomModal' || e.target.classList.contains('modal__close')) { uomModal.classList.add('hidden'); currentUomRow = null; }
+  });
+  function selectUomRow(row) {
+    if (!row || !row.dataset.uom) return;
+    var inputToFocus = null;
+    if (currentUomRow && currentUomRow.classList && currentUomRow.classList.contains('line-row')) {
+      currentUomRow.dataset.uom = (row.dataset.uom || 'NOS').trim() || 'NOS';
+      if (row.dataset.barcode != null && String(row.dataset.barcode).trim()) currentUomRow.dataset.barcode = String(row.dataset.barcode).trim();
+      if (row.dataset.cost != null && row.dataset.cost !== '') currentUomRow.dataset.rate = String(parseFloat(row.dataset.cost) || 0);
+      currentUomRow.dataset.uomfactor = (row.dataset.factor != null && row.dataset.factor !== '') ? String(parseFloat(row.dataset.factor) || 0) : '0';
+      if (typeof poRecalcDataRow === 'function') poRecalcDataRow(currentUomRow);
+      if (typeof poValidateRowUom === 'function') poValidateRowUom(currentUomRow);
+      updateTotalAmount();
+      if (typeof syncCartToTemp === 'function') syncCartToTemp();
+      uomModal.classList.add('hidden');
+      currentUomRow = null;
+      return;
+    }
+    if (currentUomRow && currentUomRow.querySelector('.uom')) {
+      currentUomRow.querySelector('.uom').value = row.dataset.uom || '';
+      var bc = currentUomRow.querySelector('.barcode');
+      if (bc && row.dataset.barcode != null) bc.value = row.dataset.barcode || '';
+      var cost = row.dataset.cost != null && row.dataset.cost !== '' ? parseFloat(row.dataset.cost) : 0;
+      currentUomRow.querySelector('.rate').value = cost.toFixed(3);
+      currentUomRow.querySelector('.rate').dispatchEvent(new Event('input'));
+      inputToFocus = currentUomRow.querySelector('.uom');
+    } else {
+      if (poLineUom) poLineUom.value = row.dataset.uom || '';
+      if (poLineBarcode && row.dataset.barcode != null) poLineBarcode.value = row.dataset.barcode || '';
+      var cost = row.dataset.cost != null && row.dataset.cost !== '' ? parseFloat(row.dataset.cost) : 0;
+      if (poLineRate) { poLineRate.value = cost.toFixed(3); if (typeof updateLineAmount === 'function') updateLineAmount(); }
+      updateBaseQtyDisplay();
+      inputToFocus = poLineQty || poLineUom;
+    }
+    uomModal.classList.add('hidden');
+    currentUomRow = null;
+    if (inputToFocus) {
+      inputToFocus.focus();
+      if (inputToFocus === poLineQty && inputToFocus.select) {
+        try { inputToFocus.select(); } catch (errSel) {}
+      }
+    }
+  }
+  uomTable.addEventListener('click', function(e) {
+    var row = e.target.closest('tbody tr');
+    selectUomRow(row);
+  });
+  uomTable.addEventListener('keydown', function(e) {
+    var row = e.target.closest('tbody tr');
+    if (e.key === 'Enter') {
+      if (row && row.dataset.uom) {
+        e.preventDefault();
+        selectUomRow(row);
+      }
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (!row) return;
+      var rows = Array.prototype.slice.call(uomBody.querySelectorAll('tr[data-uom]'));
+      var idx = rows.indexOf(row);
+      if (idx === -1) return;
+      e.preventDefault();
+      if (e.key === 'ArrowDown' && idx < rows.length - 1) rows[idx + 1].focus();
+      if (e.key === 'ArrowUp' && idx > 0) rows[idx - 1].focus();
+    }
+  });
+
+  var poAmountEditLock = false;
+  function updateLineAmount() {
+    if (!poLineQty || !poLineAmount) return;
+    if (poAmountEditLock) return;
+    var isFoc = poLineFoc && poLineFoc.checked;
+    if (isFoc) { poLineAmount.value = '0.000'; return; }
+    var q = parseFloat(poLineQty.value) || 0;
+    var r = parseFloat(poLineRate && poLineRate.value || 0) || 0;
+    var d = parseFloat(poLineDiscount && poLineDiscount.value || 0) || 0;
+    var amt = Math.max(0, (q * r) - d);
+    poLineAmount.value = amt.toFixed(3);
+  }
+  function updateLineRateFromAmount() {
+    if (!poLineQty || !poLineAmount || !poLineRate) return;
+    var isFoc = poLineFoc && poLineFoc.checked;
+    if (isFoc) { poLineAmount.value = '0.000'; return; }
+    var q = parseFloat(poLineQty.value) || 0;
+    var a = parseFloat(poLineAmount.value) || 0;
+    var d = parseFloat(poLineDiscount && poLineDiscount.value || 0) || 0;
+    if (q <= 0) return;
+    poAmountEditLock = true;
+    poLineRate.value = Math.max(0, (a + d) / q).toFixed(3);
+    poAmountEditLock = false;
+  }
+  function resetLine() {
+    poEditingItemCode = null;
+    poSetLineItemFieldsLocked(false);
+    if (poLineBarcode) poLineBarcode.value = '';
+    if (poLineItemCodeHidden) poLineItemCodeHidden.value = '';
+    if (poLineItemCode) poLineItemCode.value = '';
+    if (poLineItemName) poLineItemName.value = '';
+    if (poLineUom) poLineUom.value = 'NOS';
+    if (poLineBaseQty) poLineBaseQty.value = '0.000';
+    if (poLineQty) poLineQty.value = '0';
+    if (poLineRate) poLineRate.value = '0';
+    if (poLineDiscount) poLineDiscount.value = '0';
+    if (poLineFoc) poLineFoc.checked = false;
+    if (poLineAmount) poLineAmount.value = '0.000';
+    if (poLineOtherCharge) poLineOtherCharge.value = '0';
+    if (poLineBarcode) poLineBarcode.focus();
+  }
+  function ensureEmptyRow() {
+    if (linesBody.querySelectorAll('tr[data-line]').length === 0) {
+      var empty = linesBody.querySelector('.table-empty');
+      if (!empty) {
+        empty = document.createElement('tr');
+        empty.className = 'table-empty';
+        empty.innerHTML = '<td colspan="15">No items added. Use the entry row at the bottom of the grid to add lines.</td>';
+        poInsertBeforeEntry(empty);
+      } else if (poEntryRow() && empty.nextElementSibling !== poEntryRow()) {
+        poInsertBeforeEntry(empty);
+      }
+    }
+  }
+  function editLine(tr) {
+    if (!tr) return;
+    poEditingItemCode = (tr.dataset.itemcode || '').trim();
+    poSetLineItemFieldsLocked(true);
+    if (poLineItemCodeHidden) poLineItemCodeHidden.value = (tr.dataset.itemcode || '').trim();
+    if (poLineItemCode) poLineItemCode.value = (tr.dataset.itemcode || '').trim();
+    if (poLineItemName) poLineItemName.value = tr.dataset.itemname || '';
+    if (poLineBarcode) poLineBarcode.value = tr.dataset.barcode || '';
+    if (poLineUom) poLineUom.value = (tr.dataset.uom || 'NOS').trim() || 'NOS';
+    if (poLineBaseQty) poLineBaseQty.value = (parseFloat(tr.dataset.baseqty || 0) || 0).toFixed(3);
+    if (poLineQty) poLineQty.value = String(parseFloat(tr.dataset.quantity || 0) || 0);
+    if (poLineRate) poLineRate.value = String(parseFloat(tr.dataset.rate || 0) || 0);
+    if (poLineDiscount) poLineDiscount.value = String(parseFloat(tr.dataset.discount || 0) || 0);
+    if (poLineOtherCharge) poLineOtherCharge.value = String(parseFloat(tr.dataset.othercharge || 0) || 0);
+    if (poLineFoc) poLineFoc.checked = (tr.dataset.foc || '0') === '1';
+    updateLineAmount();
+    updateBaseQtyDisplay();
+    tr.remove();
+    ensureEmptyRow();
+    updateSlno();
+    updateTotalAmount();
+    if (typeof syncCartToTemp === 'function') syncCartToTemp();
+    if (poLineItemCode) poLineItemCode.focus();
+  }
+  var addLineValidatePending = false;
+  function validatePoLineItemMasterAndUom(codeStr, uomVal, done) {
+    var codeTrim = String(codeStr || '').trim();
+    var codeNum = poCanonicalItemCodeNum(codeTrim);
+    if (codeNum == null) {
+      alert('Enter a valid numeric item code from item master.');
+      done(false);
+      return;
+    }
+    fetch(apiItemUoms + '/' + encodeURIComponent(String(codeNum))).then(function(r) {
+      if (!r.ok) throw new Error('uom http');
+      return r.json();
+    }).then(function(d) {
+      if (!d || !d.success || !Array.isArray(d.uoms) || !d.uoms.length) {
+        alert('Item code ' + codeTrim + ' was not found in item master.');
+        done(false);
+        return;
+      }
+      cacheUomFactors(codeTrim, d.uoms);
+      cacheUomFactors(String(codeNum), d.uoms);
+      var uWant = poUomNormPo(uomVal || 'NOS');
+      var okU = d.uoms.some(function(u) { return poUomNormPo(u.uom) === uWant; });
+      if (!okU) {
+        alert('Unit "' + (String(uomVal || '').trim() || 'NOS') + '" is not defined for item ' + codeTrim + ' in the database.');
+        done(false);
+        return;
+      }
+      if (chkSupplierItems && chkSupplierItems.checked) {
+        var sc = parseInt((suppliercodeEl && suppliercodeEl.value) || '0', 10) || 0;
+        if (sc <= 0) {
+          alert('Select a supplier first when using "Supplier items only".');
+          done(false);
+          return;
+        }
+        var urlItems = apiItems + '?limit=100&search=' + encodeURIComponent(codeTrim) + supplierItemsFilterQuery();
+        fetch(urlItems).then(function(r2) {
+          if (!r2.ok) throw new Error('items http');
+          return r2.json();
+        }).then(function(di) {
+          var list = di && di.items ? di.items : [];
+          var hit = list.some(function(it) { return poCanonicalItemCodeNum(it.code) === codeNum; });
+          if (!hit) {
+            alert('Item ' + codeTrim + ' is not in the catalog for the selected supplier.');
+            done(false);
+            return;
+          }
+          done(true);
+        }).catch(function() {
+          alert('Could not verify item against supplier catalog.');
+          done(false);
+        });
+        return;
+      }
+      done(true);
+    }).catch(function() {
+      alert('Could not validate item / UOM. Check your connection and try again.');
+      done(false);
+    });
+  }
+  function addLine() {
+    if (queryMode) return;
+    if (addLineValidatePending) return;
+    var code = (poLineItemCodeHidden && poLineItemCodeHidden.value || '').trim() || (poLineItemCode && poLineItemCode.value || '').trim();
+    if (!code) { alert('Enter or select an item first.'); return; }
+    if (poLineItemCodeHidden && !poLineItemCodeHidden.value) poLineItemCodeHidden.value = code;
+    var codeIc = poCanonicalItemCodeNum(code);
+    if (codeIc == null) {
+      alert('Enter a valid numeric item code from item master.');
+      if (poLineItemCode) poLineItemCode.focus();
+      return;
+    }
+    if (poRejectDifferentItemThanEditing(code)) return;
+    var name = (poLineItemName && poLineItemName.value || '').trim();
+    var barcodeVal = (poLineBarcode && poLineBarcode.value || '').trim();
+    var uomVal = (poLineUom && poLineUom.value || '').trim() || 'NOS';
+    var isFoc = poLineFoc && poLineFoc.checked;
+    if (poFindDuplicateDataLine(code, uomVal, barcodeVal, isFoc)) {
+      alert('This line is already added (same item code, UOM, barcode, and FOC). Change one of those fields or edit the existing line.');
+      if (poLineItemCode) poLineItemCode.focus();
+      return;
+    }
+    var qty = parseFloat(poLineQty && poLineQty.value || 0) || 0;
+    if (qty <= 0) { alert('Enter a valid quantity.'); poLineQty.focus(); return; }
+    var rate = parseFloat(poLineRate && poLineRate.value || 0) || 0;
+    var disc = parseFloat(poLineDiscount && poLineDiscount.value || 0) || 0;
+    var och = parseFloat(poLineOtherCharge && poLineOtherCharge.value || 0) || 0;
+    var amt = isFoc ? 0 : (parseFloat(poLineAmount && poLineAmount.value || 0) || Math.max(0, (qty * rate) - disc));
+    var land = 0;
+    addLineValidatePending = true;
+    validatePoLineItemMasterAndUom(code, uomVal, function(ok) {
+      addLineValidatePending = false;
+      if (!ok) return;
+      var factorVal = getUomFactor(code, uomVal);
+      var baseQtyVal = qty * factorVal;
+      land = baseQtyVal > 0 ? ((amt + och) / baseQtyVal) : 0;
+      var emptyRow = linesBody.querySelector('.table-empty');
+      if (emptyRow) emptyRow.remove();
+      var rowCount = linesBody.querySelectorAll('tr[data-line]').length;
+      var tr = document.createElement('tr');
+      tr.className = 'line-row';
+      tr.dataset.line = '1';
+      tr.dataset.itemcode = code;
+      tr.dataset.itemname = name;
+      tr.dataset.barcode = barcodeVal;
+      tr.dataset.uom = uomVal;
+      tr.dataset.quantity = String(qty);
+      tr.dataset.baseqty = String(baseQtyVal);
+      tr.dataset.uomfactor = String(factorVal);
+      tr.dataset.rate = String(rate);
+      tr.dataset.bonus = '0';
+      tr.dataset.discount = String(disc);
+      tr.dataset.foc = isFoc ? '1' : '0';
+      tr.dataset.amount = String(amt);
+      tr.dataset.othercharge = String(och);
+      tr.innerHTML = '<td class="slno po-col-slno">' + (rowCount + 1) + '</td><td class="po-col-barcode">' + (barcodeVal || '') + '</td><td class="po-col-itemcode">' + (code || '') + '</td><td class="po-col-itemname">' + (name || '') + '</td><td class="po-col-uom">' + uomVal + '</td><td class="po-col-qty" style="text-align:right;">' + qty.toFixed(2) + '</td><td class="po-col-baseqty" style="text-align:right;">' + baseQtyVal.toFixed(3) + '</td><td class="po-col-rate" style="text-align:right;">' + rate.toFixed(3) + '</td><td class="po-col-amount" style="text-align:right;">' + amt.toFixed(3) + '</td><td class="po-col-add"></td><td class="po-col-del"><button type="button" class="btnRemove po-row-action-icon" title="Remove row" aria-label="Remove row">&times;</button></td><td class="po-col-discount" style="text-align:right;">' + disc.toFixed(2) + '</td><td class="po-col-foc" style="text-align:center;">' + (isFoc ? 'Y' : '') + '</td><td class="po-col-othercharge" style="text-align:right;">' + och.toFixed(2) + '</td><td class="po-col-landingcost" style="text-align:right;">' + land.toFixed(2) + '</td>';
+      poInsertBeforeEntry(tr);
+      tr.querySelector('.btnRemove').addEventListener('click', function() {
+        tr.remove();
+        ensureEmptyRow();
+        updateSlno();
+        updateTotalAmount();
+        if (typeof syncCartToTemp === 'function') syncCartToTemp();
+      });
+      updateSlno();
+      resetLine();
+      updateTotalAmount();
+      if (typeof syncCartToTemp === 'function') syncCartToTemp();
+      poNotifyLinesChanged();
+      if (poLineBarcode) poLineBarcode.focus();
+    });
+  }
+  function importAppendMatchedRows(matched) {
+    if (!matched || !matched.length) return 0;
+    var added = 0;
+    matched.forEach(function(row) {
+      var code = String(row.itemcode || '').trim();
+      if (!code) return;
+      var qty = parseFloat(row.quantity || 0) || 0;
+      var rate = parseFloat(row.rate || 0) || 0;
+      var disc = parseFloat(row.discount || 0) || 0;
+      var uom = String(row.uom || '').trim() || 'NOS';
+      var name = String(row.itemname || '').trim();
+      var barcodeVal = String(row.barcode || '').trim();
+      var noMaster = !!(row.no_master_match || row.match_kind === 'no_master_match');
+      var uomMis = !noMaster && !!(row.uom_mismatch || row.match_kind === 'rawabi_uom_mismatch');
+      if (qty <= 0) return;
+      var existing = null;
+      var importKey = poLineDuplicateKey({
+        itemcode: code,
+        uom: uom,
+        barcode: barcodeVal,
+        foc: '0'
+      });
+      linesBody.querySelectorAll('tr[data-line]').forEach(function(tr) {
+        if (poDataRowDuplicateKey(tr) === importKey) existing = tr;
+      });
+      if (existing) {
+        var q0 = parseFloat(existing.dataset.quantity || 0) || 0;
+        var q1 = q0 + qty;
+        var r0 = parseFloat(existing.dataset.rate || 0) || 0;
+        var newRate = (Math.abs(q1) > 1e-9) ? ((q0 * r0 + qty * rate) / q1) : rate;
+        var discTot = parseFloat(existing.dataset.discount || 0) + disc;
+        var isFoc = (existing.dataset.foc || '0') === '1';
+        var och = parseFloat(existing.dataset.othercharge || 0) || 0;
+        var factorVal = getUomFactor(code, (existing.dataset.uom || uom));
+        existing.dataset.quantity = String(q1);
+        existing.dataset.rate = String(newRate);
+        existing.dataset.discount = String(discTot);
+        existing.dataset.bonus = '0';
+        var amt = isFoc ? 0 : Math.max(0, (q1 * newRate) - discTot);
+        var baseQtyVal = q1 * factorVal;
+        existing.dataset.baseqty = String(baseQtyVal);
+        existing.dataset.amount = String(amt);
+        var land = baseQtyVal > 0 ? ((amt + och) / baseQtyVal) : 0;
+        var qtyCell = existing.querySelector('td.po-col-qty');
+        var baseCell = existing.querySelector('td.po-col-baseqty');
+        var rateCell = existing.querySelector('td.po-col-rate');
+        var discCell = existing.querySelector('td.po-col-discount');
+        var amtCell = existing.querySelector('td.po-col-amount');
+        var landCell = existing.querySelector('td.po-col-landingcost');
+        if (qtyCell) qtyCell.textContent = q1.toFixed(2);
+        if (baseCell) baseCell.textContent = baseQtyVal.toFixed(3);
+        if (rateCell) rateCell.textContent = newRate.toFixed(3);
+        if (discCell) discCell.textContent = discTot.toFixed(2);
+        if (amtCell) amtCell.textContent = amt.toFixed(3);
+        if (landCell) landCell.textContent = land.toFixed(2);
+        var bcCell = existing.querySelector('td.po-col-barcode');
+        if (bcCell && barcodeVal) bcCell.textContent = barcodeVal;
+        var nmCell = existing.querySelector('td.po-col-itemname');
+        if (nmCell && name) nmCell.textContent = name;
+        if (noMaster) {
+          existing.classList.add('po-line-no-master-match');
+          existing.classList.remove('po-line-uom-mismatch');
+          existing.dataset.nomastermatch = '1';
+          existing.dataset.uommismatch = '0';
+        } else if (uomMis) {
+          existing.classList.remove('po-line-no-master-match');
+          existing.dataset.nomastermatch = '0';
+          existing.classList.add('po-line-uom-mismatch');
+          existing.dataset.uommismatch = '1';
+        }
+        added++;
+        return;
+      }
+      var och = 0;
+      var isFoc = false;
+      var amt = isFoc ? 0 : Math.max(0, (qty * rate) - disc);
+      var factorVal = getUomFactor(code, uom);
+      var baseQtyVal = qty * factorVal;
+      var land = baseQtyVal > 0 ? ((amt + och) / baseQtyVal) : 0;
+      var emptyRow = linesBody.querySelector('.table-empty');
+      if (emptyRow) emptyRow.remove();
+      var rowCount = linesBody.querySelectorAll('tr[data-line]').length;
+      var tr = document.createElement('tr');
+      tr.className = 'line-row' + (noMaster ? ' po-line-no-master-match' : (uomMis ? ' po-line-uom-mismatch' : ''));
+      tr.dataset.line = '1';
+      tr.dataset.itemcode = code;
+      tr.dataset.itemname = name;
+      tr.dataset.barcode = barcodeVal;
+      tr.dataset.uom = uom;
+      tr.dataset.quantity = String(qty);
+      tr.dataset.baseqty = String(baseQtyVal);
+      tr.dataset.uomfactor = String(factorVal);
+      tr.dataset.rate = String(rate);
+      tr.dataset.bonus = '0';
+      tr.dataset.discount = String(disc);
+      tr.dataset.foc = '0';
+      tr.dataset.amount = String(amt);
+      tr.dataset.othercharge = String(och);
+      if (noMaster) tr.dataset.nomastermatch = '1';
+      else if (uomMis) tr.dataset.uommismatch = '1';
+      tr.innerHTML = '<td class="slno po-col-slno">' + (rowCount + 1) + '</td><td class="po-col-barcode">' + (barcodeVal || '') + '</td><td class="po-col-itemcode">' + (code || '') + '</td><td class="po-col-itemname">' + (name || '') + '</td><td class="po-col-uom">' + uom + '</td><td class="po-col-qty" style="text-align:right;">' + qty.toFixed(2) + '</td><td class="po-col-baseqty" style="text-align:right;">' + baseQtyVal.toFixed(3) + '</td><td class="po-col-rate" style="text-align:right;">' + rate.toFixed(3) + '</td><td class="po-col-amount" style="text-align:right;">' + amt.toFixed(3) + '</td><td class="po-col-add"></td><td class="po-col-del"><button type="button" class="btnRemove po-row-action-icon" title="Remove row" aria-label="Remove row">&times;</button></td><td class="po-col-discount" style="text-align:right;">' + disc.toFixed(2) + '</td><td class="po-col-foc" style="text-align:center;"></td><td class="po-col-othercharge" style="text-align:right;">' + och.toFixed(2) + '</td><td class="po-col-landingcost" style="text-align:right;">' + land.toFixed(2) + '</td>';
+      poInsertBeforeEntry(tr);
+      tr.querySelector('.btnRemove').addEventListener('click', function() {
+        tr.remove();
+        ensureEmptyRow();
+        updateSlno();
+        updateTotalAmount();
+        if (typeof syncCartToTemp === 'function') syncCartToTemp();
+      });
+      added++;
+    });
+    updateSlno();
+    updateTotalAmount();
+    if (typeof syncCartToTemp === 'function') syncCartToTemp();
+    return added;
+  }
+  [poLineQty, poLineRate, poLineDiscount, poLineFoc, poLineOtherCharge].forEach(function(el) {
+    if (el) {
+      el.addEventListener('input', updateLineAmount);
+      el.addEventListener('change', updateLineAmount);
+    }
+  });
+  if (poLineAmount) {
+    poLineAmount.addEventListener('input', updateLineRateFromAmount);
+    poLineAmount.addEventListener('change', updateLineRateFromAmount);
+  }
+  if (poLineQty) {
+    poLineQty.addEventListener('input', updateBaseQtyDisplay);
+    poLineQty.addEventListener('change', updateBaseQtyDisplay);
+  }
+  if (poLineUom) {
+    poLineUom.addEventListener('input', updateBaseQtyDisplay);
+    poLineUom.addEventListener('change', updateBaseQtyDisplay);
+  }
+  if (btnAddLine) btnAddLine.addEventListener('click', addLine);
+  if (btnClearLine) btnClearLine.addEventListener('click', resetLine);
+  (function() {
+    var lineFields = [poLineBarcode, poLineItemCode, poLineItemName, poLineUom, poLineQty, poLineRate, poLineDiscount, poLineFoc, poLineAmount, poLineOtherCharge, btnAddLine, btnClearLine];
+    function isVisible(el) { return el && el.offsetParent !== null; }
+    function nextVisibleIdx(idx) {
+      for (var i = idx + 1; i < lineFields.length; i++) { if (lineFields[i] && isVisible(lineFields[i])) return i; }
+      for (var i = 0; i < idx; i++) { if (lineFields[i] && isVisible(lineFields[i])) return i; }
+      return idx;
+    }
+    function prevVisibleIdx(idx) {
+      for (var i = idx - 1; i >= 0; i--) {
+        if (lineFields[i] && isVisible(lineFields[i])) return i;
+      }
+      return -1;
+    }
+    lineFields.forEach(function(el, idx) {
+      if (!el) return;
+      if (el.select) {
+        el.addEventListener('focus', function() { el.select(); });
+      }
+      el.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          if (queryMode) return;
+          if (purchaseOrderEscapeNavigationBlockedByModal()) return;
+          e.preventDefault();
+          var p = prevVisibleIdx(idx);
+          if (p >= 0 && lineFields[p]) {
+            lineFields[p].focus();
+            return;
+          }
+          if (remarksEl && remarksEl.offsetParent !== null) {
+            remarksEl.focus();
+            if (typeof remarksEl.select === 'function') {
+              try { remarksEl.select(); } catch (errRem) {}
+            }
+          }
+          return;
+        }
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (el === btnAddLine) {
+          addLine();
+          return;
+        }
+        if (el === poLineBarcode) {
+          var bcEnter = (poLineBarcode.value || '').trim();
+          if (!bcEnter) {
+            var nxBc = nextVisibleIdx(idx);
+            if (lineFields[nxBc]) { lineFields[nxBc].focus(); if (lineFields[nxBc].select) { try { lineFields[nxBc].select(); } catch (eBc) {} } }
+            return;
+          }
+          poResolveBarcodeToForm(bcEnter, { notify: true }, function(ok) {
+            if (ok && typeof poFocusFieldAfterUom === 'function') poFocusFieldAfterUom();
+          });
+          return;
+        }
+        if (el === poLineItemCode) {
+          var codeEnter = poLineItemCodeValue();
+          if (!codeEnter) {
+            alert('Enter or select an item code.');
+            if (poLineItemCode) {
+              poLineItemCode.focus();
+              try { poLineItemCode.select(); } catch (errIc) {}
+            }
+            return;
+          }
+        }
+        if (el === poLineUom) {
+          if (!poLineItemCodeValue()) {
+            alert('Select an item first.');
+            if (poLineItemCode) {
+              poLineItemCode.focus();
+              try { poLineItemCode.select(); } catch (errIc2) {}
+            }
+            return;
+          }
+          if (!poLineUomValue()) {
+            alert('Please select a UOM (F1 or click the UOM field).');
+            if (poLineUom) poLineUom.focus();
+            openPoLineUomModal();
+            return;
+          }
+          poFocusFieldAfterUom();
+          return;
+        }
+        var next = nextVisibleIdx(idx);
+        if (lineFields[next]) {
+          lineFields[next].focus();
+          if (lineFields[next].select) {
+            try { lineFields[next].select(); } catch (errN) {}
+          }
+        }
+      });
+    });
+  })();
+  function fillFormFromItem(it) {
+    if (!it) return;
+    if (poRejectDifferentItemThanEditing(it.code != null ? String(it.code) : '')) return;
+    if (poLineItemCodeHidden) poLineItemCodeHidden.value = it.code != null ? String(it.code) : '';
+    if (poLineItemCode) poLineItemCode.value = it.code != null ? String(it.code) : '';
+    if (poLineItemName) poLineItemName.value = it.itemname || it.name || '';
+    if (poLineBarcode) poLineBarcode.value = (it.barcode || '').trim();
+    poSyncLineUomFromAlternateMap(it.code != null ? String(it.code) : '', (it.uom || 'NOS').trim() || 'NOS');
+    if (poLineRate && it.cost != null) {
+      poLineRate.value = Number(it.cost).toFixed(3);
+      if (typeof updateLineAmount === 'function') updateLineAmount();
+    }
+  }
+  // GRN-style barcode resolve for the entry line: cached match first, then item-master API search.
+  function poResolveBarcodeToForm(bcRaw, opts, onDone) {
+    opts = opts || {};
+    var bc = String(bcRaw || '').trim();
+    if (!bc) { if (typeof onDone === 'function') onDone(false); return; }
+    var cmp = (typeof poBarcodeCmp === 'function') ? poBarcodeCmp : function(v) { return String(v == null ? '' : v).trim().toUpperCase(); };
+    var bcCmp = cmp(bc);
+    function notify(msg, kind) { if (opts.notify && typeof poToast === 'function') poToast(msg, kind); }
+    var list0 = (typeof itemsList !== 'undefined' ? itemsList : (typeof items !== 'undefined' ? items : [])) || [];
+    var cached = list0.filter(function(i) { return cmp(i.barcode) === bcCmp; });
+    if (cached.length === 1) { fillFormFromItem(cached[0]); if (typeof onDone === 'function') onDone(true); return; }
+    if (cached.length > 1) { notify('Multiple items match barcode "' + bc + '". Enter item code or use F1 item list.', 'warn'); if (typeof onDone === 'function') onDone(false); return; }
+    var url = apiItems + '?search=' + encodeURIComponent(bc) + '&limit=30' + supplierItemsFilterQuery();
+    fetch(url).then(function(r) { return r.json(); }).then(function(d) {
+      var resList = (d && d.items) ? d.items : [];
+      var match = resList.filter(function(i) { return cmp(i.barcode) === bcCmp; });
+      if (!match.length) {
+        notify('Barcode "' + bc + '" was not found on item master for this branch.', 'error');
+        if (opts.notify && poLineBarcode) { poLineBarcode.value = ''; poLineBarcode.focus(); }
+        if (typeof onDone === 'function') onDone(false);
+        return;
+      }
+      if (match.length > 1) { notify('Multiple items match barcode "' + bc + '". Enter item code or use F1 item list.', 'warn'); if (typeof onDone === 'function') onDone(false); return; }
+      fillFormFromItem(match[0]);
+      if (typeof onDone === 'function') onDone(true);
+    }).catch(function() {
+      notify('Could not look up barcode. Check your connection and try again.', 'error');
+      if (typeof onDone === 'function') onDone(false);
+    });
+  }
+  if (poLineBarcode) {
+    poLineBarcode.addEventListener('blur', function() {
+      var barcodeVal = (poLineBarcode.value || '').trim();
+      if (!barcodeVal) return;
+      poResolveBarcodeToForm(barcodeVal, { notify: false });
+    });
+  }
+  if (poLineItemCode) {
+    poLineItemCode.addEventListener('blur', function() {
+      var codeVal = (poLineItemCode.value || '').trim();
+      if (!codeVal) return;
+      var list = typeof itemsList !== 'undefined' ? itemsList : items;
+      var it = list.find(function(i) { return String(i.code || '') === codeVal; });
+      if (it) { fillFormFromItem(it); return; }
+      fetchItemList(codeVal, 20, function() {
+        it = (typeof itemsList !== 'undefined' ? itemsList : items).find(function(i) { return String(i.code || '') === codeVal; });
+        if (it) fillFormFromItem(it);
+      });
+    });
+  }
+
+  function updateTotalAmount() {
+    var sum = 0;
+    linesBody.querySelectorAll('tr[data-line]').forEach(function(tr) {
+      sum += parseFloat(tr.dataset.amount || 0) || 0;
+    });
+    var discount = parseFloat(discountEl.value) || 0;
+    totalAmountEl.value = (sum - discount).toFixed(2);
+  }
+  discountEl.addEventListener('input', updateTotalAmount);
+  discountEl.addEventListener('change', updateTotalAmount);
+  otherchargeEl.addEventListener('input', updateTotalAmount);
+  otherchargeEl.addEventListener('change', updateTotalAmount);
+  var cartSyncTimer = null;
+  function debounceSyncCart() {
+    if (queryMode) return;
+    if (cartSyncTimer) clearTimeout(cartSyncTimer);
+    cartSyncTimer = setTimeout(function() { if (typeof syncCartToTemp === 'function') syncCartToTemp(); cartSyncTimer = null; }, 600);
+  }
+  [lpodateEl, discountEl, otherchargeEl, remarksEl, warehouseDisplay].forEach(function(el) {
+    if (el) el.addEventListener('blur', debounceSyncCart);
+  });
+  function updateSlno() {
+    linesBody.querySelectorAll('tr[data-line]').forEach(function(tr, idx) {
+      var cell = tr.querySelector('.slno');
+      if (cell) cell.textContent = idx + 1;
+    });
+  }
+  linesBody.querySelectorAll('tr[data-line]').forEach(function(tr) {
+    var btnEdit = tr.querySelector('.btnEdit');
+    var btnRemove = tr.querySelector('.btnRemove');
+    if (btnEdit) {
+      btnEdit.addEventListener('click', function() {
+        editLine(tr);
+      });
+    }
+    if (btnRemove) {
+      btnRemove.addEventListener('click', function() {
+        tr.remove();
+        ensureEmptyRow();
+        updateSlno();
+        updateTotalAmount();
+        if (typeof syncCartToTemp === 'function') syncCartToTemp();
+      });
+    }
+  });
+  updateSlno();
+  updateTotalAmount();
+
+  // ===== Business-Central style inline editing on PO data rows (ported from GRN) =====
+  function poToast(message, type, timeoutMs) {
+    var host = document.getElementById('poToastHost');
+    if (!host) { host = document.createElement('div'); host.id = 'poToastHost'; document.body.appendChild(host); }
+    var el = document.createElement('div');
+    el.className = 'po-toast' + (type ? (' po-toast--' + type) : '');
+    var msg = document.createElement('span'); msg.className = 'po-toast__msg'; msg.textContent = String(message == null ? '' : message);
+    var btn = document.createElement('button'); btn.type = 'button'; btn.className = 'po-toast__close'; btn.setAttribute('aria-label', 'Dismiss'); btn.innerHTML = '&times;';
+    el.appendChild(msg); el.appendChild(btn); host.appendChild(el);
+    var timer = null;
+    function remove() { if (timer) { clearTimeout(timer); timer = null; } el.classList.add('po-toast--out'); setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 200); }
+    btn.addEventListener('click', remove);
+    timer = setTimeout(remove, timeoutMs || 5000);
+    return el;
+  }
+  function poBarcodeCmp(v) { return String(v == null ? '' : v).trim().toUpperCase(); }
+  function poMarkCellInvalid(tr, colKey, bad, msg) {
+    var td = tr && tr.querySelector('.' + colKey);
+    if (!td) return;
+    td.classList.remove('po-cell-checking');
+    if (bad) { td.classList.add('po-cell-invalid'); td.title = msg || 'Invalid'; }
+    else { td.classList.remove('po-cell-invalid'); td.removeAttribute('title'); }
+  }
+  function poLineDisplayNo(tr) {
+    var sl = tr && tr.querySelector('.slno');
+    return sl && sl.textContent ? String(sl.textContent).trim() : '';
+  }
+  function poGetLineValidationBlockMessage() {
+    if (!linesBody) return '';
+    var issues = [];
+    linesBody.querySelectorAll('tr[data-line]').forEach(function(tr, idx) {
+      var lineNo = poLineDisplayNo(tr) || String(idx + 1);
+      if (tr.classList.contains('po-line-no-master-match')) {
+        issues.push('Line ' + lineNo + ': item not found in item master (full red row).');
+        return;
+      }
+      if (tr.classList.contains('po-line-uom-mismatch')) {
+        issues.push('Line ' + lineNo + ': invoice UOM does not match item UOM (red row).');
+        return;
+      }
+      tr.querySelectorAll('td.po-cell-invalid').forEach(function(td) {
+        var hint = (td.title || td.getAttribute('title') || 'invalid field').trim();
+        issues.push('Line ' + lineNo + ': ' + (hint || 'fix highlighted cell') + '.');
+      });
+      if (tr.querySelector('td.po-cell-checking')) {
+        issues.push('Line ' + lineNo + ': validation still in progress — wait a moment and try again.');
+      }
+    });
+    if (!issues.length) return '';
+    var body = issues.slice(0, 10).join('\n');
+    if (issues.length > 10) body += '\n… and ' + (issues.length - 10) + ' more issue(s).';
+    return 'Fix highlighted (red) lines before saving.\n\n' + body;
+  }
+  function poRecalcDataRow(tr, keepAmount) {
+    function st(cls, val) { var el = tr.querySelector(cls); if (el) el.textContent = val; }
+    var code = (tr.dataset.itemcode || '').trim();
+    var qty = parseFloat(tr.dataset.quantity || 0) || 0;
+    var uom = (tr.dataset.uom || 'NOS').trim() || 'NOS';
+    var conv = parseFloat(tr.dataset.uomfactor || 0) || 0;
+    if (!(conv > 0)) conv = getUomFactor(code, uom);
+    if (!(conv > 0)) conv = 1;
+    tr.dataset.uomfactor = String(conv);
+    var rate = parseFloat(tr.dataset.rate || 0) || 0;
+    var disc = parseFloat(tr.dataset.discount || 0) || 0;
+    var och = parseFloat(tr.dataset.othercharge || 0) || 0;
+    var isFoc = (tr.dataset.foc || '0') === '1';
+    var baseqty = qty * conv;
+    tr.dataset.baseqty = String(baseqty);
+    var amt;
+    if (keepAmount) {
+      amt = parseFloat(tr.dataset.amount || 0) || 0;
+      rate = parseFloat(tr.dataset.rate || 0) || 0;
+    } else {
+      amt = isFoc ? 0 : Math.max(0, (qty * rate) - disc);
+      tr.dataset.amount = String(amt);
+    }
+    var land = baseqty > 1e-9 ? ((amt + och) / baseqty) : 0;
+    st('.po-col-barcode', tr.dataset.barcode || '');
+    st('.po-col-itemcode', code);
+    st('.po-col-itemname', tr.dataset.itemname || '');
+    st('.po-col-uom', uom);
+    st('.po-col-baseqty', baseqty.toFixed(3));
+    st('.po-col-qty', qty.toFixed(2));
+    st('.po-col-rate', rate.toFixed(3));
+    st('.po-col-discount', disc.toFixed(2));
+    st('.po-col-foc', isFoc ? 'Y' : '');
+    st('.po-col-amount', amt.toFixed(3));
+    st('.po-col-othercharge', och.toFixed(2));
+    st('.po-col-landingcost', land.toFixed(2));
+  }
+  function poApplyPickedItemToRow(tr, cand) {
+    if (!tr || !cand) return;
+    var mbc = String(cand.barcode != null ? cand.barcode : '').trim();
+    tr.dataset.itemcode = String(cand.code != null ? cand.code : '');
+    if (mbc) tr.dataset.barcode = mbc;
+    tr.dataset.itemname = String(cand.itemname != null ? cand.itemname : (cand.name != null ? cand.name : ''));
+    tr.dataset.uom = (String(cand.uom || 'NOS').trim() || 'NOS');
+    if (cand.cost != null && cand.cost !== '') tr.dataset.rate = String(parseFloat(cand.cost) || 0);
+    tr.dataset.uomfactor = '0';
+    tr.classList.remove('po-line-no-master-match', 'po-line-uom-mismatch');
+    delete tr.dataset.nomastermatch;
+    delete tr.dataset.uommismatch;
+    poMarkCellInvalid(tr, 'po-col-itemcode', false);
+    poMarkCellInvalid(tr, 'po-col-itemname', false);
+    poValidateRowUom(tr);
+    poRecalcDataRow(tr);
+    updateTotalAmount();
+    if (typeof syncCartToTemp === 'function') syncCartToTemp();
+  }
+  function poValidateRowUom(tr) {
+    if (!tr) return;
+    var code = (tr.dataset.itemcode || '').trim();
+    var uom = (tr.dataset.uom || '').trim();
+    if (!code || !uom) { poMarkCellInvalid(tr, 'po-col-uom', false); return; }
+    function check() {
+      var m = uomFactorCache[code] || {};
+      var ok = Object.prototype.hasOwnProperty.call(m, uom.toUpperCase());
+      poMarkCellInvalid(tr, 'po-col-uom', !ok, ok ? '' : ('UOM "' + uom + '" is not defined for item ' + code + '. Allowed: ' + (Object.keys(m).join(', ') || 'none')));
+      if (!ok) poToast('UOM "' + uom + '" is not valid for item ' + code + '.', 'error');
+      if (ok) { tr.dataset.uomfactor = String(getUomFactor(code, uom)); poRecalcDataRow(tr); updateTotalAmount(); if (typeof syncCartToTemp === 'function') syncCartToTemp(); }
+    }
+    if (uomFactorCache[code]) { check(); return; }
+    var uTd = tr.querySelector('.po-col-uom'); if (uTd) uTd.classList.add('po-cell-checking');
+    fetch(apiItemUoms + '/' + encodeURIComponent(code)).then(function(r) { return r.json(); })
+      .then(function(d) { if (d && d.success && d.uoms) cacheUomFactors(code, d.uoms); check(); })
+      .catch(function() { if (uTd) uTd.classList.remove('po-cell-checking'); });
+  }
+  function poValidateRowBarcode(tr) {
+    if (!tr) return;
+    var bc = (tr.dataset.barcode || '').trim();
+    var code = (tr.dataset.itemcode || '').trim();
+    if (!bc) { poMarkCellInvalid(tr, 'po-col-barcode', false); return; }
+    var bcCmp = poBarcodeCmp(bc);
+    var bcTd = tr.querySelector('.po-col-barcode'); if (bcTd) bcTd.classList.add('po-cell-checking');
+    var url = apiItems + '?search=' + encodeURIComponent(bc) + '&limit=30' + supplierItemsFilterQuery();
+    fetch(url).then(function(r) { return r.json(); }).then(function(d) {
+      var list = (d && d.items) ? d.items : [];
+      var match = list.filter(function(i) { return poBarcodeCmp(i.barcode) === bcCmp; });
+      if (!match.length) { poMarkCellInvalid(tr, 'po-col-barcode', true, 'Barcode "' + bc + '" not found in item master.'); poToast('Barcode "' + bc + '" not found in item master.', 'error'); return; }
+      if (match.length > 1) { poMarkCellInvalid(tr, 'po-col-barcode', true, 'Barcode "' + bc + '" matches multiple items \u2014 enter the item code instead.'); poToast('Barcode "' + bc + '" matches multiple items.', 'warn'); return; }
+      var it = match[0];
+      var itCode = String(it.code != null ? it.code : '').trim();
+      if (!code) { poApplyPickedItemToRow(tr, { code: it.code, name: it.itemname || it.name, itemname: it.itemname || it.name, barcode: it.barcode, uom: it.uom || 'NOS', cost: it.cost }); poMarkCellInvalid(tr, 'po-col-barcode', false); poEnsureBlankGridRow(); return; }
+      if (itCode && itCode !== code) { poMarkCellInvalid(tr, 'po-col-barcode', true, 'Barcode "' + bc + '" belongs to item ' + itCode + (it.name ? ' (' + it.name + ')' : '') + ', not this line\u2019s item ' + code + '.'); poToast('Barcode "' + bc + '" belongs to item ' + itCode + ', not ' + code + '.', 'error'); return; }
+      poMarkCellInvalid(tr, 'po-col-barcode', false);
+    }).catch(function() { if (bcTd) bcTd.classList.remove('po-cell-checking'); });
+  }
+  function poResolveTypedItemCode(tr) {
+    if (!tr) return;
+    var code = (tr.dataset.itemcode || '').trim();
+    if (!code) {
+      poMarkCellInvalid(tr, 'po-col-itemcode', false);
+      tr.dataset.itemname = '';
+      var nm0 = tr.querySelector('.po-col-itemname'); if (nm0) nm0.textContent = '';
+      return;
+    }
+    var icTd = tr.querySelector('.po-col-itemcode'); if (icTd) icTd.classList.add('po-cell-checking');
+    var url = apiItems + '?search=' + encodeURIComponent(code) + '&limit=50' + supplierItemsFilterQuery();
+    fetch(url).then(function(r) { return r.json(); }).then(function(d) {
+      var list = (d && d.items) ? d.items : [];
+      var it = list.find(function(i) { return String(i.code) === String(code); });
+      if (!it) { poMarkCellInvalid(tr, 'po-col-itemcode', true, 'Item code "' + code + '" not found in item master.'); poToast('Item code "' + code + '" not found in item master.', 'error'); return; }
+      poMarkCellInvalid(tr, 'po-col-itemcode', false);
+      poApplyPickedItemToRow(tr, { code: it.code, name: it.itemname || it.name, itemname: it.itemname || it.name, barcode: it.barcode, uom: it.uom || 'NOS', cost: it.cost });
+      poEnsureBlankGridRow();
+    }).catch(function() { if (icTd) icTd.classList.remove('po-cell-checking'); });
+  }
+  function poOpenUomLookupForRow(tr) {
+    if (!tr) return;
+    var itemcode = (tr.dataset.itemcode || '').trim();
+    if (!itemcode) { poToast('Select an item first.', 'warn'); return; }
+    currentUomRow = tr;
+    fetch(apiItemUoms + '/' + encodeURIComponent(itemcode)).then(function(r) { return r.json(); }).then(function(d) {
+      if (!d.success || !d.uoms || !d.uoms.length) { poToast('No UOMs found for this item.', 'warn'); currentUomRow = null; return; }
+      cacheUomFactors(itemcode, d.uoms || []);
+      uomBody.innerHTML = d.uoms.map(function(u) {
+        var barcode = (u.barcode != null ? String(u.barcode) : '').replace(/"/g, '&quot;');
+        return '<tr tabindex="0" data-uom="' + (u.uom || '').replace(/"/g, '&quot;') + '" data-cost="' + (u.cost != null ? u.cost : '') + '" data-factor="' + (u.factor != null ? u.factor : 1) + '" data-barcode="' + barcode + '"><td>' + (u.uom || '') + '</td><td style="text-align:right;">' + (u.cost != null ? Number(u.cost).toFixed(3) : '') + '</td></tr>';
+      }).join('');
+      uomModal.classList.remove('hidden');
+      var firstUomRow = uomBody.querySelector('tr[data-uom]');
+      if (firstUomRow) firstUomRow.focus();
+    }).catch(function() { poToast('Failed to load UOMs.', 'error'); currentUomRow = null; });
+  }
+  function poEnsureBlankGridRow() {
+    // The PO entry form row is the always-present blank line (kept at the bottom of the grid).
+    try { if (typeof poLineBarcode !== 'undefined' && poLineBarcode) { /* entry row already present */ } } catch (e) {}
+  }
+  var PO_INLINE_COLS = {
+    'po-col-itemcode':    { ds: 'itemcode',    type: 'text' },
+    'po-col-barcode':     { ds: 'barcode',     type: 'text' },
+    'po-col-uom':         { ds: 'uom',         type: 'text' },
+    'po-col-qty':         { ds: 'quantity',    type: 'number' },
+    'po-col-rate':        { ds: 'rate',        type: 'number' },
+    'po-col-amount':      { ds: 'amount',      type: 'number' },
+    'po-col-discount':    { ds: 'discount',    type: 'number' },
+    'po-col-othercharge': { ds: 'othercharge', type: 'number' }
+  };
+  var PO_INLINE_ORDER = ['po-col-barcode', 'po-col-itemcode', 'po-col-uom', 'po-col-qty', 'po-col-rate', 'po-col-amount', 'po-col-discount', 'po-col-othercharge'];
+  function poInlineColKey(td) {
+    if (!td || !td.classList) return null;
+    for (var k in PO_INLINE_COLS) { if (td.classList.contains(k)) return k; }
+    return null;
+  }
+  function poInlineMove(td, tr, dir) {
+    if (dir === 'down' || dir === 'up') {
+      var rows = Array.prototype.slice.call(linesBody.querySelectorAll('tr[data-line]'));
+      var ri = rows.indexOf(tr);
+      var target = rows[ri + (dir === 'down' ? 1 : -1)];
+      if (!target) return;
+      var key = poInlineColKey(td);
+      var ntd = key ? target.querySelector('.' + key) : null;
+      if (ntd) poBeginInlineEdit(ntd, target, key);
+      return;
+    }
+    var curKey = poInlineColKey(td);
+    var oi = PO_INLINE_ORDER.indexOf(curKey);
+    if (oi === -1) return;
+    var step = dir === 'right' ? 1 : -1;
+    for (var i = oi + step; i >= 0 && i < PO_INLINE_ORDER.length; i += step) {
+      var c = tr.querySelector('.' + PO_INLINE_ORDER[i]);
+      if (c) { poBeginInlineEdit(c, tr, PO_INLINE_ORDER[i]); return; }
+    }
+  }
+  function poBeginInlineEdit(td, tr, key) {
+    if (!td || td._editing || queryMode) return;
+    if (key === 'po-col-uom') { poOpenUomLookupForRow(tr); return; }
+    var cfg = PO_INLINE_COLS[key];
+    if (!cfg) return;
+    var cur = cfg.type === 'number' ? String(parseFloat(tr.dataset[cfg.ds] || 0) || 0) : String(tr.dataset[cfg.ds] || '');
+    var input = document.createElement('input');
+    input.className = 'po-inline-input';
+    input.type = cfg.type === 'number' ? 'number' : 'text';
+    if (cfg.type === 'number') input.step = 'any';
+    input.value = cur;
+    td._editing = true;
+    td.textContent = '';
+    td.appendChild(input);
+    input.focus();
+    try { input.select(); } catch (eSel) {}
+    var done = false;
+    function finish(commit) {
+      if (done) return; done = true;
+      td._editing = false;
+      if (commit) {
+        if (cfg.type === 'number') {
+          var n = parseFloat(input.value); if (isNaN(n)) n = 0;
+          if (key === 'po-col-amount') {
+            var qtyA = parseFloat(tr.dataset.quantity || 0) || 0;
+            var discA = parseFloat(tr.dataset.discount || 0) || 0;
+            var focA = (tr.dataset.foc || '0') === '1';
+            tr.dataset.amount = String(Math.max(0, focA ? 0 : n));
+            if (!focA && qtyA > 0) tr.dataset.rate = String(Math.max(0, (Math.max(0, n) + discA) / qtyA));
+            poRecalcDataRow(tr, true);
+          } else {
+            tr.dataset[cfg.ds] = String(n);
+            poRecalcDataRow(tr);
+          }
+        }
+        else { var tv = String(input.value || '').trim(); if (key === 'po-col-uom') { tv = tv.toUpperCase(); tr.dataset.uomfactor = '0'; } tr.dataset[cfg.ds] = tv; poRecalcDataRow(tr); }
+      } else {
+        poRecalcDataRow(tr);
+      }
+      updateTotalAmount();
+      if (commit) {
+        if (key === 'po-col-uom') poValidateRowUom(tr);
+        else if (key === 'po-col-barcode') poValidateRowBarcode(tr);
+        else if (key === 'po-col-itemcode') poResolveTypedItemCode(tr);
+        if (typeof syncCartToTemp === 'function') syncCartToTemp();
+      }
+    }
+    input.addEventListener('blur', function() { finish(true); });
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'F1' || e.keyCode === 112) {
+        if (key === 'po-col-barcode' || key === 'po-col-itemcode') { e.preventDefault(); e.stopPropagation(); finish(false); openItemModal(tr); }
+        else if (key === 'po-col-uom') { e.preventDefault(); e.stopPropagation(); finish(false); poOpenUomLookupForRow(tr); }
+        return;
+      }
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); poInlineMove(td, tr, 'down'); }
+      else if (e.key === 'Tab') { e.preventDefault(); finish(true); poInlineMove(td, tr, e.shiftKey ? 'left' : 'right'); }
+      else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    });
+  }
+  if (linesBody && !queryMode) {
+    linesBody.addEventListener('click', function(e) {
+      var td = e.target.closest && e.target.closest('td');
+      if (!td) return;
+      var tr = td.closest && td.closest('tr[data-line]');
+      if (!tr) return;
+      if (e.target.closest && e.target.closest('.btnRemove')) return;
+      if (td.querySelector('input, select')) return;
+      if (td.classList.contains('po-col-foc')) {
+        tr.dataset.foc = (tr.dataset.foc || '0') === '1' ? '0' : '1';
+        poRecalcDataRow(tr); updateTotalAmount();
+        if (typeof syncCartToTemp === 'function') syncCartToTemp();
+        return;
+      }
+      if (td.classList.contains('po-col-itemname')) { openItemModal(tr); return; }
+      var key = poInlineColKey(td);
+      if (key === 'po-col-uom') { poOpenUomLookupForRow(tr); return; }
+      if (key) poBeginInlineEdit(td, tr, key);
+    });
+    poEnsureEntryRowAtBottom();
+  }
+
+  function collectLines() {
+    var lines = [];
+    linesBody.querySelectorAll('tr[data-line]').forEach(function(tr) {
+      var code = (tr.dataset.itemcode || '').trim();
+      if (!code) return;
+      var qty = parseFloat(tr.dataset.quantity || 0) || 0;
+      var rate = parseFloat(tr.dataset.rate || 0) || 0;
+      var bonusVal = 0;
+      var disc = parseFloat(tr.dataset.discount || 0) || 0;
+      var lineOch = parseFloat(tr.dataset.othercharge || 0) || 0;
+      var isFoc = (tr.dataset.foc || '0') === '1';
+      var amt = parseFloat(tr.dataset.amount || 0) || 0;
+      var uomVal = (tr.dataset.uom || '').trim() || 'NOS';
+      var baseQty = parseFloat(tr.dataset.baseqty || 0) || 0;
+      var barcodeVal = (tr.dataset.barcode || '').trim();
+      lines.push({ itemcode: code, barcode: barcodeVal, quantity: qty, baseqty: baseQty, rate: rate, bonus: bonusVal, discount: disc, foc: isFoc, othercharge: lineOch, amount: amt, uom: uomVal });
+    });
+    return lines;
+  }
+  function syncCartToTemp() {
+    if (queryMode) return Promise.resolve();
+    const payload = {
+      templpono: templpono,
+      lpodate: lpodateEl.value.trim(),
+      suppliercode: parseInt(suppliercodeEl.value, 10) || 0,
+      discount: parseFloat(discountEl.value) || 0,
+      othercharge: parseFloat(otherchargeEl.value) || 0,
+      remarks: remarksEl.value.trim(),
+      warehouse_id: warehouseEnabled && warehouseIdEl ? (parseInt(warehouseIdEl.value, 10) || null) : null,
+      lines: collectLines()
+    };
+    return fetch(apiCartSave, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      .then(function(r) { return r.json(); })
+      .then(function(d) { if (d.success && d.templpono) templpono = d.templpono; return d; })
+      .catch(function(err) { console.error('Cart sync failed', err); return { success: false }; });
+  }
+
+  if (!queryMode) {
+    var lpodateForNew = lpodateEl.value.trim() || new Date().toISOString().slice(0, 10);
+    fetch(apiCartNew, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lpodate: lpodateForNew }) })
+      .then(function(r) { return r.json().catch(function() { return {}; }); })
+      .then(function(d) {
+        if (d.success && d.templpono) {
+          templpono = d.templpono;
+          if (!lpodateEl.value.trim()) lpodateEl.value = lpodateForNew;
+        } else if (d.error) {
+          console.error('Cart new failed:', d.error);
+        }
+      })
+      .catch(function(err) { console.error('Cart new request failed', err); });
+  }
+
+  var btnDiscard = document.getElementById('btnDiscard');
+  if (btnDiscard) btnDiscard.addEventListener('click', function() { window.location.reload(); });
+  var btnNew = document.getElementById('btnNew');
+  if (btnNew) {
+    btnNew.addEventListener('click', function() {
+      var hadSupplier = parseInt(suppliercodeEl.value, 10) > 0;
+      if (hadSupplier) {
+        fetch(apiNextNo).then(function(r) { return r.json(); }).then(function(d) {
+          if (d && d.lpono) { lponoEl.value = d.lpono; updatePoRef(); }
+        });
+      }
+      var lpodateForNew = lpodateEl.value.trim() || new Date().toISOString().slice(0, 10);
+      if (!lpodateEl.value.trim()) lpodateEl.value = lpodateForNew;
+      fetch(apiCartNew, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lpodate: lpodateForNew }) })
+        .then(function(r) { return r.json().catch(function() { return {}; }); })
+        .then(function(d) {
+          if (d.success && d.templpono) templpono = d.templpono;
+          supplierDisplay.value = '';
+          suppliercodeEl.value = '';
+          syncSupplierClearVisibility();
+          discountEl.value = '0';
+          otherchargeEl.value = '0';
+          remarksEl.value = '';
+          if (warehouseDisplay) warehouseDisplay.value = '';
+          if (warehouseIdEl) warehouseIdEl.value = '';
+          syncWarehouseClearVisibility();
+          linesBody.querySelectorAll('tr[data-line]').forEach(function(tr) { tr.remove(); });
+          var empty = linesBody.querySelector('.table-empty');
+          if (!empty) {
+            empty = document.createElement('tr');
+            empty.className = 'table-empty';
+            empty.innerHTML = '<td colspan="15">No items added. Use the entry row at the bottom of the grid to add lines.</td>';
+            poInsertBeforeEntry(empty);
+          } else {
+            poInsertBeforeEntry(empty);
+          }
+          poEnsureEntryRowAtBottom();
+          if (typeof resetLine === 'function') resetLine();
+          updateTotalAmount();
+        })
+        .catch(function(err) { console.error('Cart new request failed', err); });
+    });
+  }
+
+  btnSave.addEventListener('click', function() {
+    if (isSaving) return;
+    if (txnDateBlocked && !queryMode) {
+      alert(txnDateError || 'No open transaction date. Set it in Transaction Date Setup before posting.');
+      return;
+    }
+    const buildPayload = function(forcedLpono) {
+      const lpono = lponoForPayload(forcedLpono != null ? forcedLpono : lponoEl.value);
+      const lpodate = lpodateEl.value.trim();
+      const suppliercode = parseInt(suppliercodeEl.value, 10);
+      const discount = parseFloat(discountEl.value) || 0;
+      const othercharge = parseFloat(otherchargeEl.value) || 0;
+      const remarks = remarksEl.value.trim();
+      const warehouse_id = warehouseEnabled && warehouseIdEl ? (parseInt(warehouseIdEl.value, 10) || null) : null;
+      const lines = collectLines();
+      let approval_save_as = 'draft';
+      const apprSave = document.querySelector('input[name="poApprovalSaveAs"]:checked');
+      if (apprSave && apprSave.value) approval_save_as = apprSave.value;
+      const wantsApproved = approval_save_as === 'approved';
+      const approvalRadioChanged = wantsApproved !== initialSaveAsApproved;
+      const approval_only = !!(existingSavedLpo && approvalRadioChanged && !poBodyDirty && forcedLpono == null);
+      const payload = { lpono, lpodate, suppliercode, discount, othercharge, remarks, warehouse_id, lines, templpono: templpono, approval_save_as };
+      if (approval_only) payload.approval_only = true;
+      return payload;
+    };
+    const payload = buildPayload();
+    if (!lponoIsValid(payload.lpono) || !payload.lpodate) { alert('LPO No and Date required'); return; }
+    if (!payload.suppliercode) { alert('Please select Supplier'); return; }
+    if (!payload.approval_only && !payload.lines.length) { alert('Add at least one line'); return; }
+    var lineBlockMsg = poGetLineValidationBlockMessage();
+    if (lineBlockMsg) { alert(lineBlockMsg); return; }
+    setSavingState(true);
+    function doSave(savePayload, retryCount) {
+      retryCount = retryCount || 0;
+      return fetch(apiSave, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(savePayload) })
+        .then(r=>r.json())
+        .then(function(d) {
+          if (d.success) {
+            if (d.lpono != null && lponoEl) {
+              lponoEl.value = String(d.lpono);
+              updatePoRef();
+            }
+            window.dispatchEvent(new CustomEvent('nexa-transaction-save-success', { detail: d }));
+            if (d.pdf_url) {
+              try { window.open(d.pdf_url, '_blank'); } catch (e) {}
+            }
+            alert(d.message || (d.approval_only ? ('Approval saved (' + (d.approval_status || '') + ').') : ('Saved' + (d.approval_status ? (' (' + d.approval_status + ')') : '') + '.')));
+            window.location.href = listUrl;
+          }
+          else if ((d.duplicate_lpo || d.duplicate_doc_key) && retryCount < 3) {
+            var newNo = d.suggested_lpono || d.next_lpono || '';
+            if (!lponoIsValid(newNo)) { setSavingState(false); alert('Could not generate new LPO No'); return; }
+            lponoEl.value = String(newNo);
+            updatePoRef();
+            return doSave(buildPayload(newNo), retryCount + 1);
+          }
+          else if (d.duplicate_lpo || d.duplicate_doc_key) {
+            setSavingState(false);
+            alert(d.error || 'Save failed');
+          }
+          else {
+            setSavingState(false);
+            window.dispatchEvent(new CustomEvent('nexa-transaction-save-failed', { detail: d }));
+            alert(d.error || 'Save failed');
+          }
+        })
+        .catch(function() {
+          setSavingState(false);
+          window.dispatchEvent(new CustomEvent('nexa-transaction-save-failed', { detail: {} }));
+          alert('Save failed');
+        });
+    }
+    function runSaveFlow(savePayload) {
+      var finish = function() {
+        if (queryMode) {
+          doSave(savePayload);
+        } else if (savePayload.approval_only) {
+          doSave(savePayload);
+        } else {
+          syncCartToTemp().then(function(d) {
+            if (d && d.success && d.templpono) templpono = d.templpono;
+            doSave(savePayload);
+          }).catch(function() {
+            setSavingState(false);
+            alert('Save failed');
+          });
+        }
+      };
+      if (poAiEnabled && window.PoAiAssistant && typeof window.PoAiAssistant.validateBeforeSave === 'function') {
+        window.PoAiAssistant.validateBeforeSave(savePayload).then(function(v) {
+          if (v && v.can_proceed) finish();
+          else setSavingState(false);
+        });
+      } else {
+        finish();
+      }
+    }
+    runSaveFlow(payload);
+  });
+
+  var btnCancelPo = document.getElementById('btnCancelPo');
+  if (btnCancelPo) {
+    btnCancelPo.addEventListener('click', function() {
+      var lpono = lponoForPayload(lponoEl.value);
+      if (!lponoIsValid(lpono)) return;
+      if (!window.confirm('Cancel this purchase order? It will move to Canceled and cannot be edited afterward.')) return;
+      var remarks = (window.prompt('Cancellation remark (optional):', '') || '').trim();
+      fetch(apiCancelPo, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lpono: lpono, remarks: remarks }),
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.success) {
+            alert('Purchase order canceled.');
+            window.location.href = listUrl;
+          } else {
+            alert(d.error || 'Cancel failed');
+          }
+        })
+        .catch(function() { alert('Cancel failed'); });
+    });
+  }
+
+  if (apiSiTenants && apiSiFetch) {
+    var siImportModal = document.getElementById('siImportModal');
+    var siImportTenant = document.getElementById('siImportTenant');
+    var siImportBillNo = document.getElementById('siImportBillNo');
+    var siImportFetchBtn = document.getElementById('siImportFetchBtn');
+    var siImportApplyBtn = document.getElementById('siImportApplyBtn');
+    var siImportMsg = document.getElementById('siImportMsg');
+    var siImportPreview = document.getElementById('siImportPreview');
+    var btnSiImport = document.getElementById('btnSiImport');
+    var siImportLastMatched = null;
+
+    function siClearImportUi() {
+      siImportLastMatched = null;
+      if (siImportMsg) siImportMsg.textContent = '';
+      if (siImportPreview) { siImportPreview.style.display = 'none'; siImportPreview.textContent = ''; }
+      if (siImportApplyBtn) siImportApplyBtn.disabled = true;
+    }
+    function siLoadTenants() {
+      if (!siImportTenant) return;
+      fetch(apiSiTenants).then(function(r) { return r.json(); }).then(function(d) {
+        siImportTenant.innerHTML = '';
+        if (!d.success || !d.tenants || !d.tenants.length) {
+          siImportTenant.innerHTML = '<option value="">No tenants available</option>';
+          return;
+        }
+        d.tenants.forEach(function(t) {
+          var opt = document.createElement('option');
+          opt.value = t.tenant_id || '';
+          opt.textContent = (t.display_name || t.tenant_id || '') + ' (' + (t.tenant_id || '') + ')';
+          siImportTenant.appendChild(opt);
+        });
+      }).catch(function() {
+        siImportTenant.innerHTML = '<option value="">Failed to load tenants</option>';
+      });
+    }
+    if (btnSiImport && siImportModal) {
+      btnSiImport.addEventListener('click', function() {
+        siClearImportUi();
+        if (siImportBillNo) siImportBillNo.value = '';
+        siLoadTenants();
+        siImportModal.classList.remove('hidden');
+      });
+    }
+    if (siImportModal) {
+      siImportModal.addEventListener('click', function(e) {
+        if (e.target.dataset.close === 'siImportModal' || (e.target.classList && e.target.classList.contains('modal__close'))) {
+          siImportModal.classList.add('hidden');
+        }
+      });
+    }
+    if (siImportFetchBtn) {
+      siImportFetchBtn.addEventListener('click', function() {
+        siClearImportUi();
+        var tid = siImportTenant ? siImportTenant.value : '';
+        var bn = siImportBillNo ? parseInt(String(siImportBillNo.value || '').trim(), 10) : 0;
+        if (!tid) { if (siImportMsg) siImportMsg.textContent = 'Select a tenant.'; return; }
+        if (!bn || bn <= 0) { if (siImportMsg) siImportMsg.textContent = 'Enter a valid bill number.'; return; }
+        siImportFetchBtn.disabled = true;
+        fetch(apiSiFetch, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source_tenant_id: tid, bill_no: bn }),
+        })
+          .then(function(r) { return r.json(); })
+          .then(function(d) {
+            siImportFetchBtn.disabled = false;
+            if (!d.success) {
+              if (siImportMsg) siImportMsg.textContent = d.error || 'Fetch failed.';
+              return;
+            }
+            siImportLastMatched = d.matched || [];
+            var hdr = d.header || {};
+            var um = d.unmatched || [];
+            var lines = [];
+            lines.push('Bill ' + (hdr.billno || bn) + (hdr.billdate ? (' dated ' + hdr.billdate) : '') + (hdr.locationcode != null ? (' · Loc ' + hdr.locationcode) : '') + (hdr.source_tenant_id ? (' · Source ' + hdr.source_tenant_id) : ''));
+            lines.push('Lines from invoice: ' + siImportLastMatched.length);
+            var deadRed = siImportLastMatched.filter(function(r) { return r.no_master_match || r.match_kind === 'no_master_match'; }).length;
+            if (deadRed) lines.push('No master on this tenant (full red — Item Code shows RAWABICODE when known; replace before save): ' + deadRed);
+            var redN = siImportLastMatched.filter(function(r) { return !r.no_master_match && r.match_kind !== 'no_master_match' && (r.uom_mismatch || r.match_kind === 'rawabi_uom_mismatch'); }).length;
+            if (redN) lines.push('RAWABICODE OK but invoice UOM not on item (lighter red): ' + redN);
+            lines.push('Not importable (API unmatched): ' + um.length);
+            if (um.length) {
+              um.forEach(function(x) {
+                lines.push('  · Item ' + x.source_itemcode + ', RAWABI=' + (x.source_rawabicode != null ? x.source_rawabicode : '-') + ', UOM=' + (x.invoice_uom || '-'));
+              });
+            }
+            if (siImportPreview) {
+              siImportPreview.textContent = lines.join('\n');
+              siImportPreview.style.display = 'block';
+            }
+            if (siImportApplyBtn) siImportApplyBtn.disabled = !siImportLastMatched.length;
+          })
+          .catch(function() {
+            siImportFetchBtn.disabled = false;
+            if (siImportMsg) siImportMsg.textContent = 'Request failed.';
+          });
+      });
+    }
+    if (siImportApplyBtn) {
+      siImportApplyBtn.addEventListener('click', function() {
+        if (!siImportLastMatched || !siImportLastMatched.length) return;
+        var n = importAppendMatchedRows(siImportLastMatched);
+        if (siImportModal) siImportModal.classList.add('hidden');
+        siClearImportUi();
+        alert(n ? ('Added / merged ' + n + ' line(s).') : 'No lines added.');
+      });
+    }
+  }
+
+  (function poFocusSupplierOnLoad() {
+    if (queryMode || !supplierDisplay) return;
+    function run() {
+      try {
+        supplierDisplay.focus();
+      } catch (e) {}
+    }
+    if (document.readyState === 'complete') {
+      requestAnimationFrame(function() { requestAnimationFrame(run); });
+    } else {
+      window.addEventListener('load', function() {
+        requestAnimationFrame(function() { requestAnimationFrame(run); });
+      });
+    }
+  })();
+
+})();
+</script>
+{% if not query_mode %}
+<script src="{{ url_for('static', filename='js/po_ai.js') }}?v=1"></script>
+{% endif %}
+<script src="{{ url_for('static', filename='js/transaction_recording_client.js') }}?v=7"></script>
+{% endblock %}

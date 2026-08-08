@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/stock_aging.css') }}?v=6" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<div class="sa-page" id="stockAgingApp"
+     data-api="{{ api_data_url }}"
+     data-drill="{{ api_drilldown_url }}"
+     data-export-excel="{{ export_excel_url }}"
+     data-export-pdf="{{ export_pdf_url }}">
+
+  <header class="sa-header">
+    <div>
+      <h1>Stock Aging Analysis</h1>
+      <p class="sa-header__desc">
+        Identify slow-moving, non-moving, and dead stock. Analyze inventory value by aging period
+        with actionable insights for management. KPI: Stock Value = Current Stock × Average Cost;
+        Age Days = As On Date − selected aging reference date.
+      </p>
+    </div>
+    <div class="sa-actions">
+      <button type="button" class="sa-btn" id="saBtnPrint">Print</button>
+      <button type="button" class="sa-btn" id="saBtnEmail">Email Report</button>
+      <a class="sa-btn" id="saBtnExcel" href="{{ export_excel_url }}">Export Excel</a>
+      <a class="sa-btn" id="saBtnPdf" href="{{ export_pdf_url }}">Export PDF</a>
+      <button type="button" class="sa-btn sa-btn--primary" id="saBtnRun">Run Analysis</button>
+      <button type="button" class="sa-btn" id="saBtnAi">Generate AI Analysis</button>
+    </div>
+  </header>
+
+  <div id="saError" class="sa-error-banner hidden"></div>
+
+  <section class="sa-kpi-grid" id="saKpiGrid">
+    <div class="sa-kpi"><div class="sa-kpi__label">Total Inventory Value</div><div class="sa-kpi__value" data-kpi="total_inventory_value">—</div></div>
+    <div class="sa-kpi"><div class="sa-kpi__label">Total Stock Qty</div><div class="sa-kpi__value" data-kpi="total_stock_quantity">—</div></div>
+    <div class="sa-kpi sa-kpi--warn"><div class="sa-kpi__label">Slow Moving Value</div><div class="sa-kpi__value" data-kpi="slow_moving_value">—</div></div>
+    <div class="sa-kpi sa-kpi--warn"><div class="sa-kpi__label">Non Moving Value</div><div class="sa-kpi__value" data-kpi="non_moving_value">—</div></div>
+    <div class="sa-kpi sa-kpi--danger"><div class="sa-kpi__label">Dead Stock Value</div><div class="sa-kpi__value" data-kpi="dead_stock_value">—</div></div>
+    <div class="sa-kpi sa-kpi--ok"><div class="sa-kpi__label">Active Items</div><div class="sa-kpi__value" data-kpi="total_active_items">—</div></div>
+    <div class="sa-kpi"><div class="sa-kpi__label">Inactive Items</div><div class="sa-kpi__value" data-kpi="total_inactive_items">—</div></div>
+    <div class="sa-kpi"><div class="sa-kpi__label">Rows</div><div class="sa-kpi__value" data-kpi="row_count">—</div></div>
+  </section>
+
+  <div class="sa-layout">
+    <aside class="sa-panel sa-filters-panel" id="saFiltersPanel">
+      <div class="sa-panel__head">
+        <span>Filters</span>
+        <button type="button" class="sa-filters-toggle" id="saFiltersToggle" aria-expanded="false" aria-controls="saFilterForm">Show filters ▾</button>
+      </div>
+      <div class="sa-panel__body sa-filter">
+        <form id="saFilterForm">
+          <label>Company</label>
+          <select name="company" id="saCompany">
+            {% for c in options.companies or [] %}
+              <option value="{{ c.code }}" {% if filters.company == c.code %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+
+          <label>Branch</label>
+          <select name="branch" id="saBranch">
+            {% for b in options.branches or [] %}
+              <option value="{{ b.code }}" {% if filters.branch|string == b.code|string %}selected{% endif %}>{{ b.code }} — {{ b.name }}</option>
+            {% endfor %}
+          </select>
+
+          <label>Warehouse</label>
+          <select name="warehouse_id" id="saWarehouse">
+            <option value="">All warehouses</option>
+            {% for w in options.warehouses or [] %}
+              <option value="{{ w.warehouse_id or w.WAREHOUSE_ID or w.warehouse_code }}" {% if filters.warehouse_id|string == (w.warehouse_id or w.warehouse_code)|string %}selected{% endif %}>
+                {{ w.warehouse_code or w.WAREHOUSE_CODE }} {{ w.warehouse_name or w.WAREHOUSE_NAME or '' }}
+              </option>
+            {% endfor %}
+          </select>
+
+          <label>Category</label>
+          <select name="category_code" id="saCategory">
+            <option value="">All</option>
+            {% for c in options.categories or [] %}
+              <option value="{{ c.code or c.categorycode }}" {% if filters.category_code|string == (c.code or c.categorycode)|string %}selected{% endif %}>{{ c.code or c.categorycode }} {{ c.name or c.categoryname or '' }}</option>
+            {% endfor %}
+          </select>
+
+          <label>Brand</label>
+          <select name="brand_code" id="saBrand">
+            <option value="">All</option>
+            {% for b in options.brands or [] %}
+              <option value="{{ b.code }}" {% if filters.brand_code|string == b.code|string %}selected{% endif %}>{{ b.code }}</option>
+            {% endfor %}
+          </select>
+
+          <label>Supplier</label>
+          <select name="supplier_code" id="saSupplier">
+            <option value="">All</option>
+            {% for s in options.suppliers or [] %}
+              <option value="{{ s.code }}" {% if filters.supplier_code|string == s.code|string %}selected{% endif %}>{{ s.code }}</option>
+            {% endfor %}
+          </select>
+
+          <label>Item Code</label>
+          <input type="text" name="item_code" value="{{ filters.item_code or '' }}" />
+
+          <label>Item Name</label>
+          <input type="text" name="item_name" value="{{ filters.item_name or '' }}" />
+
+          <label>Search</label>
+          <input type="text" name="search" value="{{ filters.search or '' }}" placeholder="Code, name, barcode…" />
+
+          <label>As On Date</label>
+          <input type="date" name="as_on_date" value="{{ filters.as_on_date or '' }}" />
+
+          <label>Aging Method</label>
+          <select name="aging_method" id="saAgingMethod">
+            {% for m in options.aging_methods or [] %}
+              <option value="{{ m.id }}" {% if filters.aging_method == m.id %}selected{% endif %}>{{ m.label }}</option>
+            {% endfor %}
+          </select>
+
+          <label>Cost Method</label>
+          <select name="cost_method">
+            <option value="average" {% if filters.cost_method == 'average' %}selected{% endif %}>Average Cost</option>
+            <option value="last_purchase" {% if filters.cost_method == 'last_purchase' %}selected{% endif %}>Last Purchase Cost</option>
+          </select>
+
+          <label><input type="checkbox" name="include_zero" value="1" {% if filters.include_zero %}checked{% endif %} /> Include zero stock</label>
+
+          <label>Max rows</label>
+          <input type="number" name="max_rows" min="100" max="20000" value="{{ filters.max_rows or '8000' }}" />
+
+          <div class="sa-buckets-editor">
+            <label><strong>Aging buckets</strong> (customize ranges)</label>
+            <div id="saBucketsEditor"></div>
+            <button type="button" class="sa-btn" id="saAddBucket" style="margin-top:6px;width:100%;">+ Add bucket</button>
+          </div>
+          <input type="hidden" name="buckets_json" id="saBucketsJson" value="" />
+        </form>
+      </div>
+    </aside>
+
+    <div class="sa-main-column">
+      <section class="sa-charts-grid" id="saCharts">
+        <div class="sa-panel sa-chart-box">
+          <div class="sa-panel__head">Inventory Value by Aging Bucket</div>
+          <div class="sa-chart-canvas-wrap"><canvas id="chartBuckets"></canvas></div>
+        </div>
+        <div class="sa-panel sa-chart-box">
+          <div class="sa-panel__head">Stock Value by Category</div>
+          <div class="sa-chart-canvas-wrap"><canvas id="chartCategory"></canvas></div>
+        </div>
+        <div class="sa-panel sa-chart-box">
+          <div class="sa-panel__head">Top 20 Dead Stock Items</div>
+          <div class="sa-chart-canvas-wrap"><canvas id="chartDead"></canvas></div>
+        </div>
+        <div class="sa-panel sa-chart-box">
+          <div class="sa-panel__head">Top 20 Slow Moving Items</div>
+          <div class="sa-chart-canvas-wrap"><canvas id="chartSlow"></canvas></div>
+        </div>
+        <div class="sa-panel sa-chart-box">
+          <div class="sa-panel__head">Stock Value by Supplier</div>
+          <div class="sa-chart-canvas-wrap"><canvas id="chartSupplier"></canvas></div>
+        </div>
+        <div class="sa-panel sa-chart-box sa-chart-box--wide">
+          <div class="sa-panel__head">Inventory Activity Trend (6 months)</div>
+          <div class="sa-chart-canvas-wrap"><canvas id="chartTrend"></canvas></div>
+        </div>
+      </section>
+    </div>
+
+    <aside class="sa-panel sa-insights-panel">
+      <div class="sa-panel__head">AI Insights &amp; Recommendations</div>
+      <div class="sa-panel__body" id="saInsights">
+        <p class="sa-loading">Insights appear after analysis.</p>
+      </div>
+    </aside>
+  </div>
+
+  <section class="sa-panel sa-grid-panel">
+    <div class="sa-panel__head">Stock Aging Grid — click a row for drill-down; click column headers to sort</div>
+    <div class="sa-grid-wrap">
+      <div id="saGridLoading" class="sa-loading">Run analysis to load data…</div>
+      <table class="sa-table hidden" id="saGridTable">
+        <thead id="saGridHead">
+          <tr id="saGridHeadRow"></tr>
+        </thead>
+        <tbody id="saGridBody"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<div class="sa-modal hidden" id="saDrillModal" role="dialog" aria-modal="true" aria-labelledby="saDrillTitle">
+  <div class="sa-modal__backdrop" data-close="saDrillModal" aria-hidden="true"></div>
+  <div class="sa-modal__dialog" role="document">
+    <div class="sa-modal__head">
+      <h3 id="saDrillTitle">Item details</h3>
+      <button type="button" class="sa-btn sa-modal__close" data-close="saDrillModal" aria-label="Close">×</button>
+    </div>
+    <div class="sa-modal__content">
+      <div class="sa-modal__tabs" id="saDrillTabs" role="tablist">
+        <button type="button" class="sa-tab is-active" data-tab="receipts" role="tab">Receipt History</button>
+        <button type="button" class="sa-tab" data-tab="purchases" role="tab">Purchase History</button>
+        <button type="button" class="sa-tab" data-tab="sales" role="tab">Sales History</button>
+        <button type="button" class="sa-tab" data-tab="movements" role="tab">Stock Movement</button>
+        <button type="button" class="sa-tab" data-tab="cost_history" role="tab">Cost History</button>
+      </div>
+      <div class="sa-modal__body" id="saDrillBody" role="tabpanel">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.STOCK_AGING_DEFAULT_BUCKETS = {{ default_buckets|tojson }};
+  window.STOCK_AGING_INITIAL_FILTERS = {{ filters|tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/stock_aging.js') }}?v=5"></script>
+{% endblock %}

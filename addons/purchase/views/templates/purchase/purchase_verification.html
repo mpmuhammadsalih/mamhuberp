@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Purchase Verification{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page sv-list-page" id="pvPage"
+  data-api-list="{{ url_for('purchase.api_purchase_verification_documents') }}"
+  data-api-detail="{{ url_for('purchase.api_purchase_verification_detail') }}"
+  data-export-url="{{ url_for('purchase.purchase_verification_export_csv') }}"
+  data-grn-query="{{ url_for('purchase.goods_receipt_query', receipt_no=999999999) }}"
+  data-location="{{ session_location_code }}">
+<style>
+  .sv-list-page .sv-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .sv-list-page .sv-stat-card { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 11px; border: 1px solid #e5eaf2; border-radius: 10px; background: #fff; box-shadow: 0 8px 18px rgba(15, 23, 42, .06); }
+  .sv-list-page .sv-stat-icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex: 0 0 36px; border-radius: 9px; color: #fff; font-size: 17px; }
+  .sv-list-page .sv-stat-icon--blue { background: linear-gradient(135deg, #2563eb, #38bdf8); }
+  .sv-list-page .sv-stat-icon--green { background: linear-gradient(135deg, #16a34a, #22c55e); }
+  .sv-list-page .sv-stat-icon--amber { background: linear-gradient(135deg, #f59e0b, #facc15); }
+  .sv-list-page .sv-stat-icon--red { background: linear-gradient(135deg, #dc2626, #f87171); }
+  .sv-list-page .sv-stat-label { margin: 0 0 4px; color: #475569; font-size: 11px; font-weight: 700; }
+  .sv-list-page .sv-stat-value { margin: 0; color: #0f172a; font-size: clamp(16px, 1.45vw, 21px); font-weight: 850; line-height: 1.1; }
+  .sv-list-page .sv-stat-sub { margin: 3px 0 0; color: #64748b; font-size: 11px; }
+  .sv-list-page #pvTable tbody tr.pv-row { cursor: pointer; }
+  .nexa-list-page.sv-list-page .co-table tbody tr.pv-row.is-selected { background: #dcfce7 !important; box-shadow: inset 3px 0 0 #16a34a; }
+  .sv-list-page .co-table tbody tr.pv-row--err { background: #fef2f2 !important; }
+  .sv-list-page .co-table tbody tr.pv-row--warn { background: #fffbeb !important; }
+  .sv-list-page .co-status { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+  .sv-list-page .co-status--ok { background: #dcfce7; color: #166534; }
+  .sv-list-page .co-status--warn { background: #ffedd5; color: #c2410c; }
+  .sv-list-page .co-status--err { background: #fee2e2; color: #991b1b; }
+  .sv-list-page .sv-preview-drawer { border: 1px solid #dbe3ef; border-radius: 14px; background: #fff; box-shadow: 0 12px 28px rgba(15, 23, 42, .16); position: fixed; top: 50%; right: 14px; z-index: 1040; width: min(480px, calc(100vw - 28px)); height: min(780px, calc(100vh - 28px)); transform: translate(120%, -50%); opacity: 0; pointer-events: none; transition: transform .18s ease, opacity .18s ease; display: flex; flex-direction: column; overflow: hidden; }
+  .sv-list-page .sv-preview-drawer.has-row { transform: translate(0, -50%); opacity: 1; pointer-events: auto; }
+  .sv-list-page .sv-preview-drawer__empty, .sv-list-page .sv-preview-drawer__body { padding: 18px; flex: 1 1 auto; overflow-y: auto; }
+  .sv-list-page .sv-preview-drawer__empty { color: #64748b; font-size: 13px; line-height: 1.45; }
+  .sv-list-page .sv-preview-drawer__body { display: none; }
+  .sv-list-page .sv-preview-drawer.has-row .sv-preview-drawer__empty { display: none; }
+  .sv-list-page .sv-preview-drawer.has-row .sv-preview-drawer__body { display: block; }
+  .sv-list-page .sv-preview-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+  .sv-list-page .sv-preview-title { margin: 0; color: #0f172a; font-size: 14px; font-weight: 800; }
+  .sv-list-page .sv-preview-subtitle { margin-top: 5px; color: #64748b; font-size: 12px; }
+  .sv-list-page .sv-preview-close { border: 0; background: #f1f5f9; color: #334155; border-radius: 999px; width: 30px; height: 30px; cursor: pointer; font-size: 18px; }
+  .sv-list-page .pv-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; }
+  .sv-list-page .pv-tab { border: 1px solid #e2e8f0; background: #f8fafc; color: #475569; border-radius: 8px; padding: 5px 10px; font-size: 11px; font-weight: 700; cursor: pointer; }
+  .sv-list-page .pv-tab.is-active { background: #2563eb; border-color: #2563eb; color: #fff; }
+  .sv-list-page .pv-panel { display: none; font-size: 12px; }
+  .sv-list-page .pv-panel.is-active { display: block; }
+  .sv-list-page .pv-mini-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 8px; }
+  .sv-list-page .pv-mini-table th, .sv-list-page .pv-mini-table td { border-bottom: 1px solid #edf2f7; padding: 5px 6px; text-align: left; }
+  .sv-list-page .pv-mini-table th { color: #64748b; font-weight: 700; }
+  .sv-list-page .pv-mini-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .sv-list-page .sv-preview-issues { margin-top: 12px; padding: 10px; border-radius: 8px; background: #fef2f2; color: #991b1b; font-size: 12px; line-height: 1.45; }
+  .sv-list-page .sv-preview-issues li { margin: 4px 0; }
+  .sv-list-page .sv-scroll-status { margin: 10px 0 2px; padding: 9px 12px; border: 1px dashed #cbd5e1; border-radius: 8px; background: #f8fafc; color: #475569; font-size: 12px; text-align: center; }
+  .sv-list-page .sv-scroll-status.is-error { border-color: #fecaca; background: #fff1f2; color: #b91c1c; }
+  .sv-list-page .sv-rules-hint { font-size: 12px; color: #64748b; margin: 0 0 8px; line-height: 1.45; }
+</style>
+
+  <section class="sv-stat-grid" aria-label="Verification summary">
+    <div class="sv-stat-card">
+      <span class="sv-stat-icon sv-stat-icon--blue"><i class="bi bi-file-earmark-check"></i></span>
+      <div>
+        <p class="sv-stat-label">Documents</p>
+        <p class="sv-stat-value" id="pvKpiTotal">—</p>
+        <p class="sv-stat-sub" id="pvKpiTotalSub">Run scan</p>
+      </div>
+    </div>
+    <div class="sv-stat-card">
+      <span class="sv-stat-icon sv-stat-icon--green"><i class="bi bi-check-circle"></i></span>
+      <div>
+        <p class="sv-stat-label">OK</p>
+        <p class="sv-stat-value" id="pvKpiOk">—</p>
+        <p class="sv-stat-sub">Stock &amp; journal match</p>
+      </div>
+    </div>
+    <div class="sv-stat-card">
+      <span class="sv-stat-icon sv-stat-icon--red"><i class="bi bi-exclamation-triangle"></i></span>
+      <div>
+        <p class="sv-stat-label">Errors</p>
+        <p class="sv-stat-value" id="pvKpiErr">—</p>
+        <p class="sv-stat-sub">Wrong postings</p>
+      </div>
+    </div>
+    <div class="sv-stat-card">
+      <span class="sv-stat-icon sv-stat-icon--amber"><i class="bi bi-building"></i></span>
+      <div>
+        <p class="sv-stat-label">Branch</p>
+        <p class="sv-stat-value">{{ session_location_code }}</p>
+        <p class="sv-stat-sub">GRN + Purchase Return</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title page-po__title--with-icon">
+        <span class="page-po__title-icon"><i class="bi bi-shield-check"></i></span>
+        Purchase verification
+      </h1>
+      <p class="page-po__muted">
+        Audit GRN and purchase return postings: stock, average/landing cost, item journal, batch/lot, and negative stock.
+      </p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a class="page-po__btn-secondary" id="pvBtnExport" href="#">Export CSV</a>
+      <button type="button" class="page-po__btn-primary" id="pvBtnRunTop">Run verification</button>
+    </div>
+  </div>
+
+  <div id="pvMessage" class="sv-scroll-status" role="alert" style="display:none;"></div>
+
+  <form id="pvFilterForm" class="nexa-list-toolbar" action="#" method="get" autocomplete="off">
+    <select id="pvDocType" class="input" style="min-width:140px;">
+      <option value="all">All documents</option>
+      <option value="grn">GRN only</option>
+      <option value="pr">Purchase return only</option>
+    </select>
+    <input type="date" id="pvDateFrom" class="input" title="From date" />
+    <input type="date" id="pvDateTo" class="input" title="To date" />
+    <input type="text" id="pvSearch" class="input" placeholder="Doc no / invoice…" style="min-width:160px;" />
+    <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#475569;">
+      <input type="checkbox" id="pvMismatch" value="1" /> Mismatches only
+    </label>
+    <button type="submit" class="page-po__btn-primary" id="pvBtnRun" style="padding:4px 12px;font-size:11px;">Run</button>
+    <span id="pvListMeta" class="nexa-num">—</span>
+  </form>
+
+  <p class="sv-rules-hint">
+    Checks: receipt/return lines vs ITEMJOURNAL qty · GRN cost snapshots (PREVIOUSAVGCOST / PREVIOUSLANDINGCOST) vs ITEMMASTER · negative stock · batch lot presence · financial posting flags.
+  </p>
+
+  <div class="co-table-wrap">
+    <table class="co-table" id="pvTable">
+      <thead>
+        <tr>
+          <th style="width:40px;">#</th>
+          <th>Type</th>
+          <th>Doc no</th>
+          <th>Date</th>
+          <th>Supplier</th>
+          <th class="num">Amount</th>
+          <th>Reference</th>
+          <th>Status</th>
+          <th>Issues</th>
+        </tr>
+      </thead>
+      <tbody id="pvTableBody">
+        <tr id="pvNoData">
+          <td colspan="9" style="text-align:center;padding:20px;color:#6b7280;font-style:italic;">
+            Set filters and click <strong>Run verification</strong>.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div id="pvScrollStatus" class="sv-scroll-status">No report loaded.</div>
+
+  <aside class="sv-preview-drawer" id="pvPreviewDrawer" aria-label="Document detail">
+    <div class="sv-preview-drawer__empty">Select a document row for full audit: lines, journal, cost before/after, and issues.</div>
+    <div class="sv-preview-drawer__body">
+      <div class="sv-preview-head">
+        <div>
+          <h2 class="sv-preview-title" id="pvPreviewTitle">—</h2>
+          <div class="sv-preview-subtitle" id="pvPreviewSubtitle">—</div>
+        </div>
+        <button type="button" class="sv-preview-close" id="pvPreviewClose" aria-label="Close">×</button>
+      </div>
+      <div class="pv-tabs">
+        <button type="button" class="pv-tab is-active" data-panel="summary">Summary</button>
+        <button type="button" class="pv-tab" data-panel="lines">Lines</button>
+        <button type="button" class="pv-tab" data-panel="cost">Cost audit</button>
+        <button type="button" class="pv-tab" data-panel="journal">Journal</button>
+        <button type="button" class="pv-tab" data-panel="issues">Issues</button>
+      </div>
+      <div class="pv-panel is-active" id="pvPanelSummary"></div>
+      <div class="pv-panel" id="pvPanelLines"></div>
+      <div class="pv-panel" id="pvPanelCost"></div>
+      <div class="pv-panel" id="pvPanelJournal"></div>
+      <div class="pv-panel" id="pvPanelIssues"></div>
+      <p style="margin-top:12px;"><a href="#" id="pvOpenDocLink" target="_blank" rel="noopener">Open document →</a></p>
+    </div>
+  </aside>
+</div>
+<script src="{{ url_for('static', filename='js/purchase_verification.js') }}?v=2"></script>
+{% endblock %}

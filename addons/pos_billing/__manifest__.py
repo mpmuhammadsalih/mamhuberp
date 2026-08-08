@@ -1,0 +1,2 @@
+"""Addon manifest — Pos Billing."""
+MANIFEST = {'technical_name': 'pos_billing', 'name': 'Pos Billing', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Migrated from blueprints/pos_billing.py', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/pos-billing'}, 'flask': {'blueprint': 'pos_billing', 'blueprint_ref': 'addons.pos_billing:bp', 'models_package': 'addons.pos_billing.models', 'routes_module': 'addons.pos_billing.controllers.routes'}}

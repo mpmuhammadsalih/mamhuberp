@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Edit Warehouse{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/im_form_shell.css') }}?v=1" />
+<style>
+  main.container:has(> .wl-form-page.im-form-shell-page) { padding-top: 0; }
+  .wl-form-page .wl-readonly-banner {
+    margin: 0 0 10px;
+    padding: 8px 12px;
+    font-size: 13px;
+    line-height: 1.45;
+    border-radius: 4px;
+    background: var(--im-field-readonly, #e2ecf7);
+    border: 1px solid #b8c8d4;
+    color: #495057;
+  }
+  .wl-form-page .form-group.wl-check-row {
+    align-items: center;
+  }
+  .wl-form-page .form-group.wl-check-row label {
+    min-width: 140px;
+  }
+  .wl-form-page .form-group.wl-check-row input[type="checkbox"] {
+    width: auto;
+    flex: 0 0 auto;
+    margin: 0;
+    accent-color: #2563eb;
+  }
+  .wl-form-page textarea.input {
+    min-height: 3em;
+    resize: vertical;
+  }
+</style>
+
+<div class="im-page im-form-shell-page wl-form-page">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>Warehouse Master / <span class="im-ref">{{ row.get('warehouse_code') or '' }}</span></h1>
+      <div class="im-actions">
+        <button type="submit" form="whEditForm" class="im-btn-save">Save</button>
+        <a href="{{ url_for('warehouse.warehouse_locations_list') }}" class="im-btn-secondary">List</a>
+      </div>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, msg in messages %}
+        <p class="flash flash--{{ category }}" style="margin-bottom:12px;">{{ msg }}</p>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <section class="itemmaster-container wl-form-body">
+    <p class="wl-readonly-banner">
+      <strong>Code:</strong> {{ row.get('warehouse_code') or '' }} (read-only) ·
+      <strong>ID:</strong> {{ row.get('warehouse_id') or '' }}
+    </p>
+
+    <form id="whEditForm" method="post" autocomplete="off">
+      <input type="hidden" name="warehouse_id" value="{{ row.get('warehouse_id') }}" />
+      <input type="hidden" name="save_nonce" value="{{ global_save_nonce | default('') }}" />
+      <input type="hidden" name="wloc_once" value="{{ wloc_form_once }}" />
+
+      <h2 class="im-section-title">Warehouse details</h2>
+      <div class="form-section im-panel-body">
+        <div class="form-grid--2cols wl-details">
+          <div class="form-group">
+            <label>Warehouse code</label>
+            <input type="text" class="input input-readonly" readonly value="{{ row.get('warehouse_code') or '' }}" />
+          </div>
+          <div class="form-group">
+            <label for="warehouse_name">Warehouse name <span style="color:#b45309">*</span></label>
+            <input type="text" class="input" id="warehouse_name" name="warehouse_name" maxlength="100"
+                   value="{{ row.get('warehouse_name') or '' }}" required />
+          </div>
+          <div class="form-group">
+            <label for="warehouse_type">Warehouse type</label>
+            <select class="input" id="warehouse_type" name="warehouse_type">
+              {% for t in warehouse_types %}
+              <option value="{{ t }}" {% if (row.get('warehouse_type') or '')|upper == t %}selected{% endif %}>{{ t }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Branch</label>
+            <input type="text" class="input input-readonly" readonly value="{{ branch_label or row.get('locationcode') or '' }}" />
+          </div>
+          <div class="form-group span-2">
+            <label for="address">Address</label>
+            <input type="text" class="input" id="address" name="address" maxlength="200" value="{{ row.get('address') or '' }}" />
+          </div>
+          <div class="form-group">
+            <label for="contact_person">Contact person</label>
+            <input type="text" class="input" id="contact_person" name="contact_person" maxlength="100" value="{{ row.get('contact_person') or '' }}" />
+          </div>
+          <div class="form-group">
+            <label for="phone_no">Phone</label>
+            <input type="text" class="input" id="phone_no" name="phone_no" maxlength="30" value="{{ row.get('phone_no') or '' }}" />
+          </div>
+          <div class="form-group span-2">
+            <label for="remarks">Remarks</label>
+            <textarea class="input" id="remarks" name="remarks" rows="2" maxlength="500">{{ row.get('remarks') or '' }}</textarea>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="im-section-title">Options</h2>
+      <div class="form-section im-panel-body">
+        <div class="form-grid--2cols wl-details">
+          <div class="form-group wl-check-row">
+            <label for="neg">Allow negative stock</label>
+            <input type="checkbox" name="allow_negative_stock" id="neg" value="Y" {% if (row.get('allow_negative_stock') or 'N')|upper == 'Y' %}checked{% endif %} />
+          </div>
+          <div class="form-group wl-check-row">
+            <label for="bat">Batch enabled</label>
+            <input type="checkbox" name="batch_enabled" id="bat" value="Y" {% if (row.get('batch_enabled') or 'Y')|upper == 'Y' %}checked{% endif %} />
+          </div>
+          <div class="form-group wl-check-row">
+            <label for="bin">Bin enabled</label>
+            <input type="checkbox" name="bin_enabled" id="bin" value="Y" {% if (row.get('bin_enabled') or 'Y')|upper == 'Y' %}checked{% endif %} />
+          </div>
+          <div class="form-group wl-check-row">
+            <label for="act">Active</label>
+            <input type="checkbox" name="is_active" id="act" value="Y" {% if (row.get('is_active') or 'Y')|upper == 'Y' %}checked{% endif %} />
+          </div>
+        </div>
+      </div>
+    </form>
+  </section>
+</div>
+{% endblock %}

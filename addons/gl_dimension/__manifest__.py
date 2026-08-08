@@ -1,0 +1,2 @@
+"""Addon manifest — GL dimension value master (tenant DB)."""
+MANIFEST = {'technical_name': 'gl_dimension', 'name': 'GL Dimension Master', 'version': '1.0.0', 'category': 'Setup', 'summary': 'Maintain COST_CENTER / DEPARTMENT / PROJECT codes for GL analytics', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/setup/gl-dimensions'}, 'flask': {'blueprint': 'gl_dimension', 'blueprint_ref': 'addons.gl_dimension.controllers.routes:bp', 'routes_module': 'addons.gl_dimension.controllers.routes'}}

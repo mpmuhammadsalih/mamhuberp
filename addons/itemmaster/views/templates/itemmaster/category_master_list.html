@@ -1,0 +1,594 @@
+{% extends "base.html" %}
+{% block title %}Category Master{% endblock %}
+{% block content %}
+<style>
+  /* List grid chrome comes from nexa_list_page.css (.co-table); keep hierarchy + tree visuals only */
+  .cat-level-0 { font-weight: 600; }
+  .cat-level-1 { padding-left: 1.2rem !important; }
+  .cat-level-2 { padding-left: 2.4rem !important; }
+  .flag-badge {
+    display: inline-block; min-width: 1.1rem; text-align: center; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 700;
+  }
+  .flag-M { background: #dbeafe; color: #1e40af; }
+  .flag-D { background: #fef3c7; color: #92400e; }
+  .flag-C { background: #d1fae5; color: #065f46; }
+  .cat-tree { font-size: 13px; }
+  .cat-tree ul { list-style: none; padding-left: 20px; margin: 0; }
+  .cat-tree > ul { padding-left: 0; }
+  .cat-tree li { margin: 3px 0; position: relative; }
+  .cat-tree li::before { content: ''; position: absolute; left: -20px; top: 15px; width: 15px; height: 1px; border-top: 1px solid #ddd; }
+  .cat-tree li::after  { content: ''; position: absolute; left: -20px; top: 0; bottom: 15px; width: 1px; border-left: 1px solid #ddd; }
+  .cat-tree li:last-child::after { display: none; }
+  .cat-tree ul.cat-children.is-collapsed { display: none; }
+  .cat-tree-toggle {
+    flex: 0 0 22px; width: 22px; height: 22px; padding: 0; border: none; background: #eef2f7;
+    border-radius: 4px; cursor: pointer; font-size: 10px; line-height: 1; color: #4b5563;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .cat-tree-toggle:hover { background: #dbeafe; color: #1a56a4; }
+  .cat-tree-spacer { flex: 0 0 22px; width: 22px; }
+  .cat-item {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 7px 10px;
+    border: 1px solid #e2e8f0; border-radius: 4px; margin: 2px 0; background: #fff; transition: background .15s;
+  }
+  .cat-item:hover { background: #f0f5ff; }
+  .cat-item-code { font-weight: 600; color: #1a56a4; min-width: 64px; font-family: monospace; font-size: 13px; }
+  .cat-item-name { flex: 1; min-width: 120px; font-size: 13px; }
+  .nexa-list-page .tree-wrap.table-wrap { max-height: 76vh; padding: 6px 8px 10px; box-sizing: border-box; }
+  .cat-item-actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .cm-import-panel {
+    margin-bottom: 12px;
+    padding: 12px 14px;
+    border: 1px solid rgba(13, 110, 253, 0.14);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.42);
+    box-sizing: border-box;
+  }
+  .cm-import-panel strong { font-size: 13px; color: #374151; }
+</style>
+
+<div class="page-po nexa-list-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Category Master</h1>
+      <p class="page-po__muted">Main (M) → category (D) → micro (C). Category row <code>ID</code> = main <strong>code</strong>; micro row <code>ID</code> = category <strong>code</strong> (ID holds parent’s code, not a random surrogate).</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <button type="button" class="page-po__btn-primary" data-cat-action="create-m">+ Main category</button>
+      {% include 'includes/list_refresh_bar.html' %}
+      <a href="{{ url_for('itemmaster.productlist') }}" class="po-nav-link">Item Master list</a>
+    </div>
+  </div>
+
+  {% if is_admin_user %}
+  <div class="cm-import-panel">
+    <strong>Admin — Excel import</strong>
+    <div style="margin-top:10px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+      <a class="page-po__btn-secondary" style="text-decoration:none;" href="{{ url_for('itemmaster.category_master_import_template') }}">Download template (.xlsx)</a>
+    </div>
+    <form id="cmImportForm" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:10px;">
+      <input type="hidden" name="save_nonce" id="cm-import-nonce" value="{{ cm_import_nonce }}" />
+      <input type="file" name="excel_file" id="cm-import-file" accept=".xlsx,.xlsm" required />
+      <button type="submit" class="page-po__btn-primary" id="cm-import-submit">Import Excel</button>
+    </form>
+    <p id="cmImportMsg" class="page-po__muted" style="margin-top:8px; white-space:pre-wrap;"></p>
+  </div>
+  {% endif %}
+
+  <div class="po-tabs">
+    <button type="button" class="po-tab active" id="btnTreeView" onclick="switchView('tree')">Tree view</button>
+    <button type="button" class="po-tab" id="btnListView" onclick="switchView('list')">List view</button>
+  </div>
+
+  <div class="nexa-list-toolbar">
+    <span id="treeExpandBar" style="display:inline-flex; gap:6px; align-items:center;">
+      <button type="button" class="page-po__btn-secondary" id="catExpandAll" style="padding:4px 10px; font-size:11px;" title="Open all nodes">Expand all</button>
+      <button type="button" class="page-po__btn-secondary" id="catCollapseAll" style="padding:4px 10px; font-size:11px;" title="Close all nodes">Collapse all</button>
+    </span>
+    <input type="text" id="searchCat" class="input" placeholder="Search code or name…"
+           style="min-width:220px; max-width:320px;" oninput="filterCat()" onkeyup="filterCat()">
+    <button type="button" class="page-po__btn-secondary" onclick="clearCatSearch()" style="padding:4px 10px; font-size:11px;">Clear</button>
+    <span id="catCount" class="nexa-num" style="margin-left:4px;"></span>
+  </div>
+
+  <div id="treeViewCard">
+    <div class="page-po__section-title">Category hierarchy</div>
+    <div class="table-wrap tree-wrap">
+        <div id="catTreeContainer" class="cat-tree">
+          {% if tree and tree|length > 0 %}
+          <ul>
+            {% for m in tree %}
+            <li data-search="{{ (m.code|string ~ ' ' ~ (m.name or '') ~ ' M ' ~ (m.id or '') )|e }}">
+              <div class="cat-item">
+                {% if m.children and m.children|length > 0 %}
+                <button type="button" class="cat-tree-toggle" aria-expanded="true" title="Hide or show subcategories" data-cat-caret>▼</button>
+                {% else %}
+                <span class="cat-tree-spacer" aria-hidden="true"></span>
+                {% endif %}
+                <span class="flag-badge flag-M">M</span>
+                <span class="cat-item-code">{{ m.code }}</span>
+                <span class="cat-item-name">{{ m.name }}</span>
+                <span class="muted" style="font-size:12px;">ID {{ m.id }}</span>
+                <div class="cat-item-actions">
+                  <button type="button" class="btn-view" data-cat-action="edit" data-flag="M" data-code="{{ m.code }}" data-name="{{ m.name|e }}">Edit</button>
+                  <button type="button" class="btn-view" data-cat-action="create-d" data-main-code="{{ m.code }}" style="margin-left:6px;">+ Category</button>
+                </div>
+              </div>
+              {% if m.children and m.children|length > 0 %}
+              <ul class="cat-children">
+                {% for d in m.children %}
+                <li data-search="{{ (d.code|string ~ ' ' ~ (d.name or '') ~ ' D ' ~ (d.id or '') )|e }}">
+                  <div class="cat-item">
+                    {% if d.children and d.children|length > 0 %}
+                    <button type="button" class="cat-tree-toggle" aria-expanded="true" title="Hide or show micro categories" data-cat-caret>▼</button>
+                    {% else %}
+                    <span class="cat-tree-spacer" aria-hidden="true"></span>
+                    {% endif %}
+                    <span class="flag-badge flag-D">D</span>
+                    <span class="cat-item-code">{{ d.code }}</span>
+                    <span class="cat-item-name">{{ d.name }}</span>
+                    <span class="muted" style="font-size:12px;">ID {{ d.id }} · under main {{ m.code }}</span>
+                    <div class="cat-item-actions">
+                      <button type="button" class="btn-view" data-cat-action="edit" data-flag="D" data-code="{{ d.code }}" data-name="{{ d.name|e }}" data-main-code="{{ m.code }}">Edit</button>
+                      <button type="button" class="btn-view" data-cat-action="create-c" data-main-code="{{ m.code }}" data-d-code="{{ d.code }}" style="margin-left:6px;">+ Micro</button>
+                    </div>
+                  </div>
+                  {% if d.children and d.children|length > 0 %}
+                  <ul class="cat-children">
+                    {% for c in d.children %}
+                    <li data-search="{{ (c.code|string ~ ' ' ~ (c.name or '') ~ ' C ' ~ (c.id or '') )|e }}">
+                      <div class="cat-item">
+                        <span class="cat-tree-spacer" aria-hidden="true"></span>
+                        <span class="flag-badge flag-C">C</span>
+                        <span class="cat-item-code">{{ c.code }}</span>
+                        <span class="cat-item-name">{{ c.name }}</span>
+                        <span class="muted" style="font-size:12px;">ID {{ c.id }} · D {{ d.code }}</span>
+                        <div class="cat-item-actions">
+                          <button type="button" class="btn-view" data-cat-action="edit" data-flag="C" data-code="{{ c.code }}" data-name="{{ c.name|e }}" data-main-code="{{ m.code }}" data-d-code="{{ d.code }}">Edit</button>
+                        </div>
+                      </div>
+                    </li>
+                    {% endfor %}
+                  </ul>
+                  {% endif %}
+                </li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <p class="muted" style="padding:12px;">No category rows (FLAG = M) found.</p>
+          {% endif %}
+        </div>
+    </div>
+  </div>
+
+  <div id="listViewCard" style="display:none;">
+    <div class="co-table-wrap">
+      <table class="co-table" id="catListTable">
+        <thead>
+          <tr>
+            <th style="text-align:center; width:52px;">Sl.</th>
+            <th>Flag</th>
+            <th>Level</th>
+            <th>ID</th>
+            <th>Code</th>
+            <th>Name</th>
+            <th>Main (code)</th>
+            <th>Category (code)</th>
+            <th style="text-align:center; cursor:default;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="catListBody">
+          {% for r in flat_rows %}
+          <tr class="cat-row cat-level-{{ r.level }}"
+              data-search="{{ (r.code|string ~ ' ' ~ (r.name or '') ~ ' ' ~ r.flag ~ ' ' ~ (r.id or '')|string) }}">
+            <td class="sl-no">{{ loop.index }}</td>
+            <td><span class="flag-badge flag-{{ r.flag }}">{{ r.flag }}</span></td>
+            <td>{{ r.level_name }}</td>
+            <td>{{ r.id }}</td>
+            <td style="font-family:monospace;">{{ r.code }}</td>
+            <td>{{ r.name }}</td>
+            <td style="font-family:monospace;">{{ r.parent_main_code or '—' }}</td>
+            <td style="font-family:monospace;">{{ r.parent_category_code or '—' }}</td>
+            <td style="text-align:center; white-space:nowrap;">
+              <button type="button" class="btn-view" data-cat-action="edit" data-flag="{{ r.flag }}" data-code="{{ r.code }}" data-name="{{ r.name|e }}"
+                {% if r.flag == 'D' and r.parent_main_code %}data-main-code="{{ r.parent_main_code }}"{% endif %}
+                {% if r.flag == 'C' and r.parent_main_code %}data-main-code="{{ r.parent_main_code }}"{% endif %}
+                {% if r.flag == 'C' and r.parent_category_code %}data-d-code="{{ r.parent_category_code }}"{% endif %}
+              >Edit</button>
+              {% if r.flag == 'M' %}
+              <button type="button" class="btn-view" data-cat-action="create-d" data-main-code="{{ r.code }}" style="margin-left:6px;">+ Category</button>
+              {% elif r.flag == 'D' %}
+              <button type="button" class="btn-view" data-cat-action="create-c" data-main-code="{{ r.parent_main_code }}" data-d-code="{{ r.code }}" style="margin-left:6px;">+ Micro</button>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr id="catListNoData"><td colspan="9" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">No rows.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="catModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="catModal"></div>
+  <div class="modal__content" style="max-width: 440px;">
+    <div class="modal__header">
+      <h3 id="catModalTitle">Category</h3>
+      <button type="button" class="modal__close" data-close="catModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <p class="page-po__muted" id="catModalHint" style="margin-bottom:12px;"></p>
+      <input type="hidden" id="cm-mode" />
+      <input type="hidden" id="cm-flag" />
+      <input type="hidden" id="cm-code" />
+      <input type="hidden" id="cm-main_code" />
+      <input type="hidden" id="cm-d_code" />
+      <div class="mb-3" id="cm-code-row" style="display:none;">
+        <label class="form-label" for="cm-code-readonly">Code</label>
+        <input type="text" class="form-control" id="cm-code-readonly" readonly tabindex="-1" style="background:#f8fafc;" />
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="cm-name">Name *</label>
+        <input type="text" class="form-control" id="cm-name" maxlength="200" autocomplete="off" />
+      </div>
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:8px; padding:12px 20px; border-top:1px solid #e2e8f0;">
+      <button type="button" class="btn btn-secondary" data-close="catModal">Cancel</button>
+      <button type="button" class="btn btn-primary" id="cm-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var CM_SAVE_URL = {{ url_for('itemmaster.category_master_save')|tojson }};
+var CM_ISSUE_ONCE_URL = {{ url_for('itemmaster.category_master_issue_once')|tojson }};
+{% if is_admin_user %}
+var CM_IMPORT_URL = {{ url_for('itemmaster.category_master_import_excel')|tojson }};
+{% else %}
+var CM_IMPORT_URL = '';
+{% endif %}
+var CM_CREATE_M_ONCE = {{ (cm_create_m_once or '')|tojson }};
+var CM_PENDING_EDIT_ONCE = '';
+var CM_PENDING_CREATE_D_ONCE = '';
+var CM_PENDING_CREATE_C_ONCE = '';
+
+function catModalClose() {
+  var m = document.getElementById('catModal');
+  if (m) m.classList.add('hidden');
+}
+
+function catModalOpen() {
+  var m = document.getElementById('catModal');
+  if (m) {
+    m.classList.remove('hidden');
+    var n = document.getElementById('cm-name');
+    if (n) n.focus();
+  }
+}
+
+function catResetModal() {
+  document.getElementById('cm-mode').value = '';
+  document.getElementById('cm-flag').value = '';
+  document.getElementById('cm-code').value = '';
+  document.getElementById('cm-main_code').value = '';
+  document.getElementById('cm-d_code').value = '';
+  document.getElementById('cm-name').value = '';
+  var cr = document.getElementById('cm-code-row');
+  if (cr) cr.style.display = 'none';
+  document.getElementById('catModalHint').textContent = '';
+  CM_PENDING_EDIT_ONCE = '';
+  CM_PENDING_CREATE_D_ONCE = '';
+  CM_PENDING_CREATE_C_ONCE = '';
+}
+
+document.getElementById('catModal').addEventListener('click', function(e) {
+  if (e.target.getAttribute('data-close') === 'catModal' || e.target.classList.contains('modal__overlay') || e.target.classList.contains('modal__close')) {
+    catModalClose();
+  }
+});
+
+document.querySelector('.page-po').addEventListener('click', function(e) {
+  var t = e.target.closest('[data-cat-action]');
+  if (!t) return;
+  var a = t.getAttribute('data-cat-action');
+  if (a === 'create-m') {
+    catResetModal();
+    document.getElementById('cm-mode').value = 'create';
+    document.getElementById('cm-flag').value = 'M';
+    document.getElementById('catModalTitle').textContent = 'New main category';
+    document.getElementById('catModalHint').textContent = 'Code is assigned automatically.';
+    catModalOpen();
+    return;
+  }
+  if (a === 'create-d') {
+    var mc = t.getAttribute('data-main-code');
+    var url = CM_ISSUE_ONCE_URL + '?intent=create_d&main_code=' + encodeURIComponent(mc || '0');
+    fetch(url).then(function(r) { return r.json(); }).then(function(j) {
+      if (!j || !j.ok || !j.once) {
+        alert((j && j.error) ? j.error : 'Could not open new category (session/token).');
+        return;
+      }
+      if (j.save_nonce) window.__GLOBAL_SAVE_NONCE = j.save_nonce;
+      catResetModal();
+      CM_PENDING_CREATE_D_ONCE = j.once;
+      document.getElementById('cm-mode').value = 'create';
+      document.getElementById('cm-flag').value = 'D';
+      document.getElementById('cm-main_code').value = mc || '';
+      document.getElementById('catModalTitle').textContent = 'New category (under main)';
+      document.getElementById('catModalHint').textContent = 'Parent main code: ' + (mc || '—') + '. The new row ID will match this main code.';
+      catModalOpen();
+    }).catch(function() { alert('Network error'); });
+    return;
+  }
+  if (a === 'create-c') {
+    var mcode = t.getAttribute('data-main-code');
+    var dcode = t.getAttribute('data-d-code');
+    var urlc = CM_ISSUE_ONCE_URL + '?intent=create_c&d_code=' + encodeURIComponent(dcode || '0');
+    fetch(urlc).then(function(r) { return r.json(); }).then(function(j) {
+      if (!j || !j.ok || !j.once) {
+        alert((j && j.error) ? j.error : 'Could not open new micro category (session/token).');
+        return;
+      }
+      if (j.save_nonce) window.__GLOBAL_SAVE_NONCE = j.save_nonce;
+      catResetModal();
+      CM_PENDING_CREATE_C_ONCE = j.once;
+      document.getElementById('cm-mode').value = 'create';
+      document.getElementById('cm-flag').value = 'C';
+      document.getElementById('cm-main_code').value = mcode || '';
+      document.getElementById('cm-d_code').value = dcode || '';
+      document.getElementById('catModalTitle').textContent = 'New micro category';
+      document.getElementById('catModalHint').textContent = 'Under category (D) code ' + (dcode || '—') + '. The new row ID will match this D code.';
+      catModalOpen();
+    }).catch(function() { alert('Network error'); });
+    return;
+  }
+  if (a === 'edit') {
+    var fl = t.getAttribute('data-flag') || '';
+    var cd = t.getAttribute('data-code') || '';
+    var nm = t.getAttribute('data-name') || '';
+    var urle = CM_ISSUE_ONCE_URL + '?intent=edit&flag=' + encodeURIComponent(fl) + '&code=' + encodeURIComponent(cd);
+    fetch(urle).then(function(r) { return r.json(); }).then(function(j) {
+      if (!j || !j.ok || !j.once) {
+        alert((j && j.error) ? j.error : 'Could not open edit (session/token).');
+        return;
+      }
+      if (j.save_nonce) window.__GLOBAL_SAVE_NONCE = j.save_nonce;
+      catResetModal();
+      CM_PENDING_EDIT_ONCE = j.once;
+      document.getElementById('cm-mode').value = 'update';
+      document.getElementById('cm-flag').value = fl;
+      document.getElementById('cm-code').value = cd;
+      document.getElementById('cm-name').value = nm;
+      document.getElementById('cm-main_code').value = t.getAttribute('data-main-code') || '';
+      document.getElementById('cm-d_code').value = t.getAttribute('data-d-code') || '';
+      document.getElementById('cm-code-readonly').value = cd;
+      document.getElementById('cm-code-row').style.display = '';
+      var title = fl === 'M' ? 'main category' : (fl === 'D' ? 'category' : 'micro category');
+      document.getElementById('catModalTitle').textContent = 'Edit ' + title;
+      document.getElementById('catModalHint').textContent = 'Change the display name (code cannot be changed here).';
+      catModalOpen();
+    }).catch(function() { alert('Network error'); });
+  }
+});
+
+document.getElementById('cm-save').addEventListener('click', function() {
+  var mode = document.getElementById('cm-mode').value;
+  var flag = document.getElementById('cm-flag').value;
+  var name = (document.getElementById('cm-name').value || '').trim();
+  if (!name) {
+    alert('Name is required');
+    return;
+  }
+  var payload = { mode: mode, flag: flag, name: name };
+  if (mode === 'update') {
+    if (!CM_PENDING_EDIT_ONCE) {
+      alert('Session lock missing. Close and choose Edit again.');
+      return;
+    }
+    payload.code = parseInt(document.getElementById('cm-code').value, 10);
+    payload.cm_edit_once = CM_PENDING_EDIT_ONCE;
+  } else if (flag === 'M') {
+    payload.cm_create_m_once = CM_CREATE_M_ONCE;
+  } else if (flag === 'D') {
+    if (!CM_PENDING_CREATE_D_ONCE) {
+      alert('Session lock missing. Close and choose + Category again.');
+      return;
+    }
+    payload.main_code = parseInt(document.getElementById('cm-main_code').value, 10);
+    payload.cm_create_d_once = CM_PENDING_CREATE_D_ONCE;
+  } else if (flag === 'C') {
+    if (!CM_PENDING_CREATE_C_ONCE) {
+      alert('Session lock missing. Close and choose + Micro again.');
+      return;
+    }
+    payload.d_code = parseInt(document.getElementById('cm-d_code').value, 10);
+    var mc = document.getElementById('cm-main_code').value;
+    if (mc) payload.main_code = parseInt(mc, 10);
+    payload.cm_create_c_once = CM_PENDING_CREATE_C_ONCE;
+  }
+  var btn = document.getElementById('cm-save');
+  btn.disabled = true;
+  fetch(CM_SAVE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).then(function(r) { return r.json().then(function(j) { return { ok: r.ok, data: j }; }); })
+    .then(function(res) {
+      btn.disabled = false;
+      if (res.data && res.data.save_nonce) window.__GLOBAL_SAVE_NONCE = res.data.save_nonce;
+      if (res.ok && res.data && res.data.ok) {
+        catModalClose();
+        window.location.reload();
+        return;
+      }
+      var err = (res.data && res.data.error) ? res.data.error : 'Save failed';
+      alert(err);
+    })
+    .catch(function() {
+      btn.disabled = false;
+      alert('Network error');
+    });
+});
+
+function switchView(mode) {
+  var tree = document.getElementById('treeViewCard');
+  var list = document.getElementById('listViewCard');
+  var bar = document.getElementById('treeExpandBar');
+  var bTree = document.getElementById('btnTreeView');
+  var bList = document.getElementById('btnListView');
+  if (mode === 'tree') {
+    tree.style.display = '';
+    list.style.display = 'none';
+    if (bar) bar.style.display = 'inline-flex';
+    if (bTree) bTree.classList.add('active');
+    if (bList) bList.classList.remove('active');
+  } else {
+    tree.style.display = 'none';
+    list.style.display = '';
+    if (bar) bar.style.display = 'none';
+    if (bList) bList.classList.add('active');
+    if (bTree) bTree.classList.remove('active');
+  }
+  filterCat();
+}
+
+function clearCatSearch() {
+  var el = document.getElementById('searchCat');
+  if (el) el.value = '';
+  filterCat();
+}
+
+function setCatTreeExpanded(expand) {
+  var uls = document.querySelectorAll('#catTreeContainer ul.cat-children');
+  var toggles = document.querySelectorAll('#catTreeContainer .cat-tree-toggle[data-cat-caret]');
+  for (var i = 0; i < uls.length; i++) {
+    if (expand) uls[i].classList.remove('is-collapsed');
+    else uls[i].classList.add('is-collapsed');
+  }
+  for (var j = 0; j < toggles.length; j++) {
+    var t = toggles[j];
+    t.setAttribute('aria-expanded', expand ? 'true' : 'false');
+    t.textContent = expand ? '▼' : '▶';
+  }
+}
+
+document.getElementById('catTreeContainer') && document.getElementById('catTreeContainer').addEventListener('click', function(e) {
+  var btn = e.target && e.target.closest && e.target.closest('.cat-tree-toggle');
+  if (!btn || !document.getElementById('catTreeContainer').contains(btn)) return;
+  e.preventDefault();
+  var li = btn.closest('li');
+  if (!li) return;
+  var sub = li.querySelector(':scope > ul.cat-children');
+  if (!sub) return;
+  var isOpen = !sub.classList.contains('is-collapsed');
+  if (isOpen) {
+    sub.classList.add('is-collapsed');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.textContent = '▶';
+  } else {
+    sub.classList.remove('is-collapsed');
+    btn.setAttribute('aria-expanded', 'true');
+    btn.textContent = '▼';
+  }
+});
+document.getElementById('catExpandAll') && document.getElementById('catExpandAll').addEventListener('click', function() { setCatTreeExpanded(true); });
+document.getElementById('catCollapseAll') && document.getElementById('catCollapseAll').addEventListener('click', function() { setCatTreeExpanded(false); });
+
+(function() {
+  var importForm = document.getElementById('cmImportForm');
+  if (!importForm || !CM_IMPORT_URL) return;
+  importForm.addEventListener('submit', function(ev) {
+    ev.preventDefault();
+    var fileEl = document.getElementById('cm-import-file');
+    var msgEl = document.getElementById('cmImportMsg');
+    var nonceEl = document.getElementById('cm-import-nonce');
+    var btn = document.getElementById('cm-import-submit');
+    if (!fileEl || !fileEl.files || !fileEl.files.length) {
+      if (msgEl) msgEl.textContent = 'Choose an Excel file.';
+      return;
+    }
+    var fd = new FormData();
+    fd.append('save_nonce', (nonceEl && nonceEl.value) ? nonceEl.value : '');
+    fd.append('excel_file', fileEl.files[0]);
+    if (btn) btn.disabled = true;
+    if (msgEl) msgEl.textContent = 'Importing…';
+    fetch(CM_IMPORT_URL, { method: 'POST', body: fd })
+      .then(function(r) { return r.json().then(function(j) { return { okHttp: r.ok, j: j }; }); })
+      .then(function(res) {
+        if (btn) btn.disabled = false;
+        var j = res.j || {};
+        if (j.save_nonce && nonceEl) nonceEl.value = j.save_nonce;
+        if (window.__GLOBAL_SAVE_NONCE !== undefined) window.__GLOBAL_SAVE_NONCE = j.save_nonce;
+        if (!j.ok) {
+          if (msgEl) msgEl.textContent = j.error || 'Import failed.';
+          return;
+        }
+        var parts = [
+          'M: ' + (j.created_m || 0),
+          'D: ' + (j.created_d || 0),
+          'C: ' + (j.created_c || 0),
+          'B/Z/L: ' + (j.created_b || 0) + '/' + (j.created_z || 0) + '/' + (j.created_l || 0),
+          'Updated: ' + (j.updated || 0)
+        ];
+        if (msgEl) msgEl.textContent = parts.join(' · ') + (j.partial && j.errors && j.errors.length ? '\nWarnings:\n' + j.errors.join('\n') : '');
+        if (!j.partial || !j.errors || !j.errors.length) {
+          window.location.reload();
+          return;
+        }
+      })
+      .catch(function() {
+        if (btn) btn.disabled = false;
+        if (msgEl) msgEl.textContent = 'Network error.';
+      });
+  });
+})();
+
+function filterCat() {
+  var q = (document.getElementById('searchCat').value || '').trim().toLowerCase();
+  var treeLis = document.querySelectorAll('#catTreeContainer li[data-search]');
+  var visTree = 0;
+  for (var i = 0; i < treeLis.length; i++) {
+    var li = treeLis[i];
+    var hay = (li.getAttribute('data-search') || '').toLowerCase();
+    var show = !q || hay.indexOf(q) >= 0;
+    li.style.display = show ? '' : 'none';
+    if (show) visTree++;
+  }
+  var rows = document.querySelectorAll('#catListBody tr.cat-row');
+  var visList = 0;
+  for (var j = 0; j < rows.length; j++) {
+    var tr = rows[j];
+    var h = (tr.getAttribute('data-search') || '').toLowerCase();
+    var showRow = (!q || h.indexOf(q) >= 0);
+    tr.style.display = showRow ? '' : 'none';
+    if (showRow) visList++;
+  }
+  var ri = 1;
+  for (var k = 0; k < rows.length; k++) {
+    var trR = rows[k];
+    if (trR.style.display === 'none') continue;
+    var sl = trR.querySelector('.sl-no');
+    if (sl) sl.textContent = ri++;
+  }
+  var countEl = document.getElementById('catCount');
+  if (countEl) {
+    var listCard = document.getElementById('listViewCard');
+    var inList = listCard && listCard.style.display !== 'none';
+    var totalTree = treeLis.length;
+    var totalList = rows.length;
+    if (inList) {
+      countEl.textContent = q ? (visList + ' of ' + totalList + ' shown') : (totalList + ' rows');
+    } else {
+      countEl.textContent = q ? (visTree + ' of ' + totalTree + ' shown') : (totalTree + ' nodes');
+    }
+  }
+}
+filterCat();
+</script>
+{% endblock %}

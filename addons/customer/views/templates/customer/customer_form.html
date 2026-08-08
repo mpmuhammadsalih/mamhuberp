@@ -1,0 +1,2406 @@
+{% extends "base.html" %}
+{# These sets must live outside all blocks so they are visible in both block content and block scripts #}
+{% set customer_request_mode = customer_request_mode | default(false) %}
+{% set customer_request_view_only = customer_request_view_only | default(false) %}
+{% set customer_request_list_url = customer_request_list_url | default('') %}
+{% set customer_request_save_url = customer_request_save_url | default('') %}
+{% set customer_request_customercode = customer_request_customercode | default(none) %}
+{% set cr_reject_comment = cr_reject_comment | default('') %}
+{% set api_salesman_url  = api_salesman_url  | default(url_for('customer.api_salesman_list')) %}
+{% set api_category_url  = api_category_url  | default(url_for('customer.api_category_list')) %}
+{% set api_route_url     = api_route_url     | default(url_for('customer.api_route_list'))    %}
+{% set api_employee_url  = api_employee_url  | default(url_for('customer.api_employee_list')) %}
+{% set api_request_accounts_url = api_request_accounts_url | default('') %}
+{% set api_location_url  = api_location_url  | default('') %}
+{% set cr_branch_name    = cr_branch_name    | default('') %}
+{% set cr_tenant_id      = cr_tenant_id      | default('') %}
+{% set preload_salesmen  = preload_salesmen  | default([]) %}
+{% set preload_categories = preload_categories | default([]) %}
+{% set preload_routes = preload_routes | default([]) %}
+{% set preload_employees = preload_employees | default([]) %}
+{% set is_edit = is_edit | default(false) %}
+{% set accounts_locked = customer_request_mode or not (is_admin_user | default(false)) %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=2" />
+<style>
+  body:has(.cf-customer-im-page) { background: #f5f6f8 !important; }
+
+  .cf-customer-im-page {
+    max-width: 1680px;
+    margin: 0 auto;
+    padding: 8px 12px 10px !important;
+    padding-top: 50px !important;
+    box-sizing: border-box;
+    --im-toolbar-bg: linear-gradient(180deg, #f0f7fb 0%, #e3eef8 100%);
+    --im-toolbar-border: rgba(13, 110, 253, 0.14);
+    --im-field-fill: rgba(255, 255, 255, 0.52);
+    --im-field-fill-strong: #eaf2fa;
+    --im-field-readonly: rgba(226, 236, 247, 0.92);
+  }
+
+  .cf-customer-im-page .im-topbar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 6px;
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+  .cf-customer-im-page .im-topbar-main {
+    position: fixed !important;
+    top: 46px;
+    left: 260px;
+    right: var(--nexa-scrollbar-width, 0px);
+    z-index: 105;
+    margin: 0 !important;
+    padding: 6px 16px 8px 16px !important;
+    border-bottom: 1px solid var(--im-toolbar-border);
+    box-shadow:
+      0 1px 0 rgba(15, 23, 42, 0.04),
+      0 6px 18px rgba(15, 23, 42, 0.06);
+    background: var(--im-toolbar-bg);
+    box-sizing: border-box;
+    width: auto;
+    max-width: none;
+    display: flex !important;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    min-width: 0;
+  }
+  .layout.sidebar-collapsed:not(.layout--auth) .cf-customer-im-page .im-topbar-main { left: 56px; }
+  .layout--auth .cf-customer-im-page .im-topbar-main {
+    top: 0;
+    left: 0;
+    right: var(--nexa-scrollbar-width, 0px);
+    padding: 6px 16px 8px 16px !important;
+  }
+
+  .cf-customer-im-page .im-topbar-main h1 {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    font-size: 13px !important;
+    font-weight: 400;
+    color: #212529;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cf-customer-im-page .im-topbar-main h1 .im-ref { font-weight: 600; }
+
+  .cf-customer-im-page .im-actions {
+    flex: 0 0 auto;
+    margin-left: auto;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .cf-customer-im-page .im-actions::-webkit-scrollbar { display: none; height: 0; }
+
+  .cf-customer-im-page .im-btn-save,
+  .cf-customer-im-page .im-btn-secondary {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box !important;
+    min-height: 36px;
+    padding: 8px 14px !important;
+    border-radius: 6px !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    text-decoration: none !important;
+    white-space: nowrap;
+    cursor: pointer;
+    font-family: inherit;
+    flex-shrink: 0;
+  }
+  .cf-customer-im-page .im-btn-secondary {
+    background: var(--im-field-fill-strong) !important;
+    border: 1px solid rgba(13, 110, 253, 0.18) !important;
+    color: #495057 !important;
+    box-shadow: 0 3px 8px rgba(15, 23, 42, .04);
+  }
+  .cf-customer-im-page .im-btn-save {
+    background: #0d6efd !important;
+    border: 1px solid #0d6efd !important;
+    color: #fff !important;
+    box-shadow: 0 8px 18px rgba(13, 110, 253, .22);
+  }
+
+  .cf-customer-im-page .status-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .cf-customer-im-page .status-badge--active { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+  .cf-customer-im-page .status-badge--locked { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+  .cf-customer-im-page .status-badge--new { background: #cce5ff; color: #004085; border: 1px solid #b8daff; }
+
+  .customer-form-shell.itemmaster-container {
+    background: var(--im-field-fill-strong);
+    border: 1px solid #e5eaf2;
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, .06);
+    overflow: hidden;
+    padding: 0;
+    margin-top: 6px;
+  }
+
+  .customer-form-shell.itemmaster-container .cf-form-stack {
+    padding: 6px 10px 12px;
+    box-sizing: border-box;
+  }
+
+  .cf-form-stack { display: flex; flex-direction: column; gap: 2px; margin-top: 0; }
+  .cf-form-stack .cf-form-panel { display: block; padding: 0; margin: 0; background: transparent; flex-shrink: 0; }
+  .cf-section-title {
+    margin: 0;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #14324a;
+    background: linear-gradient(180deg, #e4ecf4 0%, #d5e1ec 100%);
+    border: 1px solid #b8c8d4;
+    border-bottom: 1px solid #a9bac9;
+    border-radius: 2px 2px 0 0;
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    line-height: 1.25;
+  }
+  .cf-form-stack .cf-form-panel:not(:first-child) .cf-section-title { margin-top: 10px; }
+  .cf-form-stack .cf-form-panel .customer-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 18px;
+    row-gap: 4px;
+    margin-top: 0 !important;
+    margin-bottom: 6px !important;
+    padding: 8px 12px !important;
+    border: 1px solid #b8c8d4 !important;
+    border-top: none !important;
+    border-radius: 0 0 2px 2px !important;
+    background: #fff !important;
+    box-shadow: 0 1px 3px rgba(15, 35, 55, 0.08);
+  }
+
+  .cf-customer-im-page .customer-details .form-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 0;
+    min-height: 0;
+    min-width: 0;
+  }
+  .cf-customer-im-page .customer-details .form-group label {
+    margin: 0;
+    min-width: 140px;
+    font-size: 13px;
+    font-weight: 400;
+    color: #495057;
+    flex-shrink: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+  }
+  .cf-customer-im-page .customer-details .form-group label > span { min-width: 140px; flex-shrink: 0; }
+  .cf-customer-im-page .customer-details .form-group .input,
+  .cf-customer-im-page .customer-details .form-group select {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    line-height: 1.25;
+    padding: 2px 0;
+    min-height: auto;
+    border: none;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 0;
+    background: var(--im-field-fill);
+    box-shadow: none !important;
+  }
+  .cf-customer-im-page .customer-details .form-group .input:focus,
+  .cf-customer-im-page .customer-details .form-group select:focus {
+    outline: none;
+    border-bottom-color: var(--nexa-focus-color);
+    box-shadow: none !important;
+  }
+  .cf-customer-im-page .customer-details .form-group input:disabled,
+  .cf-customer-im-page .customer-details .form-group input[readonly] { background: var(--im-field-readonly); color: #6c757d; }
+  .cf-customer-im-page .customer-details .search-field {
+    flex: 1;
+    border: none !important;
+    border-bottom: 1px solid #dee2e6 !important;
+    border-radius: 0 !important;
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    padding: 0;
+    background: var(--im-field-fill);
+    box-shadow: none !important;
+    overflow: visible;
+  }
+  .cf-customer-im-page .customer-details .search-field:focus-within {
+    border-bottom-color: var(--nexa-focus-color) !important;
+    outline: none;
+    box-shadow: none !important;
+  }
+  .cf-customer-im-page .customer-details .search-field .input {
+    border: none !important;
+    padding: 2px 0;
+    line-height: 1.25;
+    min-height: auto;
+    background: transparent;
+    box-shadow: none !important;
+  }
+  .cf-customer-im-page .customer-details .search-picker {
+    background: transparent;
+    border: none;
+    color: #007bff;
+    cursor: pointer;
+    padding: 2px 6px;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+  .cf-customer-im-page .customer-details .search-clear {
+    background: transparent;
+    border: none;
+    color: #6c757d;
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .cf-customer-im-page .customer-details .account-search .search-clear { display: none !important; }
+  .cf-customer-im-page .field-hint {
+    margin: 2px 0 0 152px;
+    color: #6c757d;
+    font-size: 11px;
+    line-height: 1.25;
+  }
+  #cf-panel-accounts .customer-details .form-group {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  #cf-panel-accounts .customer-details .form-group > .field-hint {
+    flex: 0 0 100%;
+    margin-left: 152px;
+    margin-top: 2px;
+    box-sizing: border-box;
+  }
+  .cf-customer-im-page .customer-actions { margin-top: 12px; padding: 10px 14px 14px; border-top: 1px solid #dee2e6; background: #fff; }
+
+  @media (max-width: 1024px) {
+    .cf-form-stack .cf-form-panel .customer-details { grid-template-columns: 1fr; }
+  }
+
+  /* Kill browser autofill yellow highlight */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  select:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0 1000px #fff inset !important;
+    box-shadow: 0 0 0 1000px #fff inset !important;
+    -webkit-text-fill-color: inherit !important;
+  }
+
+  /* ── Save overlay ──────────────────────────────────────────── */
+  #cfSaveOverlay {
+    display: none; position: fixed; inset: 0; z-index: 9999;
+    background: rgba(0,0,0,.45); align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px;
+  }
+  #cfSaveOverlay.active { display: flex; }
+  .cf-spinner {
+    width: 52px; height: 52px; border-radius: 50%;
+    border: 5px solid rgba(255,255,255,.25);
+    border-top-color: #fff;
+    animation: cfSpin .75s linear infinite;
+  }
+  @keyframes cfSpin { to { transform: rotate(360deg); } }
+  .cf-overlay-text { color: #fff; font-size: 15px; font-weight: 600; letter-spacing: .3px; }
+
+  /* ── All text inputs uppercase ─────────────────────────────── */
+  .cf-customer-im-page input[type="text"].input,
+  .cf-customer-im-page input:not([type="number"]):not([type="hidden"]):not([type="submit"]).input,
+  .cf-customer-im-page textarea.input {
+    text-transform: uppercase;
+  }
+
+  /* ── Accounts section: uniform label width so all pickers align ── */
+  #cf-panel-accounts .form-group label > span:first-child {
+    min-width: 170px;
+    width: 170px;
+    flex-shrink: 0;
+  }
+
+  /* ── Responsive layout (Customer + Customer Request) ─────────── */
+  @media (max-width: 900px) {
+    .cf-customer-im-page {
+      max-width: 100% !important;
+      padding-left: 8px;
+      padding-right: 8px;
+    }
+    .cf-customer-im-page .im-topbar-main {
+      flex-wrap: wrap !important;
+      left: 0 !important;
+      right: 0 !important;
+      padding-left: 10px !important;
+      padding-right: 10px !important;
+    }
+  }
+
+  @media (max-width: 1280px) {
+    .cf-customer-im-page .customer-details,
+    .cf-form-stack .cf-form-panel .customer-details {
+      grid-template-columns: 1fr !important;
+      row-gap: 4px !important;
+      column-gap: 0 !important;
+    }
+    .cf-customer-im-page .customer-details .form-group {
+      display: block;
+      min-height: auto;
+      margin-bottom: 6px;
+    }
+    .cf-customer-im-page .customer-details .form-group label {
+      width: 100%;
+      min-width: 0;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 4px;
+      align-items: start;
+    }
+    .cf-customer-im-page .customer-details .form-group label > span {
+      min-width: 0;
+      width: 100%;
+      font-size: 12px;
+      font-weight: 600;
+      color: #6c757d;
+    }
+    #cf-panel-accounts .form-group label > span:first-child {
+      min-width: 0;
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .cf-customer-im-page .customer-details .search-field {
+      width: 100%;
+    }
+    .cf-customer-im-page .field-hint {
+      margin: 3px 0 0 0;
+    }
+    #cf-panel-accounts .customer-details .form-group > .field-hint {
+      margin-left: 0;
+    }
+    .cf-customer-im-page .customer-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .cf-customer-im-page .customer-actions .im-btn-save,
+    .cf-customer-im-page .customer-actions .im-btn-secondary,
+    .cf-customer-im-page .customer-actions button,
+    .cf-customer-im-page .customer-actions a {
+      margin-left: 0 !important;
+      width: 100%;
+      text-align: center;
+      justify-content: center;
+    }
+    .modal__content {
+      width: 96vw !important;
+      max-width: 96vw !important;
+    }
+  }
+</style>
+<div class="im-page cf-customer-im-page">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>
+        {% if customer_request_mode %}
+          Customer Request / <span class="im-ref">{% if is_edit and customer_request_customercode %}{{ customer_request_customercode }}{% else %}New{% endif %}</span>
+          {% if customer_request_view_only %}<span class="status-badge status-badge--new">View</span>{% endif %}
+        {% else %}
+          Customer / <span class="im-ref">{% if is_edit and customer %}{{ customer.customercode }}{% elif not is_edit %}{{ next_customer_code }}{% else %}—{% endif %}</span>
+          {% if not is_edit %}<span class="status-badge status-badge--new">New</span>
+          {% elif customer and (customer.flag or '')|upper == 'N' %}<span class="status-badge status-badge--locked">Locked</span>
+          {% elif customer %}<span class="status-badge status-badge--active">Active</span>
+          {% endif %}
+        {% endif %}
+      </h1>
+      <div class="im-actions">
+        {% if customer_request_mode %}
+          {% if customer_request_view_only %}
+            <a href="{{ customer_request_list_url }}" class="im-btn-secondary">Back</a>
+          {% else %}
+            <button type="submit" form="customerForm" id="cfSubmitBtn" class="im-btn-save">{{ 'Update Request' if is_edit else 'Submit Request' }}</button>
+            <a href="{{ customer_request_list_url }}" class="im-btn-secondary">Cancel</a>
+          {% endif %}
+        {% else %}
+          <button type="submit" form="customerForm" id="cfSubmitBtn" class="im-btn-save">{{ 'Update Customer' if is_edit else 'Save Customer' }}</button>
+          <a href="{{ url_for('customer.customer_list') }}" class="im-btn-secondary">Cancel</a>
+          <a href="{{ url_for('customer.customer_list') }}" class="im-btn-secondary">List</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <section class="customer-form-shell itemmaster-container">
+  <form id="customerForm" method="post" autocomplete="off"
+    action="{% if customer_request_mode %}{{ customer_request_save_url }}{% elif is_edit %}{{ url_for('customer.customer_edit', location_code=location_code, customer_code=next_customer_code) }}{% else %}{{ url_for('customer.customer_create') }}{% endif %}">
+
+    <input type="hidden" name="save_nonce" value="{{ global_save_nonce | default('') }}" />
+
+    {# For customer request edits, carry the PK separately so the save can detect new vs edit #}
+    {% if customer_request_mode and customer_request_customercode %}
+    <input type="hidden" name="cr_edit_code" value="{{ customer_request_customercode }}" />
+    {% endif %}
+
+    <div class="cf-form-stack">
+
+    <div class="cf-form-panel" id="cf-panel-general">
+      <h2 class="cf-section-title">General</h2>
+      <div class="customer-details">
+        <div class="form-group">
+          {% if customer_request_mode %}
+            <label for="cr_locationDisplay">
+              <span>Location</span>
+              <input type="text" id="cr_locationDisplay" class="input" readonly
+                style="background:#f5f5f5;cursor:not-allowed;"
+                value="{{ (location_code ~ ' - ' ~ location_name) if location_name else (location_code or '') }}" />
+              <input type="hidden" id="cr_locationcode" name="locationcode" value="{{ location_code or '' }}" />
+            </label>
+          {% else %}
+            <label for="locationDisplay">
+              <span>Location</span>
+              <input type="text" id="locationDisplay" class="input"
+                value="{{ (location_code ~ ' - ' ~ location_name) if location_name else location_code }}" readonly />
+            </label>
+          {% endif %}
+        </div>
+        {% if customer_request_mode %}
+        <div class="form-group">
+          <label for="cr_branch_display">
+            <span>Branch</span>
+            <input type="text" id="cr_branch_display" class="input" readonly
+              style="background:#f5f5f5;cursor:not-allowed;"
+              value="{{ (cr_branch_name ~ ' (' ~ cr_tenant_id ~ ')') if cr_branch_name else (cr_tenant_id | default('')) }}" />
+          </label>
+        </div>
+        {% endif %}
+        <div class="form-group">
+          <label for="customercode">
+            <span>Customer Code</span>
+            <input type="number" id="customercode" name="customercode" class="input" value="{{ next_customer_code }}"
+              {{ 'readonly' if (is_edit or customer_request_mode) else '' }}
+              {% if customer_request_mode %}style="background:#f5f5f5;cursor:not-allowed;"{% endif %}
+              min="1" />
+          </label>
+        </div>
+        <div class="form-group" style="grid-column: span 2;">
+          <label for="customername">
+            <span>Customer Name</span>
+            <input type="text" id="customername" name="customername" class="input" value="{{ (customer.customername or '') if customer else '' }}" required placeholder="Customer name" />
+          </label>
+        </div>
+        <div class="form-group" style="grid-column: span 2;">
+          <label for="address">
+            <span>Address</span>
+            <input type="text" id="address" name="address" class="input" value="{{ (customer.address or '') if customer else '' }}" placeholder="Address" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="street">
+            <span>Street</span>
+            <input type="text" id="street" name="street" class="input" value="{{ (customer.street or '') if customer else '' }}" placeholder="Street" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="zone">
+            <span>Zone</span>
+            <input type="text" id="zone" name="zone" class="input" value="{{ (customer.zone or '') if customer else '' }}" placeholder="Zone" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="pobox">
+            <span>P.O.Box</span>
+            <input type="text" id="pobox" name="pobox" class="input" value="{{ (customer.pobox or '') if customer else '' }}" placeholder="P.O.Box" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="crno">
+            <span>CR No</span>
+            <input type="text" id="crno" name="crno" class="input" value="{{ (customer.crno or '') if customer else '' }}" placeholder="CR No" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="nationality">
+            <span>Nationality</span>
+            <input type="text" id="nationality" name="nationality" class="input" value="{{ (customer.nationality or '') if customer else '' }}" placeholder="Nationality" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="telephone">
+            <span>Telephone</span>
+            <input type="text" id="telephone" name="telephone" class="input" value="{{ (customer.telephone or '') if customer else '' }}" placeholder="Telephone" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="mobile">
+            <span>Mobile</span>
+            <input type="text" id="mobile" name="mobile" class="input" value="{{ (customer.mobile or '') if customer else '' }}" placeholder="Mobile" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="whatsapp">
+            <span>WhatsApp</span>
+            <input type="text" id="whatsapp" name="whatsapp" class="input" value="{{ (customer.whatsapp or '') if customer else '' }}" placeholder="WhatsApp number" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="email">
+            <span>Email</span>
+            <input type="text" id="email" name="email" class="input" value="{{ (customer.email or '') if customer else '' }}" placeholder="Email address" style="text-transform:none;" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="qatarid">
+            <span>Qatar ID</span>
+            <input type="text" id="qatarid" name="qatarid" class="input" value="{{ (customer.qatarid or '') if customer else '' }}" placeholder="Qatar ID" />
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="cf-form-panel" id="cf-panel-sales">
+      <h2 class="cf-section-title">Sales</h2>
+      <div class="customer-details">
+        <div class="form-group">
+          <label for="salesmanDisplay">
+            <span>Salesman</span>
+            <span class="search-field search-field--popup">
+              <input type="text" id="salesmanDisplay" class="input" placeholder="Click to select..." readonly value="{{ salesman_name or '' }}" />
+              <button type="button" class="search-clear" id="salesmanClear" aria-label="Clear" style="display: none;">×</button>
+              <button type="button" class="search-picker" id="salesmanPicker" aria-label="Open salesman list">▾</button>
+            </span>
+            <input type="hidden" id="salesmancode" name="salesmancode" value="{{ (customer.salesmancode or '') if customer else '' }}" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="customer_billing_type">
+            <span>Customer type</span>
+            {% if customer_request_mode %}
+              <select id="customer_billing_type" name="customer_billing_type" class="input" disabled style="background:#f5f5f5;cursor:not-allowed;">
+                <option value="CASH" selected>Cash</option>
+              </select>
+            {% else %}
+              <select id="customer_billing_type" name="customer_billing_type" class="input" required>
+                <option value="">-- Select --</option>
+                <option value="CASH" {% if customer and (customer.customer_billing_type or 'CASH') == 'CASH' %}selected{% endif %}>Cash</option>
+                <option value="CREDIT" {% if customer and customer.customer_billing_type == 'CREDIT' %}selected{% endif %}>Credit</option>
+              </select>
+              <small class="muted" style="width:100%;">Cash bills post as type C; Credit as type R on Sales, Returns, and POS.</small>
+            {% endif %}
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="categoryDisplay">
+            <span>Customer Category</span>
+            <span class="search-field search-field--popup">
+              <input type="text" id="categoryDisplay" class="input" placeholder="Click to select..." readonly value="{{ category_name or '' }}" />
+              <button type="button" class="search-clear" id="categoryClear" aria-label="Clear" style="display: none;">×</button>
+              <button type="button" class="search-picker" id="categoryPicker" aria-label="Open category list">▾</button>
+            </span>
+            <input type="hidden" id="customercategory" name="customercategory" value="{{ (customer.customercategory or '') if customer else '' }}" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="bySalesmanDisplay">
+            <span>By Salesman</span>
+            <span class="search-field search-field--popup">
+              <input type="text" id="bySalesmanDisplay" class="input" placeholder="Click to select..." readonly value="{{ by_salesman_name or '' }}" />
+              <button type="button" class="search-clear" id="bySalesmanClear" aria-label="Clear" style="display: none;">×</button>
+              <button type="button" class="search-picker" id="bySalesmanPicker" aria-label="Open salesman list">▾</button>
+            </span>
+            <input type="hidden" id="bysalesman" name="bysalesman" value="{{ (customer.bysalesman or '') if customer else '' }}" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="routeDisplay">
+            <span>Route No</span>
+            <span class="search-field search-field--popup">
+              <input type="text" id="routeDisplay" class="input" placeholder="Click to select..." readonly value="{{ route_name or '' }}" />
+              <button type="button" class="search-clear" id="routeClear" aria-label="Clear" style="display: none;">×</button>
+              <button type="button" class="search-picker" id="routePicker" aria-label="Open route list">▾</button>
+            </span>
+            <input type="hidden" id="routeno" name="routeno" value="{{ (customer.routeno or '') if customer else '' }}" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="creditlimit">
+            <span>Credit Limit</span>
+            <input type="number" id="creditlimit" name="creditlimit" class="input" value="{{ (customer.creditlimit or 0) if customer else 0 }}" min="0" step="0.01" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="creditterm">
+            <span>Credit Term (Days)</span>
+            <input type="number" id="creditterm" name="creditterm" class="input" value="{{ customer.creditterms if customer and customer.creditterms is not none else 2 }}" min="0" step="0.01" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="currentcredit">
+            <span>Current Credit</span>
+            <input type="number" id="currentcredit" name="currentcredit" class="input" value="{{ (customer.currentcreditamount or 0) if customer else 0 }}" min="0" step="0.01" readonly style="background:#f8f9fa;cursor:default;" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="employeeDisplay">
+            <span>C/O Employee</span>
+            <span class="search-field search-field--popup">
+              <input type="text" id="employeeDisplay" class="input" placeholder="Press F1 to select..." readonly
+                value="{{ employee_name or '' }}" />
+              <button type="button" class="search-clear" id="employeeClear" aria-label="Clear" style="{{ '' if employee_name else 'display:none' }}">×</button>
+              <button type="button" class="search-picker" id="employeePicker" aria-label="Open employee list">▾</button>
+            </span>
+            <input type="hidden" id="employeecode" name="employeecode" value="{{ (customer.employeecode or '') if customer else '' }}" />
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="cf-form-panel" id="cf-panel-accounts">
+      <h2 class="cf-section-title">Accounts</h2>
+      <div class="customer-details">
+        {% if accounts_locked %}
+        <div style="margin-bottom:12px;padding:10px 12px;color:#084298;background:#e7f1ff;font-size:12px;line-height:1.4;">
+          {% if customer_request_mode and not is_edit %}
+          Receivable, Sales, Output VAT, and Advance accounts use your branch defaults and cannot be changed (same behaviour as Item Request GL fields).
+          {% else %}
+          GL accounts use branch defaults. Only the <strong>admin</strong> user can change account mappings on this screen.
+          {% endif %}
+        </div>
+        {% endif %}
+        <div class="form-group">
+          <label for="flagDisplay">
+            <span>Status</span>
+            {% if customer_request_mode %}
+              <input type="text" id="flagDisplay" class="input" readonly
+                style="background:#f5f5f5;cursor:not-allowed;"
+                value="Active" />
+              <input type="hidden" id="flag" name="flag" value="Y" />
+            {% else %}
+            <span class="search-field search-field--popup">
+              <input type="text" id="flagDisplay" class="input" placeholder="Click to select..." readonly
+                value="{% if customer and (customer.flag or '')|upper == 'N' %}Locked{% else %}Active{% endif %}" />
+              <button type="button" class="search-picker" id="flagPicker" aria-label="Open status list">▾</button>
+            </span>
+            <input type="hidden" id="flag" name="flag"
+              value="{% if customer and (customer.flag or '')|upper == 'N' %}N{% else %}Y{% endif %}" />
+            {% endif %}
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="closedDisplay">
+            <span>Account Status</span>
+            {% if customer_request_mode %}
+              <input type="text" id="closedDisplay" class="input" readonly
+                style="background:#f5f5f5;cursor:not-allowed;"
+                value="Open" />
+              <input type="hidden" id="closed" name="closed" value="N" />
+            {% else %}
+            <span class="search-field search-field--popup">
+              <input type="text" id="closedDisplay" class="input" placeholder="Click to select..." readonly
+                value="{% if customer and (customer.closed or '')|upper == 'Y' %}Closed{% else %}Open{% endif %}" />
+              <button type="button" class="search-picker" id="closedPicker" aria-label="Open account status list">▾</button>
+            </span>
+            <input type="hidden" id="closed" name="closed"
+              value="{% if customer and (customer.closed or '')|upper == 'Y' %}Y{% else %}N{% endif %}" />
+            {% endif %}
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="ccode">
+            <span>C Code</span>
+            <input type="text" id="ccode" class="input" readonly style="background:#f8f9fa;cursor:default;"
+              value="{{ (customer.ccode or '') if customer else '' }}" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="points">
+            <span>Points</span>
+            <input type="text" id="points" class="input" readonly style="background:#f8f9fa;cursor:default;"
+              value="{{ (customer.points or '') if customer else '' }}" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="countersale" style="flex-direction:row;align-items:center;gap:10px;cursor:pointer;">
+            <span style="min-width:0;">Counter Sale</span>
+            <input type="checkbox" id="countersaleChk" style="width:18px;height:18px;cursor:pointer;flex-shrink:0;"
+              {% if customer and (customer.countersale or '')|upper == 'Y' %}checked{% endif %} />
+            <input type="hidden" id="countersale" name="countersale"
+              value="{% if customer and (customer.countersale or '')|upper == 'Y' %}Y{% else %}N{% endif %}" />
+          </label>
+        </div>
+        <div class="form-group" style="grid-column: span 2; max-width: 100%;">
+          <label for="receivableaccount_display" style="width: 100%;">
+            <span>Receivable Account</span> <span style="color:#b45309" title="Required">*</span>
+            {% set customer_recv_code = (customer.receivableaccount if customer and customer.receivableaccount else (default_accounts.customer_receivable if default_accounts and default_accounts.customer_receivable else '1200')) %}
+            {% set customer_recv_display %}{% if customer_recv_code %}{% for acc in chart_accounts %}{% if (acc.code|string) == (customer_recv_code|string) %}{{ acc.code }} - {{ acc.name }}{% endif %}{% endfor %}{% endif %}{% endset %}
+            {% if accounts_locked %}
+              <input type="text" id="receivableaccount_display" class="input" readonly style="background:#f5f5f5;cursor:not-allowed;" value="{{ (customer_recv_display | trim) or customer_recv_code }}" />
+              <input type="hidden" id="receivableaccount" name="receivableaccount" value="{{ customer_recv_code }}" />
+            {% else %}
+            <span class="search-field search-field--popup account-search">
+              <input type="text" id="receivableaccount_display" class="input" placeholder="Press F1 to select..." value="{{ customer_recv_display }}" />
+              <button type="button" class="search-clear" id="accountCodeClear" aria-label="Clear" style="display: none;">×</button>
+              <button type="button" class="search-picker" id="accountCodePicker" aria-label="Open account list">▾</button>
+            </span>
+            <input type="hidden" id="receivableaccount" name="receivableaccount" value="{{ customer_recv_code }}" />
+            {% endif %}
+          </label>
+          <div class="field-hint">Choose customer control / A/R account (example: <strong>1200 - Accounts Receivable</strong>).</div>
+        </div>
+        <div class="form-group" style="grid-column: span 2; max-width: 100%;">
+          <label for="salesaccount_display" style="width: 100%;">
+            <span>Sales Account</span> <span style="color:#b45309" title="Required">*</span>
+            {% set customer_sales_code = (customer.salesaccount if customer and customer.salesaccount else (default_accounts.customer_sales if default_accounts else '')) %}
+            {% set customer_sales_display %}{% if customer_sales_code %}{% for acc in chart_accounts %}{% if (acc.code|string) == (customer_sales_code|string) %}{{ acc.code }} - {{ acc.name }}{% endif %}{% endfor %}{% endif %}{% endset %}
+            {% if accounts_locked %}
+              <input type="text" id="salesaccount_display" class="input" readonly style="background:#f5f5f5;cursor:not-allowed;" value="{{ (customer_sales_display | trim) or customer_sales_code }}" />
+              <input type="hidden" id="salesaccount" name="salesaccount" value="{{ customer_sales_code }}" />
+            {% else %}
+            <span class="search-field search-field--popup account-search">
+              <input type="text" id="salesaccount_display" class="input" placeholder="Press F1 to select..." value="{{ customer_sales_display }}" />
+              <button type="button" class="search-clear" id="salesAccountClear" aria-label="Clear" style="display: none;">×</button>
+              <button type="button" class="search-picker" id="salesAccountPicker" aria-label="Open account list">▾</button>
+            </span>
+            <input type="hidden" id="salesaccount" name="salesaccount" value="{{ customer_sales_code }}" />
+            {% endif %}
+          </label>
+          <div class="field-hint">Choose revenue account used for this customer (example: <strong>4100 - Sales Revenue</strong>).</div>
+        </div>
+        <div class="form-group" style="grid-column: span 2; max-width: 100%;">
+          <label for="vatoutputaccount_display" style="width: 100%;">
+            <span>Output VAT Account</span> <span style="color:#b45309" title="Required">*</span>
+            {% set customer_vat_code = (customer.vatoutputaccount if customer and customer.vatoutputaccount else (default_accounts.customer_vat_output if default_accounts else '')) %}
+            {% set customer_vat_display %}{% if customer_vat_code %}{% for acc in chart_accounts %}{% if (acc.code|string) == (customer_vat_code|string) %}{{ acc.code }} - {{ acc.name }}{% endif %}{% endfor %}{% endif %}{% endset %}
+            {% if accounts_locked %}
+              <input type="text" id="vatoutputaccount_display" class="input" readonly style="background:#f5f5f5;cursor:not-allowed;" value="{{ (customer_vat_display | trim) or customer_vat_code }}" />
+              <input type="hidden" id="vatoutputaccount" name="vatoutputaccount" value="{{ customer_vat_code }}" />
+            {% else %}
+            <span class="search-field search-field--popup account-search">
+              <input type="text" id="vatoutputaccount_display" class="input" placeholder="Press F1 to select..." value="{{ customer_vat_display }}" />
+              <button type="button" class="search-clear" id="vatOutputAccountClear" aria-label="Clear" style="display: none;">×</button>
+              <button type="button" class="search-picker" id="vatOutputAccountPicker" aria-label="Open account list">▾</button>
+            </span>
+            <input type="hidden" id="vatoutputaccount" name="vatoutputaccount" value="{{ customer_vat_code }}" />
+            {% endif %}
+          </label>
+          <div class="field-hint">Choose VAT on sales account used during invoice posting (your VAT payable/output account).</div>
+        </div>
+        <div class="form-group" style="grid-column: span 2; max-width: 100%;">
+          <label for="advanceaccount_display" style="width: 100%;">
+            <span>Advance Account</span> <span style="color:#b45309" title="Required">*</span>
+            {% set customer_adv_code = (customer.advanceaccount if customer and customer.advanceaccount else (default_accounts.customer_advance if default_accounts else '')) %}
+            {% set customer_adv_display %}{% if customer_adv_code %}{% for acc in chart_accounts %}{% if (acc.code|string) == (customer_adv_code|string) %}{{ acc.code }} - {{ acc.name }}{% endif %}{% endfor %}{% endif %}{% endset %}
+            {% if accounts_locked %}
+              <input type="text" id="advanceaccount_display" class="input" readonly style="background:#f5f5f5;cursor:not-allowed;" value="{{ (customer_adv_display | trim) or customer_adv_code }}" />
+              <input type="hidden" id="advanceaccount" name="advanceaccount" value="{{ customer_adv_code }}" />
+            {% else %}
+            <span class="search-field search-field--popup account-search">
+              <input type="text" id="advanceaccount_display" class="input" placeholder="Press F1 to select..." value="{{ customer_adv_display }}" />
+              <button type="button" class="search-clear" id="advanceAccountClear" aria-label="Clear" style="display: none;">×</button>
+              <button type="button" class="search-picker" id="advanceAccountPicker" aria-label="Open account list">▾</button>
+            </span>
+            <input type="hidden" id="advanceaccount" name="advanceaccount" value="{{ customer_adv_code }}" />
+            {% endif %}
+          </label>
+          <div class="field-hint">Choose customer advance/prepayment account (for received advances), e.g. <strong>2130 - Customer Advances</strong>.</div>
+        </div>
+
+        {% if not customer_request_mode %}
+        <div class="form-group" style="grid-column: span 2;">
+          <label for="reason">
+            <span>Reason</span>
+            <input type="text" id="reason" name="reason" class="input"
+                   value="{{ (customer.reason or '') if customer else '' }}"
+                   placeholder="Reason…" />
+          </label>
+        </div>
+        <div class="form-group" style="grid-column: span 2;">
+          <label for="otherreason">
+            <span>Other Reason</span>
+            <input type="text" id="otherreason" name="otherreason" class="input"
+                   value="{{ (customer.otherreason or '') if customer else '' }}"
+                   placeholder="Other reason…" />
+          </label>
+        </div>
+        <div class="form-group" style="grid-column: span 2;">
+          <label for="closedreason">
+            <span>Closed Reason</span>
+            <input type="text" id="closedreason" name="closedreason" class="input"
+                   value="{{ (customer.closedreason or '') if customer else '' }}"
+                   placeholder="Closed reason…" />
+          </label>
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+
+    </div>{# cf-form-stack #}
+
+    {% if customer_request_view_only and cr_reject_comment %}
+    <div style="margin:16px 0;padding:14px 18px;background:#fef2f2;border:1px solid #fca5a5;border-left:5px solid #dc2626;border-radius:8px;">
+      <div style="font-weight:700;color:#dc2626;margin-bottom:4px;font-size:13px;">✕ Rejection Reason</div>
+      <div style="color:#7f1d1d;font-size:14px;line-height:1.5;white-space:pre-wrap;">{{ cr_reject_comment }}</div>
+    </div>
+    {% endif %}
+
+    {% if customer_request_mode and customer_request_view_only %}
+    <div class="customer-actions">
+          <a href="{{ customer_request_list_url }}" class="im-btn-secondary">← Back to List</a>
+          {% if cr_reject_comment and (user_customer_creation or allow_all_permissions) %}
+            {# Rejected request — allow customer creation users to reopen or convert #}
+            <form method="post"
+                  action="{{ url_for('ho.customer_request_reopen', customercode=customer_request_customercode) }}"
+                  style="display:inline;margin-left:8px;"
+                  onsubmit="return confirm('Move this request back to Pending?')">
+              <input type="hidden" name="redirect" value="1" />
+              <button type="submit"
+                      style="background:#f59e0b;color:#fff;border:1px solid #f59e0b;padding:7px 16px;border-radius:5px;font-weight:600;cursor:pointer;font-size:13px;">
+                ↩ Move to Pending
+              </button>
+            </form>
+            <a href="{{ url_for('ho.customer_central_form', from_cr=customer_request_customercode) }}"
+               style="margin-left:8px;background:#198754;color:#fff;border:1px solid #198754;padding:7px 16px;border-radius:5px;font-weight:600;font-size:13px;text-decoration:none;display:inline-block;">
+              Convert to Central
+            </a>
+          {% endif %}
+    </div>
+    {% endif %}
+  </form>
+  </section>
+
+  <!-- Save overlay -->
+  <div id="cfSaveOverlay" role="status" aria-live="polite">
+    <div class="cf-spinner"></div>
+    <div class="cf-overlay-text">Saving, please wait…</div>
+  </div>
+
+  <!-- Invoice Code (Type) popup: 1 = Cash, 2 = Credit -->
+  <div class="modal hidden" id="invoiceCodeModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="invoiceCodeModal"></div>
+    <div class="modal__content" style="max-width: 360px;">
+      <div class="modal__header">
+        <h4>Select Invoice Type</h4>
+        <button type="button" class="modal__close" data-close="invoiceCodeModal">×</button>
+      </div>
+      <div class="modal__body">
+        <table class="table" id="invoiceCodeModalTable">
+          <thead>
+            <tr><th>Code</th><th>Type</th></tr>
+          </thead>
+          <tbody>
+            <tr class="invoice-code-row" data-code="1" data-name="Cash"><td>1</td><td>Cash</td></tr>
+            <tr class="invoice-code-row" data-code="2" data-name="Credit"><td>2</td><td>Credit</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Salesman popup: fetch from SALESMAN table -->
+  <div class="modal hidden" id="salesmanModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="salesmanModal"></div>
+    <div class="modal__content" style="max-width: 480px;">
+      <div class="modal__header">
+        <h4>Select Salesman</h4>
+        <button type="button" class="modal__close" data-close="salesmanModal">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="modal__search" style="margin-bottom: 12px;">
+          <input type="text" id="salesmanModalSearch" class="input" placeholder="Search code or name..." style="width: 100%; padding: 8px;" />
+        </div>
+        <div class="scroll-table" style="max-height: 320px;">
+          <table class="table" id="salesmanModalTable">
+            <thead>
+              <tr><th>Code</th><th>Name</th></tr>
+            </thead>
+            <tbody id="salesmanModalBody">
+              <tr><td colspan="2" class="muted">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Customer Category popup: TBLCUSTOMERCATEGORY -->
+  <div class="modal hidden" id="categoryModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="categoryModal"></div>
+    <div class="modal__content" style="max-width: 480px;">
+      <div class="modal__header">
+        <h4>Select Customer Category</h4>
+        <button type="button" class="modal__close" data-close="categoryModal">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="modal__search" style="margin-bottom: 12px;">
+          <input type="text" id="categoryModalSearch" class="input" placeholder="Search code or name..." style="width: 100%; padding: 8px;" />
+        </div>
+        <div class="scroll-table" style="max-height: 320px;">
+          <table class="table">
+            <thead><tr><th>Code</th><th>Name</th></tr></thead>
+            <tbody id="categoryModalBody"><tr><td colspan="2" class="muted">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- By Salesman popup: SALESMAN table -->
+  <div class="modal hidden" id="bySalesmanModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="bySalesmanModal"></div>
+    <div class="modal__content" style="max-width: 480px;">
+      <div class="modal__header">
+        <h4>Select By Salesman</h4>
+        <button type="button" class="modal__close" data-close="bySalesmanModal">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="modal__search" style="margin-bottom: 12px;">
+          <input type="text" id="bySalesmanModalSearch" class="input" placeholder="Search code or name..." style="width: 100%; padding: 8px;" />
+        </div>
+        <div class="scroll-table" style="max-height: 320px;">
+          <table class="table">
+            <thead><tr><th>Code</th><th>Name</th></tr></thead>
+            <tbody id="bySalesmanModalBody"><tr><td colspan="2" class="muted">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status popup -->
+  <div class="modal hidden" id="flagModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="flagModal"></div>
+    <div class="modal__content" style="max-width: 320px;">
+      <div class="modal__header">
+        <h4>Select Status</h4>
+        <button type="button" class="modal__close" data-close="flagModal">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="scroll-table" style="max-height: 200px;">
+          <table class="table">
+            <tbody id="flagModalBody">
+              <tr class="modal-list-row" tabindex="0" data-code="Y" data-name="Active">
+                <td><b>Y</b></td><td>Active</td>
+              </tr>
+              <tr class="modal-list-row" tabindex="0" data-code="N" data-name="Locked">
+                <td><b>N</b></td><td>Locked</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Account Status popup -->
+  <div class="modal hidden" id="closedModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="closedModal"></div>
+    <div class="modal__content" style="max-width: 320px;">
+      <div class="modal__header">
+        <h4>Select Account Status</h4>
+        <button type="button" class="modal__close" data-close="closedModal">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="scroll-table" style="max-height: 200px;">
+          <table class="table">
+            <tbody id="closedModalBody">
+              <tr class="modal-list-row" tabindex="0" data-code="N" data-name="Open">
+                <td><b>N</b></td><td>Open</td>
+              </tr>
+              <tr class="modal-list-row" tabindex="0" data-code="Y" data-name="Closed">
+                <td><b>Y</b></td><td>Closed</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- C/O Employee popup: EMPLOYEE1 (pending='Y') -->
+  <div class="modal hidden" id="employeeModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="employeeModal"></div>
+    <div class="modal__content" style="max-width: 520px;">
+      <div class="modal__header">
+        <h4>Select Employee</h4>
+        <button type="button" class="modal__close" data-close="employeeModal">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="modal__search" style="margin-bottom: 12px;">
+          <input type="text" id="employeeModalSearch" class="input" placeholder="Search code or name..." style="width: 100%; padding: 8px;" />
+        </div>
+        <div class="scroll-table" style="max-height: 320px;">
+          <table class="table">
+            <thead><tr><th>Code</th><th>Name</th></tr></thead>
+            <tbody id="employeeModalBody"><tr><td colspan="2" class="muted">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Route No popup: TBLROUTES -->
+  <div class="modal hidden" id="routeModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="routeModal"></div>
+    <div class="modal__content" style="max-width: 480px;">
+      <div class="modal__header">
+        <h4>Select Route</h4>
+        <button type="button" class="modal__close" data-close="routeModal">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="modal__search" style="margin-bottom: 12px;">
+          <input type="text" id="routeModalSearch" class="input" placeholder="Search code or name..." style="width: 100%; padding: 8px;" />
+        </div>
+        <div class="scroll-table" style="max-height: 320px;">
+          <table class="table">
+            <thead><tr><th>Code</th><th>Name</th></tr></thead>
+            <tbody id="routeModalBody"><tr><td colspan="2" class="muted">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Account popup: CHART_OF_ACCOUNTS -->
+  <div class="modal hidden" id="customerAccountModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="customerAccountModal"></div>
+    <div class="modal__content" style="max-width: 680px;">
+      <div class="modal__header">
+        <h4>Select Account</h4>
+        <button type="button" class="modal__close" data-close="customerAccountModal">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="modal__search" style="margin-bottom: 12px;">
+          <input type="text" id="customerAccountModalSearch" class="input" placeholder="Search code or name..." style="width: 100%; padding: 8px;" />
+        </div>
+        <div class="scroll-table" style="max-height: 320px;">
+          <table class="table" id="customerAccountModalTable">
+            <thead><tr><th>Code</th><th>Name</th><th>Type</th></tr></thead>
+            <tbody>
+              {% for acc in chart_accounts %}
+                <tr data-code="{{ acc.code }}" data-name="{{ acc.name }}" data-text="{{ (acc.code ~ ' ' ~ acc.name ~ ' ' ~ (acc.type or ''))|lower }}">
+                  <td>{{ acc.code }}</td>
+                  <td>{{ acc.name }}</td>
+                  <td>{{ acc.type or '-' }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  function cfScrollFlashIntoView() {
+    var fl = document.querySelector('.flash-list');
+    if (!fl) return;
+    try {
+      fl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch (e) {
+      fl.scrollIntoView(true);
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', cfScrollFlashIntoView);
+  } else {
+    cfScrollFlashIntoView();
+  }
+})();
+</script>
+<script>
+function cfSwitchTab(name) {
+  if (!name) return;
+  var panel = document.getElementById('cf-panel-' + name);
+  if (panel) {
+    try {
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) {
+      panel.scrollIntoView(true);
+    }
+  }
+  if (name === 'accounts' && window.cfEnsureRequestAccountsLoaded) {
+    window.cfEnsureRequestAccountsLoaded();
+  }
+}
+
+// ── Enter / Escape field navigation ─────────────────────────────
+(function() {
+  // Full ordered field list (General → Sales → Accounts)
+  // tab   = which panel the field lives in
+  // picker = button id to click when F1 is pressed (for display-only fields)
+  var CF_FIELDS = [
+    { id: 'customername',              tab: 'general'                                    },
+    { id: 'address',                   tab: 'general'                                    },
+    { id: 'street',                    tab: 'general'                                    },
+    { id: 'zone',                      tab: 'general'                                    },
+    { id: 'pobox',                     tab: 'general'                                    },
+    { id: 'crno',                      tab: 'general'                                    },
+    { id: 'nationality',               tab: 'general'                                    },
+    { id: 'telephone',                 tab: 'general'                                    },
+    { id: 'mobile',                    tab: 'general'                                    },
+    { id: 'whatsapp',                  tab: 'general'                                    },
+    { id: 'email',                     tab: 'general'                                    },
+    { id: 'qatarid',                   tab: 'general'                                    },
+    { id: 'salesmanDisplay',           tab: 'sales',    picker: 'salesmanPicker'         },
+    { id: 'customer_billing_type',     tab: 'sales'                                      },
+    { id: 'categoryDisplay',           tab: 'sales',    picker: 'categoryPicker'         },
+    { id: 'bySalesmanDisplay',         tab: 'sales',    picker: 'bySalesmanPicker'       },
+    { id: 'routeDisplay',              tab: 'sales',    picker: 'routePicker'            },
+    { id: 'creditlimit',               tab: 'sales'                                      },
+    { id: 'creditterm',                tab: 'sales'                                      },
+    { id: 'currentcredit',             tab: 'sales'                                      },
+    { id: 'employeeDisplay',           tab: 'sales',    picker: 'employeePicker'         },
+    { id: 'cfSubmitBtn',               tab: null                                       },
+    { id: 'flagDisplay',               tab: 'accounts', picker: 'flagPicker'             },
+    { id: 'closedDisplay',             tab: 'accounts', picker: 'closedPicker'           },
+    { id: 'ccode',                     tab: 'accounts'                                   },
+    { id: 'points',                    tab: 'accounts'                                   },
+    { id: 'countersaleChk',            tab: 'accounts'                                   },
+    { id: 'receivableaccount_display', tab: 'accounts', picker: 'accountCodePicker'     },
+    { id: 'salesaccount_display',      tab: 'accounts', picker: 'salesAccountPicker'    },
+    { id: 'vatoutputaccount_display',  tab: 'accounts', picker: 'vatOutputAccountPicker' },
+    { id: 'advanceaccount_display',    tab: 'accounts', picker: 'advanceAccountPicker'  },
+    { id: 'reason',                    tab: 'accounts'                                   },
+    { id: 'otherreason',               tab: 'accounts'                                   },
+    { id: 'closedreason',              tab: 'accounts'                                   },
+  ];
+
+  // Switch to section and focus the field
+  function cfFocusField(def) {
+    if (!def) return;
+    if (def.tab) cfSwitchTab(def.tab);
+    var el = document.getElementById(def.id);
+    if (!el) return;
+    el.focus();
+    try { el.select(); } catch(x) {}
+  }
+
+  // Find index of current field in the list (-1 if not found)
+  function cfIndex(id) {
+    for (var i = 0; i < CF_FIELDS.length; i++) {
+      if (CF_FIELDS[i].id === id) return i;
+    }
+    return -1;
+  }
+
+  // ── Mandatory field definitions (must be in same scope as keydown handler) ──
+  var CF_MANDATORY = [
+    { displayId: 'customername',       hiddenId: null,               tab: 'general' },
+    { displayId: 'address',            hiddenId: null,               tab: 'general' },
+    { displayId: 'mobile',             hiddenId: null,               tab: 'general', pair: 'telephone' },
+    { displayId: 'customer_billing_type', hiddenId: null, tab: 'sales' },
+  ];
+
+  function cfMandatoryHasValue(m) {
+    if (m.pair) {
+      var pEl = document.getElementById(m.pair);
+      if (pEl && String(pEl.value || '').trim()) return true;
+    }
+    if (m.hiddenId) {
+      var hEl = document.getElementById(m.hiddenId);
+      return !!(hEl && String(hEl.value || '').trim());
+    }
+    var dEl = document.getElementById(m.displayId);
+    return !!(dEl && String(dEl.value || '').trim());
+  }
+
+  // Add red asterisk to mandatory field labels
+  window.addEventListener('DOMContentLoaded', function() {
+    var starIds = CF_MANDATORY.map(function(m) { return m.displayId; });
+    starIds.push('telephone'); // also mandatory (8 digits required)
+    starIds.push('mobile');    // also mandatory (8 digits required)
+    starIds.forEach(function(id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      var label = el.closest('label');
+      if (!label) return;
+      var span = label.querySelector('span:first-child');
+      if (span && !span.querySelector('.cf-req-star')) {
+        var star = document.createElement('span');
+        star.className = 'cf-req-star';
+        star.textContent = ' *';
+        star.style.cssText = 'color:#dc3545;font-weight:700;';
+        span.appendChild(star);
+      }
+    });
+  });
+
+  // Enter → move to next field; Escape → move to previous field
+  document.addEventListener('keydown', function(e) {
+    var key = e.key;
+    if (key !== 'Enter' && key !== 'Escape') return;
+
+    // Let modal-specific handlers deal with it when a modal is open
+    if (document.querySelector('.modal:not(.hidden)')) return;
+
+    var active = document.activeElement;
+    if (!active || !active.id) return;
+
+    var idx = cfIndex(active.id);
+    if (idx === -1) return;   // field not in our list
+
+    if (key === 'Enter') {
+      // When focused on the submit button, let Enter trigger form submit naturally
+      if (active.id === 'cfSubmitBtn') return;
+
+      e.preventDefault();
+
+      // ── Copy telephone → mobile when pressing Enter from telephone ──
+      if (active.id === 'telephone') {
+        var telVal = active.value.trim();
+        var mobileEl = document.getElementById('mobile');
+        if (mobileEl && !mobileEl.value.trim() && telVal) {
+          mobileEl.value = telVal;
+        }
+      }
+
+      // ── Length validation for telephone / mobile / qatarid ──
+      var LENGTH_RULES = {
+        telephone: { len: 8,  required: true,  label: 'Telephone' },
+        mobile:    { len: 8,  required: true,  label: 'Mobile'    },
+        qatarid:   { len: 11, required: false, label: 'Qatar ID'  }
+      };
+      if (LENGTH_RULES[active.id] !== undefined) {
+        var rule    = LENGTH_RULES[active.id];
+        var rawVal  = active.value.trim();
+        var digits  = rawVal.replace(/\D/g, '');
+        if (!rawVal && rule.required) {
+          cfMarkError(active);
+          cfShowFieldError(active, rule.label + ' is required (8 digits).');
+          return;
+        }
+        if (rawVal && digits.length !== rule.len) {
+          cfMarkError(active);
+          cfShowFieldError(active, rule.label + ' must be exactly ' + rule.len + ' digits.');
+          return; // stay on this field
+        }
+      }
+
+      // Check if current field is mandatory and empty → stay + mark red
+      var mandatoryEntry = null;
+      for (var mi = 0; mi < CF_MANDATORY.length; mi++) {
+        if (CF_MANDATORY[mi].displayId === active.id) { mandatoryEntry = CF_MANDATORY[mi]; break; }
+      }
+      if (mandatoryEntry && !cfMandatoryHasValue(mandatoryEntry)) {
+        cfMarkError(active);
+        return; // stay on this field
+      }
+      if (idx < CF_FIELDS.length - 1) {
+        cfFocusField(CF_FIELDS[idx + 1]);
+      }
+      // Last field → do nothing (no auto-submit on Enter)
+    } else if (key === 'Escape') {
+      e.preventDefault();
+      if (idx > 0) {
+        cfFocusField(CF_FIELDS[idx - 1]);
+      }
+      // Already on first field → do nothing
+    }
+  });
+
+  // Suppress browser autofill/suggestions completely:
+  // 1. Mark every editable text/number input as readonly before the browser scans for fillable fields
+  // 2. Remove readonly on first focus so the user can type normally
+  // 3. Set autocomplete="new-password" (the only value Chrome reliably respects)
+  window.addEventListener('DOMContentLoaded', function() {
+    var SKIP_TYPES = { checkbox:1, radio:1, hidden:1, submit:1, button:1, reset:1, file:1, image:1 };
+    document.querySelectorAll('input, textarea, select').forEach(function(el) {
+      el.setAttribute('autocomplete', 'new-password');
+      el.setAttribute('autocorrect', 'off');
+      el.setAttribute('autocapitalize', 'none');
+      el.setAttribute('spellcheck', 'false');
+      // readonly trick: set readonly unless the field is already intentionally readonly/disabled
+      var type = (el.getAttribute('type') || 'text').toLowerCase();
+      if (!SKIP_TYPES[type] && !el.readOnly && !el.disabled && el.tagName !== 'SELECT') {
+        el.setAttribute('readonly', 'readonly');
+        el.setAttribute('data-cf-noautofill', '1');
+      }
+    });
+    // Remove the temporary readonly on first focus/click so user can type
+    document.addEventListener('focusin', function(e) {
+      var el = e.target;
+      if (el && el.getAttribute('data-cf-noautofill') === '1') {
+        el.removeAttribute('readonly');
+        el.removeAttribute('data-cf-noautofill');
+      }
+    }, true);
+    document.addEventListener('click', function(e) {
+      var el = e.target;
+      if (el && el.getAttribute && el.getAttribute('data-cf-noautofill') === '1') {
+        el.removeAttribute('readonly');
+        el.removeAttribute('data-cf-noautofill');
+      }
+    }, true);
+    // Auto-focus Customer Name
+    var el = document.getElementById('customername');
+    if (el) { el.focus(); try { el.select(); } catch(x) {} }
+  });
+
+  // Convert all free-text input values to UPPERCASE as user types (except email)
+  var CF_NO_UPPER = { 'email': true };
+  document.addEventListener('input', function(e) {
+    var el = e.target;
+    if (!el || el.type === 'number' || el.type === 'hidden' || el.readOnly) return;
+    if (CF_NO_UPPER[el.id]) return;
+    if (!el.closest || !el.closest('.cf-customer-im-page')) return;
+    var pos = el.selectionStart;
+    el.value = el.value.toUpperCase();
+    try { el.setSelectionRange(pos, pos); } catch(x) {}
+  });
+})();
+</script>
+<script src="{{ url_for('static', filename='js/customer_billing_type.js') }}?v=1"></script>
+<script>
+(function() {
+  var billingSel = document.getElementById('customer_billing_type');
+  function syncBilling() {
+    if (window.NexaCustomerBilling) {
+      NexaCustomerBilling.syncCustomerBillingFormSelect(billingSel);
+    }
+  }
+  if (billingSel) {
+    billingSel.addEventListener('change', syncBilling);
+    window.addEventListener('DOMContentLoaded', syncBilling);
+    syncBilling();
+  }
+})();
+</script>
+<script>
+(function() {
+  /* Legacy invoice-code modal (unused) */
+  function setInvoiceCode(code) {
+    var billingSel = document.getElementById('customer_billing_type');
+    if (billingSel) {
+      billingSel.value = String(code) === '2' ? 'CREDIT' : 'CASH';
+      if (window.NexaCustomerBilling) {
+        NexaCustomerBilling.syncCustomerBillingFormSelect(billingSel);
+      }
+    }
+    var chk = document.getElementById('countersaleChk');
+    var csHidden = document.getElementById('countersale');
+    var isCredit = (String(code) === '2');
+    if (chk) {
+      if (isCredit) {
+        chk.checked = false;
+        chk.disabled = true;
+        chk.style.opacity = '0.4';
+        chk.style.cursor = 'not-allowed';
+      } else {
+        chk.disabled = false;
+        chk.style.opacity = '1';
+        chk.style.cursor = 'pointer';
+        if (isCash || !code) {
+          chk.checked = false;
+        }
+      }
+    }
+    if (csHidden) {
+      if (isCredit) {
+        csHidden.value = 'N';
+      } else if (isCash || !code) {
+        csHidden.value = 'N';
+      } else {
+        csHidden.value = chk && chk.checked ? 'Y' : 'N';
+      }
+    }
+  }
+
+  var modal = document.getElementById('invoiceCodeModal');
+  var picker = document.getElementById('invoiceCodePicker');
+  var display = document.getElementById('invoiceCodeDisplay');
+  function openModal() {
+    if (modal) modal.classList.remove('hidden');
+  }
+  function closeModal() {
+    if (modal) modal.classList.add('hidden');
+    if (display) display.focus();
+  }
+
+  if (picker) picker.addEventListener('click', openModal);
+  if (modal) {
+    var overlay = modal.querySelector('.modal__overlay');
+    var closeBtn = modal.querySelector('.modal__close');
+    if (overlay) overlay.addEventListener('click', closeModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    modal.querySelectorAll('.invoice-code-row').forEach(function(row) {
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', function() {
+      setInvoiceCode(row.getAttribute('data-code'), row.getAttribute('data-name'));
+    });
+    });
+  }
+  if (clearBtn) {
+    clearBtn.addEventListener('click', function() {
+      setInvoiceCode('', '');
+    });
+  }
+  // Counter sale: Credit → off & disabled. Cash → optional.
+  (function() {
+    var billingSelInit = document.getElementById('customer_billing_type');
+    if (window.NexaCustomerBilling) {
+      NexaCustomerBilling.syncCustomerBillingFormSelect(billingSelInit);
+    }
+  })();
+
+  // Counter Sale checkbox: sync hidden only (receivable account is not auto-changed)
+  (function() {
+    var chk = document.getElementById('countersaleChk');
+    var csHidden = document.getElementById('countersale');
+    if (chk) {
+      chk.addEventListener('change', function() {
+        if (csHidden) csHidden.value = chk.checked ? 'Y' : 'N';
+      });
+    }
+  })();
+
+  // Salesman popup
+  var salesmanModal = document.getElementById('salesmanModal');
+  var salesmanDisplay = document.getElementById('salesmanDisplay');
+  var salesmanHidden = document.getElementById('salesmancode');
+  var salesmanPicker = document.getElementById('salesmanPicker');
+  var salesmanClearBtn = document.getElementById('salesmanClear');
+  var salesmanModalSearch = document.getElementById('salesmanModalSearch');
+  var salesmanModalBody = document.getElementById('salesmanModalBody');
+  var salesmanList = [];
+
+  function openSalesmanModal() {
+    if (salesmanModal) salesmanModal.classList.remove('hidden');
+    if (salesmanModalSearch) salesmanModalSearch.value = '';
+    loadSalesmanList();
+  }
+  function closeSalesmanModal() {
+    if (salesmanModal) salesmanModal.classList.add('hidden');
+    if (salesmanDisplay) salesmanDisplay.focus();
+  }
+  function loadSalesmanList() {
+    salesmanModalBody.innerHTML = '<tr><td colspan="2" class="muted">Loading...</td></tr>';
+    if (Array.isArray(CF_PRELOAD_SALESMEN) && CF_PRELOAD_SALESMEN.length) {
+      salesmanList = CF_PRELOAD_SALESMEN.slice();
+      renderSalesmanRows(salesmanList);
+      return;
+    }
+    var primaryUrl = (typeof CF_API_SALESMAN_URL === 'string' && CF_API_SALESMAN_URL.trim())
+      ? cfWithTenant(CF_API_SALESMAN_URL.trim())
+      : cfWithTenant(CF_API_SALESMAN_FALLBACK_URL);
+    function fetchSalesmen(url) {
+      return fetch(url, { credentials: 'same-origin' }).then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      });
+    }
+    fetchSalesmen(primaryUrl)
+      .then(function(data) {
+        salesmanList = (data && data.salesmen) ? data.salesmen : [];
+        renderSalesmanRows(salesmanList);
+      })
+      .catch(function() {
+        if (primaryUrl !== CF_API_SALESMAN_FALLBACK_URL) {
+          fetchSalesmen(cfWithTenant(CF_API_SALESMAN_FALLBACK_URL))
+            .then(function(data) {
+              salesmanList = (data && data.salesmen) ? data.salesmen : [];
+              renderSalesmanRows(salesmanList);
+            })
+            .catch(function() {
+              salesmanModalBody.innerHTML = '<tr><td colspan="2" class="muted">Error loading list.</td></tr>';
+            });
+        } else {
+          salesmanModalBody.innerHTML = '<tr><td colspan="2" class="muted">Error loading list.</td></tr>';
+        }
+      });
+  }
+  function renderSalesmanRows(list) {
+    salesmanModalBody.innerHTML = '';
+    if (list.length === 0) {
+      salesmanModalBody.innerHTML = '<tr><td colspan="2" class="muted">No salesmen found.</td></tr>';
+      return;
+    }
+    list.forEach(function(s) {
+      var row = document.createElement('tr');
+      row.style.cursor = 'pointer';
+      row.dataset.code = (s.code != null) ? String(s.code) : '';
+      row.dataset.name = (s.name != null) ? String(s.name) : '';
+      row.innerHTML = '<td>' + (s.code != null ? s.code : '-') + '</td><td>' + (s.name != null ? s.name : '-') + '</td>';
+      row.addEventListener('click', function() {
+        var code = row.getAttribute('data-code');
+        var name = row.getAttribute('data-name');
+        if (salesmanHidden) salesmanHidden.value = code || '';
+        if (salesmanDisplay) salesmanDisplay.value = name || '';
+        if (salesmanClearBtn) salesmanClearBtn.style.display = (code || name) ? '' : 'none';
+        closeSalesmanModal();
+        if (salesmanDisplay) salesmanDisplay.focus();
+      });
+      salesmanModalBody.appendChild(row);
+    });
+  }
+  if (salesmanPicker) salesmanPicker.addEventListener('click', openSalesmanModal);
+  if (salesmanModal) {
+    var smOverlay = salesmanModal.querySelector('.modal__overlay');
+    var smClose = salesmanModal.querySelector('.modal__close');
+    if (smOverlay) smOverlay.addEventListener('click', closeSalesmanModal);
+    if (smClose) smClose.addEventListener('click', closeSalesmanModal);
+  }
+  if (salesmanModalSearch) {
+    salesmanModalSearch.addEventListener('input', function() {
+      var q = (this.value || '').toLowerCase().trim();
+      var filtered = salesmanList.filter(function(s) {
+        var code = (s.code != null ? String(s.code) : '').toLowerCase();
+        var name = (s.name != null ? String(s.name) : '').toLowerCase();
+        return !q || code.indexOf(q) !== -1 || name.indexOf(q) !== -1;
+      });
+      renderSalesmanRows(filtered);
+    });
+  }
+  if (salesmanClearBtn) {
+    salesmanClearBtn.addEventListener('click', function() {
+      if (salesmanHidden) salesmanHidden.value = '';
+      if (salesmanDisplay) salesmanDisplay.value = '';
+      salesmanClearBtn.style.display = 'none';
+    });
+  }
+  if (salesmanHidden && salesmanHidden.value && salesmanClearBtn) {
+    salesmanClearBtn.style.display = '';
+  }
+
+  // Customer Category popup
+  var categoryModal = document.getElementById('categoryModal');
+  var categoryDisplay = document.getElementById('categoryDisplay');
+  var categoryHidden = document.getElementById('customercategory');
+  var categoryPicker = document.getElementById('categoryPicker');
+  var categoryClearBtn = document.getElementById('categoryClear');
+  var categoryModalSearch = document.getElementById('categoryModalSearch');
+  var categoryModalBody = document.getElementById('categoryModalBody');
+  var categoryList = [];
+  function openCategoryModal() {
+    if (categoryModal) categoryModal.classList.remove('hidden');
+    if (categoryModalSearch) categoryModalSearch.value = '';
+    categoryModalBody.innerHTML = '<tr><td colspan="2" class="muted">Loading...</td></tr>';
+    if (Array.isArray(CF_PRELOAD_CATEGORIES) && CF_PRELOAD_CATEGORIES.length) {
+      categoryList = CF_PRELOAD_CATEGORIES.slice();
+      renderListRows(categoryModalBody, categoryList, function(code, name){
+        if (categoryHidden) categoryHidden.value = code || '';
+        if (categoryDisplay) categoryDisplay.value = name || '';
+        if (categoryClearBtn) categoryClearBtn.style.display = (code || name) ? '' : 'none';
+        if (categoryModal) categoryModal.classList.add('hidden');
+        if (categoryDisplay) categoryDisplay.focus();
+      });
+      return;
+    }
+    cfFetchJsonWithRetry(CF_API_CATEGORY_URL, CF_API_CATEGORY_FALLBACK_URL).then(function(data){
+      categoryList = (data && data.categories) ? data.categories : [];
+      renderListRows(categoryModalBody, categoryList, function(code, name){
+        if (categoryHidden) categoryHidden.value = code || '';
+        if (categoryDisplay) categoryDisplay.value = name || '';
+        if (categoryClearBtn) categoryClearBtn.style.display = (code || name) ? '' : 'none';
+        if (categoryModal) categoryModal.classList.add('hidden');
+        if (categoryDisplay) categoryDisplay.focus();
+      });
+    }).catch(function(){ categoryModalBody.innerHTML = '<tr><td colspan="2" class="muted">Error loading category list.</td></tr>'; });
+  }
+  function renderListRows(tbody, list, onSelect) {
+    tbody.innerHTML = '';
+    if (list.length === 0) { tbody.innerHTML = '<tr><td colspan="2" class="muted">No items found.</td></tr>'; return; }
+    list.forEach(function(item){
+      var row = document.createElement('tr');
+      row.style.cursor = 'pointer';
+      var code = (item.code != null) ? String(item.code) : '';
+      var name = (item.name != null) ? String(item.name) : '';
+      row.innerHTML = '<td>' + (item.code != null ? item.code : '-') + '</td><td>' + (item.name != null ? item.name : '-') + '</td>';
+      row.addEventListener('click', function(){ onSelect(code, name); });
+      tbody.appendChild(row);
+    });
+  }
+  if (categoryPicker) categoryPicker.addEventListener('click', openCategoryModal);
+  if (categoryModal) {
+    categoryModal.querySelector('.modal__overlay') && categoryModal.querySelector('.modal__overlay').addEventListener('click', function(){ categoryModal.classList.add('hidden'); if (categoryDisplay) categoryDisplay.focus(); });
+    categoryModal.querySelector('.modal__close') && categoryModal.querySelector('.modal__close').addEventListener('click', function(){ categoryModal.classList.add('hidden'); if (categoryDisplay) categoryDisplay.focus(); });
+  }
+  if (categoryModalSearch) categoryModalSearch.addEventListener('input', function(){
+    var q = (this.value || '').toLowerCase().trim();
+    var filtered = categoryList.filter(function(s){ var c = (s.code != null ? String(s.code) : '').toLowerCase(); var n = (s.name != null ? String(s.name) : '').toLowerCase(); return !q || c.indexOf(q) !== -1 || n.indexOf(q) !== -1; });
+    renderListRows(categoryModalBody, filtered, function(code, name){ if (categoryHidden) categoryHidden.value = code || ''; if (categoryDisplay) categoryDisplay.value = name || ''; if (categoryClearBtn) categoryClearBtn.style.display = (code || name) ? '' : 'none'; if (categoryModal) categoryModal.classList.add('hidden'); if (categoryDisplay) categoryDisplay.focus(); });
+  });
+  if (categoryClearBtn) categoryClearBtn.addEventListener('click', function(){ if (categoryHidden) categoryHidden.value = ''; if (categoryDisplay) categoryDisplay.value = ''; categoryClearBtn.style.display = 'none'; });
+  if (categoryHidden && categoryHidden.value && categoryClearBtn) categoryClearBtn.style.display = '';
+
+  // By Salesman popup (reuse salesman-list API)
+  var bySalesmanModal = document.getElementById('bySalesmanModal');
+  var bySalesmanDisplay = document.getElementById('bySalesmanDisplay');
+  var bySalesmanHidden = document.getElementById('bysalesman');
+  var bySalesmanPicker = document.getElementById('bySalesmanPicker');
+  var bySalesmanClearBtn = document.getElementById('bySalesmanClear');
+  var bySalesmanModalSearch = document.getElementById('bySalesmanModalSearch');
+  var bySalesmanModalBody = document.getElementById('bySalesmanModalBody');
+  var bySalesmanList = [];
+  function openBySalesmanModal() {
+    if (bySalesmanModal) bySalesmanModal.classList.remove('hidden');
+    if (bySalesmanModalSearch) bySalesmanModalSearch.value = '';
+    bySalesmanModalBody.innerHTML = '<tr><td colspan="2" class="muted">Loading...</td></tr>';
+    if (Array.isArray(CF_PRELOAD_SALESMEN) && CF_PRELOAD_SALESMEN.length) {
+      bySalesmanList = CF_PRELOAD_SALESMEN.slice();
+      renderListRows(bySalesmanModalBody, bySalesmanList, function(code, name){
+        if (bySalesmanHidden) bySalesmanHidden.value = code || '';
+        if (bySalesmanDisplay) bySalesmanDisplay.value = name || '';
+        if (bySalesmanClearBtn) bySalesmanClearBtn.style.display = (code || name) ? '' : 'none';
+        if (bySalesmanModal) bySalesmanModal.classList.add('hidden');
+        if (bySalesmanDisplay) bySalesmanDisplay.focus();
+      });
+      return;
+    }
+    var primaryUrl = (typeof CF_API_SALESMAN_URL === 'string' && CF_API_SALESMAN_URL.trim())
+      ? cfWithTenant(CF_API_SALESMAN_URL.trim())
+      : cfWithTenant(CF_API_SALESMAN_FALLBACK_URL);
+    function fetchBySalesmen(url) {
+      return fetch(url, { credentials: 'same-origin' }).then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      });
+    }
+    fetchBySalesmen(primaryUrl).then(function(data){
+      bySalesmanList = (data && data.salesmen) ? data.salesmen : [];
+      renderListRows(bySalesmanModalBody, bySalesmanList, function(code, name){
+        if (bySalesmanHidden) bySalesmanHidden.value = code || '';
+        if (bySalesmanDisplay) bySalesmanDisplay.value = name || '';
+        if (bySalesmanClearBtn) bySalesmanClearBtn.style.display = (code || name) ? '' : 'none';
+        if (bySalesmanModal) bySalesmanModal.classList.add('hidden');
+        if (bySalesmanDisplay) bySalesmanDisplay.focus();
+      });
+    }).catch(function(){
+      if (primaryUrl !== CF_API_SALESMAN_FALLBACK_URL) {
+        fetchBySalesmen(cfWithTenant(CF_API_SALESMAN_FALLBACK_URL)).then(function(data){
+          bySalesmanList = (data && data.salesmen) ? data.salesmen : [];
+          renderListRows(bySalesmanModalBody, bySalesmanList, function(code, name){
+            if (bySalesmanHidden) bySalesmanHidden.value = code || '';
+            if (bySalesmanDisplay) bySalesmanDisplay.value = name || '';
+            if (bySalesmanClearBtn) bySalesmanClearBtn.style.display = (code || name) ? '' : 'none';
+            if (bySalesmanModal) bySalesmanModal.classList.add('hidden');
+            if (bySalesmanDisplay) bySalesmanDisplay.focus();
+          });
+        }).catch(function(){ bySalesmanModalBody.innerHTML = '<tr><td colspan="2" class="muted">Error loading.</td></tr>'; });
+      } else {
+        bySalesmanModalBody.innerHTML = '<tr><td colspan="2" class="muted">Error loading.</td></tr>';
+      }
+    });
+  }
+  if (bySalesmanPicker) bySalesmanPicker.addEventListener('click', openBySalesmanModal);
+  if (bySalesmanModal) {
+    bySalesmanModal.querySelector('.modal__overlay') && bySalesmanModal.querySelector('.modal__overlay').addEventListener('click', function(){ bySalesmanModal.classList.add('hidden'); if (bySalesmanDisplay) bySalesmanDisplay.focus(); });
+    bySalesmanModal.querySelector('.modal__close') && bySalesmanModal.querySelector('.modal__close').addEventListener('click', function(){ bySalesmanModal.classList.add('hidden'); if (bySalesmanDisplay) bySalesmanDisplay.focus(); });
+  }
+  if (bySalesmanModalSearch) bySalesmanModalSearch.addEventListener('input', function(){
+    var q = (this.value || '').toLowerCase().trim();
+    var filtered = bySalesmanList.filter(function(s){ var c = (s.code != null ? String(s.code) : '').toLowerCase(); var n = (s.name != null ? String(s.name) : '').toLowerCase(); return !q || c.indexOf(q) !== -1 || n.indexOf(q) !== -1; });
+    renderListRows(bySalesmanModalBody, filtered, function(code, name){ if (bySalesmanHidden) bySalesmanHidden.value = code || ''; if (bySalesmanDisplay) bySalesmanDisplay.value = name || ''; if (bySalesmanClearBtn) bySalesmanClearBtn.style.display = (code || name) ? '' : 'none'; if (bySalesmanModal) bySalesmanModal.classList.add('hidden'); if (bySalesmanDisplay) bySalesmanDisplay.focus(); });
+  });
+  if (bySalesmanClearBtn) bySalesmanClearBtn.addEventListener('click', function(){ if (bySalesmanHidden) bySalesmanHidden.value = ''; if (bySalesmanDisplay) bySalesmanDisplay.value = ''; bySalesmanClearBtn.style.display = 'none'; });
+  if (bySalesmanHidden && bySalesmanHidden.value && bySalesmanClearBtn) bySalesmanClearBtn.style.display = '';
+
+  // Route No popup
+  var routeModal = document.getElementById('routeModal');
+  var routeDisplay = document.getElementById('routeDisplay');
+  var routeHidden = document.getElementById('routeno');
+  var routePicker = document.getElementById('routePicker');
+  var routeClearBtn = document.getElementById('routeClear');
+  var routeModalSearch = document.getElementById('routeModalSearch');
+  var routeModalBody = document.getElementById('routeModalBody');
+  var routeList = [];
+  function openRouteModal() {
+    if (routeModal) routeModal.classList.remove('hidden');
+    if (routeModalSearch) routeModalSearch.value = '';
+    routeModalBody.innerHTML = '<tr><td colspan="2" class="muted">Loading...</td></tr>';
+    if (Array.isArray(CF_PRELOAD_ROUTES) && CF_PRELOAD_ROUTES.length) {
+      routeList = CF_PRELOAD_ROUTES.slice();
+      renderListRows(routeModalBody, routeList, function(code, name){
+        if (routeHidden) routeHidden.value = code || '';
+        if (routeDisplay) routeDisplay.value = name || '';
+        if (routeClearBtn) routeClearBtn.style.display = (code || name) ? '' : 'none';
+        if (routeModal) routeModal.classList.add('hidden');
+        if (routeDisplay) routeDisplay.focus();
+      });
+      return;
+    }
+    cfFetchJsonWithRetry(CF_API_ROUTE_URL, CF_API_ROUTE_FALLBACK_URL).then(function(data){
+      routeList = (data && data.routes) ? data.routes : [];
+      renderListRows(routeModalBody, routeList, function(code, name){
+        if (routeHidden) routeHidden.value = code || '';
+        if (routeDisplay) routeDisplay.value = name || '';
+        if (routeClearBtn) routeClearBtn.style.display = (code || name) ? '' : 'none';
+        if (routeModal) routeModal.classList.add('hidden');
+        if (routeDisplay) routeDisplay.focus();
+      });
+    }).catch(function(){ routeModalBody.innerHTML = '<tr><td colspan="2" class="muted">Error loading route list.</td></tr>'; });
+  }
+  if (routePicker) routePicker.addEventListener('click', openRouteModal);
+  if (routeModal) {
+    routeModal.querySelector('.modal__overlay') && routeModal.querySelector('.modal__overlay').addEventListener('click', function(){ routeModal.classList.add('hidden'); if (routeDisplay) routeDisplay.focus(); });
+    routeModal.querySelector('.modal__close') && routeModal.querySelector('.modal__close').addEventListener('click', function(){ routeModal.classList.add('hidden'); if (routeDisplay) routeDisplay.focus(); });
+  }
+  if (routeModalSearch) routeModalSearch.addEventListener('input', function(){
+    var q = (this.value || '').toLowerCase().trim();
+    var filtered = routeList.filter(function(s){ var c = (s.code != null ? String(s.code) : '').toLowerCase(); var n = (s.name != null ? String(s.name) : '').toLowerCase(); return !q || c.indexOf(q) !== -1 || n.indexOf(q) !== -1; });
+    renderListRows(routeModalBody, filtered, function(code, name){ if (routeHidden) routeHidden.value = code || ''; if (routeDisplay) routeDisplay.value = name || ''; if (routeClearBtn) routeClearBtn.style.display = (code || name) ? '' : 'none'; if (routeModal) routeModal.classList.add('hidden'); if (routeDisplay) routeDisplay.focus(); });
+  });
+  if (routeClearBtn) routeClearBtn.addEventListener('click', function(){ if (routeHidden) routeHidden.value = ''; if (routeDisplay) routeDisplay.value = ''; routeClearBtn.style.display = 'none'; });
+  if (routeHidden && routeHidden.value && routeClearBtn) routeClearBtn.style.display = '';
+
+  // C/O Employee popup
+  var employeeModal = document.getElementById('employeeModal');
+  var employeeDisplay = document.getElementById('employeeDisplay');
+  var employeeHidden = document.getElementById('employeecode');
+  var employeePicker = document.getElementById('employeePicker');
+  var employeeClearBtn = document.getElementById('employeeClear');
+  var employeeModalSearch = document.getElementById('employeeModalSearch');
+  var employeeModalBody = document.getElementById('employeeModalBody');
+  var employeeList = [];
+  function openEmployeeModal() {
+    if (employeeModal) employeeModal.classList.remove('hidden');
+    if (employeeModalSearch) { employeeModalSearch.value = ''; employeeModalSearch.focus(); }
+    employeeModalBody.innerHTML = '<tr><td colspan="2" class="muted">Loading...</td></tr>';
+    if (Array.isArray(CF_PRELOAD_EMPLOYEES) && CF_PRELOAD_EMPLOYEES.length) {
+      employeeList = CF_PRELOAD_EMPLOYEES.slice();
+      renderListRows(employeeModalBody, employeeList, function(code, name){
+        if (employeeHidden)   employeeHidden.value  = code || '';
+        if (employeeDisplay)  employeeDisplay.value = name || '';
+        if (employeeClearBtn) employeeClearBtn.style.display = (code || name) ? '' : 'none';
+        if (employeeModal)    employeeModal.classList.add('hidden');
+        if (employeeDisplay)  employeeDisplay.focus();
+      });
+      return;
+    }
+    cfFetchJsonWithRetry(CF_API_EMPLOYEE_URL, CF_API_EMPLOYEE_FALLBACK_URL).then(function(data){
+      employeeList = (data && data.employees) ? data.employees : [];
+      renderListRows(employeeModalBody, employeeList, function(code, name){
+        if (employeeHidden)   employeeHidden.value  = code || '';
+        if (employeeDisplay)  employeeDisplay.value = name || '';
+        if (employeeClearBtn) employeeClearBtn.style.display = (code || name) ? '' : 'none';
+        if (employeeModal)    employeeModal.classList.add('hidden');
+        if (employeeDisplay)  employeeDisplay.focus();
+      });
+    }).catch(function(){ employeeModalBody.innerHTML = '<tr><td colspan="2" class="muted">Error loading employee list.</td></tr>'; });
+  }
+  if (employeePicker)  employeePicker.addEventListener('click', openEmployeeModal);
+  if (employeeDisplay) employeeDisplay.addEventListener('click', openEmployeeModal);
+  if (employeeModal) {
+    employeeModal.querySelector('.modal__overlay') && employeeModal.querySelector('.modal__overlay').addEventListener('click', function(){ employeeModal.classList.add('hidden'); if (employeeDisplay) employeeDisplay.focus(); });
+    employeeModal.querySelector('.modal__close')   && employeeModal.querySelector('.modal__close').addEventListener('click',   function(){ employeeModal.classList.add('hidden'); if (employeeDisplay) employeeDisplay.focus(); });
+  }
+  if (employeeModalSearch) employeeModalSearch.addEventListener('input', function(){
+    var q = (this.value || '').toLowerCase().trim();
+    var filtered = employeeList.filter(function(s){ var c = (s.code != null ? String(s.code) : '').toLowerCase(); var n = (s.name != null ? String(s.name) : '').toLowerCase(); return !q || c.indexOf(q) !== -1 || n.indexOf(q) !== -1; });
+    renderListRows(employeeModalBody, filtered, function(code, name){ if (employeeHidden) employeeHidden.value = code || ''; if (employeeDisplay) employeeDisplay.value = name || ''; if (employeeClearBtn) employeeClearBtn.style.display = (code || name) ? '' : 'none'; if (employeeModal) employeeModal.classList.add('hidden'); if (employeeDisplay) employeeDisplay.focus(); });
+  });
+  if (employeeClearBtn) employeeClearBtn.addEventListener('click', function(){ if (employeeHidden) employeeHidden.value = ''; if (employeeDisplay) employeeDisplay.value = ''; employeeClearBtn.style.display = 'none'; if (employeeDisplay) employeeDisplay.focus(); });
+  if (employeeHidden && employeeHidden.value && employeeClearBtn) employeeClearBtn.style.display = '';
+
+  // Status popup (FLAG: Y=Active / N=Locked)
+  (function() {
+    var modal   = document.getElementById('flagModal');
+    var display = document.getElementById('flagDisplay');
+    var hidden  = document.getElementById('flag');
+    var picker  = document.getElementById('flagPicker');
+    var rows    = document.querySelectorAll('#flagModalBody .modal-list-row');
+    function openModal() {
+      if (modal) modal.classList.remove('hidden');
+      if (rows.length) rows[0].focus();
+    }
+    function selectItem(code, name) {
+      if (hidden)  hidden.value  = code;
+      if (display) display.value = name;
+      if (modal)   modal.classList.add('hidden');
+      if (display) display.focus();
+    }
+    rows.forEach(function(row) {
+      row.addEventListener('click', function() { selectItem(row.dataset.code, row.dataset.name); });
+      row.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); selectItem(row.dataset.code, row.dataset.name); }
+        if (e.key === 'ArrowDown') { e.preventDefault(); var n = row.nextElementSibling; if (n) n.focus(); }
+        if (e.key === 'ArrowUp')   { e.preventDefault(); var p = row.previousElementSibling; if (p) p.focus(); }
+        if (e.key === 'Escape')    { modal.classList.add('hidden'); if (display) display.focus(); }
+      });
+    });
+    if (picker)  picker.addEventListener('click', openModal);
+    if (display) display.addEventListener('click', openModal);
+    if (modal)   modal.querySelector('.modal__overlay') && modal.querySelector('.modal__overlay').addEventListener('click', function(){ modal.classList.add('hidden'); if (display) display.focus(); });
+    if (modal)   modal.querySelector('.modal__close')   && modal.querySelector('.modal__close').addEventListener('click',   function(){ modal.classList.add('hidden'); if (display) display.focus(); });
+  })();
+
+  // Account Status popup (CLOSED: N=Open / Y=Closed)
+  (function() {
+    var modal   = document.getElementById('closedModal');
+    var display = document.getElementById('closedDisplay');
+    var hidden  = document.getElementById('closed');
+    var picker  = document.getElementById('closedPicker');
+    var rows    = document.querySelectorAll('#closedModalBody .modal-list-row');
+    function openModal() {
+      if (modal) modal.classList.remove('hidden');
+      if (rows.length) rows[0].focus();
+    }
+    function selectItem(code, name) {
+      if (hidden)  hidden.value  = code;
+      if (display) display.value = name;
+      if (modal)   modal.classList.add('hidden');
+      if (display) display.focus();
+    }
+    rows.forEach(function(row) {
+      row.addEventListener('click', function() { selectItem(row.dataset.code, row.dataset.name); });
+      row.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); selectItem(row.dataset.code, row.dataset.name); }
+        if (e.key === 'ArrowDown') { e.preventDefault(); var n = row.nextElementSibling; if (n) n.focus(); }
+        if (e.key === 'ArrowUp')   { e.preventDefault(); var p = row.previousElementSibling; if (p) p.focus(); }
+        if (e.key === 'Escape')    { modal.classList.add('hidden'); if (display) display.focus(); }
+      });
+    });
+    if (picker)  picker.addEventListener('click', openModal);
+    if (display) display.addEventListener('click', openModal);
+    if (modal)   modal.querySelector('.modal__overlay') && modal.querySelector('.modal__overlay').addEventListener('click', function(){ modal.classList.add('hidden'); if (display) display.focus(); });
+    if (modal)   modal.querySelector('.modal__close')   && modal.querySelector('.modal__close').addEventListener('click',   function(){ modal.classList.add('hidden'); if (display) display.focus(); });
+  })();
+
+  // Customer related accounts popup (Chart of Accounts)
+  var CR_REQUEST_MODE      = {{ 'true' if customer_request_mode else 'false' }};
+  var CR_VIEW_ONLY         = {{ 'true' if customer_request_view_only else 'false' }};
+  var CR_NEW_LOCK_ACCOUNTS = {{ 'true' if customer_request_mode and not is_edit else 'false' }};
+  if (CR_VIEW_ONLY) {
+    document.addEventListener('DOMContentLoaded', function () {
+      var form = document.getElementById('customerForm');
+      if (!form) return;
+      form.querySelectorAll('input, select, textarea').forEach(function (el) {
+        el.setAttribute('readonly', 'readonly');
+        el.setAttribute('disabled', 'disabled');
+        el.style.background = '#f5f5f5';
+        el.style.cursor = 'not-allowed';
+        el.style.pointerEvents = 'none';
+      });
+      form.querySelectorAll('button[type="button"], .search-picker').forEach(function (btn) {
+        btn.setAttribute('disabled', 'disabled');
+        btn.style.pointerEvents = 'none';
+        btn.style.opacity = '0.5';
+      });
+      form.style.userSelect = 'text';
+    });
+  }
+  var CF_API_SALESMAN_URL  = {{ api_salesman_url  | tojson }};
+  var CF_API_CATEGORY_URL  = {{ api_category_url  | tojson }};
+  var CF_API_ROUTE_URL     = {{ api_route_url     | tojson }};
+  var CF_API_EMPLOYEE_URL  = {{ api_employee_url  | tojson }};
+  var CF_API_REQUEST_ACCOUNTS_URL = {{ api_request_accounts_url | tojson }};
+  var CF_API_SALESMAN_FALLBACK_URL = "/ho/customer-central/api/salesman-list";
+  var CF_API_CATEGORY_FALLBACK_URL = "/ho/customer-central/api/category-list";
+  var CF_API_ROUTE_FALLBACK_URL = "/ho/customer-central/api/route-list";
+  var CF_API_EMPLOYEE_FALLBACK_URL = "/ho/customer-central/api/employee-list";
+  var CF_CR_TENANT_ID = {{ (cr_tenant_id or '') | tojson }};
+  var CF_PRELOAD_SALESMEN = {{ preload_salesmen | tojson }};
+  var CF_PRELOAD_CATEGORIES = {{ preload_categories | tojson }};
+  var CF_PRELOAD_ROUTES = {{ preload_routes | tojson }};
+  var CF_PRELOAD_EMPLOYEES = {{ preload_employees | tojson }};
+  var CF_REQUEST_ACCOUNTS_LOADED = false;
+  var CF_REQUEST_ACCOUNTS_LOADING = false;
+  function cfWithTenant(url) {
+    var base = (url || '').trim();
+    if (!base || !CF_CR_TENANT_ID) return base;
+    try {
+      var abs = new URL(base, window.location.origin);
+      if (!abs.searchParams.get('tenant')) {
+        abs.searchParams.set('tenant', CF_CR_TENANT_ID);
+      }
+      return abs.pathname + abs.search + abs.hash;
+    } catch (e) {
+      return base;
+    }
+  }
+  function cfFetchJsonWithRetry(primaryUrl, fallbackUrl) {
+    function _fetchJson(url) {
+      return fetch(url, { credentials: 'same-origin' }).then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      });
+    }
+    var p = cfWithTenant(primaryUrl || '');
+    var f = cfWithTenant(fallbackUrl || '');
+    if (!p) p = f;
+    return _fetchJson(p).catch(function() {
+      if (f && f !== p) return _fetchJson(f);
+      throw new Error('fetch_failed');
+    });
+  }
+  function cfApplyRequestAccountDefaults(payload) {
+    var defaults = (payload && payload.default_accounts) || {};
+    var accounts = (payload && payload.chart_accounts) || [];
+    var acctMap = {};
+    accounts.forEach(function(acc) {
+      var code = String((acc && acc.code) || '').trim();
+      var name = String((acc && acc.name) || '').trim();
+      if (code) acctMap[code] = code + (name ? (' - ' + name) : '');
+    });
+    var pairs = [
+      { hidden: 'receivableaccount', display: 'receivableaccount_display', key: 'customer_receivable' },
+      { hidden: 'salesaccount', display: 'salesaccount_display', key: 'customer_sales' },
+      { hidden: 'vatoutputaccount', display: 'vatoutputaccount_display', key: 'customer_vat_output' },
+      { hidden: 'advanceaccount', display: 'advanceaccount_display', key: 'customer_advance' }
+    ];
+    pairs.forEach(function(p) {
+      var h = document.getElementById(p.hidden);
+      var d = document.getElementById(p.display);
+      if (!h || !d) return;
+      var existing = String(h.value || '').trim();
+      var defCode = String(defaults[p.key] || '').trim();
+      var code = (CR_NEW_LOCK_ACCOUNTS && defCode) ? defCode : (existing || defCode);
+      if (!code) return;
+      h.value = code;
+      d.value = acctMap[code] || code;
+    });
+  }
+  window.cfEnsureRequestAccountsLoaded = function() {
+    if (!CR_REQUEST_MODE) return;
+    if (CF_REQUEST_ACCOUNTS_LOADED || CF_REQUEST_ACCOUNTS_LOADING) return;
+    if (!CF_API_REQUEST_ACCOUNTS_URL) return;
+    CF_REQUEST_ACCOUNTS_LOADING = true;
+    fetch(CF_API_REQUEST_ACCOUNTS_URL, { credentials: 'same-origin' })
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(data) {
+        if (!data || !data.success) throw new Error('accounts load failed');
+        cfApplyRequestAccountDefaults(data);
+        CF_REQUEST_ACCOUNTS_LOADED = true;
+      })
+      .catch(function() {})
+      .finally(function() { CF_REQUEST_ACCOUNTS_LOADING = false; });
+  };
+  var customerForm = document.getElementById('customerForm');
+  var accountModal = document.getElementById('customerAccountModal');
+  var accountModalSearch = document.getElementById('customerAccountModalSearch');
+  var accountModalTable = document.getElementById('customerAccountModalTable');
+  var accountFieldConfigs = [
+    { displayId: 'receivableaccount_display', valueId: 'receivableaccount', pickerId: 'accountCodePicker' },
+    { displayId: 'salesaccount_display', valueId: 'salesaccount', pickerId: 'salesAccountPicker' },
+    { displayId: 'vatoutputaccount_display', valueId: 'vatoutputaccount', pickerId: 'vatOutputAccountPicker' },
+    { displayId: 'advanceaccount_display', valueId: 'advanceaccount', pickerId: 'advanceAccountPicker' }
+  ];
+  var activeAccountField = null;
+  var accountPickerByDisplayId = {};
+
+  function filterAccountRows(term) {
+    if (!accountModalTable) return;
+    var q = (term || '').toLowerCase().trim();
+    accountModalTable.querySelectorAll('tbody tr').forEach(function(row) {
+      var text = (row.dataset.text || '').toLowerCase();
+      row.style.display = (!q || text.indexOf(q) !== -1) ? '' : 'none';
+    });
+  }
+  function openAccountModal(cfg) {
+    if (!accountModal) return;
+    activeAccountField = cfg;
+    // Mark which field opened this modal so Escape can return to it
+    document.querySelectorAll('[data-acct-active]').forEach(function(el){ el.removeAttribute('data-acct-active'); });
+    var displayEl = document.getElementById(cfg.displayId);
+    if (displayEl) displayEl.setAttribute('data-acct-active', '1');
+    accountModal.classList.remove('hidden');
+    if (accountModalSearch) {
+      accountModalSearch.value = '';
+      filterAccountRows('');
+      accountModalSearch.focus();
+    }
+  }
+  accountFieldConfigs.forEach(function(cfg) {
+    var displayInput = document.getElementById(cfg.displayId);
+    var pickerBtn = document.getElementById(cfg.pickerId);
+    if (!displayInput || !pickerBtn) return;
+    accountPickerByDisplayId[cfg.displayId] = cfg.pickerId;
+    pickerBtn.addEventListener('click', function(){ openAccountModal(cfg); });
+    displayInput.addEventListener('keydown', function(e){
+      if (e.key === 'F1') { e.preventDefault(); openAccountModal(cfg); }
+    });
+  });
+  if (accountModal) {
+    accountModal.querySelector('.modal__overlay') && accountModal.querySelector('.modal__overlay').addEventListener('click', function(){ accountModal.classList.add('hidden'); });
+    accountModal.querySelector('.modal__close') && accountModal.querySelector('.modal__close').addEventListener('click', function(){ accountModal.classList.add('hidden'); });
+  }
+  if (accountModalSearch) {
+    accountModalSearch.addEventListener('input', function(){ filterAccountRows(accountModalSearch.value); });
+  }
+  if (accountModalTable) {
+    accountModalTable.addEventListener('click', function(e) {
+      var row = e.target.closest('tr');
+      if (!row || !activeAccountField || !row.dataset.code) return;
+      var code = row.dataset.code || '';
+      var name = row.dataset.name || '';
+      var displayInput = document.getElementById(activeAccountField.displayId);
+      var valueInput = document.getElementById(activeAccountField.valueId);
+      if (displayInput) displayInput.value = code ? (code + ' - ' + name) : '';
+      if (valueInput) valueInput.value = code;
+      accountModal.classList.add('hidden');
+      document.querySelectorAll('[data-acct-active]').forEach(function(el){ el.removeAttribute('data-acct-active'); });
+      if (displayInput) displayInput.focus();
+    });
+  }
+  function handleAccountF1(e) {
+    if (e.key !== 'F1') return;
+    var active = document.activeElement;
+    if (!active || !active.id) return;
+    var pickerId = accountPickerByDisplayId[active.id];
+    if (!pickerId) return;
+    var picker = document.getElementById(pickerId);
+    if (!picker) return;
+    e.preventDefault();
+    e.stopPropagation();
+    picker.click();
+  }
+  document.addEventListener('keydown', handleAccountF1, true);
+  window.addEventListener('keydown', handleAccountF1, true);
+
+
+  // ── Field error helpers ──────────────────────────────────────
+  var CF_ERROR_STYLE = '2px solid #dc3545';
+  function cfMarkError(el) {
+    if (!el) return;
+    el.style.borderBottom = CF_ERROR_STYLE;
+    el.style.borderColor  = '#dc3545';
+    // Clear red when user interacts
+    var clearFn = function() {
+      el.style.borderBottom = '';
+      el.style.borderColor  = '';
+      el.removeEventListener('input',  clearFn);
+      el.removeEventListener('change', clearFn);
+      el.removeEventListener('focus',  clearFn);
+    };
+    el.addEventListener('input',  clearFn);
+    el.addEventListener('change', clearFn);
+    el.addEventListener('focus',  clearFn);
+  }
+  function cfMarkErrorById(id) {
+    cfMarkError(document.getElementById(id));
+  }
+
+  // Show a small inline error tip below a field (auto-removes on next input)
+  function cfShowFieldError(el, msg) {
+    if (!el) return;
+    var existing = document.getElementById('cf-field-err-' + el.id);
+    if (existing) existing.remove();
+    var tip = document.createElement('div');
+    tip.id = 'cf-field-err-' + el.id;
+    tip.textContent = '⚠ ' + msg;
+    tip.style.cssText = 'color:#dc3545;font-size:11px;margin-top:3px;';
+    el.parentNode && el.parentNode.insertBefore(tip, el.nextSibling);
+    var rm = function() { if (tip.parentNode) tip.remove(); el.removeEventListener('input', rm); };
+    el.addEventListener('input', rm);
+  }
+
+  // Validate digit-length fields; returns true if invalid
+  function cfCheckLength(id, label, len, errors_arr) {
+    var el = document.getElementById(id);
+    if (!el) return false;
+    var raw = (el.value || '').trim();
+    if (!raw) return false; // empty is OK (mandatory check handles required ones)
+    var digits = raw.replace(/\D/g, '');
+    if (digits.length !== len) {
+      if (errors_arr) errors_arr.push({ displayId: id, hiddenId: null, label: label + ' must be ' + len + ' digits', tab: 'general' });
+      cfMarkError(el);
+      cfShowFieldError(el, label + ' must be exactly ' + len + ' digits.');
+      return true;
+    }
+    return false;
+  }
+
+  if (customerForm) {
+    customerForm.addEventListener('submit', function(e) {
+      if (window.NexaCustomerBilling) {
+        NexaCustomerBilling.syncCustomerBillingFormSelect(document.getElementById('customer_billing_type'));
+      }
+      var errors = [];
+
+      // Helper: register a failed field
+      function fail(displayId, hiddenId, label, tab) {
+        errors.push({ displayId: displayId, hiddenId: hiddenId, label: label, tab: tab });
+      }
+
+      // ── Always required ──────────────────────────────────────
+      var nameEl = document.getElementById('customername');
+      if (!nameEl || !String(nameEl.value || '').trim()) fail('customername', null, 'Customer Name', 'general');
+
+      var addrEl = document.getElementById('address');
+      if (!addrEl || !String(addrEl.value || '').trim()) fail('address', null, 'Address', 'general');
+
+      // ── Telephone & Mobile: mandatory + exactly 8 digits ───────
+      var mobileEl  = document.getElementById('mobile');
+      var phoneEl   = document.getElementById('telephone');
+      var mobileVal = mobileEl ? String(mobileEl.value || '').trim() : '';
+      var phoneVal  = phoneEl  ? String(phoneEl.value  || '').trim() : '';
+
+      if (!phoneVal) {
+        fail('telephone', null, 'Telephone', 'general');
+      } else if (phoneVal.replace(/\D/g, '').length !== 8) {
+        fail('telephone', null, 'Telephone (8 digits)', 'general');
+      }
+
+      if (!mobileVal) {
+        fail('mobile', null, 'Mobile', 'general');
+      } else if (mobileVal.replace(/\D/g, '').length !== 8) {
+        fail('mobile', null, 'Mobile (8 digits)', 'general');
+      }
+
+      // ── Qatar ID: 11 digits if filled ───────────────────────────
+      (function () {
+        var qidEl = document.getElementById('qatarid');
+        if (!qidEl) return;
+        var qidRaw = String(qidEl.value || '').trim();
+        if (qidRaw && qidRaw.replace(/\D/g, '').length !== 11) {
+          fail('qatarid', null, 'Qatar ID (11 digits)', 'general');
+        }
+      })();
+
+      // Customer type (Cash / Credit)
+      var billingSel = document.getElementById('customer_billing_type');
+      var billingVal = billingSel ? String(billingSel.value || '').trim().toUpperCase() : '';
+      if (!billingVal || (billingVal !== 'CASH' && billingVal !== 'CREDIT')) {
+        fail('customer_billing_type', null, 'Customer type', 'sales');
+      }
+
+      // ── Non-CR-mode additional checks ───────────────────────
+      if (!CR_REQUEST_MODE) {
+        var acctChecks = [
+          { id: 'receivableaccount', label: 'Receivable Account' },
+          { id: 'salesaccount',      label: 'Sales Account'      },
+          { id: 'vatoutputaccount',  label: 'Output VAT Account' },
+          { id: 'advanceaccount',    label: 'Advance Account'    }
+        ];
+        for (var ai = 0; ai < acctChecks.length; ai++) {
+          var ac = acctChecks[ai];
+          var acEl = document.getElementById(ac.id);
+          if (!acEl || !String(acEl.value || '').trim()) fail(ac.id + '_display', ac.id, ac.label, 'accounts');
+        }
+        if (billingVal === 'CREDIT') {
+          var clEl = document.getElementById('creditlimit');
+          var ctEl = document.getElementById('creditterm');
+          if (!clEl || parseFloat(clEl.value) <= 0) fail('creditlimit', null, 'Credit Limit', 'sales');
+          if (!ctEl || parseFloat(ctEl.value) <= 0) fail('creditterm',  null, 'Credit Term',  'sales');
+        }
+      }
+
+      // ── If any errors: alert only (do not clear or restyle fields) ──
+      if (errors.length > 0) {
+        e.preventDefault();
+        if (window.reEnableFormSubmit) window.reEnableFormSubmit(customerForm);
+        var missingLabels = errors.map(function(err) { return err.label; });
+        alert('Please fill in the required fields:\n\n• ' + missingLabels.join('\n• '));
+        return;
+      }
+
+      // ── All validation passed — show saving overlay ───────────
+      var overlay = document.getElementById('cfSaveOverlay');
+      if (overlay) overlay.classList.add('active');
+    });
+  }
+})();
+</script>
+
+<script>
+/* ── Popup keyboard navigation (F1 open, Enter select, arrows navigate) ── */
+(function() {
+
+  /* Add Enter/ArrowUp/ArrowDown to a <tr> row */
+  function cfNavRow(row, getSearch) {
+    if (row._cfNav) return;
+    row._cfNav = true;
+    row.setAttribute('tabindex', '0');
+    row.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        row.click();
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        var next = row.nextElementSibling;
+        while (next && next.style.display === 'none') next = next.nextElementSibling;
+        if (next) next.focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        var prev = row.previousElementSibling;
+        while (prev && prev.style.display === 'none') prev = prev.previousElementSibling;
+        if (prev) { prev.focus(); }
+        else { var s = (typeof getSearch === 'function') ? getSearch() : getSearch; if (s) s.focus(); }
+      }
+    });
+  }
+
+  /* Watch a tbody for newly rendered rows and patch them */
+  function cfObserveBody(tbody, getSearch) {
+    if (!tbody) return;
+    new MutationObserver(function() {
+      tbody.querySelectorAll('tr').forEach(function(row) {
+        if (row.style.cursor === 'pointer') cfNavRow(row, getSearch);
+      });
+    }).observe(tbody, { childList: true });
+  }
+
+  /* Wire Enter on search box to jump to first visible row */
+  function cfSearchEnter(searchEl, tbody) {
+    if (!searchEl || !tbody) return;
+    searchEl.addEventListener('keydown', function(e) {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      var first = tbody.querySelector('tr[tabindex="0"]');
+      if (first) first.focus();
+    });
+  }
+
+  /* Wire F1 on a display field to call openFn */
+  function cfF1Open(displayId, openFn) {
+    var el = document.getElementById(displayId);
+    if (!el) return;
+    el.addEventListener('keydown', function(e) {
+      if (e.key === 'F1') { e.preventDefault(); openFn(); }
+    });
+  }
+
+  /* ── Salesman ──────────────────────────────────────────────── */
+  var salesmanModalSearch = document.getElementById('salesmanModalSearch');
+  var salesmanModalBody   = document.getElementById('salesmanModalBody');
+  cfObserveBody(salesmanModalBody, function() { return salesmanModalSearch; });
+  cfSearchEnter(salesmanModalSearch, salesmanModalBody);
+  cfF1Open('salesmanDisplay', function() {
+    var btn = document.getElementById('salesmanPicker');
+    if (btn) btn.click();
+    setTimeout(function() { if (salesmanModalSearch) { salesmanModalSearch.focus(); salesmanModalSearch.select(); } }, 120);
+  });
+
+  /* ── Customer Category ─────────────────────────────────────── */
+  var categoryModalSearch = document.getElementById('categoryModalSearch');
+  var categoryModalBody   = document.getElementById('categoryModalBody');
+  cfObserveBody(categoryModalBody, function() { return categoryModalSearch; });
+  cfSearchEnter(categoryModalSearch, categoryModalBody);
+  cfF1Open('categoryDisplay', function() {
+    var btn = document.getElementById('categoryPicker');
+    if (btn) btn.click();
+    setTimeout(function() { if (categoryModalSearch) { categoryModalSearch.focus(); categoryModalSearch.select(); } }, 120);
+  });
+
+  /* ── By Salesman ───────────────────────────────────────────── */
+  var bySalesmanModalSearch = document.getElementById('bySalesmanModalSearch');
+  var bySalesmanModalBody   = document.getElementById('bySalesmanModalBody');
+  cfObserveBody(bySalesmanModalBody, function() { return bySalesmanModalSearch; });
+  cfSearchEnter(bySalesmanModalSearch, bySalesmanModalBody);
+  cfF1Open('bySalesmanDisplay', function() {
+    var btn = document.getElementById('bySalesmanPicker');
+    if (btn) btn.click();
+    setTimeout(function() { if (bySalesmanModalSearch) { bySalesmanModalSearch.focus(); bySalesmanModalSearch.select(); } }, 120);
+  });
+
+  /* ── Route ─────────────────────────────────────────────────── */
+  var routeModalSearch = document.getElementById('routeModalSearch');
+  var routeModalBody   = document.getElementById('routeModalBody');
+  cfObserveBody(routeModalBody, function() { return routeModalSearch; });
+  cfSearchEnter(routeModalSearch, routeModalBody);
+  cfF1Open('routeDisplay', function() {
+    var btn = document.getElementById('routePicker');
+    if (btn) btn.click();
+    setTimeout(function() { if (routeModalSearch) { routeModalSearch.focus(); routeModalSearch.select(); } }, 120);
+  });
+
+  /* ── Employee ───────────────────────────────────────────────── */
+  var employeeModalSearchNav = document.getElementById('employeeModalSearch');
+  var employeeModalBodyNav   = document.getElementById('employeeModalBody');
+  cfObserveBody(employeeModalBodyNav, function() { return employeeModalSearchNav; });
+  cfSearchEnter(employeeModalSearchNav, employeeModalBodyNav);
+  cfF1Open('employeeDisplay', function() {
+    var btn = document.getElementById('employeePicker');
+    if (btn) btn.click();
+    setTimeout(function() { if (employeeModalSearchNav) { employeeModalSearchNav.focus(); employeeModalSearchNav.select(); } }, 120);
+  });
+
+  cfF1Open('flagDisplay', function() {
+    var btn = document.getElementById('flagPicker');
+    if (btn) btn.click();
+    setTimeout(function() { var r = document.querySelector('#flagModalBody .modal-list-row'); if (r) r.focus(); }, 80);
+  });
+
+  cfF1Open('closedDisplay', function() {
+    var btn = document.getElementById('closedPicker');
+    if (btn) btn.click();
+    setTimeout(function() { var r = document.querySelector('#closedModalBody .modal-list-row'); if (r) r.focus(); }, 80);
+  });
+
+  /* ── Account (Jinja-rendered static rows) ──────────────────── */
+  var accountModalSearch = document.getElementById('customerAccountModalSearch');
+  var accountModalTable  = document.getElementById('customerAccountModalTable');
+  var accountModalBody   = accountModalTable && accountModalTable.querySelector('tbody');
+  if (accountModalBody) {
+    accountModalBody.querySelectorAll('tr').forEach(function(row) {
+      cfNavRow(row, function() { return accountModalSearch; });
+    });
+  }
+  cfSearchEnter(accountModalSearch, accountModalBody);
+  /* F1 on account display fields is already wired by the previous block */
+
+  /* ── Escape: close open modal, return focus to its display field ── */
+  var CF_MODAL_RETURN = {
+    'salesmanModal':     'salesmanDisplay',
+    'invoiceCodeModal':  'invoiceCodeDisplay',
+    'categoryModal':     'categoryDisplay',
+    'bySalesmanModal':   'bySalesmanDisplay',
+    'routeModal':        'routeDisplay',
+    'employeeModal':     'employeeDisplay',
+    'flagModal':         'flagDisplay',
+    'closedModal':       'closedDisplay'
+    // customerAccountModal handled separately via activeAccountField
+  };
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    var open = document.querySelector('.modal:not(.hidden)');
+    if (!open) return;
+    e.preventDefault();
+    open.classList.add('hidden');
+    // Account modal: return to whichever account display field opened it
+    if (open.id === 'customerAccountModal') {
+      var acctSearch = document.getElementById('customerAccountModalSearch');
+      // activeAccountField is declared in the other script block; access via DOM query
+      var focused = document.querySelector(
+        '#receivableaccount_display, #salesaccount_display, #vatoutputaccount_display, #advanceaccount_display'
+      );
+      // Try to find the last account display that has focus-marker, else fall back to receivable
+      var retAcc = document.querySelector('[data-acct-active="1"]');
+      if (retAcc) { retAcc.removeAttribute('data-acct-active'); retAcc.focus(); }
+      return;
+    }
+    var retId = CF_MODAL_RETURN[open.id];
+    if (retId) { var el = document.getElementById(retId); if (el) el.focus(); }
+  });
+
+})();
+</script>
+{% endblock %}

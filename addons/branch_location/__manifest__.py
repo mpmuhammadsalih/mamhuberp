@@ -1,0 +1,2 @@
+"""Addon manifest — Branch / Location master (LOCATIONMASTER tenant table)."""
+MANIFEST = {'technical_name': 'branch_location', 'name': 'Branch Location Master', 'version': '1.0.0', 'category': 'Setup', 'summary': 'List and edit branches/locations from LOCATIONMASTER', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/setup/branch-location'}, 'flask': {'blueprint': 'branch_location', 'blueprint_ref': 'addons.branch_location.controllers.routes:bp', 'routes_module': 'addons.branch_location.controllers.routes'}}

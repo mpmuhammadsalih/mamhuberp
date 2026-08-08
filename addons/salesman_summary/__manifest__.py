@@ -1,0 +1,2 @@
+"""Addon manifest — Salesman Summary."""
+MANIFEST = {'technical_name': 'salesman_summary', 'name': 'Salesman Summary', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Migrated from blueprints/salesman_summary.py', 'depends': [], 'application': False, 'installable': False, 'license': 'LGPL-3', 'urls': {'prefix': '/salesman-summary'}, 'flask': {'blueprint': 'salesman_summary', 'blueprint_ref': 'addons.salesman_summary:bp', 'models_package': 'addons.salesman_summary.models', 'routes_module': 'addons.salesman_summary.controllers.routes'}}

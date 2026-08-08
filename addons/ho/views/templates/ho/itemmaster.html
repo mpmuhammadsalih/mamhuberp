@@ -1,0 +1,1450 @@
+{% extends "base.html" %}
+{% block content %}
+{# Item Request vs HO Central (non-admin): GL accounts locked to system defaults via grn_new_item_default_accounts #}
+{% set accounts_locked = (item_request_mode | default(false)) or ((ho_mode | default(false)) and not (is_admin_user | default(false))) %}
+<style>
+  body { overflow-x: auto; min-height: 100vh; color: #212529; }
+  .im-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px 16px;
+    --im-toolbar-bg: linear-gradient(180deg, #f0f7fb 0%, #e3eef8 100%);
+    --im-toolbar-border: rgba(13, 110, 253, 0.14);
+    --im-field-fill: rgba(255, 255, 255, 0.52);
+    --im-field-fill-strong: #eaf2fa;
+    --im-field-readonly: rgba(226, 236, 247, 0.92);
+    --im-table-surface: rgba(255, 255, 255, 0.55);
+  }
+  .im-topbar { display: flex; flex-direction: column; align-items: stretch; gap: 16px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #dee2e6; }
+  .im-topbar-main { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; }
+  .im-topbar h1 { margin: 0; font-size: 17px; font-weight: 400; color: #212529; line-height: 1.3; }
+  .im-topbar h1 .im-ref { font-weight: 600; }
+  .im-topbar .im-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .im-btn-save { background: #28a745 !important; border: none; color: #fff !important; padding: 8px 20px; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .im-ai-toggle { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid rgba(13, 110, 253, 0.18); border-radius: 16px; background: var(--im-field-fill-strong); color: #495057; font-size: 12px; font-weight: 600; }
+  .im-ai-toggle .switch { position: relative; display: inline-block; width: 36px; height: 20px; }
+  .im-ai-toggle .switch input { opacity: 0; width: 0; height: 0; }
+  .im-ai-toggle .slider { position: absolute; inset: 0; cursor: pointer; background: #ced4da; transition: .2s; border-radius: 20px; }
+  .im-ai-toggle .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background: #fff; transition: .2s; border-radius: 50%; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+  .im-ai-toggle .switch input:checked + .slider { background: #28a745; }
+  .im-ai-toggle .switch input:checked + .slider:before { transform: translateX(16px); }
+  .im-link { color: #007bff; text-decoration: none; font-size: 13px; cursor: pointer; background: none; border: none; padding: 0; }
+  .im-link:hover { text-decoration: underline; }
+  .im-btn-secondary { background: var(--im-field-fill-strong); border: 1px solid rgba(13, 110, 253, 0.16); color: #495057; padding: 8px 16px; border-radius: 4px; font-size: 13px; cursor: pointer; }
+  .im-btn-secondary:hover { background: #dfe8f3; }
+  .status-badge { padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 10px; }
+  .status-badge--active { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+  .status-badge--locked { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+  .status-badge--new { background: #cce5ff; color: #004085; border: 1px solid #b8daff; }
+  .itemmaster-container .form-section { background: transparent; padding: 16px 0; margin-bottom: 0; border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; }
+  .itemmaster-container .form-group { display: flex; align-items: center; gap: 10px; }
+  .itemmaster-container .form-group label { color: #495057; font-weight: 400; font-size: 13px; margin-bottom: 0; display: block; min-width: 150px; }
+  .itemmaster-container .form-group > input,
+  .itemmaster-container .form-group > textarea,
+  .itemmaster-container .form-group > .search-field { flex: 1; min-width: 0; }
+  .itemmaster-container .field-hint { margin-top: 4px; color: #6c757d; font-size: 11px; line-height: 1.35; }
+  .itemmaster-container #tab-accounts .form-group { align-items: flex-start; flex-wrap: wrap; }
+  .itemmaster-container #tab-accounts .form-group .field-hint { flex: 0 0 100%; margin-left: 160px; }
+  .itemmaster-container .form-group.form-group--full { align-items: flex-start; }
+  .itemmaster-container .form-group.form-group--full > textarea { min-height: 54px; }
+  .itemmaster-container .form-group .checkbox-label { min-width: auto; display: inline-flex; align-items: center; gap: 8px; }
+  .itemmaster-container .input, .itemmaster-container input[type="text"], .itemmaster-container input[type="number"], .itemmaster-container textarea { border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; padding: 6px 0; font-size: 13px; background: var(--im-field-fill); }
+  .itemmaster-container .input:focus, .itemmaster-container input:focus, .itemmaster-container textarea:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .itemmaster-container .input-readonly { background: var(--im-field-readonly); color: #6c757d; }
+  /* Arabic item name — avoid glyphs rendering as placeholders (Tahoma/Segoe cover Arabic well on Windows). */
+  .itemmaster-container .im-arabic-field { font-family: "Segoe UI", Tahoma, "Arial Unicode MS", "Noto Sans Arabic", Arial, sans-serif; }
+  .itemmaster-tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid #dee2e6; }
+  .itemmaster-tabs .tab { padding: 10px 16px; font-size: 13px; font-weight: 500; color: #495057; background: transparent; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
+  .itemmaster-tabs .tab:hover { color: #007bff; }
+  .itemmaster-tabs .tab.tab--active { color: #007bff; border-bottom-color: #007bff; }
+  .search-field { border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; display: inline-flex; align-items: center; background: var(--im-field-fill); }
+  .search-field:focus-within { border-bottom-color: var(--nexa-focus-color); }
+  .search-field .search-picker { background: transparent; border: none; color: #007bff; cursor: pointer; padding: 4px 8px; }
+  .itemmaster-container .search-field .search-clear { display: none !important; }
+  /* Keep popup fields as plain text fields (no dropdown arrow look). */
+  .itemmaster-container .search-field .search-picker { display: none !important; }
+  .itemmaster-container .search-field input[type="text"] { cursor: text; }
+  .scroll-table { border: 1px solid #dee2e6; border-radius: 4px; background: var(--im-table-surface); }
+  .itemmaster-container .table thead { background: var(--im-field-fill-strong) !important; }
+  .itemmaster-container .table thead th { background: var(--im-field-fill-strong) !important; color: #495057 !important; padding: 8px 12px; border-bottom: 1px solid #dee2e6; font-weight: 600; font-size: 12px; }
+  .itemmaster-container .table td { padding: 8px 12px; font-size: 13px; border-bottom: 1px solid #dee2e6; }
+  .itemmaster-container .table tbody tr:hover { background: #f8f9fa !important; }
+  .im-ai-explain { margin-top: 12px; border: 1px solid #dbe6ff; background: #f7faff; border-radius: 6px; padding: 10px 12px; }
+  #aiExplainSection.im-ai-explain { display: none !important; }
+  #aiExplainSection.im-ai-explain.im-ai-explain--active { display: block !important; }
+  .im-ai-explain__title { font-size: 12px; font-weight: 700; color: #2b4c7e; margin-bottom: 6px; }
+  .im-ai-explain__body { font-size: 12px; color: #4b5563; line-height: 1.4; }
+  .im-ai-explain__arabic { margin-top: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+  .im-ai-explain__arabic b { color: #1f2937; }
+  .im-ai-explain__arabic span { color: #0f5132; direction: rtl; unicode-bidi: plaintext; }
+  .im-ai-explain__actions { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .im-ai-explain__table-wrap { margin-top: 8px; border: 1px solid #e2e8f0; border-radius: 4px; overflow: hidden; display: none; }
+  .im-ai-explain__table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+  .im-ai-explain__table td { border-bottom: 1px solid #eef2f7; border-right: 1px solid #eef2f7; padding: 6px 8px; text-align: left; vertical-align: top; width: 10%; }
+  .im-ai-explain__table td:last-child { border-right: none; }
+  .im-ai-explain__table tr:last-child td { border-bottom: none; }
+  .im-ai-cell__label { display: block; font-weight: 600; color: #334155; margin-bottom: 2px; }
+  .im-ai-cell__value { display: block; color: #334155; word-break: break-word; }
+  .im-ai-explain--error { border-color: #f1c0c7; background: #fff5f6; }
+  .im-ai-explain--error .im-ai-explain__title { color: #842029; }
+  .im-ai-explain--error .im-ai-explain__body { color: #842029; }
+  .modal .table thead { background: #f8f9fa !important; }
+  .modal .table thead th { background: #f8f9fa !important; color: #495057 !important; padding: 8px 12px; border-bottom: 1px solid #dee2e6; font-weight: 600; }
+  /* HO central — target DB panel (below primary actions) */
+  .im-target-db-panel {
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    background: linear-gradient(180deg, var(--im-field-fill-strong) 0%, #e2ecf6 100%);
+    box-sizing: border-box;
+  }
+  .im-target-db-panel__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e9ecef;
+  }
+  .im-target-db-panel__title { display: block; font-size: 14px; font-weight: 600; color: #212529; }
+  .im-target-db-panel__actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .im-target-db-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 10px 14px;
+  }
+  .im-target-db-cell {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: var(--im-field-fill-strong);
+    font-size: 12px;
+    color: #495057;
+    cursor: pointer;
+    line-height: 1.35;
+    transition: border-color .12s ease, box-shadow .12s ease;
+  }
+  .im-target-db-cell:hover { border-color: #94a3b8; box-shadow: 0 1px 4px rgba(15, 23, 42, .07); }
+  .im-target-db-cell--linked {
+    border-color: #badbcc;
+    background: #eaf8ee;
+    color: #0a3622;
+  }
+  .im-target-db-cell input[type="checkbox"] { margin-top: 3px; flex-shrink: 0; }
+  .im-target-db-cell .im-target-db-cell__text { flex: 1; min-width: 0; word-break: break-word; }
+
+  .im-page:has(.itemmaster-container) {
+    padding-top: 50px !important;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main {
+    position: fixed !important;
+    top: 46px;
+    left: 260px;
+    right: var(--nexa-scrollbar-width, 0px);
+    z-index: 105;
+    margin: 0 !important;
+    padding: 6px 16px 8px 16px;
+    border-bottom: 1px solid var(--im-toolbar-border);
+    box-shadow:
+      0 1px 0 rgba(15, 23, 42, 0.04),
+      0 6px 18px rgba(15, 23, 42, 0.06);
+    background: var(--im-toolbar-bg);
+    box-sizing: border-box;
+    width: auto;
+    max-width: none;
+    display: flex !important;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    min-width: 0;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main h1 {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    font-size: 13px !important;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions {
+    flex: 0 0 auto;
+    margin-left: auto;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    gap: 3px;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions::-webkit-scrollbar {
+    display: none;
+    height: 0;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions > .im-btn-save,
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions > button.im-btn-secondary,
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions > a.im-btn-save,
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions > a.im-btn-secondary {
+    box-sizing: border-box !important;
+    width: 5.25rem;
+    min-width: 5.25rem;
+    max-width: 5.25rem;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-decoration: none !important;
+    flex-shrink: 0;
+    background: var(--im-field-fill-strong) !important;
+    border: 1px solid rgba(13, 110, 253, 0.18) !important;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions > .im-btn-save {
+    background: #28a745 !important;
+    border: none !important;
+    color: #fff !important;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions > label.im-ai-toggle {
+    box-sizing: border-box;
+    width: 5.25rem;
+    min-width: 5.25rem;
+    max-width: 5.25rem;
+    margin: 0 !important;
+    padding: 4px 4px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px;
+    flex-shrink: 0;
+    font-size: 11px;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions > label.im-ai-toggle > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main h1 .status-badge {
+    margin-left: 5px;
+    padding: 1px 6px;
+    font-size: 9px;
+    vertical-align: middle;
+  }
+  .layout.sidebar-collapsed:not(.layout--auth) .im-page:has(.itemmaster-container) .im-topbar-main {
+    left: 56px;
+    padding: 6px 16px 8px 16px;
+  }
+  .layout--auth .im-page:has(.itemmaster-container) .im-topbar-main {
+    top: 0;
+    left: 0;
+    right: var(--nexa-scrollbar-width, 0px);
+    padding: 6px 16px 8px 16px;
+  }
+</style>
+  <div class="im-page">
+    <div class="im-topbar">
+      <div class="im-topbar-main">
+      <h1>{{ itemmaster_page_title or 'Item Master' }} / <span class="im-ref" id="imTitleRef">{% if item_data and not itemmaster_force_is_new %}{{ item_data.itemcode }}{% else %}New{% endif %}</span> <span class="item-status" id="itemStatus">{% if itemmaster_force_is_new %}<span class="status-badge status-badge--new">New</span>{% elif item_data %}{% if item_data.itemflag == 'N' %}<span class="status-badge status-badge--locked">Locked</span>{% else %}<span class="status-badge status-badge--active">Active</span>{% endif %}{% else %}<span class="status-badge status-badge--new">New</span>{% endif %}</span></h1>
+      <div class="im-actions">
+        <button type="submit" form="itemMasterForm" class="im-btn-save" id="btnSave">{% if item_data and not itemmaster_force_is_new %}Update{% else %}Save{% endif %}</button>
+        {% if ho_mode and itemmaster_from_item_request and temp_item_code %}
+        <button type="button" class="im-btn-secondary" id="btnRejectItemRequest" style="border-color:#dc3545; color:#842029;" data-reject-url="{{ url_for('ho.item_request_reject', item_code=temp_item_code) }}">Reject</button>
+        {% endif %}
+        <label class="im-ai-toggle" for="ai_mode_toggle" title="AI Mode">
+          <span>AI</span>
+          <span class="switch">
+            <input type="checkbox" id="ai_mode_toggle" />
+            <span class="slider"></span>
+          </span>
+        </label>
+        {% if ho_mode and item_data and not itemmaster_force_is_new %}
+        <button type="button" class="im-btn-secondary" id="btnRemap">Remap</button>
+        <button type="button" class="im-btn-secondary" id="btnDeleteItem" style="border-color:#dc3545; color:#dc3545;" title="Delete item">Delete</button>
+        {% endif %}
+        <button type="button" class="im-btn-secondary" id="btnCancel">Cancel</button>
+        <a href="{{ itemmaster_list_url or url_for('itemmaster.productlist') }}" class="im-btn-secondary">List</a>
+        {% if ho_mode %}
+        <a href="{{ url_for('ho.itemmaster_central_activity_log') }}" class="im-btn-secondary" title="Activity report">Activity</a>
+        {% endif %}
+        {% if is_admin_user %}
+        <a href="{{ url_for('itemmaster.itemmaster_data_config') }}" class="im-btn-secondary" title="Data configuration">Config</a>
+        {% endif %}
+        <button type="button" class="im-btn-secondary" id="btnNew">New</button>
+        <button type="button" class="im-btn-secondary" id="btnQuery">Query</button>
+      </div>
+      </div>
+      {% if ho_mode %}
+      <div id="hoTargetTenantChecks" class="im-target-db-panel" role="group" aria-label="Target databases">
+        <div class="im-target-db-panel__head">
+          <div>
+            <span class="im-target-db-panel__title">Target databases</span>
+          </div>
+          <div class="im-target-db-panel__actions">
+            <button type="button" class="im-link" id="btnHoTargetAll" style="font-size:13px;font-weight:600;">All</button>
+            <span style="color:#ced4da;" aria-hidden="true">|</span>
+            <button type="button" class="im-link" id="btnHoTargetNone" style="font-size:13px;font-weight:600;">None</button>
+          </div>
+        </div>
+        <div class="im-target-db-grid">
+          {% for t in target_dbs %}
+          <label class="im-target-db-cell{% if existing_rawabi_tenants and t.tenant_id in existing_rawabi_tenants %} im-target-db-cell--linked{% endif %}">
+            <input type="checkbox" class="ho-target-tenant-check" value="{{ t.tenant_id }}" {% if selected_target_tenants and t.tenant_id in selected_target_tenants %}checked{% endif %} {% if existing_rawabi_tenants and t.tenant_id in existing_rawabi_tenants %}disabled{% endif %} />
+            <span class="im-target-db-cell__text"><strong>{{ t.display_name or t.tenant_id }}</strong><br /><span style="opacity:.92;">{{ t.tenant_id }}{% if t.network_link %} · {{ t.network_link }}{% endif %}</span></span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  <section class="itemmaster-container">
+
+    <form
+      id="itemMasterForm"
+      method="post"
+      action="{{ itemmaster_save_url or url_for('itemmaster.itemmaster_save') }}"
+      data-view-url="{{ itemmaster_view_url or url_for('itemmaster.itemmaster') }}"
+      data-list-url="{{ itemmaster_list_url or '' }}"
+      data-next-code-url="{{ itemmaster_next_code_url or url_for('itemmaster.itemmaster_next_code') }}"
+      data-suggest-barcode-url="{{ url_for('itemmaster.itemmaster_api_suggest_barcode') }}"
+      data-require-target-db="{{ '1' if ho_mode else '0' }}"
+      data-from-item-request="{{ '1' if itemmaster_from_item_request else '0' }}"
+      data-item-request-mode="{{ '1' if item_request_mode else '0' }}"
+      data-accounts-locked="{{ '1' if accounts_locked else '0' }}"
+      {% if ho_mode and itemmaster_from_item_request %}data-item-request-rejected-url="{{ url_for('ho.item_request', tab='rejected') }}"{% endif %}
+      data-default-dbocode="{{ item_request_default_dbocode or '' }}"
+      data-default-branch="{{ ir_tenant_id | default('') }}"
+      data-ho-remap-url="{% if ho_mode %}{{ url_for('ho.itemmaster_central_remap') }}{% endif %}"
+      data-ho-delete-item-url="{% if ho_mode %}{{ url_for('ho.itemmaster_central_delete_item') }}{% endif %}"
+      data-ho-source-location="{{ ho_source_location_code if ho_mode else '' }}"
+      data-existing-targets="{{ (existing_rawabi_tenants or [])|join(',') }}"
+      data-arabic-suggest-url="{{ itemmaster_ai_arabic_url or url_for('itemmaster.itemmaster_ai_arabic_name') }}"
+      data-ai-general-fill-url="{{ itemmaster_ai_general_fill_url or url_for('itemmaster.itemmaster_ai_general_fill') }}"
+      data-ai-barcode-web-url="{{ itemmaster_ai_barcode_web_url or url_for('itemmaster.itemmaster_ai_barcode_web') }}"
+      data-grn-prefill-ai="{{ '1' if prefill_from_grn_ai else '0' }}"
+      data-item-accounts-api="{{ url_for('itemmaster.api_item_accounts') }}"
+      data-category-price-pct-api="{{ url_for('itemmaster.api_category_price_percentage') }}"
+      autocomplete="off"
+    >
+      <input type="hidden" name="is_new" id="isNew" value="{% if itemmaster_force_is_new %}true{% elif item_data %}false{% else %}true{% endif %}" />
+      <input type="hidden" name="location_code" value="{{ location_code }}" />
+      <input
+        type="hidden"
+        id="temp_item_code_hidden"
+        name="temp_item_code"
+        value="{% if temp_item_code %}{{ temp_item_code }}{% elif item_data and item_data.tempitemcode %}{{ item_data.tempitemcode }}{% else %}{% endif %}"
+      />
+      <input type="hidden" id="existing_target_tenant_ids" name="existing_target_tenant_ids" value="{{ (existing_rawabi_tenants or [])|join(',') }}" />
+
+      <!-- Tabs Navigation -->
+      <div class="itemmaster-tabs">
+        <button type="button" class="tab tab--active" data-tab="general">General</button>
+        <button type="button" class="tab" data-tab="pricing">Pricing</button>
+        <button type="button" class="tab" data-tab="variant">Variant</button>
+        <button type="button" class="tab" data-tab="inventory">Inventory</button>
+        <button type="button" class="tab" data-tab="additional">Additional</button>
+        <button type="button" class="tab" data-tab="accounts">Accounts</button>
+      </div>
+
+      <!-- Branch (Item Request only) — shown above tabs like customer request -->
+      {% if item_request_mode %}
+      <div class="form-group" style="margin-bottom:12px;max-width:400px;">
+        <label for="branch_display">Branch</label>
+        <input
+          type="text"
+          id="branch_display"
+          name="branch_display"
+          value="{{ (ir_branch_name ~ ' (' ~ ir_tenant_id ~ ')') if ir_branch_name else (ir_tenant_id | default('')) }}"
+          readonly
+          tabindex="-1"
+          style="background:#f5f5f5;cursor:not-allowed;color:#555;"
+        />
+      </div>
+      {% endif %}
+
+      <!-- General Tab -->
+      <div class="tab-content tab-content--active" id="tab-general">
+        <div class="form-section">
+          <div class="form-grid form-grid--2cols">
+            <div class="form-group">
+              <label for="item_code">
+                Item Code <span class="required">*</span>
+              </label>
+              <input type="text" id="item_code" name="item_code" value="{{ item_data.itemcode if item_data else '' }}" readonly class="input-readonly" />
+            </div>
+            {% if ho_mode %}
+            <div class="form-group">
+              <label for="tempitemcode_display">TempItemCode</label>
+              <input
+                type="text"
+                id="tempitemcode_display"
+                value="{% if item_data and item_data.tempitemcode %}{{ item_data.tempitemcode }}{% elif temp_item_code %}{{ temp_item_code }}{% else %}{% endif %}"
+                readonly
+                class="input-readonly"
+              />
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+              <label for="manufacturer_id">
+                Barcode{% if not item_request_mode %} <span class="required">*</span>{% endif %}
+              </label>
+              <div class="im-barcode-row" style="display:flex;gap:8px;align-items:center;">
+                <input type="text" id="manufacturer_id" name="manufacturer_id" style="flex:1;min-width:0;" value="{% if item_data %}{{ item_data.manufacturerid or '' }}{% elif prefill_from_grn_ai and prefill_item_code_invoice %}{{ prefill_item_code_invoice }}{% else %}{% endif %}" {% if not item_request_mode %}required{% endif %} />
+                {% if not itemmaster_view_only %}
+                <button type="button" class="page-po__btn-secondary" id="btnGenerateBarcode" title="13-digit: starts with 12, ends with item code" style="white-space:nowrap;font-size:12px;padding:6px 10px;">Generate</button>
+                {% endif %}
+              </div>
+              <p class="im-field-hint" style="font-size:11px;color:#64748b;margin:4px 0 0;">13-digit internal: prefix 12 + item code, e.g. item 1000 → 1200000001000</p>
+            </div>
+
+            <div class="form-group">
+              <label for="item_name">
+                Item Name <span class="required">*</span>
+              </label>
+              <input type="text" id="item_name" name="item_name" value="{% if item_data and item_data.itemname %}{{ item_data.itemname }}{% else %}{{ prefill_itemname|default('', true) }}{% endif %}" required />
+            </div>
+
+            <div class="form-group">
+              <label for="item_name_ara">Item Name (Arabic)</label>
+              <input
+                type="text"
+                id="item_name_ara"
+                name="item_name_ara"
+                class="im-arabic-field"
+                value="{{ item_data.itemnameara if item_data else '' }}"
+                lang="ar"
+                dir="rtl"
+                autocomplete="off"
+              />
+            </div>
+
+            {% set ir_own_show = item_request_mode or (itemmaster_from_item_request | default(false)) %}
+            {% if ir_own_show %}
+              {% if item_data and item_data.ownproduct is not none %}
+                {% set ir_own_upper = (item_data.ownproduct|string)|trim|upper %}
+              {% else %}
+                {% set ir_own_upper = '' %}
+              {% endif %}
+            {% endif %}
+
+            {% if ir_own_show %}
+            <div class="form-group">
+              <label for="description">Description</label>
+              <div style="flex:1;display:flex;align-items:center;gap:14px;flex-wrap:wrap;min-width:0;">
+                <input type="text" id="description" name="description" style="flex:1;min-width:200px;" value="{% if item_data %}{{ item_data.description or '' }}{% elif prefill_from_grn_ai and prefill_description %}{{ prefill_description }}{% else %}{% endif %}" />
+                <span class="im-ai-toggle" title="Stored as OWNPRODUCT on ITEMMASTERTEMP / ITEMMASTER">
+                  <span>Own product</span>
+                  <label class="switch">
+                    <input type="checkbox" id="own_product" name="own_product" value="Y" {% if ir_own_upper == 'Y' or ir_own_upper == '1' %}checked{% endif %} />
+                    <span class="slider"></span>
+                  </label>
+                </span>
+              </div>
+            </div>
+            {% else %}
+            <div class="form-group">
+              <label for="description">Description</label>
+              <input type="text" id="description" name="description" value="{% if item_data %}{{ item_data.description or '' }}{% elif prefill_from_grn_ai and prefill_description %}{{ prefill_description }}{% else %}{% endif %}" />
+            </div>
+            {% endif %}
+          </div>
+          <div class="form-grid form-grid--2cols" style="margin-top: 12px;">
+            <div class="form-group">
+              <label for="main_category">Main Category</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="main_category"
+                  name="main_category_display"
+                  value="{% if item_data and item_data.maincategory %}{% for mc in main_categories %}{% if mc.code == item_data.maincategory %}{{ mc.code }} - {{ mc.name }}{% endif %}{% endfor %}{% endif %}"
+                  placeholder="Click to search main category..."
+                  readonly
+                />
+                <button type="button" class="search-clear" id="mainCategoryClear" aria-label="Clear main category" style="display: {% if item_data and item_data.maincategory %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="mainCategoryPicker" aria-label="Open main category list">▾</button>
+              </span>
+              <input type="hidden" id="main_category_code" name="main_category" value="{% if item_data and item_data.maincategory %}{{ item_data.maincategory }}{% else %}0{% endif %}" />
+            </div>
+
+            <div class="form-group">
+              <label for="department_code">Category</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="department_code"
+                  name="department_code_display"
+                  value="{% if item_data and item_data.departmentcode %}{% for dept in departments %}{% if dept.code == item_data.departmentcode %}{{ dept.code }} - {{ dept.name }}{% endif %}{% endfor %}{% endif %}"
+                  placeholder="Click to search department..."
+                  readonly
+                />
+                <button type="button" class="search-clear" id="departmentClear" aria-label="Clear department" style="display: {% if item_data and item_data.departmentcode %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="departmentPicker" aria-label="Open department list">▾</button>
+              </span>
+              <input type="hidden" id="department_code_hidden" name="department_code" value="{% if item_data and item_data.departmentcode %}{{ item_data.departmentcode }}{% endif %}" />
+            </div>
+
+            <div class="form-group">
+              <label for="category_code">
+                Micro Category <span class="required">*</span>
+              </label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="category_code"
+                  name="category_code_display"
+                  value="{% if item_data and item_data.categorycode %}{% for cat in categories %}{% if cat.code == item_data.categorycode %}{{ cat.code }} - {{ cat.name }}{% endif %}{% endfor %}{% endif %}"
+                  placeholder="Click to search category..."
+                  readonly
+                  required
+                />
+                <button type="button" class="search-clear" id="categoryClear" aria-label="Clear category" style="display: {% if item_data and item_data.categorycode %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="categoryPicker" aria-label="Open category list">▾</button>
+              </span>
+              <input type="hidden" id="category_code_hidden" name="category_code" value="{% if item_data and item_data.categorycode %}{{ item_data.categorycode }}{% else %}0{% endif %}" required />
+            </div>
+
+            <div class="form-group">
+              <label for="brand_code">Brand</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="brand_code"
+                  name="brand_code_display"
+                  value="{% if item_data and item_data.brandcode %}{% for brand in brands %}{% if brand.code == item_data.brandcode %}{{ brand.code }} - {{ brand.name }}{% endif %}{% endfor %}{% endif %}"
+                  placeholder="Click to search brand..."
+                  readonly
+                />
+                <button type="button" class="search-clear" id="brandClear" aria-label="Clear brand" style="display: {% if item_data and item_data.brandcode %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="brandPicker" aria-label="Open brand list">▾</button>
+              </span>
+              <input type="hidden" id="brand_code_hidden" name="brand_code" value="{% if item_data and item_data.brandcode %}{{ item_data.brandcode }}{% else %}0{% endif %}" />
+            </div>
+
+          </div>
+
+          <div class="form-grid form-grid--2cols" style="margin-top: 12px;">
+            <div class="form-group">
+              <label for="sup_code">Supplier</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="sup_code"
+                  name="sup_code_display"
+                  value="{% if item_data and item_data.supcode %}{% for supplier in suppliers %}{% if supplier.code == item_data.supcode %}{{ supplier.code }} - {{ supplier.name }}{% endif %}{% endfor %}{% elif prefill_from_grn_ai and prefill_sup_display %}{{ prefill_sup_display }}{% endif %}"
+                  placeholder="Click to search supplier..."
+                  readonly
+                />
+                <button type="button" class="search-clear" id="supplierClear" aria-label="Clear supplier" style="display: {% if item_data and item_data.supcode %}block{% elif prefill_from_grn_ai and prefill_sup_code %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="supplierPicker" aria-label="Open supplier list">▾</button>
+              </span>
+              <input type="hidden" id="sup_code_hidden" name="sup_code" value="{% if item_data and item_data.supcode %}{{ item_data.supcode }}{% elif prefill_from_grn_ai and prefill_sup_code %}{{ prefill_sup_code }}{% else %}0{% endif %}" />
+            </div>
+
+            {% if item_request_mode %}
+              <input type="hidden" id="dbocode_hidden" name="dbocode" value="{% if item_data and item_data.locationcode %}{{ item_data.locationcode }}{% else %}{{ item_request_default_dbocode or '' }}{% endif %}" />
+              <input type="hidden" id="branch_hidden" name="branch" value="{{ ir_tenant_id or '' }}" />
+            {% endif %}
+
+            <div class="form-group">
+              <label for="base_uom">
+                Base Uom <span class="required">*</span>
+              </label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="base_uom"
+                  name="base_uom_display"
+                  value="{% if item_data and item_data.baseuom %}{% for unit in units %}{% if unit.code == item_data.baseuom %}{{ unit.code }} - {{ unit.name }}{% endif %}{% endfor %}{% elif prefill_from_grn_ai and prefill_base_uom_display %}{{ prefill_base_uom_display }}{% endif %}"
+                  placeholder="Click to search base unit..."
+                  readonly
+                  required
+                />
+                <button type="button" class="search-clear" id="baseUomClear" aria-label="Clear base unit" style="display: {% if item_data and item_data.baseuom %}block{% elif prefill_from_grn_ai and prefill_base_uom_code %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="baseUomPicker" aria-label="Open base unit list">▾</button>
+              </span>
+              <input type="hidden" id="base_uom_hidden" name="base_uom" value="{% if item_data and item_data.baseuom %}{{ item_data.baseuom }}{% elif prefill_from_grn_ai and prefill_base_uom_code is not none %}{{ prefill_base_uom_code }}{% endif %}" required />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pricing Tab -->
+      <div class="tab-content" id="tab-pricing">
+        <div class="form-section">
+          <div class="form-grid form-grid--2cols">
+            <div class="form-group">
+              <label for="cost_price">Cost Price</label>
+              <input type="number" step="0.01" id="cost_price" name="cost_price" value="{% if item_data %}{{ item_data.costprice }}{% elif prefill_from_grn_ai %}{{ '%.2f'|format(prefill_cost) }}{% else %}0{% endif %}" />
+            </div>
+
+            <div class="form-group">
+              <label for="retail_price">Retail Price</label>
+              <input type="number" step="0.01" id="retail_price" name="retail_price" value="{% if item_data %}{{ item_data.retailprice }}{% elif prefill_from_grn_ai %}{{ '%.2f'|format(prefill_retail) }}{% else %}0{% endif %}" />
+            </div>
+
+            <div class="form-group">
+              <label for="wholesale_price">Wholesale Price</label>
+              <input type="number" step="0.01" id="wholesale_price" name="wholesale_price" value="{{ item_data.wholesaleprice if item_data else '0' }}" />
+            </div>
+
+            <div class="form-group">
+              <label for="third_price">Third Price</label>
+              <input type="number" step="0.01" id="third_price" name="third_price" value="{{ item_data.thirdprice if item_data else '0' }}" />
+            </div>
+
+            <div class="form-group">
+              <label for="branch_price">Branch Price</label>
+              <input type="number" step="0.01" id="branch_price" name="branch_price" value="{{ item_data.branchprice if item_data else '0' }}" />
+            </div>
+
+          </div>
+        </div>
+
+        {% if not item_request_mode %}
+        <div class="form-section">
+          <div class="form-grid form-grid--2cols">
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="discount_flag" name="discount_flag" value="Y" {% if item_data and item_data.discountflag == 'Y' %}checked{% endif %} />
+                <span>Allow Discount</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Accounts Tab -->
+      <div class="tab-content" id="tab-accounts">
+        <div class="form-section">
+          {% if accounts_locked %}
+          <div class="field-hint" style="margin-bottom:12px;{% if item_request_mode %}color:#856404;background:#fff8e6;{% else %}color:#084298;background:#e7f1ff;{% endif %}border-bottom:none;padding:8px 10px;">
+            {% if item_request_mode %}
+            Sales, Purchase, Inventory, and COGS accounts are fixed to system defaults for Item Request and cannot be edited.
+            {% else %}
+            Sales, Purchase, Inventory, and COGS accounts are fixed to system defaults and cannot be edited.
+            {% endif %}
+          </div>
+          {% endif %}
+          <div class="form-grid form-grid--2cols">
+            <div class="form-group">
+              <label for="sales_account_display">Sales Account</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="sales_account_display"
+                  value="{% if accounts_locked %}{{ (grn_new_item_default_accounts and grn_new_item_default_accounts.sales_display) or '4100 - Sales Revenue' }}{% elif item_data and item_data.sales_account %}{% set ns = namespace(val='') %}{% for acc in chart_accounts %}{% if (acc.code|string) == (item_data.sales_account|string) %}{% set ns.val = (acc.code|string) ~ ' - ' ~ (acc.name|string) %}{% endif %}{% endfor %}{{ ns.val if ns.val else (item_data.sales_account|string) }}{% elif grn_new_item_default_accounts and grn_new_item_default_accounts.sales_display %}{{ grn_new_item_default_accounts.sales_display }}{% endif %}"
+                  placeholder="{% if accounts_locked %}System default{% else %}Press F1 to select account...{% endif %}"
+                  {% if accounts_locked %}readonly class="input-readonly" tabindex="-1"{% endif %}
+                />
+                <button type="button" class="search-clear" id="salesAccountClear" aria-label="Clear sales account" style="display: {% if accounts_locked %}none{% elif item_data and item_data.sales_account %}block{% elif grn_new_item_default_accounts %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="salesAccountPicker" aria-label="Open sales account list">▾</button>
+              </span>
+              <input type="hidden" id="sales_account" name="sales_account" value="{% if accounts_locked %}{{ (grn_new_item_default_accounts and grn_new_item_default_accounts.sales_code) or '4100' }}{% else %}{{ item_data.sales_account if item_data and item_data.sales_account else (grn_new_item_default_accounts.sales_code if grn_new_item_default_accounts else '') }}{% endif %}" />
+              <div class="field-hint">{% if accounts_locked %}Locked to default sales revenue account.{% else %}example: <strong>4100 - Sales Revenue</strong>{% endif %}</div>
+            </div>
+
+            <div class="form-group">
+              <label for="purchase_account_display">Purchase Account</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="purchase_account_display"
+                  value="{% if accounts_locked %}{{ (grn_new_item_default_accounts and grn_new_item_default_accounts.purchase_display) or '5001 - Purchase Expense' }}{% elif item_data and item_data.purchase_account %}{% set ns = namespace(val='') %}{% for acc in chart_accounts %}{% if (acc.code|string) == (item_data.purchase_account|string) %}{% set ns.val = (acc.code|string) ~ ' - ' ~ (acc.name|string) %}{% endif %}{% endfor %}{{ ns.val if ns.val else (item_data.purchase_account|string) }}{% elif grn_new_item_default_accounts and grn_new_item_default_accounts.purchase_display %}{{ grn_new_item_default_accounts.purchase_display }}{% endif %}"
+                  placeholder="{% if accounts_locked %}System default{% else %}Press F1 to select account...{% endif %}"
+                  {% if accounts_locked %}readonly class="input-readonly" tabindex="-1"{% endif %}
+                />
+                <button type="button" class="search-clear" id="purchaseAccountClear" aria-label="Clear purchase account" style="display: {% if accounts_locked %}none{% elif item_data and item_data.purchase_account %}block{% elif grn_new_item_default_accounts %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="purchaseAccountPicker" aria-label="Open purchase account list">▾</button>
+              </span>
+              <input type="hidden" id="purchase_account" name="purchase_account" value="{% if accounts_locked %}{{ (grn_new_item_default_accounts and grn_new_item_default_accounts.purchase_code) or '5001' }}{% else %}{{ item_data.purchase_account if item_data and item_data.purchase_account else (grn_new_item_default_accounts.purchase_code if grn_new_item_default_accounts else '') }}{% endif %}" />
+              <div class="field-hint">{% if accounts_locked %}Locked to default purchase account.{% else %}example: <strong>5001 - Purchase Expense</strong>{% endif %}</div>
+            </div>
+
+            <div class="form-group">
+              <label for="inventory_account_display">Inventory Account</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="inventory_account_display"
+                  value="{% if accounts_locked %}{{ (grn_new_item_default_accounts and grn_new_item_default_accounts.inventory_display) or '1300 - Inventory' }}{% elif item_data and item_data.inventory_account %}{% set ns = namespace(val='') %}{% for acc in chart_accounts %}{% if (acc.code|string) == (item_data.inventory_account|string) %}{% set ns.val = (acc.code|string) ~ ' - ' ~ (acc.name|string) %}{% endif %}{% endfor %}{{ ns.val if ns.val else (item_data.inventory_account|string) }}{% elif grn_new_item_default_accounts and grn_new_item_default_accounts.inventory_display %}{{ grn_new_item_default_accounts.inventory_display }}{% endif %}"
+                  placeholder="{% if accounts_locked %}System default{% else %}Press F1 to select account...{% endif %}"
+                  {% if accounts_locked %}readonly class="input-readonly" tabindex="-1"{% endif %}
+                />
+                <button type="button" class="search-clear" id="inventoryAccountClear" aria-label="Clear inventory account" style="display: {% if accounts_locked %}none{% elif item_data and item_data.inventory_account %}block{% elif grn_new_item_default_accounts %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="inventoryAccountPicker" aria-label="Open inventory account list">▾</button>
+              </span>
+              <input type="hidden" id="inventory_account" name="inventory_account" value="{% if accounts_locked %}{{ (grn_new_item_default_accounts and grn_new_item_default_accounts.inventory_code) or '1300' }}{% else %}{{ item_data.inventory_account if item_data and item_data.inventory_account else (grn_new_item_default_accounts.inventory_code if grn_new_item_default_accounts else '') }}{% endif %}" />
+              <div class="field-hint">{% if accounts_locked %}Locked to default inventory account.{% else %}example: <strong>1300 - Inventory</strong>{% endif %}</div>
+            </div>
+
+            <div class="form-group">
+              <label for="cogs_account_display">COGS Account</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="cogs_account_display"
+                  value="{% if accounts_locked %}{{ (grn_new_item_default_accounts and grn_new_item_default_accounts.cogs_display) or '5100 - Cost of Goods Sold' }}{% elif item_data and item_data.cogs_account %}{% set ns = namespace(val='') %}{% for acc in chart_accounts %}{% if (acc.code|string) == (item_data.cogs_account|string) %}{% set ns.val = (acc.code|string) ~ ' - ' ~ (acc.name|string) %}{% endif %}{% endfor %}{{ ns.val if ns.val else (item_data.cogs_account|string) }}{% elif grn_new_item_default_accounts and grn_new_item_default_accounts.cogs_display %}{{ grn_new_item_default_accounts.cogs_display }}{% endif %}"
+                  placeholder="{% if accounts_locked %}System default{% else %}Press F1 to select account...{% endif %}"
+                  {% if accounts_locked %}readonly class="input-readonly" tabindex="-1"{% endif %}
+                />
+                <button type="button" class="search-clear" id="cogsAccountClear" aria-label="Clear COGS account" style="display: {% if accounts_locked %}none{% elif item_data and item_data.cogs_account %}block{% elif grn_new_item_default_accounts %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="cogsAccountPicker" aria-label="Open COGS account list">▾</button>
+              </span>
+              <input type="hidden" id="cogs_account" name="cogs_account" value="{% if accounts_locked %}{{ (grn_new_item_default_accounts and grn_new_item_default_accounts.cogs_code) or '5100' }}{% else %}{{ item_data.cogs_account if item_data and item_data.cogs_account else (grn_new_item_default_accounts.cogs_code if grn_new_item_default_accounts else '') }}{% endif %}" />
+              <div class="field-hint">{% if accounts_locked %}Locked to default COGS account.{% else %}example: <strong>5100 - Cost of Goods Sold</strong>{% endif %}</div>
+            </div>
+
+            <div class="form-group">
+              <label for="vat_percent">VAT Percentage</label>
+              <input type="number" step="0.01" id="vat_percent" name="vat_percent" value="{{ item_data.vatpercent if item_data else '0' }}" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inventory Tab -->
+      <div class="tab-content" id="tab-inventory">
+        <div class="form-section">
+          <div class="form-grid form-grid--2cols">
+            {% if not item_request_mode %}
+            <div class="form-group">
+              <label for="store">Store</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="store"
+                  name="store_display"
+                  value="{% if item_data and item_data.store %}{{ item_data.store }}{% else %}{% endif %}"
+                  placeholder="Press F1 to select store..."
+                  readonly
+                />
+                <button type="button" class="search-clear" id="storeClear" aria-label="Clear store" style="display: {% if item_data and item_data.store %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="storePicker" aria-label="Open store list">▾</button>
+              </span>
+              <input type="hidden" id="store_hidden" name="store" value="{% if item_data and item_data.store %}{{ item_data.store }}{% else %}{% endif %}" />
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+              <label for="maximum_level">Maximum Level</label>
+              <input type="number" id="maximum_level" name="maximum_level" value="{{ item_data.maximumlevel if item_data else '0' }}" />
+            </div>
+
+            <div class="form-group">
+              <label for="reorder_level">Reorder Level</label>
+              <input type="number" id="reorder_level" name="reorder_level" value="{{ item_data.reorderlevel if item_data else '0' }}" />
+            </div>
+
+            <div class="form-group">
+              <label for="quantity_limit">Quantity Limit</label>
+              <input type="number" id="quantity_limit" name="quantity_limit" value="{{ item_data.quantitylimit if item_data else '0' }}" />
+            </div>
+
+            <div class="form-group">
+              <label>Current Stock</label>
+              <input type="text" value="{{ item_data.currentstock if item_data else '0' }}" readonly class="input-readonly" />
+            </div>
+          </div>
+        </div>
+        {% if not hide_store_inventory_panel %}
+        <div class="form-section">
+          <h4 style="margin:0 0 10px 0; font-size: 13px; color: #495057;">Store Inventory <span class="muted" style="font-weight:400;">(warehouse stock)</span></h4>
+          <div class="scroll-table">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Store</th>
+                  <th>Description</th>
+                  <th style="text-align:right;">Stock</th>
+                </tr>
+              </thead>
+              <tbody id="storeInventoryBody">
+                {% if store_inventory_rows %}
+                  {% for row in store_inventory_rows %}
+                  <tr>
+                    <td>{{ row.code or '-' }}</td>
+                    <td>{{ row.store or '-' }}</td>
+                    <td>{{ row.description or '-' }}</td>
+                    <td style="text-align:right;">{{ row.stock or 0 }}</td>
+                  </tr>
+                  {% endfor %}
+                {% else %}
+                  <tr id="storeInventoryEmptyRow">
+                    <td colspan="4" class="muted">No store inventory rows found.</td>
+                  </tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Variant Tab -->
+      <div class="tab-content" id="tab-variant">
+        <div class="form-section">
+          <div class="form-grid form-grid--2cols">
+            <div class="form-group">
+              <label for="alternate_barcode">Alternate Barcode</label>
+              <input type="text" id="alternate_barcode" name="alternate_barcode" value="{% if alternate_uom %}{{ alternate_uom.manufacturerid or '' }}{% else %}{% endif %}" />
+            </div>
+            <div class="form-group">
+              <label for="alternate_uom_display">Alternate UOM Code</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="alternate_uom_display"
+                  name="alternate_uom_display"
+                  value="{% if alternate_uom and alternate_uom.alternateuomcode %}{% for unit in units %}{% if unit.code == alternate_uom.alternateuomcode %}{{ unit.code }} - {{ unit.name }}{% endif %}{% endfor %}{% endif %}"
+                  placeholder="Click to search alternate UOM..."
+                  readonly
+                />
+                <button type="button" class="search-clear" id="alternateUomClear" aria-label="Clear alternate UOM" style="display: {% if alternate_uom and alternate_uom.alternateuomcode %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="alternateUomPicker" aria-label="Open alternate UOM list">▾</button>
+              </span>
+              <input type="hidden" id="alternate_uom_code" name="alternate_uom_code" value="{% if alternate_uom and alternate_uom.alternateuomcode %}{{ alternate_uom.alternateuomcode }}{% endif %}" />
+              <input type="hidden" id="alternate_slno" name="alternate_slno" value="{% if alternate_uom and alternate_uom.slno %}{{ alternate_uom.slno }}{% endif %}" />
+            </div>
+            <div class="form-group">
+              <label for="alternate_conversion_factor">Conversion Factor</label>
+              <input type="number" step="0.001" id="alternate_conversion_factor" name="alternate_conversion_factor" value="{{ alternate_uom.conversionfactor if alternate_uom else '' }}" />
+            </div>
+            <div class="form-group">
+              <label for="alternate_cost_price">Alt Cost Price</label>
+              <input type="number" step="0.001" id="alternate_cost_price" name="alternate_cost_price" value="{{ alternate_uom.costprice if alternate_uom else '' }}" readonly class="input-readonly" />
+            </div>
+            <div class="form-group">
+              <label for="alternate_wholesale_price">Alt Wholesale Price</label>
+              <input type="number" step="0.01" id="alternate_wholesale_price" name="alternate_wholesale_price" value="{{ alternate_uom.wholesaleprice if alternate_uom else '' }}" />
+            </div>
+            <div class="form-group">
+              <label for="alternate_retail_price">Alt Retail Price</label>
+              <input type="number" step="0.01" id="alternate_retail_price" name="alternate_retail_price" value="{{ alternate_uom.retailprice if alternate_uom else '' }}" />
+            </div>
+            <div class="form-group">
+              <label for="alternate_third_price">Alt Third Price</label>
+              <input type="number" step="0.01" id="alternate_third_price" name="alternate_third_price" value="{{ alternate_uom.thirdprice if alternate_uom else '' }}" />
+            </div>
+            <div class="form-group">
+              <label for="alternate_branch_price">Alt Branch Price</label>
+              <input type="number" step="0.01" id="alternate_branch_price" name="alternate_branch_price" value="{{ alternate_uom.branchprice if alternate_uom else '' }}" />
+            </div>
+            <div class="form-group">
+              <label for="variantAddBtn">Add</label>
+              <button type="button" id="variantAddBtn" class="im-btn-secondary" title="Add alternate price row" aria-label="Add alternate price row">+</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="scroll-table">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Sl No</th>
+                  <th>Alt Barcode</th>
+                  <th>Alt UOM</th>
+                  <th>Factor</th>
+                  <th>Cost</th>
+                  <th>Wholesale</th>
+                  <th>Retail</th>
+                  <th>Third</th>
+                  <th>Branch</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for alt in alternate_uoms %}
+                  <tr
+                    class="alt-variant-row"
+                    data-slno="{{ alt.slno }}"
+                    data-barcode="{{ alt.manufacturerid or '' }}"
+                    data-uom="{{ alt.alternateuomcode or '' }}"
+                    data-factor="{{ alt.conversionfactor or '' }}"
+                    data-cost="{{ alt.costprice or '' }}"
+                    data-wholesale="{{ alt.wholesaleprice or '' }}"
+                    data-retail="{{ alt.retailprice or '' }}"
+                    data-third="{{ alt.thirdprice or '' }}"
+                    data-branch="{{ alt.branchprice or '' }}"
+                  >
+                    <td>{{ alt.slno }}</td>
+                    <td>{{ alt.manufacturerid or '-' }}</td>
+                    <td>{{ alt.alternateuomcode or '-' }}</td>
+                    <td>{{ alt.conversionfactor or '0' }}</td>
+                    <td>{{ alt.costprice or '0' }}</td>
+                    <td>{{ alt.wholesaleprice or '0' }}</td>
+                    <td>{{ alt.retailprice or '0' }}</td>
+                    <td>{{ alt.thirdprice or '0' }}</td>
+                    <td>{{ alt.branchprice or '0' }}</td>
+                    <td><button type="button" class="im-link alt-variant-edit">Edit</button></td>
+                  </tr>
+                {% endfor %}
+                {% if not alternate_uoms %}
+                  <tr id="variantEmptyRow">
+                    <td colspan="10" class="muted">No alternate variants added.</td>
+                  </tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Additional Tab -->
+      <div class="tab-content" id="tab-additional">
+        <div class="form-section">
+          <div class="form-grid form-grid--2cols">
+            <div class="form-group">
+              <label for="rawabicode">Master Code</label>
+              <input type="text" id="rawabicode" name="rawabicode" value="{{ item_data.rawabicode if item_data else '' }}" readonly class="input-readonly" />
+            </div>
+
+            <div class="form-group">
+              <label for="property">Property</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="property"
+                  name="property_display"
+                  value="{% if item_data and item_data.property %}{% for p in item_properties %}{% if (p.code|string) == (item_data.property|string) %}{{ p.code }} - {{ p.name }}{% endif %}{% endfor %}{% endif %}"
+                  placeholder="Click to search property..."
+                  readonly
+                />
+                <button type="button" class="search-clear" id="propertyClear" aria-label="Clear property" style="display: {% if item_data and item_data.property %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="propertyPicker" aria-label="Open property list">▾</button>
+              </span>
+              <input type="hidden" id="property_code" name="property_code" value="{% if item_data and item_data.property %}{{ item_data.property }}{% else %}0{% endif %}" />
+            </div>
+
+            <div class="form-group">
+              <label for="origin">Origin</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="origin"
+                  name="origin_display"
+                  value="{% if item_data and item_data.origin %}{% for o in item_origins %}{% if (o.code|string) == (item_data.origin|string) %}{{ o.code }} - {{ o.name }}{% endif %}{% endfor %}{% endif %}"
+                  placeholder="Click to search origin..."
+                  readonly
+                />
+                <button type="button" class="search-clear" id="originClear" aria-label="Clear origin" style="display: {% if item_data and item_data.origin %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="originPicker" aria-label="Open origin list">▾</button>
+              </span>
+              <input type="hidden" id="origin_code" name="origin_code" value="{% if item_data and item_data.origin %}{{ item_data.origin }}{% else %}0{% endif %}" />
+            </div>
+
+            <div class="form-group">
+              <label for="packing">Packing</label>
+              <input type="text" id="packing" name="packing" value="{{ item_data.packing if item_data else '' }}" />
+            </div>
+
+            <input type="hidden" id="rebate" name="rebate" value="{{ item_data.rebate if item_data else '0' }}" />
+            <input type="hidden" id="size_code_hidden" name="size_code" value="{% if item_data and item_data.sizecode %}{{ item_data.sizecode }}{% else %}0{% endif %}" />
+
+            <input type="hidden" id="color_code_hidden" name="color_code" value="{% if item_data and item_data.colorcode %}{{ item_data.colorcode }}{% else %}0{% endif %}" />
+            <input type="hidden" id="ministry_factor" name="ministry_factor" value="{{ item_data.ministryfactor if item_data else '' }}" />
+            <input type="hidden" id="ministry_unit" name="ministry_unit" value="{% if item_data and item_data.ministryunit %}{{ item_data.ministryunit }}{% endif %}" />
+          </div>
+        </div>
+      </div>
+    </form>
+    <div class="im-ai-explain" id="aiExplainSection">
+      <div class="im-ai-explain__title">AI Explain</div>
+      <div class="im-ai-explain__body" id="aiFetchDetails">AI Mode is OFF.</div>
+      <div class="im-ai-explain__table-wrap" id="aiExplainTableWrap">
+        <table class="im-ai-explain__table" id="aiExplainTable">
+          <tbody id="aiExplainTableBody"></tbody>
+        </table>
+      </div>
+      <div class="im-ai-explain__arabic" id="aiArabicExplainRow" style="display:none;">
+        <b>Arabic from Item Name:</b>
+        <span id="aiArabicPreview"></span>
+      </div>
+      <div class="im-ai-explain__actions">
+        <button type="button" class="im-btn-secondary" id="btnCopySuggestedData" style="padding:4px 10px;font-size:12px;display:none;">Copy Data</button>
+      </div>
+    </div>
+  </section>
+    {% if ho_mode and rawabi_detail_rows %}
+      <div class="im-btn-secondary" style="margin-top: 10px; padding: 8px 10px; overflow: auto;">
+        <div style="font-size: 12px; font-weight: 600; margin-bottom: 6px;">Connected by master code</div>
+        <table class="table table-fixed" style="width: 100%; font-size: 12px; margin: 0;">
+          <thead>
+            <tr>
+              <th>DB Name</th>
+              <th>Master Code</th>
+              <th>Manufacturer ID</th>
+              <th>Item Name</th>
+              <th>BaseUOM</th>
+              <th>CostPrice</th>
+              <th>RetailPrice</th>
+              <th>CurrentStock</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rawabi_detail_rows %}
+              <tr>
+                <td>{{ r.dbname or '' }}</td>
+                <td>{{ r.rawabicode or '' }}</td>
+                <td>{{ r.manufacturerid or '' }}</td>
+                <td>{{ r.itemname or '' }}</td>
+                <td>{{ r.baseuom or '' }}</td>
+                <td>{{ '%.3f'|format(r.costprice or 0) }}</td>
+                <td>{{ '%.3f'|format(r.retailprice or 0) }}</td>
+                <td>{{ '%.3f'|format(r.currentstock or 0) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
+  <!-- Main Category Popup Modal -->
+  <div class="modal hidden" id="mainCategoryModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="mainCategoryModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Main Category</h3>
+        <button type="button" class="modal__close" data-close="mainCategoryModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="mainCategoryModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="mainCategoryModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="mainCategoryModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for mc in main_categories %}
+                <tr data-code="{{ mc.code }}" data-name="{{ mc.name }}" data-text="{{ (mc.code ~ ' ' ~ mc.name)|lower }}">
+                  <td>{{ mc.code }}</td>
+                  <td>{{ mc.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Department Popup Modal -->
+  <div class="modal hidden" id="departmentModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="departmentModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Category</h3>
+        <button type="button" class="modal__close" data-close="departmentModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="departmentModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="departmentModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="departmentModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for dept in departments %}
+                <tr data-code="{{ dept.code }}" data-name="{{ dept.name }}" data-text="{{ (dept.code ~ ' ' ~ dept.name)|lower }}">
+                  <td>{{ dept.code }}</td>
+                  <td>{{ dept.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Category Popup Modal -->
+  <div class="modal hidden" id="categoryModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="categoryModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Micro Category</h3>
+        <button type="button" class="modal__close" data-close="categoryModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="categoryModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="categoryModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="categoryModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for cat in categories %}
+                <tr data-code="{{ cat.code }}" data-name="{{ cat.name }}" data-text="{{ (cat.code ~ ' ' ~ cat.name)|lower }}">
+                  <td>{{ cat.code }}</td>
+                  <td>{{ cat.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Brand Popup Modal -->
+  <div class="modal hidden" id="brandModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="brandModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Brand</h3>
+        <button type="button" class="modal__close" data-close="brandModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="brandModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="brandModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="brandModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for brand in brands %}
+                <tr data-code="{{ brand.code }}" data-name="{{ brand.name }}" data-text="{{ (brand.code ~ ' ' ~ brand.name)|lower }}">
+                  <td>{{ brand.code }}</td>
+                  <td>{{ brand.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Base UOM Popup Modal -->
+  <div class="modal hidden" id="baseUomModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="baseUomModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Base Uom</h3>
+        <button type="button" class="modal__close" data-close="baseUomModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="baseUomModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="baseUomModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="baseUomModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for unit in units %}
+                <tr data-code="{{ unit.code }}" data-name="{{ unit.name }}" data-text="{{ (unit.code ~ ' ' ~ unit.name)|lower }}">
+                  <td>{{ unit.code }}</td>
+                  <td>{{ unit.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alternate UOM Popup Modal -->
+  <div class="modal hidden" id="alternateUomModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="alternateUomModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Alternate Uom</h3>
+        <button type="button" class="modal__close" data-close="alternateUomModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="alternateUomModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="alternateUomModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="alternateUomModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for unit in units %}
+                <tr data-code="{{ unit.code }}" data-name="{{ unit.name }}" data-text="{{ (unit.code ~ ' ' ~ unit.name)|lower }}">
+                  <td>{{ unit.code }}</td>
+                  <td>{{ unit.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supplier Popup Modal -->
+  <div class="modal hidden" id="supplierModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="supplierModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Supplier</h3>
+        <button type="button" class="modal__close" data-close="supplierModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="supplierModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="supplierModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="supplierModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for supplier in suppliers %}
+                <tr data-code="{{ supplier.code }}" data-name="{{ supplier.name }}" data-text="{{ (supplier.code ~ ' ' ~ supplier.name)|lower }}">
+                  <td>{{ supplier.code }}</td>
+                  <td>{{ supplier.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Property Popup Modal -->
+  <div class="modal hidden" id="propertyModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="propertyModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Property</h3>
+        <button type="button" class="modal__close" data-close="propertyModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="propertyModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="propertyModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="propertyModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in item_properties %}
+                <tr data-code="{{ p.code }}" data-name="{{ p.name }}" data-text="{{ (p.code ~ ' ' ~ p.name)|lower }}">
+                  <td>{{ p.code }}</td>
+                  <td>{{ p.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Origin Popup Modal -->
+  <div class="modal hidden" id="originModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="originModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Origin</h3>
+        <button type="button" class="modal__close" data-close="originModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="originModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="originModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="originModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for o in item_origins %}
+                <tr data-code="{{ o.code }}" data-name="{{ o.name }}" data-text="{{ (o.code ~ ' ' ~ o.name)|lower }}">
+                  <td>{{ o.code }}</td>
+                  <td>{{ o.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Store Popup Modal -->
+  <div class="modal hidden" id="storeModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="storeModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>{% if item_request_mode %}Locations{% else %}Store{% endif %}</h3>
+        <button type="button" class="modal__close" data-close="storeModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="storeModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="storeModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="storeModalTable">
+            <thead>
+              <tr>
+                <th>{% if item_request_mode %}Dbocode{% else %}Code{% endif %}</th>
+                {% if item_request_mode %}<th>Branch</th>{% endif %}
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for s in store_popup_rows %}
+                <tr data-code="{{ s.code }}" data-dbkey="{{ s.dbkey or '' }}" data-name="{{ s.name }}" data-text="{{ (s.code ~ ' ' ~ (s.dbkey or '') ~ ' ' ~ s.name)|lower }}">
+                  <td>{{ s.code }}</td>
+                  {% if item_request_mode %}<td>{{ s.dbkey or '' }}</td>{% endif %}
+                  <td>{{ s.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Item Accounts Popup Modal -->
+  <div class="modal hidden" id="itemAccountModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="itemAccountModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Account</h3>
+        <button type="button" class="modal__close" data-close="itemAccountModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="itemAccountModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="itemAccountModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="itemAccountModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for acc in chart_accounts %}
+                <tr data-code="{{ acc.code }}" data-name="{{ acc.name }}" data-text="{{ (acc.code ~ ' ' ~ acc.name ~ ' ' ~ (acc.type or ''))|lower }}">
+                  <td>{{ acc.code }}</td>
+                  <td>{{ acc.name }}</td>
+                  <td>{{ acc.type or '' }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script>window.IM_ITEM_ACCOUNTS_API = {{ url_for('itemmaster.api_item_accounts')|tojson }};</script>
+  <script src="{{ url_for('static', filename='js/itemmaster.js') }}?v=18"></script>
+{% endblock %}

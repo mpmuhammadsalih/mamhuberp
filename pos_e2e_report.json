@@ -1,0 +1,185 @@
+{
+  "ok": true,
+  "elapsed_ms": 34545.91,
+  "base_url": "http://127.0.0.1:5002",
+  "payment": "card",
+  "skip_save": false,
+  "steps": [
+    {
+      "step": "launch chromium",
+      "ok": true,
+      "ms": 67.56
+    },
+    {
+      "step": "login",
+      "ok": true,
+      "ms": 11301.41
+    },
+    {
+      "step": "dismiss fullscreen gate (if any)",
+      "ok": true,
+      "ms": 374.07
+    },
+    {
+      "step": "wait POS shell",
+      "ok": true,
+      "ms": 19.21
+    },
+    {
+      "step": "add line via Test barcode",
+      "ok": true,
+      "ms": 6628.26
+    },
+    {
+      "step": "open Payment modal",
+      "ok": true,
+      "ms": 411.66
+    },
+    {
+      "step": "select Card (auto remainder)",
+      "ok": true,
+      "ms": 579.33
+    },
+    {
+      "step": "validation message ready",
+      "ok": true,
+      "ms": 3.67
+    },
+    {
+      "step": "Validate (checkout)",
+      "ok": true,
+      "ms": 546.74
+    },
+    {
+      "step": "save response",
+      "ok": true,
+      "detail": {
+        "success": true,
+        "queued": true,
+        "queue_job_id": 42,
+        "queue_status": "PENDING",
+        "billno": 8159205117,
+        "stock_posted": false,
+        "stock_affected_items": 0,
+        "receipt": {
+          "location_details": {
+            "locationname": "AL RAWABI FOOD STUFF - SANAYYA",
+            "locationcode": 7,
+            "minusbilling": "N",
+            "address": "DOHA - QATAR",
+            "telephone": "44971777",
+            "phone": "44971777"
+          },
+          "receiptno": 8159205117,
+          "countercode": 184,
+          "countername": null,
+          "user": "admin",
+          "billdate": "17/05/2026",
+          "billtime": "11:43:25",
+          "billtype": "C",
+          "customercode": "0",
+          "customername": "",
+          "orderno": "",
+          "lines": [
+            {
+              "slno": 1,
+              "barcode": "14465",
+              "manufacturerid": "14465",
+              "item": "#MINT POWDER (NANA) 9KG",
+              "item_ara": "",
+              "uom": "BG",
+              "qty": 1.0,
+              "rate": 200.0,
+              "disc": 0.0,
+              "amount": 200.0
+            }
+          ],
+          "footer": {
+            "net_total": 200.0,
+            "discount_total": 0.0,
+            "message": "Thank you."
+          },
+          "billno": 8159205117,
+          "receipt_extras": {
+            "credit_sale": false,
+            "tender_total": 200,
+            "change": 0,
+            "payment_type_label": "Card",
+            "loyalty_customer_line": "",
+            "total_points": 0,
+            "net_bill_total": 200,
+            "bill_discount_total": 0
+          }
+        },
+        "receipt_text": "      AL RAWABI FOOD STUFF - SANAYYA      \n               DOHA - QATAR               \n           Telephone : 44971777           \n------------------------------------------\nSl.N Barcode        Qty  Rate Amount\n------------------------------------------\n1                 1.000 00.00 200.00\n14465\n    #MINT POWDER (NANA) 9KG\n------------------------------------------\n\nGrand Total                     QAR 200.00\nDiscount                          QAR 0.00\nNet Total                       QAR 200.00\n------------------------------------------\n\nQatar Riyals QR                     200.00\nChange Qatar Riyals QR                0.00\n\n------------------------------------------\nPayment Type                          Card\nTotal Points                             0\nServed By : admin                         \n\nReceipt      Date        Time          POS\n8159205117   17/05/2026  11:43:25      184\n\n------------------------------------------\n\n            \u0634\u0643\u0631\u0627 \u0644\u0643 \u0639\u0644\u0649 \u0627\u0644\u0634\u0631\u0627\u0621            \n          Thank you for shopping          \n\n|| ||||||||| |  | |||||||| |||||||| |  |||\n              0081592051175               ",
+        "save_nonce": "49a9aa4a49c84b2198efa871d390ebd9"
+      }
+    },
+    {
+      "step": "close receipt preview (if any)",
+      "ok": true,
+      "ms": 10017.68
+    }
+  ],
+  "save_response": {
+    "success": true,
+    "queued": true,
+    "queue_job_id": 42,
+    "queue_status": "PENDING",
+    "billno": 8159205117,
+    "stock_posted": false,
+    "stock_affected_items": 0,
+    "receipt": {
+      "location_details": {
+        "locationname": "AL RAWABI FOOD STUFF - SANAYYA",
+        "locationcode": 7,
+        "minusbilling": "N",
+        "address": "DOHA - QATAR",
+        "telephone": "44971777",
+        "phone": "44971777"
+      },
+      "receiptno": 8159205117,
+      "countercode": 184,
+      "countername": null,
+      "user": "admin",
+      "billdate": "17/05/2026",
+      "billtime": "11:43:25",
+      "billtype": "C",
+      "customercode": "0",
+      "customername": "",
+      "orderno": "",
+      "lines": [
+        {
+          "slno": 1,
+          "barcode": "14465",
+          "manufacturerid": "14465",
+          "item": "#MINT POWDER (NANA) 9KG",
+          "item_ara": "",
+          "uom": "BG",
+          "qty": 1.0,
+          "rate": 200.0,
+          "disc": 0.0,
+          "amount": 200.0
+        }
+      ],
+      "footer": {
+        "net_total": 200.0,
+        "discount_total": 0.0,
+        "message": "Thank you."
+      },
+      "billno": 8159205117,
+      "receipt_extras": {
+        "credit_sale": false,
+        "tender_total": 200,
+        "change": 0,
+        "payment_type_label": "Card",
+        "loyalty_customer_line": "",
+        "total_points": 0,
+        "net_bill_total": 200,
+        "bill_discount_total": 0
+      }
+    },
+    "receipt_text": "      AL RAWABI FOOD STUFF - SANAYYA      \n               DOHA - QATAR               \n           Telephone : 44971777           \n------------------------------------------\nSl.N Barcode        Qty  Rate Amount\n------------------------------------------\n1                 1.000 00.00 200.00\n14465\n    #MINT POWDER (NANA) 9KG\n------------------------------------------\n\nGrand Total                     QAR 200.00\nDiscount                          QAR 0.00\nNet Total                       QAR 200.00\n------------------------------------------\n\nQatar Riyals QR                     200.00\nChange Qatar Riyals QR                0.00\n\n------------------------------------------\nPayment Type                          Card\nTotal Points                             0\nServed By : admin                         \n\nReceipt      Date        Time          POS\n8159205117   17/05/2026  11:43:25      184\n\n------------------------------------------\n\n            \u0634\u0643\u0631\u0627 \u0644\u0643 \u0639\u0644\u0649 \u0627\u0644\u0634\u0631\u0627\u0621            \n          Thank you for shopping          \n\n|| ||||||||| |  | |||||||| |||||||| |  |||\n              0081592051175               ",
+    "save_nonce": "49a9aa4a49c84b2198efa871d390ebd9"
+  }
+}

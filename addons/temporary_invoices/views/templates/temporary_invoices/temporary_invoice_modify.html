@@ -1,0 +1,504 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+  .si-po-page { max-width: min(1680px, 98vw); margin: 0 auto; padding: 24px 16px; box-sizing: border-box; background: #fff; color: #212529; }
+  .si-po-page .po-topbar { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #dee2e6; }
+  .si-po-page .po-topbar h1 { margin: 0; font-size: 24px; font-weight: 400; color: #212529; }
+  .si-po-page .po-topbar h1 .po-ref { font-weight: 600; }
+  .si-po-page .po-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .si-po-page .po-btn-save { background: #28a745 !important; border: none; color: #fff !important; padding: 8px 20px; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .si-po-page .po-btn-save:disabled { background: #adb5bd !important; cursor: not-allowed; }
+  .si-po-page .si-po-btn-modify { background: linear-gradient(180deg, #f472b6 0%, #e11d48 100%) !important; border: 1px solid #be123c !important; color: #fff !important; padding: 8px 20px; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 1px 3px rgba(190, 18, 60, 0.35); }
+  .si-po-page .si-po-btn-modify:hover:not(:disabled) { filter: brightness(1.06); border-color: #9f1239 !important; }
+  .si-po-page .si-po-btn-modify:disabled { background: #cbd5e1 !important; border-color: #94a3b8 !important; cursor: not-allowed; filter: none; box-shadow: none; color: #64748b !important; }
+  .si-po-page .po-link { color: #007bff; text-decoration: none; font-size: 13px; cursor: pointer; background: none; border: none; padding: 0; }
+  .si-po-page .po-link:hover { text-decoration: underline; }
+  .si-po-page .po-details { display: grid; grid-template-columns: 1fr 1fr; gap: 0 48px; margin-bottom: 24px; }
+  .si-po-page .po-details .form-group { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; min-height: 32px; }
+  .si-po-page .po-details .form-group label { margin: 0; min-width: 140px; font-size: 13px; font-weight: 400; color: #495057; flex-shrink: 0; }
+  .si-po-page .po-details .form-group .input { flex: 1; font-size: 13px; padding: 6px 0; border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; background: transparent; min-width: 0; color: #212529; }
+  .si-po-page .po-details .form-group .input:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .si-po-page .po-details .form-group .input[readonly] { background: transparent; color: #212529; -webkit-text-fill-color: #212529; }
+  .si-po-page .po-details .form-group.span-2 { grid-column: span 2; }
+  .si-po-page .po-section-title { font-size: 14px; font-weight: 600; color: #212529; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #007bff; display: inline-block; }
+  .si-po-page .po-hint { font-size: 13px; color: #495057; line-height: 1.5; margin: 0 0 12px; }
+  .si-po-page .si-po-bill-search { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+  .si-po-page .si-po-bill-search-form { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
+  .si-po-page .si-po-bill-search__btns { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .si-po-page .si-po-bill-search .form-group { display: flex; align-items: center; gap: 12px; margin-bottom: 0; min-height: 32px; min-width: 200px; flex: 1 1 280px; max-width: 420px; }
+  .si-po-page .si-po-bill-search .form-group label { margin: 0; min-width: 140px; font-size: 13px; font-weight: 400; color: #495057; flex-shrink: 0; }
+  .si-po-page .si-po-bill-search .form-group .input { flex: 1; font-size: 13px; padding: 6px 0; border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; background: transparent; min-width: 0; color: #212529; }
+  .si-po-page .si-po-bill-search .form-group .input:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .si-po-page .card, .si-po-page .form-section { background: transparent; border: none; padding: 0; margin: 0 0 16px; }
+  .si-po-page .button--secondary { background: transparent; border: 1px solid #dee2e6; color: #495057; padding: 8px 16px; border-radius: 4px; font-size: 13px; cursor: pointer; }
+  .si-po-page .button--secondary:hover { background: #f8f9fa; }
+  .si-po-page .scroll-table { overflow: auto; max-height: 50vh; background: #fff; -webkit-overflow-scrolling: touch; border: 1px solid #dee2e6; border-radius: 4px; }
+  .si-po-page #tempInvoiceLineItemsTable { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .si-po-page #tempInvoiceLineItemsTable thead { background: #f8f9fa !important; }
+  .si-po-page #tempInvoiceLineItemsTable thead th { background: #f8f9fa !important; color: #495057 !important; padding: 10px 12px !important; font-weight: 600; font-size: 12px; text-align: left; border-bottom: 1px solid #dee2e6; white-space: nowrap; }
+  .si-po-page #tempInvoiceLineItemsTable tbody td { padding: 8px 12px !important; border: none; border-bottom: 1px solid #dee2e6; vertical-align: middle; color: #212529; font-size: 13px; }
+  .si-po-page #tempInvoiceLineItemsTable tbody tr:hover { background: #f8f9fa !important; }
+  .si-po-page .search-field { display: flex; align-items: stretch; flex: 1; min-width: 0; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; }
+  .si-po-page .search-field .input { flex: 1; border: none !important; border-radius: 0; padding: 6px 10px !important; margin: 0; min-width: 0; color: #212529; -webkit-text-fill-color: #212529; }
+  .si-po-page .search-field .search-picker { background: #334155; color: #fff; border: none; padding: 6px 10px; cursor: pointer; font-size: 12px; flex-shrink: 0; }
+  .si-po-page .search-field .search-clear { background: #f1f5f9; border: none; padding: 0 8px; cursor: pointer; flex-shrink: 0; color: #64748b; }
+  .si-po-page .modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .si-po-page .modal.hidden { display: none; }
+  .si-po-page .modal__overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.4); cursor: pointer; }
+  .si-po-page .modal__content { position: relative; background: #fff; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); max-width: 500px; width: 100%; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
+  .si-po-page .modal__header { padding: 12px 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+  .si-po-page .modal__body { padding: 12px; overflow: auto; max-height: 320px; }
+  .si-po-page #tempInvoiceSalesmanTable, .si-po-page #tempInvoiceBilltypeTable { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .si-po-page #tempInvoiceSalesmanTable thead, .si-po-page #tempInvoiceBilltypeTable thead { background: #334155 !important; }
+  .si-po-page #tempInvoiceSalesmanTable thead th, .si-po-page #tempInvoiceBilltypeTable thead th { background: #334155 !important; color: #fff !important; padding: 8px 10px; font-weight: 600; font-size: 12px; text-align: left; }
+  .si-po-page #tempInvoiceSalesmanTable tbody td, .si-po-page #tempInvoiceBilltypeTable tbody td { padding: 8px 12px; border: 1px solid #e2e8f0; text-align: left; }
+  .si-po-page #tempInvoiceSalesmanTable tbody tr:hover, .si-po-page #tempInvoiceBilltypeTable tbody tr:hover { background: #f1f5f9; cursor: pointer; }
+  .si-po-page .modal__search .search-field { border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 8px; }
+  .si-po-page .modal__search .search-field input { flex: 1; border: none; padding: 8px 10px; font-size: 13px; }
+  .si-po-page .text-danger { color: #b91c1c; font-size: 13px; }
+  .si-po-page .text-success { color: #065f46; font-size: 13px; }
+  .si-po-page .text-muted { color: #6b7280; font-size: 13px; }
+</style>
+
+<div class="si-po-page">
+  <div class="po-topbar">
+    <h1>Modify / <span class="po-ref">{{ billno or 'Search' }}</span></h1>
+    <div class="po-actions">
+      <a href="{{ url_for('temporary_invoices.temporary_invoices') }}" class="po-link">Sales Invoices</a>
+    </div>
+  </div>
+
+  <div class="form-section">
+    <div class="si-po-bill-search">
+      <form method="get" action="{{ url_for('temporary_invoices.temporary_invoice_modify') }}" class="si-po-bill-search-form">
+        <div class="form-group">
+          <label for="tempInvoiceBillno">Bill No</label>
+          <input type="text" id="tempInvoiceBillno" name="billno" class="input" value="{{ billno }}" placeholder="Enter bill no" autocomplete="off" />
+        </div>
+        <div class="si-po-bill-search__btns">
+          <button type="submit" class="po-btn-save">Search</button>
+          {% if header %}
+            <button type="submit" form="temporaryInvoiceModifyForm" class="si-po-btn-modify" id="temporaryInvoiceModifyBtn">Modify</button>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% if error_message %}
+    <div class="form-section text-danger">{{ error_message }}</div>
+  {% endif %}
+  {% if message %}
+    <div class="form-section text-success">{{ message }}</div>
+  {% endif %}
+
+  {% if billno and not header %}
+    <div class="form-section text-muted">No invoice found for Bill No {{ billno }}.</div>
+  {% endif %}
+
+  {% if header %}
+    <div class="form-section temporary-invoice-modify-header">
+      <form method="post" action="{{ url_for('temporary_invoices.temporary_invoice_modify') }}" id="temporaryInvoiceModifyForm">
+        <input type="hidden" name="billno" value="{{ billno }}" />
+        <input type="hidden" id="tempInvoiceSalesmanCode" name="salesmancode" value="{{ header.salesmancode or '' }}" />
+        <input type="hidden" id="tempInvoiceBilltype" name="billtype" value="{{ header.billtype or '' }}" data-current="{{ header.billtype or '' }}" />
+        <div class="po-details temporary-invoice-modify-grid">
+          <div class="form-group">
+            <label>Bill Date</label>
+            <input class="input" readonly value="{{ header.billdate.strftime('%d-%b-%Y') if header.billdate else '-' }}" />
+          </div>
+          <div class="form-group">
+            <label>Customer Code</label>
+            <input class="input" name="customercode" value="{{ header.customercode or '' }}" readonly title="{{ header.customercode or '' }}" />
+          </div>
+          <div class="form-group span-2">
+            <label>Customer Name</label>
+            <input class="input" name="customername" value="{{ header.customername or '' }}" readonly title="{{ header.customername or '' }}" />
+          </div>
+          <div class="form-group">
+            <label for="tempInvoiceOrderno">Order No</label>
+            <input type="text" id="tempInvoiceOrderno" name="orderno" class="input" value="{{ header.orderno or '' }}" maxlength="80" autocomplete="off" required title="Edit order number (must be unique for this branch)" />
+          </div>
+          <div class="form-group">
+            <label>Salesman Code</label>
+            <span class="search-field search-field--popup">
+              <input type="text" id="tempInvoiceSalesmanCodeDisplay" readonly class="input" value="{{ header.salesmancode or '' }}" />
+              <button type="button" class="search-clear" id="tempInvoiceSalesmanClear" aria-label="Clear salesman" style="display: none;">×</button>
+              <button type="button" class="search-picker" id="tempInvoiceSalesmanPicker" aria-label="Open salesman list">▾</button>
+            </span>
+          </div>
+          <div class="form-group">
+            <label>Salesman Name</label>
+            <input class="input" id="tempInvoiceSalesmanName" name="salesmanname" value="{{ header.salesmanname or '' }}" readonly title="{{ header.salesmanname or '' }}" />
+          </div>
+          <div class="form-group">
+            <label>Net Bill Amount</label>
+            <input class="input" readonly value="{{ '%.2f'|format((header.netbillamount or 0)|float) }}" />
+          </div>
+          <div class="form-group">
+            <label>Bill Type</label>
+            <span class="search-field search-field--popup">
+              <input type="text" id="tempInvoiceBilltypeDisplay" readonly class="input" value="{{ header.billtype or '' }}" />
+              <button type="button" class="search-picker" id="tempInvoiceBilltypePicker" aria-label="Open bill type list">▾</button>
+            </span>
+          </div>
+        </div>
+      </form>
+      <script>
+        (function() {
+          var form = document.getElementById('temporaryInvoiceModifyForm');
+          var btn = document.getElementById('temporaryInvoiceModifyBtn');
+          var saveStarted = false;
+          if (form && btn) {
+            form.addEventListener('submit', function() {
+              if (saveStarted) {
+                return;
+              }
+              saveStarted = true;
+              btn.disabled = true;
+              btn.textContent = 'Saving…';
+              btn.title = 'Saving…';
+              if (typeof window.showLoadingOverlay === 'function') {
+                window.showLoadingOverlay('Saving invoice…');
+              }
+            });
+          }
+        })();
+      </script>
+    </div>
+
+    <div class="form-section">
+      <div class="po-section-title">Line items</div>
+      <p class="po-hint">Load line items when needed (faster initial page).</p>
+      <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <button type="button" class="button button--secondary" id="tempInvoiceLoadLineItemsBtn">More — load line items</button>
+        <span id="tempInvoiceLineItemsStatus" class="text-muted" style="font-size: 13px;" aria-live="polite"></span>
+      </div>
+      <div class="scroll-table" id="tempInvoiceLineItemsWrap" style="margin-top: 12px; display: none;">
+        <table class="table" id="tempInvoiceLineItemsTable">
+          <thead>
+            <tr>
+              <th>Item Code</th>
+              <th>Item Name</th>
+              <th>UOM</th>
+              <th>Qty</th>
+              <th>Rate</th>
+              <th>Amount</th>
+            </tr>
+          </thead>
+          <tbody id="tempInvoiceLineItemsTbody"></tbody>
+        </table>
+      </div>
+      <script type="application/json" id="tempInvoiceLineItemsApiUrl">{{ line_items_api_url|tojson }}</script>
+      <script type="application/json" id="tempInvoiceLineItemsBillno">{{ billno|tojson }}</script>
+    </div>
+  {% endif %}
+
+  <div class="modal hidden" id="tempInvoiceSalesmanModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="tempInvoiceSalesmanModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h4>Select Salesman</h4>
+        <button type="button" class="modal__close" data-close="tempInvoiceSalesmanModal">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="modal__search">
+          <span class="search-field search-field--wide">
+            <input type="text" id="tempInvoiceSalesmanSearch" placeholder="Search salesman..." />
+            <button type="button" class="search-clear" id="tempInvoiceSalesmanSearchClear" style="display: none;">×</button>
+          </span>
+        </div>
+        <div class="scroll-table modal__table">
+          <table class="table" id="tempInvoiceSalesmanTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for salesman in salesmen %}
+                <tr data-code="{{ salesman.code }}" data-name="{{ salesman.name or '' }}">
+                  <td>{{ salesman.code }}</td>
+                  <td>{{ salesman.name or '-' }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="tempInvoiceBilltypeModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="tempInvoiceBilltypeModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h4>Select Bill Type</h4>
+        <button type="button" class="modal__close" data-close="tempInvoiceBilltypeModal">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="scroll-table modal__table">
+          <table class="table" id="tempInvoiceBilltypeTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr data-code="C" data-name="CASH INVOICE"><td>C</td><td>CASH INVOICE</td></tr>
+              <tr data-code="R" data-name="CREDIT INVOICE"><td>R</td><td>CREDIT INVOICE</td></tr>
+              <tr data-code="T" data-name="TEMPORARY"><td>T</td><td>TEMPORARY</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    (function () {
+      const salesmanModal = document.getElementById('tempInvoiceSalesmanModal');
+      const salesmanPicker = document.getElementById('tempInvoiceSalesmanPicker');
+      const salesmanDisplay = document.getElementById('tempInvoiceSalesmanCodeDisplay');
+      const salesmanCode = document.getElementById('tempInvoiceSalesmanCode');
+      const salesmanName = document.getElementById('tempInvoiceSalesmanName');
+      const salesmanClear = document.getElementById('tempInvoiceSalesmanClear');
+      const salesmanSearch = document.getElementById('tempInvoiceSalesmanSearch');
+      const salesmanSearchClear = document.getElementById('tempInvoiceSalesmanSearchClear');
+      const salesmanTable = document.getElementById('tempInvoiceSalesmanTable');
+
+      const billtypeModal = document.getElementById('tempInvoiceBilltypeModal');
+      const billtypePicker = document.getElementById('tempInvoiceBilltypePicker');
+      const billtypeDisplay = document.getElementById('tempInvoiceBilltypeDisplay');
+      const billtypeHidden = document.getElementById('tempInvoiceBilltype');
+      const billtypeTable = document.getElementById('tempInvoiceBilltypeTable');
+
+      function toggleClear(button, value) {
+        if (!button) return;
+        button.style.display = value ? 'inline-flex' : 'none';
+      }
+
+      function bindModalClose(modal) {
+        if (!modal) return;
+        modal.addEventListener('click', event => {
+          const target = event.target;
+          if (target instanceof HTMLElement && target.dataset.close) {
+            modal.classList.add('hidden');
+          }
+        });
+        const closeButtons = modal.querySelectorAll('.modal__close, .modal__overlay');
+        closeButtons.forEach(button => button.addEventListener('click', () => modal.classList.add('hidden')));
+      }
+
+      function bindTableSelect(table, onSelect) {
+        if (!table) return;
+        Array.from(table.querySelectorAll('tbody tr')).forEach(row => {
+          row.addEventListener('click', () => onSelect(row.dataset.code || '', row.dataset.name || ''));
+        });
+      }
+
+      if (salesmanPicker && salesmanModal) {
+        const rows = salesmanTable ? Array.from(salesmanTable.querySelectorAll('tbody tr')) : [];
+        salesmanPicker.addEventListener('click', () => {
+          salesmanModal.classList.remove('hidden');
+          if (salesmanSearch) {
+            salesmanSearch.value = '';
+            rows.forEach(row => (row.style.display = ''));
+            salesmanSearch.focus();
+          }
+        });
+
+        if (salesmanDisplay) {
+          salesmanDisplay.addEventListener('click', () => salesmanPicker.click());
+        }
+
+        if (salesmanSearch) {
+          salesmanSearch.addEventListener('input', event => {
+            const value = (event.target.value || '').trim().toLowerCase();
+            rows.forEach(row => {
+              const code = (row.dataset.code || '').toLowerCase();
+              const name = (row.dataset.name || '').toLowerCase();
+              row.style.display = !value || code.includes(value) || name.includes(value) ? '' : 'none';
+            });
+            toggleClear(salesmanSearchClear, value);
+          });
+        }
+
+        if (salesmanSearchClear) {
+          salesmanSearchClear.addEventListener('click', () => {
+            if (salesmanSearch) {
+              salesmanSearch.value = '';
+              rows.forEach(row => (row.style.display = ''));
+              salesmanSearch.focus();
+            }
+            toggleClear(salesmanSearchClear, '');
+          });
+        }
+
+        bindTableSelect(salesmanTable, (code, name) => {
+          if (salesmanCode) salesmanCode.value = code;
+          if (salesmanDisplay) salesmanDisplay.value = code;
+          if (salesmanName) salesmanName.value = name;
+          toggleClear(salesmanClear, code);
+          salesmanModal.classList.add('hidden');
+        });
+
+        if (salesmanClear) {
+          salesmanClear.addEventListener('click', () => {
+            if (salesmanCode) salesmanCode.value = '';
+            if (salesmanDisplay) salesmanDisplay.value = '';
+            if (salesmanName) salesmanName.value = '';
+            toggleClear(salesmanClear, '');
+          });
+        }
+      }
+
+      if (billtypePicker && billtypeModal) {
+        const currentBilltype = (billtypeHidden?.dataset.current || billtypeHidden?.value || '').trim().toUpperCase();
+        if (currentBilltype === 'R' || currentBilltype === 'T') {
+          billtypePicker.style.display = 'none';
+        } else if (currentBilltype === 'C') {
+          const rows = billtypeTable ? Array.from(billtypeTable.querySelectorAll('tbody tr')) : [];
+          rows.forEach(row => {
+            row.style.display = (row.dataset.code || '').toUpperCase() === 'T' ? '' : 'none';
+          });
+        }
+
+        billtypePicker.addEventListener('click', () => {
+          if (currentBilltype !== 'C') return;
+          billtypeModal.classList.remove('hidden');
+        });
+        if (billtypeDisplay) {
+          billtypeDisplay.addEventListener('click', () => { if (currentBilltype === 'C') billtypePicker.click(); });
+          billtypeDisplay.addEventListener('focus', function() { this.select(); });
+          billtypeDisplay.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              this.select();
+              if (currentBilltype === 'C') billtypePicker.click();
+            }
+          });
+        }
+        bindTableSelect(billtypeTable, (code, name) => {
+          if (currentBilltype !== 'C') return;
+          if (billtypeHidden) billtypeHidden.value = code;
+          if (billtypeDisplay) billtypeDisplay.value = (name && name.trim()) ? name.trim() : code;
+          billtypeModal.classList.add('hidden');
+        });
+        if (billtypeDisplay && billtypeHidden && billtypeTable) {
+          const currentCode = (billtypeHidden.value || '').trim().toUpperCase();
+          const row = Array.from(billtypeTable.querySelectorAll('tbody tr')).find(r => (r.dataset.code || '').toUpperCase() === currentCode);
+          if (row && row.dataset.name) billtypeDisplay.value = row.dataset.name.trim();
+        }
+      }
+
+      bindModalClose(salesmanModal);
+      bindModalClose(billtypeModal);
+    })();
+
+    (function loadLineItemsLazy() {
+      const btn = document.getElementById('tempInvoiceLoadLineItemsBtn');
+      const statusEl = document.getElementById('tempInvoiceLineItemsStatus');
+      const wrap = document.getElementById('tempInvoiceLineItemsWrap');
+      const tbody = document.getElementById('tempInvoiceLineItemsTbody');
+      const apiEl = document.getElementById('tempInvoiceLineItemsApiUrl');
+      const billEl = document.getElementById('tempInvoiceLineItemsBillno');
+      if (!btn || !tbody || !apiEl || !billEl) return;
+
+      let apiUrl = '';
+      let billno = '';
+      try {
+        apiUrl = JSON.parse(apiEl.textContent || '""');
+        billno = JSON.parse(billEl.textContent || '""');
+      } catch (e) {
+        return;
+      }
+      if (!apiUrl || !billno) return;
+
+      function fmtMoney(v) {
+        const n = Number(v);
+        return Number.isFinite(n) ? n.toFixed(2) : '-';
+      }
+
+      function cellText(v) {
+        if (v === null || v === undefined || v === '') return '-';
+        return String(v);
+      }
+
+      btn.addEventListener('click', () => {
+        if (btn.disabled) return;
+        btn.disabled = true;
+        if (statusEl) statusEl.textContent = 'Loading…';
+        const url = apiUrl + (apiUrl.indexOf('?') >= 0 ? '&' : '?') + 'billno=' + encodeURIComponent(billno);
+        fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+          .then(r => r.json().then(data => ({ ok: r.ok, status: r.status, data })))
+          .then(({ ok, data }) => {
+            if (!data || !data.success) {
+              const err = (data && data.error) || 'Could not load line items.';
+              if (statusEl) statusEl.textContent = err;
+              btn.disabled = false;
+              return;
+            }
+            tbody.textContent = '';
+            const rows = data.items || [];
+            if (!rows.length) {
+              const tr = document.createElement('tr');
+              tr.className = 'table-empty';
+              const td = document.createElement('td');
+              td.colSpan = 6;
+              td.textContent = 'No item details found.';
+              tr.appendChild(td);
+              tbody.appendChild(tr);
+            } else {
+              rows.forEach(row => {
+                const tr = document.createElement('tr');
+                const q = row.quantity;
+                [
+                  cellText(row.itemcode),
+                  cellText(row.itemname),
+                  cellText(row.uom),
+                  q !== null && q !== undefined && q !== '' ? String(q) : '-',
+                  fmtMoney(row.rate),
+                  fmtMoney(row.amount),
+                ].forEach(text => {
+                  const td = document.createElement('td');
+                  td.textContent = text;
+                  tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+              });
+            }
+            if (wrap) wrap.style.display = '';
+            if (statusEl) statusEl.textContent = rows.length ? rows.length + ' line(s)' : '';
+            btn.textContent = 'Line items loaded';
+            btn.disabled = true;
+          })
+          .catch(() => {
+            if (statusEl) statusEl.textContent = 'Network error.';
+            btn.disabled = false;
+          });
+      });
+    })();
+  </script>
+
+  {% if message %}
+  <script type="application/json" id="message-data">{{ message|tojson }}</script>
+  <script type="application/json" id="redirect-data">{{ url_for("temporary_invoices.temporary_invoice_modify")|tojson }}</script>
+  <script>
+    (function() {
+      const messageData = JSON.parse(document.getElementById('message-data').textContent);
+      const redirectUrl = JSON.parse(document.getElementById('redirect-data').textContent);
+      window.setTimeout(() => {
+        alert(messageData);
+        window.location.href = redirectUrl;
+      }, 100);
+    })();
+  </script>
+  {% endif %}
+{% endblock %}

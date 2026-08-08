@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .co-table { width: 100%; border-collapse: collapse !important; }
+  .co-table th, .co-table td {
+    border: 1px solid #cfd4da !important; padding: 7px 10px !important; white-space: nowrap; font-size: 13px;
+  }
+  .co-table thead th {
+    background: #eef2f7 !important; position: sticky; top: 0; z-index: 2;
+    cursor: pointer; user-select: none;
+  }
+  .co-table thead th:after { content: " ⇅"; opacity: .35; font-size: 11px; }
+  .co-table thead th[data-order="asc"]:after  { content: " ▲"; opacity: 1; }
+  .co-table thead th[data-order="desc"]:after { content: " ▼"; opacity: 1; }
+  .co-table tbody tr:nth-child(even) { background: #fbfcfe; }
+  .co-table tbody tr:hover { background: #f0f5ff !important; }
+  .co-table tfoot tr th { background: #e9edf3 !important; font-weight: 700; }
+  .co-table td a { color: inherit; text-decoration: none; }
+  .co-table td a:hover { text-decoration: underline; color: #1a56a4; }
+  .co-picker-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 5000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .co-picker {
+    width: min(760px, 100%);
+    max-height: 82vh;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .co-picker__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #d6dbe3;
+    background: #f6f8fc;
+  }
+  .co-picker__body {
+    padding: 10px 12px;
+    overflow: auto;
+  }
+  .co-picker__table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .co-picker__table th,
+  .co-picker__table td {
+    border: 1px solid #d7dce4;
+    padding: 7px 8px;
+    font-size: 13px;
+  }
+  .co-picker__table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #edf2f8;
+  }
+  .co-picker__table tbody tr {
+    cursor: pointer;
+  }
+  .co-picker__table tbody tr:hover {
+    background: #eef5ff;
+  }
+</style>
+
+<div class="page-po" style="max-width: 1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Customer Outstanding Cash — by month</h1>
+      <p class="page-po__muted">Outstanding by <strong>bill date</strong> calendar month: current month, two previous months, then older. Totals match the aging Customer Outstanding Cash report (same tblsettlement rules).</p>
+    </div>
+    <div class="page-po__actions">
+      <a class="page-po__btn-secondary" href="{{ url_for('reports.customer_outstanding') }}">Aging buckets</a>
+    </div>
+  </div>
+
+  <div style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:flex-end; gap:10px; flex-wrap:wrap;">
+    <div style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap;">
+      <div>
+        <label class="muted" style="display:block; margin-bottom:4px;">Route</label>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <input class="input" id="routeDisplay" readonly style="min-width:240px;" value="">
+          <button type="button" class="page-po__btn-secondary" id="pickRouteBtn">...</button>
+        </div>
+        <input type="hidden" id="routeFilter" value="{{ selected_route or '' }}">
+      </div>
+      <div>
+        <label class="muted" style="display:block; margin-bottom:4px;">Salesman</label>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <input class="input" id="salesmanDisplay" readonly style="min-width:260px;" value="">
+          <button type="button" class="page-po__btn-secondary" id="pickSalesmanBtn">...</button>
+        </div>
+        <input type="hidden" id="salesmanFilter" value="{{ selected_salesman or '' }}">
+      </div>
+      <button type="button" class="page-po__btn-secondary" id="applyFiltersBtn">Apply</button>
+      <button type="button" class="page-po__btn-secondary" id="clearFiltersBtn">Clear</button>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <input type="text" class="input" id="custSearch" placeholder="Search by customer code or name…" style="max-width:300px;">
+      <a class="page-po__btn-secondary" id="exportBtn" href="{{ url_for('reports.customer_outstanding_month_export', routecode=selected_route or '', salesmancode=selected_salesman or '') }}">Export</a>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="co-table" id="custTable">
+      <thead>
+        <tr>
+          <th style="text-align:center;">Sl.No</th>
+          <th>Customer Code</th>
+          <th>Customer Name</th>
+          {% for attr, label, bucket in month_specs %}
+          <th style="text-align:right;">{{ label }}</th>
+          {% endfor %}
+          <th style="text-align:right;">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          {% set total = (row.dm0 or 0) + (row.dm1 or 0) + (row.dm2 or 0) + (row.dolder or 0) %}
+          <tr data-code="{{ row.customercode or '' }}" data-name="{{ (row.customername or '')|lower }}">
+            <td style="text-align:center;">{{ loop.index }}</td>
+            <td>{{ row.customercode }}</td>
+            <td>{{ row.customername or '-' }}</td>
+            {% for attr, label, bucket in month_specs %}
+            <td style="text-align:right;">
+              <a href="{{ url_for('reports.customer_outstanding_details', customer_code=row.customercode, bucket=bucket, src='month', routecode=selected_route or '', salesmancode=selected_salesman or '') }}">{{ "%.2f"|format(row[attr] or 0) }}</a>
+            </td>
+            {% endfor %}
+            <td style="text-align:right;">
+              <a href="{{ url_for('reports.customer_outstanding_details', customer_code=row.customercode, bucket='all', src='month', routecode=selected_route or '', salesmancode=selected_salesman or '') }}">{{ "%.2f"|format(total) }}</a>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="{{ 3 + (month_specs|length) + 1 }}" class="muted" style="text-align:center;">No outstanding balances found.</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <th colspan="3">Total</th>
+          {% for attr, label, bucket in month_specs %}
+          <th style="text-align:right;"><a href="{{ url_for('reports.customer_outstanding_details', bucket=bucket, src='month', routecode=selected_route or '', salesmancode=selected_salesman or '') }}">{{ "%.2f"|format(footer_by_attr.get(attr, 0)) }}</a></th>
+          {% endfor %}
+          <th style="text-align:right;"><a href="{{ url_for('reports.customer_outstanding_details', bucket='all', src='month', routecode=selected_route or '', salesmancode=selected_salesman or '') }}">{{ "%.2f"|format(footer_grand) }}</a></th>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+
+<div class="co-picker-overlay" id="pickerOverlay">
+  <div class="co-picker">
+    <div class="co-picker__head">
+      <strong id="pickerTitle">Select</strong>
+      <button type="button" class="page-po__btn-secondary" id="pickerCloseBtn">Close</button>
+    </div>
+    <div class="co-picker__body">
+      <input type="text" class="input" id="pickerSearch" placeholder="Search..." style="margin-bottom:10px; max-width:320px;">
+      <table class="co-picker__table">
+        <thead>
+          <tr>
+            <th style="width:170px;">Code</th>
+            <th>Name</th>
+          </tr>
+        </thead>
+        <tbody id="pickerBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const table = document.getElementById("custTable");
+  if (!table) return;
+  const tbody = table.querySelector("tbody");
+  const headers = table.querySelectorAll("thead th");
+
+  headers.forEach((th, idx) => {
+    th.addEventListener("click", () => {
+      const order = th.getAttribute("data-order") === "asc" ? "desc" : "asc";
+      headers.forEach(h => h.removeAttribute("data-order"));
+      th.setAttribute("data-order", order);
+      const rows = Array.from(tbody.querySelectorAll("tr:not([style*='display: none'])"));
+      rows.sort((a, b) => {
+        const av = (a.children[idx]?.textContent || "").trim();
+        const bv = (b.children[idx]?.textContent || "").trim();
+        const an = parseFloat(av.replace(/,/g, ""));
+        const bn = parseFloat(bv.replace(/,/g, ""));
+        const res = (!isNaN(an) && !isNaN(bn)) ? an - bn : av.localeCompare(bv);
+        return order === "asc" ? res : -res;
+      });
+      rows.forEach(r => tbody.appendChild(r));
+    });
+  });
+
+  const searchInput = document.getElementById("custSearch");
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      const term = searchInput.value.trim().toLowerCase();
+      Array.from(tbody.querySelectorAll("tr")).forEach(r => {
+        const code = (r.dataset.code || "").toLowerCase();
+        const name = (r.dataset.name || "").toLowerCase();
+        r.style.display = (!term || code.includes(term) || name.includes(term)) ? "" : "none";
+      });
+    });
+  }
+
+  const routeFilter = document.getElementById("routeFilter");
+  const salesmanFilter = document.getElementById("salesmanFilter");
+  const routeDisplay = document.getElementById("routeDisplay");
+  const salesmanDisplay = document.getElementById("salesmanDisplay");
+  const pickRouteBtn = document.getElementById("pickRouteBtn");
+  const pickSalesmanBtn = document.getElementById("pickSalesmanBtn");
+  const applyBtn = document.getElementById("applyFiltersBtn");
+  const clearBtn = document.getElementById("clearFiltersBtn");
+  const exportBtn = document.getElementById("exportBtn");
+  const pickerOverlay = document.getElementById("pickerOverlay");
+  const pickerTitle = document.getElementById("pickerTitle");
+  const pickerSearch = document.getElementById("pickerSearch");
+  const pickerBody = document.getElementById("pickerBody");
+  const pickerCloseBtn = document.getElementById("pickerCloseBtn");
+
+  const routeOptions = [
+    { code: "", name: "All Routes", label: "All Routes" },
+    {% for r in route_options or [] %}
+    { code: "{{ r.code }}", name: "{{ (r.name or '')|replace('"', '\\"') }}", label: "{{ r.code }}{% if r.name %} - {{ (r.name or '')|replace('"', '\\"') }}{% endif %}" },
+    {% endfor %}
+  ];
+  const salesmanOptions = [
+    { code: "", name: "All Salesmen", label: "All Salesmen" },
+    {% for sm in salesmen or [] %}
+    { code: "{{ sm.code or '' }}", name: "{{ (sm.name or '')|replace('"', '\\"') }}", label: "{{ sm.code or '' }}{% if sm.name %} - {{ (sm.name or '')|replace('"', '\\"') }}{% endif %}" },
+    {% endfor %}
+  ];
+
+  let pickerType = "";
+  let activeOptions = [];
+
+  const getDisplayLabel = (type, value) => {
+    const src = type === "route" ? routeOptions : salesmanOptions;
+    const hit = src.find(x => String(x.code) === String(value || ""));
+    return hit ? hit.label : (src[0]?.label || "");
+  };
+
+  const syncDisplays = () => {
+    if (routeDisplay) routeDisplay.value = getDisplayLabel("route", routeFilter?.value || "");
+    if (salesmanDisplay) salesmanDisplay.value = getDisplayLabel("salesman", salesmanFilter?.value || "");
+  };
+
+  const closePicker = () => {
+    if (!pickerOverlay) return;
+    pickerOverlay.style.display = "none";
+    pickerType = "";
+    activeOptions = [];
+    if (pickerSearch) pickerSearch.value = "";
+  };
+
+  const renderPickerRows = (term = "") => {
+    if (!pickerBody) return;
+    const t = (term || "").trim().toLowerCase();
+    const rows = activeOptions.filter(o => !t || String(o.code).toLowerCase().includes(t) || String(o.name).toLowerCase().includes(t) || String(o.label).toLowerCase().includes(t));
+    pickerBody.innerHTML = rows.map(o => (
+      `<tr data-code="${String(o.code).replace(/"/g, "&quot;")}"><td>${o.code || ""}</td><td>${o.name || ""}</td></tr>`
+    )).join("");
+    if (!rows.length) {
+      pickerBody.innerHTML = `<tr><td colspan="2" class="muted" style="text-align:center;">No records found.</td></tr>`;
+    }
+  };
+
+  const openPicker = (type) => {
+    pickerType = type;
+    activeOptions = type === "route" ? routeOptions : salesmanOptions;
+    if (pickerTitle) pickerTitle.textContent = type === "route" ? "Select Route" : "Select Salesman";
+    renderPickerRows("");
+    if (pickerOverlay) pickerOverlay.style.display = "flex";
+    if (pickerSearch) pickerSearch.focus();
+  };
+
+  const buildFilterUrl = (clearAll = false, forExport = false) => {
+    const url = new URL(window.location.href);
+    const routeVal = clearAll ? "" : (routeFilter?.value || "");
+    const smVal = clearAll ? "" : (salesmanFilter?.value || "");
+    if (routeVal) url.searchParams.set("routecode", routeVal);
+    else url.searchParams.delete("routecode");
+    if (smVal) url.searchParams.set("salesmancode", smVal);
+    else url.searchParams.delete("salesmancode");
+    if (forExport) {
+      url.pathname = "{{ url_for('reports.customer_outstanding_month_export') }}";
+    }
+    return url.toString();
+  };
+
+  if (applyBtn) {
+    applyBtn.addEventListener("click", () => {
+      window.location.href = buildFilterUrl(false, false);
+    });
+  }
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      if (routeFilter) routeFilter.value = "";
+      if (salesmanFilter) salesmanFilter.value = "";
+      syncDisplays();
+      window.location.href = buildFilterUrl(true, false);
+    });
+  }
+  if (exportBtn) {
+    exportBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      window.location.href = buildFilterUrl(false, true);
+    });
+  }
+
+  if (pickRouteBtn) pickRouteBtn.addEventListener("click", () => openPicker("route"));
+  if (pickSalesmanBtn) pickSalesmanBtn.addEventListener("click", () => openPicker("salesman"));
+
+  if (pickerSearch) {
+    pickerSearch.addEventListener("input", () => renderPickerRows(pickerSearch.value || ""));
+  }
+  if (pickerBody) {
+    pickerBody.addEventListener("click", (e) => {
+      const tr = e.target.closest("tr[data-code]");
+      if (!tr) return;
+      const code = tr.getAttribute("data-code") || "";
+      if (pickerType === "route" && routeFilter) routeFilter.value = code;
+      if (pickerType === "salesman" && salesmanFilter) salesmanFilter.value = code;
+      syncDisplays();
+      closePicker();
+    });
+  }
+  if (pickerCloseBtn) pickerCloseBtn.addEventListener("click", closePicker);
+  if (pickerOverlay) {
+    pickerOverlay.addEventListener("click", (e) => {
+      if (e.target === pickerOverlay) closePicker();
+    });
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && pickerOverlay && pickerOverlay.style.display === "flex") closePicker();
+  });
+
+  syncDisplays();
+});
+</script>
+{% endblock %}

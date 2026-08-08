@@ -1,0 +1,3012 @@
+{% extends "base.html" %}
+{% from 'includes/global_lookup_field.html' import global_lookup_field %}
+{% block title %}Journal Entry{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  #journalLines,
+  #jeRecentTable {
+    width: 100%;
+    border-collapse: collapse !important;
+    table-layout: auto;
+  }
+  #journalLines th,
+  #journalLines td,
+  #jeRecentTable th,
+  #jeRecentTable td {
+    border: 1px solid #cfd4da !important;
+    padding: 8px 10px !important;
+    white-space: nowrap;
+  }
+  #journalLines th:first-child,
+  #journalLines td:first-child {
+    min-width: 220px;
+    max-width: 280px;
+    white-space: normal;
+  }
+  #journalLines .global-lookup--inline { width: 100%; }
+  #journalLines .global-lookup__row { width: 100%; }
+  #journalLines .global-lookup__input { font-size: 12px; min-width: 0; }
+  #journalLines th:nth-child(2),
+  #journalLines td:nth-child(2) {
+    min-width: 130px;
+    max-width: 170px;
+  }
+  #journalLines td:nth-child(3),
+  #journalLines td:nth-child(4),
+  #journalLines td:nth-child(5) {
+    white-space: normal;
+    max-width: 120px;
+  }
+  #journalLines th:nth-child(6),
+  #journalLines th:nth-child(7),
+  #journalLines td:nth-child(6),
+  #journalLines td:nth-child(7) {
+    min-width: 132px;
+    max-width: 150px;
+    width: 132px;
+  }
+  #journalLines td:nth-child(6) .input,
+  #journalLines td:nth-child(7) .input {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  #journalLines thead th,
+  #jeRecentTable thead th {
+    background: #eef2f7 !important;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  #journalLines tbody tr:nth-child(even),
+  #jeRecentTable tbody tr:nth-child(even) {
+    background: #fbfcfe;
+  }
+  #journalLines tbody tr:hover,
+  #jeRecentTable tbody tr:hover {
+    background: #f1f6ff !important;
+  }
+  .je-filter { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-bottom: 14px; }
+  .je-filter label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px; }
+  .je-filter input[type="date"] { padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; }
+  .je-filter .je-pdf { display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; text-decoration: none; background: #1a56a4; color: #fff; border: 1px solid #1a56a4; }
+  .je-filter .je-pdf:hover { background: #144a8a; color: #fff; }
+  .je-filter .je-clear { color: #64748b; font-size: 13px; }
+  .je-source-picker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 220px;
+    max-width: 280px;
+    padding: 8px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    font-size: 14px;
+    color: #0f172a;
+    cursor: pointer;
+    text-align: left;
+  }
+  .je-source-picker:hover { border-color: #94a3b8; background: #f8fafc; }
+  .je-source-picker__text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .je-source-picker__chev { color: #64748b; font-size: 12px; }
+  #jeSourcePickerModal .modal__content { width: min(520px, 96vw); max-height: 85vh; display: flex; flex-direction: column; }
+  #jeSourcePickerModal .modal__body { overflow: hidden; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  #jeSourcePickerTable { width: 100%; border-collapse: collapse; font-size: 13px; }
+  #jeSourcePickerTable th, #jeSourcePickerTable td { border-bottom: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; }
+  #jeSourcePickerTable thead th { background: #f1f5f9; position: sticky; top: 0; }
+  #jeSourcePickerTable tbody tr { cursor: pointer; }
+  #jeSourcePickerTable tbody tr:hover { background: #eff6ff; }
+  #jeSourcePickerTable tbody tr.is-selected { background: #dbeafe; }
+  #jeSourcePickerScroll { max-height: 50vh; overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+  #jeRecentTable thead th.sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  #jeRecentTable thead th.sortable:hover { background: #e9ecef; }
+  #jeRecentTable thead th.sortable .sort-indicator {
+    display: inline-block;
+    min-width: 1em;
+    margin-left: 4px;
+    color: #94a3b8;
+    font-size: 10px;
+  }
+  #jeRecentTable thead th.sortable.sort-asc .sort-indicator,
+  #jeRecentTable thead th.sortable.sort-desc .sort-indicator { color: #1d4ed8; }
+  .je-vno a { color: #1a56a4; font-weight: 600; text-decoration: none; }
+  .je-vno a:hover { text-decoration: underline; }
+  .je-pick-hdr td { background: #eef2f7; font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 10px; }
+  #jeAccountModal .modal__content { max-width: min(920px, 98vw); width: min(920px, 98vw); max-height: 85vh; display: flex; flex-direction: column; }
+  #jeAccountModal .modal__body { overflow: hidden; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  #jeAccountModal .je-acc-picker-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  #jeAccountModal .je-acc-picker-tabs button {
+    border: 1px solid #d0d7e2;
+    background: #fff;
+    color: #334155;
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #jeAccountModal .je-acc-picker-tabs button.is-active {
+    background: #1a56a4;
+    border-color: #1a56a4;
+    color: #fff;
+  }
+  #jeAccountScroll { max-height: 52vh; overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+  #jeAccountPickerTable { width: 100%; border-collapse: collapse; }
+  #jeAccountPickerTable thead th {
+    position: sticky; top: 0; z-index: 1;
+    background: #f1f5f9; color: #475569; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.04em; padding: 8px 10px; text-align: left; border-bottom: 1px solid #e2e8f0;
+  }
+  #jeAccountPickerTable tbody tr { cursor: pointer; }
+  #jeAccountPickerTable tbody tr:hover,
+  #jeAccountPickerTable tbody tr.is-active { background: #e8f0fb; }
+  #jeAccountPickerTable td { padding: 8px 10px; font-size: 13px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+  #jeAccountPickerTable td.je-acc-bal { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #jeAccountPickerTable td.je-acc-bal.is-neg { color: #b91c1c; }
+  #jeAccountPickerTable .je-acc-kind {
+    display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.03em;
+    padding: 2px 6px; border-radius: 4px; background: #e2e8f0; color: #334155;
+  }
+  #jeAccountPickerTable .je-acc-kind--sup { background: #ffedd5; color: #9a3412; }
+  #jeAccountPickerTable .je-acc-kind--cust { background: #dbeafe; color: #1e40af; }
+  #journalLines .je-account-lookup .global-lookup__row { display: flex; align-items: stretch; gap: 0; }
+  #journalLines .je-account-lookup .je-account-display { flex: 1 1 auto; min-width: 0; }
+  #journalLines .je-account-lookup .je-account-picker {
+    flex: 0 0 28px; width: 28px; border: 0; border-left: 1px solid #e2e8f0;
+    background: #1a56a4; color: #fff; font-size: 14px; font-weight: 700; cursor: pointer;
+    border-radius: 0 4px 4px 0;
+  }
+  #journalLines .je-account-lookup .je-account-picker:hover { background: #144a8a; }
+  #jeDimModal .modal__content { max-width: min(520px, 96vw); }
+  .journal-entry-page .je-filter.nexa-list-filter-panel {
+    align-items: flex-end;
+  }
+  .journal-entry-page .je-recent-block .co-table-wrap {
+    border: 1px solid #e5eaf2;
+    border-radius: 8px;
+    overflow: auto;
+    background: rgba(255, 255, 255, .55);
+  }
+  .journal-entry-page #jeRecentTable {
+    width: 100%;
+    border-collapse: collapse !important;
+    table-layout: auto;
+  }
+  .journal-entry-page #jeRecentTable thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f8fafc !important;
+    color: #0f172a !important;
+    padding: 4px 10px !important;
+    border-bottom: 1px solid #dee2e6 !important;
+    font-size: 11px;
+    font-weight: 750;
+    line-height: 1.25;
+    white-space: nowrap;
+  }
+  .journal-entry-page #jeRecentTable td {
+    padding: 4px 10px !important;
+    border-bottom: 1px solid #dee2e6 !important;
+    color: #334155;
+    font-size: 13px;
+    line-height: 1.25;
+    white-space: nowrap;
+  }
+  .journal-entry-page #jeRecentTable tbody tr:nth-child(even) {
+    background: #fbfcfe;
+  }
+  .journal-entry-page #jeRecentTable tbody tr:hover {
+    background: #f8f9fa !important;
+  }
+  .journal-entry-page #jeRecentTable .num {
+    text-align: right;
+  }
+  .journal-entry-page #jeRecentTable th:nth-child(4),
+  .journal-entry-page #jeRecentTable td:nth-child(4) {
+    max-width: 150px;
+    white-space: normal;
+    word-break: break-word;
+  }
+  .journal-entry-page #jeRecentTable th:nth-child(5),
+  .journal-entry-page #jeRecentTable td:nth-child(5) {
+    max-width: 240px;
+    white-space: normal;
+    word-break: break-word;
+  }
+  .je-status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+  }
+  .je-status-pill--posted {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+  }
+  .je-status-pill--draft {
+    background: #fffbeb;
+    color: #92400e;
+    border: 1px solid #fde68a;
+  }
+  .journal-entry-page > .nexa-stat-grid {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: center;
+    margin-top: 4px;
+    padding-top: 0;
+  }
+  .journal-entry-page > .nexa-stat-grid .nexa-stat-card {
+    flex: 0 1 280px;
+  }
+  .journal-entry-page .je-new-voucher-shell {
+    --im-field-fill: rgba(255, 255, 255, 0.52);
+    --im-field-fill-strong: #eaf2fa;
+    --im-field-readonly: rgba(226, 236, 247, 0.92);
+    background: var(--im-field-fill-strong);
+    border: 1px solid #e5eaf2;
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, .06);
+    overflow: hidden;
+  }
+  .journal-entry-page .je-new-voucher-shell .cf-form-panel {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    padding: 10px;
+  }
+  .journal-entry-page .je-new-voucher-shell .cf-section-title {
+    margin: 0 0 8px;
+    padding: 0;
+    color: #0f172a;
+    font-size: 18px;
+    font-weight: 800;
+  }
+  .journal-entry-page .je-form-hint {
+    margin: 0 0 8px;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+  .journal-entry-page .je-new-voucher-shell .form-section {
+    position: relative;
+    margin: 0 0 8px;
+    padding: 36px 12px 12px;
+    border: 1px solid #e5eaf2;
+    border-radius: 0;
+    background: var(--im-field-fill-strong);
+  }
+  .journal-entry-page .je-new-voucher-shell .form-section::before {
+    position: absolute;
+    top: 10px;
+    left: 12px;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 850;
+  }
+  .journal-entry-page .je-voucher-section::before { content: "Voucher Details"; }
+  .journal-entry-page .je-dim-section::before { content: "Default Dimensions"; }
+  .journal-entry-page .je-lines-section::before { content: "Journal Lines"; }
+  .journal-entry-page .je-new-voucher-shell .form-grid,
+  .journal-entry-page .je-new-voucher-shell .form-grid--2cols {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(180px, 1fr));
+    gap: 10px 14px;
+  }
+  .journal-entry-page .je-new-voucher-shell .form-group {
+    display: block;
+    min-width: 0;
+  }
+  .journal-entry-page .je-new-voucher-shell .form-group.form-group--wide {
+    grid-column: span 2;
+  }
+  .journal-entry-page .je-new-voucher-shell .form-group label,
+  .journal-entry-page .je-new-voucher-shell .label {
+    display: block;
+    min-width: 0;
+    margin: 0 0 5px;
+    color: #0f172a;
+    font-size: 11px;
+    font-weight: 750;
+    line-height: 1.2;
+  }
+  .journal-entry-page .je-new-voucher-shell .input,
+  .journal-entry-page .je-new-voucher-shell input[type="text"],
+  .journal-entry-page .je-new-voucher-shell input[type="number"],
+  .journal-entry-page .je-new-voucher-shell input[type="date"],
+  .journal-entry-page .je-new-voucher-shell .search-field {
+    width: 100%;
+    min-height: 32px;
+    border: 1px solid #dbe3ef !important;
+    border-radius: 0;
+    background: var(--im-field-fill-strong);
+    font-size: 12px;
+    line-height: 1.25;
+    box-sizing: border-box;
+  }
+  .journal-entry-page .je-new-voucher-shell .input,
+  .journal-entry-page .je-new-voucher-shell input[type="text"],
+  .journal-entry-page .je-new-voucher-shell input[type="number"],
+  .journal-entry-page .je-new-voucher-shell input[type="date"] {
+    padding: 4px 8px;
+  }
+  .journal-entry-page .je-new-voucher-shell .search-field {
+    display: flex;
+    align-items: center;
+    padding: 0;
+    overflow: hidden;
+  }
+  .journal-entry-page .je-new-voucher-shell .search-field input[type="text"] {
+    border: 0 !important;
+    min-height: 30px;
+    padding: 0 10px;
+  }
+  .journal-entry-page .je-new-voucher-shell .search-field .search-picker {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    min-height: 30px;
+    flex: 0 0 30px;
+    color: #64748b;
+    border-left: 1px solid #edf2f7;
+  }
+  .journal-entry-page .je-new-voucher-shell .input:focus,
+  .journal-entry-page .je-new-voucher-shell input:focus,
+  .journal-entry-page .je-new-voucher-shell .search-field:focus-within {
+    outline: none;
+    border-color: #0d6efd !important;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, .10);
+  }
+  .journal-entry-page .je-new-voucher-shell .scroll-table {
+    border: 1px solid #e5eaf2;
+    border-radius: 8px;
+    overflow: auto;
+    background: rgba(255, 255, 255, .55);
+  }
+  .journal-entry-page #journalLines th,
+  .journal-entry-page #journalLines td {
+    padding: 4px 10px !important;
+    font-size: 13px;
+    line-height: 1.25;
+  }
+  .journal-entry-page #journalLines thead th {
+    background: #f8fafc !important;
+    color: #0f172a !important;
+    font-size: 11px;
+  }
+  .journal-entry-page .je-form-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 2px 0;
+  }
+  .journal-entry-page .je-alert {
+    display: none;
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    background: #fef2f2;
+    color: #991b1b;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .journal-entry-page .je-alert.is-visible {
+    display: block;
+  }
+  .journal-entry-page .je-alert strong {
+    display: block;
+    margin-bottom: 4px;
+    color: #7f1d1d;
+    font-size: 12px;
+  }
+  .journal-entry-page .je-alert ul {
+    margin: 0;
+    padding-left: 18px;
+  }
+  .journal-entry-page .je-ai-panel {
+    display: none;
+    margin-bottom: 10px;
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #eff6ff, #f8fbff);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, .06);
+    overflow: hidden;
+  }
+  .journal-entry-page .je-ai-panel.is-visible {
+    display: block !important;
+  }
+  .journal-entry-page .je-ai-panel-header {
+    padding: 9px 14px;
+    font-weight: 700;
+    font-size: 13px;
+    color: #1e40af;
+    background: #dbeafe;
+    border-bottom: 1px solid #bfdbfe;
+    letter-spacing: .01em;
+  }
+  .je-ai-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 34px;
+    padding: 0 10px;
+    border: 1px solid #dbe3ef;
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .je-ai-switch input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .je-ai-switch__track {
+    position: relative;
+    width: 38px;
+    height: 20px;
+    border-radius: 999px;
+    background: #cbd5e1;
+    transition: background .16s ease;
+  }
+  .je-ai-switch__track::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .25);
+    transition: transform .16s ease;
+  }
+  .je-ai-switch input:checked + .je-ai-switch__track {
+    background: #2563eb;
+  }
+  .je-ai-switch input:checked + .je-ai-switch__track::after {
+    transform: translateX(18px);
+  }
+  .journal-entry-page .je-ai-body {
+    display: grid;
+    grid-template-columns: minmax(520px, 1.55fr) minmax(280px, .85fr);
+    gap: 14px;
+    padding: 0 14px 14px;
+  }
+  .journal-entry-page .je-ai-compose {
+    border: 1px solid #bfdbfe;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.8), 0 8px 20px rgba(37, 99, 235, .08);
+    padding: 10px;
+  }
+  .journal-entry-page .je-ai-input {
+    width: 100%;
+    min-height: 132px;
+    resize: vertical;
+    border: 0;
+    outline: none;
+    border-radius: 10px;
+    padding: 12px 12px;
+    color: #0f172a;
+    font-size: 14px;
+    line-height: 1.45;
+    background: #f8fbff;
+    box-sizing: border-box;
+  }
+  .journal-entry-page .je-ai-input:focus {
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+  }
+  .journal-entry-page .je-ai-examples {
+    margin: 9px 2px 11px;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .journal-entry-page .je-ai-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .journal-entry-page .je-ai-output {
+    display: grid;
+    gap: 8px;
+  }
+  .journal-entry-page .je-ai-card {
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .82);
+    padding: 9px 10px;
+  }
+  .journal-entry-page .je-ai-card b {
+    display: block;
+    margin-bottom: 3px;
+    color: #1e3a8a;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .journal-entry-page .je-ai-card span {
+    color: #334155;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+  .journal-entry-page .je-ai-preview-table {
+    width: 100%;
+    margin-top: 6px;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .journal-entry-page .je-ai-preview-table th,
+  .journal-entry-page .je-ai-preview-table td {
+    padding: 5px 6px;
+    border: 1px solid #dbeafe;
+    text-align: left;
+  }
+  .journal-entry-page .je-ai-preview-table th {
+    background: #f0f9ff;
+    color: #1e3a8a;
+    font-size: 11px;
+    text-transform: uppercase;
+  }
+  .journal-entry-page .je-ai-preview-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .journal-entry-page .je-ai-validation {
+    margin-top: 10px;
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    background: #fff;
+    padding: 10px;
+  }
+  .journal-entry-page .je-ai-validation-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(150px, 1fr));
+    gap: 8px;
+  }
+  .journal-entry-page .je-ai-validation-card {
+    border: 1px solid #e5eaf2;
+    border-radius: 10px;
+    padding: 8px 9px;
+    background: #f8fafc;
+    font-size: 12px;
+  }
+  .journal-entry-page .je-ai-validation-card b {
+    display: block;
+    margin-bottom: 5px;
+    color: #0f172a;
+    font-size: 11px;
+    text-transform: uppercase;
+  }
+  .journal-entry-page .je-ai-validation-card ul {
+    margin: 0;
+    padding-left: 16px;
+  }
+  .journal-entry-page .je-ai-score {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 8px;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .journal-entry-page #journalLines tr.je-row-invalid td {
+    background: #fff1f2 !important;
+    box-shadow: inset 3px 0 0 #ef4444;
+  }
+  .journal-entry-page .je-post-spinner {
+    display: none;
+    width: 14px;
+    height: 14px;
+    margin-right: 7px;
+    border: 2px solid rgba(255, 255, 255, .45);
+    border-top-color: #fff;
+    border-radius: 999px;
+    animation: je-spin .7s linear infinite;
+    vertical-align: -2px;
+  }
+  body.je-is-posting .journal-entry-page .je-post-spinner {
+    display: inline-block;
+  }
+  body.je-is-posting .journal-entry-page .je-post-btn {
+    cursor: wait;
+    opacity: .86;
+  }
+  @keyframes je-spin {
+    to { transform: rotate(360deg); }
+  }
+  @media (max-width: 1200px) {
+    .journal-entry-page .je-new-voucher-shell .form-grid,
+    .journal-entry-page .je-new-voucher-shell .form-grid--2cols { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+    .journal-entry-page .je-ai-body { grid-template-columns: 1fr; }
+    .journal-entry-page .je-ai-validation-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 700px) {
+    .journal-entry-page .je-new-voucher-shell .form-grid,
+    .journal-entry-page .je-new-voucher-shell .form-grid--2cols { grid-template-columns: 1fr; }
+    .journal-entry-page .je-new-voucher-shell .form-group.form-group--wide { grid-column: auto; }
+  }
+</style>
+{% set je_kpi = namespace(n=0, dr=0.0, cr=0.0) %}
+{% for row in entries %}
+  {% set je_kpi.n = je_kpi.n + 1 %}
+  {% set je_kpi.dr = je_kpi.dr + ((row.total_debit or 0)|float) %}
+  {% set je_kpi.cr = je_kpi.cr + ((row.total_credit or 0)|float) %}
+{% endfor %}
+
+<div class="im-page setup-im-page setup-im-journal nexa-setup-list-page journal-entry-page"
+     {% if show_form %}data-transaction-audit="JournalEntry"
+     data-transaction-no-selector="input[name='reference_no']"
+     data-audit-intercept-form="#journalForm"
+     data-track-root=".journal-entry-page"{% endif %}>
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>Journal entry / <span class="im-ref">{% if show_form and (journal_data or {}).get('edit_voucher_no') %}Edit {{ (journal_data or {}).get('edit_voucher_no')|e }}{% elif show_form %}New voucher{% else %}Voucher list{% endif %}</span></h1>
+      <div class="im-actions">
+        {% if show_form %}
+        <label class="je-ai-switch" for="jeAiToggle">
+          <input type="checkbox" id="jeAiToggle">
+          <span class="je-ai-switch__track" aria-hidden="true"></span>
+          <span>AI</span>
+        </label>
+        {% if not (journal_data or {}).get('edit_voucher_no') %}
+        <button type="button" class="im-btn-secondary je-draft-btn" data-action="draft">Save Draft</button>
+        {% endif %}
+        <button type="button" class="im-btn-save je-post-btn" data-action="post"><span class="je-post-spinner" aria-hidden="true"></span><span class="je-post-label">{% if (journal_data or {}).get('edit_voucher_no') %}Update journal{% else %}Post journal{% endif %}</span></button>
+        <a class="im-btn-secondary" href="{{ url_for('accounts.journal_entry', date_from=date_from or none, date_to=date_to or none) }}">List</a>
+        {% else %}
+        <a class="im-btn-save" href="{{ url_for('accounts.journal_entry', new=1, date_from=date_from or none, date_to=date_to or none) }}">+ New voucher</a>
+        {% endif %}
+        <a class="im-btn-secondary" href="{{ url_for('accounts.journal_entry_summary_pdf', date_from=date_from or none, date_to=date_to or none) }}" target="_blank" rel="noopener">Summary PDF</a>
+      </div>
+    </div>
+  </div>
+
+  {% if not show_form %}
+  <section class="nexa-stat-grid" aria-label="Recent vouchers summary">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-journal-text" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Vouchers (range)</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(je_kpi.n) }}</p>
+        <p class="nexa-stat-sub">Max 500 loaded</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-arrow-down-left-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Total debit</p>
+        <p class="nexa-stat-value">{{ '%.2f'|format(je_kpi.dr) }}</p>
+        <p class="nexa-stat-sub">Listed vouchers</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-arrow-up-right-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Total credit</p>
+        <p class="nexa-stat-value">{{ '%.2f'|format(je_kpi.cr) }}</p>
+        <p class="nexa-stat-sub">Listed vouchers</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-calculator" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Dr − Cr</p>
+        <p class="nexa-stat-value">{{ '%.2f'|format(je_kpi.dr - je_kpi.cr) }}</p>
+        <p class="nexa-stat-sub">Should be ~0 if balanced</p>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if show_form %}
+  <div class="je-ai-panel" id="jeAiPanel" aria-label="AI Accounting Assistant">
+    <div class="je-ai-panel-header">AI Accounting Assistant</div>
+    <div class="je-ai-body">
+      <div class="je-ai-compose">
+        <textarea id="jeAiText" class="je-ai-input" placeholder="Type transaction in normal language..."></textarea>
+        <div class="je-ai-examples">
+          Examples: Paid office rent 5000 by bank | Electricity expense paid cash | Purchase furniture including VAT
+        </div>
+        <div class="je-ai-actions">
+          <button type="button" class="page-po__btn-primary" id="jeAiGenerate">Generate Entry</button>
+          <button type="button" class="page-po__btn-secondary" id="jeAiClear">Clear AI Text</button>
+        </div>
+      </div>
+      <div class="je-ai-output" id="jeAiSuggestions" aria-live="polite">
+        <div class="je-ai-card"><b>Suggested Accounts</b><span>Type a transaction and click Generate Entry.</span></div>
+        <div class="je-ai-card"><b>Suggested Tax</b><span>Waiting for transaction details.</span></div>
+        <div class="je-ai-card"><b>Duplicate Warning</b><span>No duplicate check yet.</span></div>
+        <div class="je-ai-card"><b>Unusual Entry Warning</b><span>No warning yet.</span></div>
+        <div class="je-ai-card"><b>Previous Similar Transactions</b><span>Will compare against visible recent voucher text when available.</span></div>
+      </div>
+      <div class="je-ai-validation" id="jeAiValidationPanel" style="display:none;">
+        <div class="je-ai-score" id="jeAiValidationScores"></div>
+        <div class="je-ai-validation-grid">
+          <div class="je-ai-validation-card"><b>✅ Passed Checks</b><ul id="jeAiPassed"></ul></div>
+          <div class="je-ai-validation-card"><b>⚠ Warnings</b><ul id="jeAiWarnings"></ul></div>
+          <div class="je-ai-validation-card"><b>❌ Errors</b><ul id="jeAiErrors"></ul></div>
+          <div class="je-ai-validation-card"><b>🧠 AI Suggestions</b><ul id="jeAiValidationSuggestions"></ul></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="setup-im-shell customer-form-shell itemmaster-container je-new-voucher-shell">
+    <div class="cf-form-stack">
+      <div class="cf-form-panel">
+        <h2 class="cf-section-title">{% if (journal_data or {}).get('edit_voucher_no') %}Edit journal voucher{% else %}New journal voucher{% endif %}</h2>
+        <p class="je-form-hint">{% if (journal_data or {}).get('edit_voucher_no') %}Update lines and click <strong>Update journal</strong> (same voucher number). Only manual posted journals can be edited.{% else %}Type to search <strong>accounts</strong>, suppliers, or customers on each line. <strong>Enter</strong> moves to the next field; <strong>Esc</strong> moves back. Use toolbar <strong>Save Draft</strong> or <strong>Post journal</strong>.{% endif %}</p>
+        <div class="je-alert" id="journalFormAlert" role="alert" aria-live="polite"></div>
+    <form method="post" id="journalForm">
+      <input type="hidden" name="save_nonce" value="{{ global_save_nonce | default('') }}">
+      <input type="hidden" name="return_date_from" value="{{ date_from or '' }}">
+      <input type="hidden" name="return_date_to" value="{{ date_to or '' }}">
+      <input type="hidden" name="draft_id" value="{{ (journal_data or {}).get('draft_id') or '' }}">
+      <input type="hidden" name="edit_voucher_no" value="{{ (journal_data or {}).get('edit_voucher_no') or '' }}">
+      <input type="hidden" name="action" id="journalAction" value="post">
+      <div class="form-section je-voucher-section">
+        <div class="form-grid">
+        <div class="form-group">
+          <label class="label">Voucher Date</label>
+          <input type="date" class="input" name="voucher_date" id="jeVoucherDate"
+                 value="{{ (journal_data or {}).get('voucher_date') or default_voucher_date or '' }}">
+          <p class="je-form-hint" id="jeVoucherDateHint" style="margin:6px 0 0;">
+            Closed accounting periods cannot be selected (Period Closing).
+          </p>
+        </div>
+        <div class="form-group">
+          <label class="label">Reference No</label>
+          <input type="text" class="input" name="reference_no" placeholder="Reference" value="{{ (journal_data or {}).get('reference_no') or '' }}">
+        </div>
+        <div class="form-group form-group--wide">
+          <label class="label">Narration</label>
+          <input type="text" class="input" name="narration" placeholder="Narration" value="{{ (journal_data or {}).get('narration') or '' }}">
+        </div>
+        </div>
+      </div>
+      <div class="form-section je-dim-section">
+        <p class="je-form-hint">
+          Set defaults below for all lines, or override per line. Type to search cost center, department, and project from <a href="{{ url_for('gl_dimension.gl_dimension_list') }}">GL dimension master</a>.
+        </p>
+        <div class="form-grid">
+        {{ global_lookup_field(
+          field_id='jeDefCc',
+          label='Default cost center',
+          name='default_cost_center',
+          kind='cost_center',
+          value_code=(journal_data or {}).get('default_cost_center') or '',
+          placeholder='Type to search…',
+          no_default=true,
+        ) }}
+        {{ global_lookup_field(
+          field_id='jeDefDept',
+          label='Default department',
+          name='default_department',
+          kind='department',
+          value_code=(journal_data or {}).get('default_department') or '',
+          placeholder='Type to search…',
+          no_default=true,
+        ) }}
+        {{ global_lookup_field(
+          field_id='jeDefProj',
+          label='Default project',
+          name='default_project',
+          kind='project',
+          value_code=(journal_data or {}).get('default_project') or '',
+          placeholder='Type to search…',
+          no_default=true,
+        ) }}
+        </div>
+      </div>
+      <div class="form-section je-lines-section">
+      <p class="field-hint-inline" style="margin:0 0 8px;">Debit, credit, and line remarks auto-copy to the next open line. Press <strong>Enter</strong> on Debit to skip Credit and jump to the next account.</p>
+      <div class="table-wrap scroll-table">
+        <table class="table" id="journalLines">
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th>Remarks</th>
+              <th>Cost ctr</th>
+              <th>Dept</th>
+              <th>Project</th>
+              <th>Debit</th>
+              <th>Credit</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="je-account-cell">
+                <input type="hidden" class="je-party-type" name="party_type[]" value="">
+                <input type="hidden" class="je-party-code" name="party_code[]" value="">
+                <div class="global-lookup odoo-lookup je-account-lookup global-lookup--inline" data-search-url="{{ url_for('api.global_lookup', kind='gl_account') }}" data-no-default="1" data-placeholder="Search account, supplier, customer…" data-limit="8" data-min-chars="1">
+                  <div class="global-lookup__row odoo-lookup__row">
+                    <input type="text" class="global-lookup__input odoo-lookup__input input je-account-display" autocomplete="off" placeholder="Search account, supplier, customer…" data-allow-autocomplete title="Type to search, or press F1 / ▾ for full list" />
+                    <input type="hidden" class="global-lookup__value odoo-lookup__value je-account-code" name="account_code[]" value="" />
+                    <button type="button" class="global-lookup__clear odoo-lookup__clear" aria-label="Clear account" hidden>×</button>
+                    <button type="button" class="je-account-picker" aria-label="Open account list" title="Open account list (F1)">▾</button>
+                  </div>
+                </div>
+              </td>
+              <td><input class="input" type="text" name="remarks[]" placeholder="Line remarks"></td>
+              <td>{{ global_lookup_field(field_id='jeCc0', name='cost_center[]', kind='cost_center', inline=true, placeholder='Search…', no_default=true, field_class='', input_class='global-lookup__input odoo-lookup__input input') }}</td>
+              <td>{{ global_lookup_field(field_id='jeDp0', name='department[]', kind='department', inline=true, placeholder='Search…', no_default=true, field_class='', input_class='global-lookup__input odoo-lookup__input input') }}</td>
+              <td>{{ global_lookup_field(field_id='jePj0', name='project[]', kind='project', inline=true, placeholder='Search…', no_default=true, field_class='', input_class='global-lookup__input odoo-lookup__input input') }}</td>
+              <td><input class="input" type="number" step="0.01" min="0" name="debit[]" value="0"></td>
+              <td><input class="input" type="number" step="0.01" min="0" name="credit[]" value="0"></td>
+            </tr>
+            <tr>
+              <td class="je-account-cell">
+                <input type="hidden" class="je-party-type" name="party_type[]" value="">
+                <input type="hidden" class="je-party-code" name="party_code[]" value="">
+                <div class="global-lookup odoo-lookup je-account-lookup global-lookup--inline" data-search-url="{{ url_for('api.global_lookup', kind='gl_account') }}" data-no-default="1" data-placeholder="Search account, supplier, customer…" data-limit="8" data-min-chars="1">
+                  <div class="global-lookup__row odoo-lookup__row">
+                    <input type="text" class="global-lookup__input odoo-lookup__input input je-account-display" autocomplete="off" placeholder="Search account, supplier, customer…" data-allow-autocomplete title="Type to search, or press F1 / ▾ for full list" />
+                    <input type="hidden" class="global-lookup__value odoo-lookup__value je-account-code" name="account_code[]" value="" />
+                    <button type="button" class="global-lookup__clear odoo-lookup__clear" aria-label="Clear account" hidden>×</button>
+                    <button type="button" class="je-account-picker" aria-label="Open account list" title="Open account list (F1)">▾</button>
+                  </div>
+                </div>
+              </td>
+              <td><input class="input" type="text" name="remarks[]" placeholder="Line remarks"></td>
+              <td>{{ global_lookup_field(field_id='jeCc1', name='cost_center[]', kind='cost_center', inline=true, placeholder='Search…', no_default=true, field_class='', input_class='global-lookup__input odoo-lookup__input input') }}</td>
+              <td>{{ global_lookup_field(field_id='jeDp1', name='department[]', kind='department', inline=true, placeholder='Search…', no_default=true, field_class='', input_class='global-lookup__input odoo-lookup__input input') }}</td>
+              <td>{{ global_lookup_field(field_id='jePj1', name='project[]', kind='project', inline=true, placeholder='Search…', no_default=true, field_class='', input_class='global-lookup__input odoo-lookup__input input') }}</td>
+              <td><input class="input" type="number" step="0.01" min="0" name="debit[]" value="0"></td>
+              <td><input class="input" type="number" step="0.01" min="0" name="credit[]" value="0"></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="je-form-actions">
+        <button type="button" class="page-po__btn-secondary" id="addJournalLine">+ Add Line</button>
+        {% if not (journal_data or {}).get('edit_voucher_no') %}
+        <button type="button" class="page-po__btn-secondary je-draft-btn" data-action="draft">Save Draft</button>
+        {% endif %}
+        <button type="button" class="page-po__btn-primary je-form-footer-submit je-post-btn" data-action="post"><span class="je-post-spinner" aria-hidden="true"></span><span class="je-post-label">{% if (journal_data or {}).get('edit_voucher_no') %}Update Journal{% else %}Post Journal{% endif %}</span></button>
+      </div>
+      </div>
+    </form>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if not show_form %}
+  <div class="page-po nexa-list-page nexa-setup-list-page je-recent-block">
+    <div class="page-po__topbar">
+      <div>
+        <h2 class="page-po__title" style="font-size:18px;margin:0;">Recent vouchers</h2>
+        <p class="page-po__muted" style="margin:4px 0 0;">All GL sources (manual, purchase, AP, etc.). Click a voucher no for detail.</p>
+      </div>
+      <div class="page-po__topbar-actions">
+        <a href="{{ url_for('accounts.journal_entry', new=1, date_from=date_from or none, date_to=date_to or none) }}" class="page-po__btn-primary">+ New voucher</a>
+        {% include 'includes/list_refresh_bar.html' %}
+      </div>
+    </div>
+
+    <form method="get" action="{{ url_for('accounts.journal_entry') }}" class="je-filter nexa-list-filter-panel" id="jeFilterForm">
+      <div>
+        <label for="je_q">Search</label>
+        <input type="text" id="je_q" name="q" class="input" placeholder="Voucher, reference, narration, source..." value="{{ search_term or '' }}" style="min-width:260px;">
+      </div>
+      <div>
+        <label for="je_status">Status</label>
+        <select id="je_status" name="status" class="input" style="min-width:140px;">
+          <option value="all" {% if (status_filter or 'all') == 'all' %}selected{% endif %}>All</option>
+          <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
+          <option value="posted" {% if status_filter == 'posted' %}selected{% endif %}>Posted</option>
+        </select>
+      </div>
+      <div>
+        <label for="jeSourcePickerBtn">Source document</label>
+        <input type="hidden" name="source" id="je_source" value="{{ 'all' if not source_filter or source_filter|lower == 'all' else source_filter }}">
+        <button type="button" class="je-source-picker" id="jeSourcePickerBtn" title="Select source document">
+          <span class="je-source-picker__text" id="jeSourcePickerLabel">{{ source_filter_label or 'All sources' }}</span>
+          <span class="je-source-picker__chev" aria-hidden="true">▾</span>
+        </button>
+      </div>
+      <div>
+        <label for="je_date_from">From</label>
+        <input type="date" id="je_date_from" name="date_from" value="{{ date_from or '' }}">
+      </div>
+      <div>
+        <label for="je_date_to">To</label>
+        <input type="date" id="je_date_to" name="date_to" value="{{ date_to or '' }}">
+      </div>
+      <div>
+        <label style="visibility: hidden; display: block; margin-bottom: 4px;">&nbsp;</label>
+        <button type="submit" class="page-po__btn-primary">Search / Filter</button>
+      </div>
+      <div>
+        <label style="visibility: hidden; display: block; margin-bottom: 4px;">&nbsp;</label>
+        <a href="{{ url_for('accounts.journal_entry') }}" class="je-clear">Clear</a>
+      </div>
+      <div>
+        <label style="visibility: hidden; display: block; margin-bottom: 4px;">&nbsp;</label>
+        <a class="je-pdf" href="{{ url_for('accounts.journal_entry_summary_pdf', date_from=date_from or none, date_to=date_to or none, source=source_filter if source_filter and source_filter != 'all' else none) }}" target="_blank" rel="noopener">Summary PDF (A4)</a>
+      </div>
+    </form>
+    <div class="co-table-wrap">
+      <table class="co-table" id="jeRecentTable">
+        <thead>
+          <tr>
+            <th class="sortable" data-sort="sl" data-sort-type="number" style="text-align:center;width:52px;">Sl.No <span class="sort-indicator"></span></th>
+            <th class="sortable" data-sort="voucher" data-sort-type="text">Voucher No <span class="sort-indicator"></span></th>
+            <th class="sortable" data-sort="date" data-sort-type="text">Date <span class="sort-indicator"></span></th>
+            <th class="sortable" data-sort="reference" data-sort-type="text">Reference <span class="sort-indicator"></span></th>
+            <th class="sortable" data-sort="narration" data-sort-type="text">Narration <span class="sort-indicator"></span></th>
+            <th class="sortable" data-sort="status" data-sort-type="text">Status <span class="sort-indicator"></span></th>
+            <th class="sortable" data-sort="source" data-sort-type="text">Source <span class="sort-indicator"></span></th>
+            <th class="sortable num" data-sort="debit" data-sort-type="number">Debit <span class="sort-indicator"></span></th>
+            <th class="sortable num" data-sort="credit" data-sort-type="number">Credit <span class="sort-indicator"></span></th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in entries %}
+          {% set row_status = row.status or 'POSTED' %}
+          {% set row_source = (row.source or '')|upper %}
+          <tr class="je-data-row"
+              data-sl="{{ loop.index }}"
+              data-voucher="{{ (row.voucher_no or '')|e }}"
+              data-date="{{ (row.voucher_date or '')|e }}"
+              data-reference="{{ (row.reference_no or '')|e }}"
+              data-narration="{{ (row.narration or '')|e }}"
+              data-status="{{ row_status|e }}"
+              data-source="{{ (row.source or '')|e }}"
+              data-debit="{{ '%.2f'|format(row.total_debit or 0) }}"
+              data-credit="{{ '%.2f'|format(row.total_credit or 0) }}">
+            <td class="je-sl" style="text-align:center;">{{ loop.index }}</td>
+            <td class="je-vno">
+              {% if row.status == 'DRAFT' %}
+              <a href="{{ url_for('accounts.journal_entry', draft_id=row.draft_id, new=1, date_from=date_from or none, date_to=date_to or none) }}">{{ row.voucher_no }}</a>
+              {% else %}
+              <a href="{{ url_for('accounts.journal_voucher_view', voucher_no=row.voucher_no, date_from=date_from or none, date_to=date_to or none) }}">{{ row.voucher_no }}</a>
+              {% endif %}
+            </td>
+            <td>{{ row.voucher_date }}</td>
+            <td>{{ row.reference_no or '' }}</td>
+            <td>{{ row.narration or '' }}</td>
+            <td><span class="je-status-pill {{ 'je-status-pill--draft' if row_status == 'DRAFT' else 'je-status-pill--posted' }}">{{ row_status }}</span></td>
+            <td>{{ row.source or '—' }}</td>
+            <td class="num">{{ '%.2f'|format(row.total_debit or 0) }}</td>
+            <td class="num">{{ '%.2f'|format(row.total_credit or 0) }}</td>
+            <td class="je-row-actions">
+              {% if row_status == 'DRAFT' %}
+              <a class="btn-view" href="{{ url_for('accounts.journal_entry', draft_id=row.draft_id, new=1, date_from=date_from or none, date_to=date_to or none) }}">Edit</a>
+              {% elif row_status == 'POSTED' %}
+              <a class="btn-view" href="{{ url_for('accounts.journal_voucher_pdf', voucher_no=row.voucher_no) }}" target="_blank" rel="noopener">PDF</a>
+              {% if row_source == 'MANUAL' %}
+              <a class="btn-view" href="{{ url_for('accounts.journal_entry', edit=row.voucher_no, date_from=date_from or none, date_to=date_to or none) }}">Edit</a>
+              <a class="btn-view" href="{{ url_for('accounts.journal_voucher_view', voucher_no=row.voucher_no, date_from=date_from or none, date_to=date_to or none) }}#je-reverse">Reverse</a>
+              {% else %}
+              <a class="btn-view" href="{{ url_for('accounts.journal_voucher_view', voucher_no=row.voucher_no, date_from=date_from or none, date_to=date_to or none) }}">View</a>
+              {% endif %}
+              {% else %}
+              —
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="10" class="muted">No GL vouchers in this range. Widen the dates or post transactions.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{% if show_form %}
+<script type="application/json" id="jeCoaMetaJson">[
+{% for row in accounts %}{"code":{{ row.code|tojson }},"name":{{ (row.name or '')|tojson }},"accountType":{{ (row.type or '')|upper|tojson }},"status":{{ (row.status or 'ACTIVE')|upper|tojson }},"kind":"GL"}{% if not loop.last %},{% endif %}
+{% endfor %}]</script>
+<script type="application/json" id="jeCoaBalancesJson">{{ (je_account_balances or {})|tojson }}</script>
+<script type="application/json" id="jePartyBalancesJson">{{ (je_party_balances or {'SUPPLIER': {}, 'CUSTOMER': {}})|tojson }}</script>
+<script type="application/json" id="jeClosedPeriodsJson">{{ (je_closed_periods or [])|tojson }}</script>
+
+<div class="modal hidden" id="jeAccountModal" role="dialog" aria-modal="true" aria-labelledby="jeAccPickerTitle">
+  <div class="modal__overlay" data-close="jeAccountModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3 id="jeAccPickerTitle">Select account</h3>
+      <button type="button" class="modal__close" data-close="jeAccountModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="je-acc-picker-tabs" role="tablist" aria-label="Account type">
+        <button type="button" class="is-active" data-tab="all">All</button>
+        <button type="button" data-tab="gl">GL</button>
+        <button type="button" data-tab="supplier">Supplier</button>
+        <button type="button" data-tab="customer">Customer</button>
+      </div>
+      <div class="search-field" style="width:100%;">
+        <input type="text" id="jeAccPickerSearch" class="input" placeholder="Search by code, name, supplier, or customer…" autocomplete="off" style="width:100%;">
+      </div>
+      <div id="jeAccountScroll">
+        <table class="table" id="jeAccountPickerTable">
+          <thead>
+            <tr>
+              <th style="width:70px;">Kind</th>
+              <th style="width:110px;">Code / A/c</th>
+              <th>Name</th>
+              <th style="width:100px;">Type</th>
+              <th style="width:120px;text-align:right;">Balance</th>
+            </tr>
+          </thead>
+          <tbody id="jeAccPickerBody"></tbody>
+        </table>
+      </div>
+      <p class="muted" style="margin:0;font-size:12px;">Tip: press <strong>F1</strong> in the Account field, or click <strong>▾</strong>, to open this list. Typeahead still works while typing.</p>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    const initialJournalLines = {{ (journal_lines or [])|tojson }};
+    const jeAccountMetaByCode = {};
+    const jeAccountBalanceByCode = {};
+    const jePartyBalanceByKind = { SUPPLIER: {}, CUSTOMER: {} };
+    try {
+      const coaMetaEl = document.getElementById("jeCoaMetaJson");
+      const coaMeta = coaMetaEl ? JSON.parse(coaMetaEl.textContent || "[]") : [];
+      coaMeta.forEach(function (m) {
+        if (m && m.code) jeAccountMetaByCode[String(m.code)] = m;
+      });
+    } catch (e) {}
+    try {
+      const balEl = document.getElementById("jeCoaBalancesJson");
+      const balMap = balEl ? JSON.parse(balEl.textContent || "{}") : {};
+      Object.keys(balMap || {}).forEach(function (code) {
+        const n = Number(balMap[code]);
+        jeAccountBalanceByCode[String(code).toUpperCase()] = Number.isFinite(n) ? n : 0;
+      });
+    } catch (eBal) {}
+    function jeNormPartyKey(v) {
+      let s = String(v == null ? "" : v).trim();
+      if (!s) return "";
+      const n = Number(s);
+      if (Number.isFinite(n) && Math.floor(n) === n) return String(Math.trunc(n));
+      return s.toUpperCase();
+    }
+    try {
+      const partyEl = document.getElementById("jePartyBalancesJson");
+      const partyMap = partyEl ? JSON.parse(partyEl.textContent || "{}") : {};
+      ["SUPPLIER", "CUSTOMER"].forEach(function (kind) {
+        const src = (partyMap && partyMap[kind]) || {};
+        const dest = {};
+        Object.keys(src).forEach(function (code) {
+          const n = Number(src[code]);
+          dest[jeNormPartyKey(code)] = Number.isFinite(n) ? n : 0;
+        });
+        jePartyBalanceByKind[kind] = dest;
+      });
+    } catch (eParty) {}
+    const addBtn = document.getElementById("addJournalLine");
+    const tbody = document.querySelector("#journalLines tbody");
+    const journalForm = document.getElementById("journalForm");
+    const journalFormAlert = document.getElementById("journalFormAlert");
+    const journalAction = document.getElementById("journalAction");
+    const postButtons = Array.prototype.slice.call(document.querySelectorAll(".je-post-btn"));
+    const draftButtons = Array.prototype.slice.call(document.querySelectorAll(".je-draft-btn"));
+    const jeVoucherDateInput = document.getElementById("jeVoucherDate") || (journalForm ? journalForm.querySelector("input[name='voucher_date']") : null);
+    const jeVoucherDateHint = document.getElementById("jeVoucherDateHint");
+    let jeClosedPeriods = [];
+    try {
+      const closedEl = document.getElementById("jeClosedPeriodsJson");
+      const parsedClosed = closedEl ? JSON.parse(closedEl.textContent || "[]") : [];
+      jeClosedPeriods = Array.isArray(parsedClosed) ? parsedClosed : [];
+    } catch (eClosed) {
+      jeClosedPeriods = [];
+    }
+    function closedPeriodForDate(isoDate) {
+      const d = String(isoDate || "").trim().slice(0, 10);
+      if (!d || d.length < 10) return null;
+      for (let i = 0; i < jeClosedPeriods.length; i++) {
+        const p = jeClosedPeriods[i] || {};
+        const a = String(p.start_date || "").slice(0, 10);
+        const b = String(p.end_date || "").slice(0, 10);
+        if (a && b && d >= a && d <= b) return p;
+      }
+      return null;
+    }
+    function closedPeriodMessage(isoDate) {
+      const p = closedPeriodForDate(isoDate);
+      if (!p) return "";
+      const label = p.period_label || (String(p.month || "") + " " + String(p.financial_year || ""));
+      return "Accounting period " + label + " is closed. Choose a date in an open period.";
+    }
+    function refreshVoucherDateClosedHint() {
+      if (!jeVoucherDateInput) return;
+      const msg = closedPeriodMessage(jeVoucherDateInput.value);
+      if (msg) {
+        jeVoucherDateInput.setCustomValidity(msg);
+        if (jeVoucherDateHint) {
+          jeVoucherDateHint.textContent = msg;
+          jeVoucherDateHint.style.color = "#b91c1c";
+        }
+      } else {
+        jeVoucherDateInput.setCustomValidity("");
+        if (jeVoucherDateHint) {
+          if (jeClosedPeriods.length) {
+            const labels = jeClosedPeriods.slice(0, 6).map(function (p) { return p.period_label || ""; }).filter(Boolean);
+            jeVoucherDateHint.textContent = labels.length
+              ? ("Closed periods (read-only): " + labels.join(", ") + (jeClosedPeriods.length > 6 ? "…" : "") + ". Dates in those ranges cannot be posted.")
+              : "Closed accounting periods cannot be selected (Period Closing).";
+          } else {
+            jeVoucherDateHint.textContent = "Closed accounting periods cannot be selected (Period Closing).";
+          }
+          jeVoucherDateHint.style.color = "";
+        }
+      }
+    }
+    if (jeVoucherDateInput) {
+      jeVoucherDateInput.addEventListener("change", refreshVoucherDateClosedHint);
+      jeVoucherDateInput.addEventListener("input", refreshVoucherDateClosedHint);
+      refreshVoucherDateClosedHint();
+    }
+    const jeAiText = document.getElementById("jeAiText");
+    const jeAiGenerate = document.getElementById("jeAiGenerate");
+    const jeAiClear = document.getElementById("jeAiClear");
+    const jeAiSuggestions = document.getElementById("jeAiSuggestions");
+    const jeAiToggle = document.getElementById("jeAiToggle");
+    const jeAiPanel = document.getElementById("jeAiPanel");
+    const jeAiValidationPanel = document.getElementById("jeAiValidationPanel");
+    const jeAiValidationScores = document.getElementById("jeAiValidationScores");
+    const jeAiPassed = document.getElementById("jeAiPassed");
+    const jeAiWarnings = document.getElementById("jeAiWarnings");
+    const jeAiErrors = document.getElementById("jeAiErrors");
+    const jeAiValidationSuggestions = document.getElementById("jeAiValidationSuggestions");
+    const jeAiMemoryKey = "nexa.journalEntry.aiMemory.v1";
+
+    if (jeAiToggle && jeAiPanel) {
+      setAiPanelVisible(false);
+      jeAiToggle.addEventListener("change", function () {
+        const on = jeAiToggle.checked;
+        clearAiValidationState();
+        setAiPanelVisible(on);
+        if (on && jeAiText) {
+          setTimeout(function () { jeAiText.focus(); }, 0);
+        }
+      });
+    }
+
+    let pendingAiEntry = null;
+
+    function bindAccountLookup(tr) {
+      const lookup = tr.querySelector(".je-account-lookup");
+      if (!lookup || lookup.dataset.jeAcctBound === "1") return;
+      lookup.dataset.jeAcctBound = "1";
+      lookup.addEventListener("global-lookup:select", function (e) {
+        const r = (e.detail && e.detail.row) ? e.detail.row : {};
+        const pt = tr.querySelector(".je-party-type");
+        const pc = tr.querySelector(".je-party-code");
+        if (pt) pt.value = r.party_type || "";
+        if (pc) pc.value = r.party_code || "";
+        const partyType = String(r.party_type || "").trim().toUpperCase();
+        if (partyType === "SUPPLIER") {
+          showJournalAlert([
+            "Supplier payable: post the amount as Credit (Cr) on this line to create a bill to pay.",
+            "Debit (Dr) on payable is a payment/credit — it will not appear for payment allocation.",
+          ]);
+        } else if (partyType === "CUSTOMER") {
+          showJournalAlert([
+            "Customer receivable: post the amount as Debit (Dr) on this line.",
+            "Credit (Cr) on receivable reduces what the customer owes.",
+          ]);
+        } else {
+          clearJournalAlert();
+        }
+        const accDisplay = tr.querySelector(".je-account-display");
+        if (accDisplay) jeFocusNext(accDisplay);
+      });
+      if (window.GlobalLookup && lookup.dataset.odooLookupInit !== "1") {
+        window.GlobalLookup.init(lookup);
+      }
+    }
+
+    function bindJournalLookups(root) {
+      const scope = root || document;
+      if (window.GlobalLookup && window.GlobalLookup.initAll) {
+        window.GlobalLookup.initAll(scope);
+      }
+      scope.querySelectorAll("#journalLines tbody tr").forEach(bindAccountLookup);
+      bindJournalFieldNav(scope);
+      bindJournalAmountBalance(scope);
+    }
+
+    function isJeNavField(el) {
+      if (!el || el.disabled || el.type === "hidden") return false;
+      if (el.offsetParent === null) return false;
+      if (el.tagName === "BUTTON") return false;
+      return el.matches(
+        "#journalForm input[name='voucher_date'], #journalForm input[name='reference_no'], #journalForm input[name='narration'], "
+        + "#journalForm .je-account-display, #journalForm input[name='remarks[]'], "
+        + "#journalForm input[name='debit[]'], #journalForm input[name='credit[]'], "
+        + "#jeDefCcDisplay, #jeDefDeptDisplay, #jeDefProjDisplay, "
+        + "#journalLines .global-lookup__input, #journalLines .odoo-lookup__input"
+      );
+    }
+
+    function lookupDropdownForRoot(root) {
+      if (!root || !root.id) return null;
+      return document.querySelector('[data-lookup-owner="' + root.id + '"]');
+    }
+
+    function lookupHasSelectableOptions(root) {
+      if (!root || !root.classList.contains("is-open")) return false;
+      const dd = lookupDropdownForRoot(root);
+      return !!(dd && dd.style.display !== "none" && dd.querySelector(".global-lookup__option, .odoo-lookup__option"));
+    }
+
+    function closeLookupDropdown(root) {
+      if (!root) return;
+      const dd = lookupDropdownForRoot(root);
+      root.classList.remove("is-open");
+      const input = root.querySelector(".global-lookup__input, .odoo-lookup__input");
+      if (input) input.setAttribute("aria-expanded", "false");
+      if (dd) {
+        dd.style.display = "none";
+        dd.innerHTML = "";
+      }
+    }
+
+    function collectJournalNavFields() {
+      if (!journalForm || !tbody) return [];
+      const fields = [];
+      ["voucher_date", "reference_no", "narration"].forEach(function (name) {
+        const el = journalForm.querySelector('input[name="' + name + '"]');
+        if (isJeNavField(el)) fields.push(el);
+      });
+      ["jeDefCcDisplay", "jeDefDeptDisplay", "jeDefProjDisplay"].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (isJeNavField(el)) fields.push(el);
+      });
+      Array.prototype.forEach.call(tbody.querySelectorAll("tr"), function (tr) {
+        const acc = tr.querySelector(".je-account-display");
+        if (isJeNavField(acc)) fields.push(acc);
+        const rem = tr.querySelector("input[name='remarks[]']");
+        if (isJeNavField(rem)) fields.push(rem);
+        const tds = tr.querySelectorAll("td");
+        for (let i = 2; i <= 4; i += 1) {
+          const td = tds[i];
+          if (!td) continue;
+          const dimInp = td.querySelector(".global-lookup__input, .odoo-lookup__input");
+          if (isJeNavField(dimInp)) fields.push(dimInp);
+        }
+        const debit = tr.querySelector("input[name='debit[]']");
+        const credit = tr.querySelector("input[name='credit[]']");
+        if (isJeNavField(debit)) fields.push(debit);
+        if (isJeNavField(credit)) fields.push(credit);
+      });
+      return fields;
+    }
+
+    function focusJeField(el) {
+      if (!el) return;
+      el.focus();
+      if (typeof el.select === "function" && el.type !== "date") {
+        try { el.select(); } catch (err) { /* readonly */ }
+      }
+    }
+
+    function jeFocusNextAccountFromRow(tr) {
+      if (!tr) return;
+      rebalanceJournalFromRow(tr);
+      let nextTr = tr.nextElementSibling;
+      if (!nextTr) {
+        nextTr = addJournalRow();
+      }
+      if (nextTr) {
+        focusJeField(nextTr.querySelector(".je-account-display"));
+      }
+    }
+
+    function jeFocusNext(el) {
+      const fields = collectJournalNavFields();
+      const idx = fields.indexOf(el);
+      if (idx >= 0 && idx < fields.length - 1) {
+        focusJeField(fields[idx + 1]);
+        return;
+      }
+      const tr = el.closest("#journalLines tbody tr");
+      if (!tr) return;
+      const nextTr = tr.nextElementSibling;
+      if (nextTr) {
+        const acc = nextTr.querySelector(".je-account-display");
+        focusJeField(acc);
+        return;
+      }
+      const newRow = addJournalRow();
+      if (newRow) focusJeField(newRow.querySelector(".je-account-display"));
+    }
+
+    function jeFocusPrev(el) {
+      const fields = collectJournalNavFields();
+      const idx = fields.indexOf(el);
+      if (idx > 0) {
+        focusJeField(fields[idx - 1]);
+        return;
+      }
+      const tr = el.closest("#journalLines tbody tr");
+      if (!tr || !tr.previousElementSibling) return;
+      const prevTr = tr.previousElementSibling;
+      const credit = prevTr.querySelector("input[name='credit[]']");
+      focusJeField(credit || prevTr.querySelector(".je-account-display"));
+    }
+
+    function onJournalNavKeydown(e) {
+      if (e.key !== "Enter" && e.key !== "Escape") return;
+      if (!isJeNavField(e.target)) return;
+      const el = e.target;
+      const lookupRoot = el.closest(".global-lookup, .odoo-lookup");
+
+      if (e.key === "Enter") {
+        if (lookupRoot && lookupHasSelectableOptions(lookupRoot)) return;
+        e.preventDefault();
+        if (el.name === "debit[]") {
+          jeFocusNextAccountFromRow(el.closest("#journalLines tbody tr"));
+          return;
+        }
+        jeFocusNext(el);
+        return;
+      }
+
+      if (lookupRoot && lookupRoot.classList.contains("is-open")) {
+        closeLookupDropdown(lookupRoot);
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      jeFocusPrev(el);
+    }
+
+    function bindJournalFieldNav(root) {
+      const scope = root || journalForm;
+      if (!scope) return;
+      const nodes = scope === journalForm
+        ? collectJournalNavFields()
+        : Array.prototype.slice.call(scope.querySelectorAll(
+          ".je-account-display, input[name='remarks[]'], input[name='debit[]'], input[name='credit[]'], .global-lookup__input, .odoo-lookup__input"
+        ));
+      nodes.forEach(function (el) {
+        if (!isJeNavField(el)) return;
+        if (el.dataset.jeNavBound === "1") return;
+        el.dataset.jeNavBound = "1";
+        el.addEventListener("keydown", onJournalNavKeydown);
+      });
+    }
+
+    if (!addBtn || !tbody) return;
+
+    let journalPosting = false;
+
+    function escapeHtml(s) {
+      return String(s == null ? "" : s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function showJournalAlert(messages) {
+      if (!journalFormAlert) return;
+      const items = (messages || []).map(function (m) { return "<li>" + escapeHtml(m) + "</li>"; }).join("");
+      journalFormAlert.innerHTML = "<strong>Cannot post journal</strong><ul>" + items + "</ul>";
+      journalFormAlert.classList.add("is-visible");
+      journalFormAlert.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function clearJournalAlert() {
+      if (!journalFormAlert) return;
+      journalFormAlert.classList.remove("is-visible");
+      journalFormAlert.innerHTML = "";
+    }
+
+    function amountValue(input) {
+      const n = Number((input && input.value) || 0);
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    let jeAutoBalancing = false;
+
+    function roundMoney(n) {
+      return Math.round(n * 100) / 100;
+    }
+
+    function setJeAmountInput(input, val) {
+      if (!input) return;
+      jeAutoBalancing = true;
+      input.value = val;
+      jeAutoBalancing = false;
+    }
+
+    function getJeRemarkText(sourceRow) {
+      const rem = sourceRow ? sourceRow.querySelector("input[name='remarks[]']") : null;
+      const lineText = String((rem && rem.value) || "").trim();
+      if (lineText) return lineText;
+      const narrationInput = journalForm ? journalForm.querySelector("input[name='narration']") : null;
+      return String((narrationInput && narrationInput.value) || "").trim();
+    }
+
+    function copyJeRemarksToTarget(sourceRow, targetRow) {
+      if (!sourceRow || !targetRow || targetRow.dataset.jeManualRemarks === "1") return;
+      const targetRem = targetRow.querySelector("input[name='remarks[]']");
+      if (!targetRem) return;
+      const text = getJeRemarkText(sourceRow);
+      if (!text) return;
+      jeAutoBalancing = true;
+      targetRem.value = text;
+      jeAutoBalancing = false;
+    }
+
+    function findJeBalanceTargetRow(sourceRow) {
+      if (!tbody || !sourceRow) return null;
+      const rows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
+      const idx = rows.indexOf(sourceRow);
+      if (idx < 0) return null;
+      let i;
+      for (i = idx + 1; i < rows.length; i += 1) {
+        const debit = amountValue(rows[i].querySelector("input[name='debit[]']"));
+        const credit = amountValue(rows[i].querySelector("input[name='credit[]']"));
+        if (debit <= 0 && credit <= 0) return rows[i];
+      }
+      for (i = idx - 1; i >= 0; i -= 1) {
+        const debit = amountValue(rows[i].querySelector("input[name='debit[]']"));
+        const credit = amountValue(rows[i].querySelector("input[name='credit[]']"));
+        if (debit <= 0 && credit <= 0) return rows[i];
+      }
+      for (i = rows.length - 1; i >= 0; i -= 1) {
+        if (rows[i] !== sourceRow) return rows[i];
+      }
+      return null;
+    }
+
+    function rebalanceJournalFromRow(sourceRow) {
+      if (!tbody || !sourceRow || jeAutoBalancing) return;
+      const target = findJeBalanceTargetRow(sourceRow);
+      if (!target || target === sourceRow) return;
+      if (target.dataset.jeManualAmount === "1" && target !== sourceRow) return;
+
+      const rows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
+      let debitTotal = 0;
+      let creditTotal = 0;
+      rows.forEach(function (row) {
+        if (row === target) return;
+        debitTotal += Math.max(0, amountValue(row.querySelector("input[name='debit[]']")));
+        creditTotal += Math.max(0, amountValue(row.querySelector("input[name='credit[]']")));
+      });
+      const diff = roundMoney(debitTotal - creditTotal);
+      const tDebit = target.querySelector("input[name='debit[]']");
+      const tCredit = target.querySelector("input[name='credit[]']");
+      if (!tDebit || !tCredit) return;
+
+      if (Math.abs(diff) < 0.005) {
+        setJeAmountInput(tDebit, "0");
+        setJeAmountInput(tCredit, "0");
+        delete target.dataset.jeManualAmount;
+        return;
+      }
+      if (diff > 0) {
+        setJeAmountInput(tCredit, diff.toFixed(2));
+        setJeAmountInput(tDebit, "0");
+      } else {
+        setJeAmountInput(tDebit, (-diff).toFixed(2));
+        setJeAmountInput(tCredit, "0");
+      }
+      delete target.dataset.jeManualAmount;
+      copyJeRemarksToTarget(sourceRow, target);
+    }
+
+    function onJournalRemarksInput(e) {
+      if (jeAutoBalancing) return;
+      const input = e.target;
+      if (!input || input.name !== "remarks[]") return;
+      const row = input.closest("tr");
+      if (!row) return;
+      row.dataset.jeManualRemarks = "1";
+      const target = findJeBalanceTargetRow(row);
+      if (!target || target.dataset.jeManualRemarks === "1") return;
+      const text = String(input.value || "").trim();
+      if (!text) return;
+      const targetRem = target.querySelector("input[name='remarks[]']");
+      if (!targetRem) return;
+      jeAutoBalancing = true;
+      targetRem.value = text;
+      jeAutoBalancing = false;
+    }
+
+    function onJournalNarrationInput() {
+      if (jeAutoBalancing || !tbody) return;
+      const narrationInput = journalForm ? journalForm.querySelector("input[name='narration']") : null;
+      const text = String((narrationInput && narrationInput.value) || "").trim();
+      if (!text) return;
+      Array.prototype.forEach.call(tbody.querySelectorAll("tr"), function (row) {
+        const debit = amountValue(row.querySelector("input[name='debit[]']"));
+        const credit = amountValue(row.querySelector("input[name='credit[]']"));
+        if (debit <= 0 && credit <= 0) return;
+        const rem = row.querySelector("input[name='remarks[]']");
+        if (rem && !String(rem.value || "").trim() && row.dataset.jeManualRemarks !== "1") {
+          jeAutoBalancing = true;
+          rem.value = text;
+          jeAutoBalancing = false;
+        }
+        const target = findJeBalanceTargetRow(row);
+        if (target) copyJeRemarksToTarget(row, target);
+      });
+    }
+
+    function onJournalAmountInput(e) {
+      if (jeAutoBalancing) return;
+      const input = e.target;
+      if (!input || !input.name || (input.name !== "debit[]" && input.name !== "credit[]")) return;
+      const row = input.closest("tr");
+      if (!row) return;
+      row.dataset.jeManualAmount = "1";
+      const debitIn = row.querySelector("input[name='debit[]']");
+      const creditIn = row.querySelector("input[name='credit[]']");
+      if (input.name === "debit[]" && amountValue(debitIn) > 0) {
+        setJeAmountInput(creditIn, "0");
+      } else if (input.name === "credit[]" && amountValue(creditIn) > 0) {
+        setJeAmountInput(debitIn, "0");
+      }
+      rebalanceJournalFromRow(row);
+    }
+
+    function bindJournalAmountBalance(root) {
+      const scope = root || journalForm;
+      if (!scope) return;
+      scope.querySelectorAll("input[name='debit[]'], input[name='credit[]']").forEach(function (input) {
+        if (input.dataset.jeAmountBound === "1") return;
+        input.dataset.jeAmountBound = "1";
+        input.addEventListener("input", onJournalAmountInput);
+        input.addEventListener("change", onJournalAmountInput);
+      });
+      scope.querySelectorAll("input[name='remarks[]']").forEach(function (input) {
+        if (input.dataset.jeRemarksBound === "1") return;
+        input.dataset.jeRemarksBound = "1";
+        input.addEventListener("input", onJournalRemarksInput);
+        input.addEventListener("change", onJournalRemarksInput);
+      });
+    }
+
+    function bindJournalNarrationCopy() {
+      if (!journalForm) return;
+      const narrationInput = journalForm.querySelector("input[name='narration']");
+      if (!narrationInput || narrationInput.dataset.jeNarrationBound === "1") return;
+      narrationInput.dataset.jeNarrationBound = "1";
+      narrationInput.addEventListener("input", onJournalNarrationInput);
+      narrationInput.addEventListener("change", onJournalNarrationInput);
+    }
+
+    function chartAccountByCode(code) {
+      const c = String(code || "").trim();
+      if (!c) return null;
+      const meta = jeAccountMetaByCode[c];
+      if (meta) {
+        return {
+          dataset: {
+            code: c,
+            accountType: meta.accountType || "",
+            status: meta.status || "ACTIVE",
+            kind: meta.kind || "GL"
+          }
+        };
+      }
+      return { dataset: { code: c, accountType: "", status: "ACTIVE", kind: "GL" } };
+    }
+
+    function listHtml(items) {
+      return (items && items.length ? items : ["None"]).map(function (x) {
+        return "<li>" + escapeHtml(x) + "</li>";
+      }).join("");
+    }
+
+    function renderAiValidation(result) {
+      if (!jeAiValidationPanel) return;
+      jeAiValidationPanel.style.display = "block";
+      if (jeAiValidationScores) {
+        jeAiValidationScores.innerHTML = "Fraud risk score: " + escapeHtml(result.fraudRiskScore) + "% &nbsp; | &nbsp; Posting confidence: " + escapeHtml(result.confidence) + "%";
+      }
+      if (jeAiPassed) jeAiPassed.innerHTML = listHtml(result.passed);
+      if (jeAiWarnings) jeAiWarnings.innerHTML = listHtml(result.warnings);
+      if (jeAiErrors) jeAiErrors.innerHTML = listHtml(result.errors);
+      if (jeAiValidationSuggestions) jeAiValidationSuggestions.innerHTML = listHtml(result.suggestions);
+    }
+
+    function setPostDisabled(disabled) {
+      // Validation should block submission, not leave the Post button disabled.
+      if (!disabled) {
+        postButtons.forEach(function (btn) { btn.disabled = false; });
+      }
+    }
+
+    function clearAiValidationState() {
+      if (jeAiValidationPanel) jeAiValidationPanel.style.display = "none";
+      setPostDisabled(false);
+      if (tbody) {
+        Array.prototype.slice.call(tbody.querySelectorAll("tr")).forEach(function (row) {
+          row.classList.remove("je-row-invalid");
+        });
+      }
+    }
+
+    function setAiPanelVisible(on) {
+      if (!jeAiPanel) return;
+      jeAiPanel.classList.toggle("is-visible", !!on);
+      jeAiPanel.style.display = on ? "block" : "none";
+    }
+
+    function runAiPostValidation() {
+      const result = {
+        passed: [],
+        warnings: [],
+        errors: [],
+        suggestions: [],
+        fraudRiskScore: 0,
+        confidence: 100
+      };
+      let debitTotal = 0;
+      let creditTotal = 0;
+      let validRows = 0;
+      const narrationInput = journalForm ? journalForm.querySelector("input[name='narration']") : null;
+      const narrationValue = String((narrationInput && narrationInput.value) || "").trim();
+      const rows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
+      rows.forEach(function (row, idx) {
+        row.classList.remove("je-row-invalid");
+        const accountCode = String((row.querySelector(".je-account-code") || {}).value || "").trim();
+        const debit = amountValue(row.querySelector("input[name='debit[]']"));
+        const credit = amountValue(row.querySelector("input[name='credit[]']"));
+        const remarks = String((row.querySelector("input[name='remarks[]']") || {}).value || "").trim();
+        const hasLine = accountCode || debit > 0 || credit > 0 || remarks;
+        if (!hasLine) return;
+        validRows += 1;
+        debitTotal += Math.max(0, debit);
+        creditTotal += Math.max(0, credit);
+        const acc = chartAccountByCode(accountCode);
+        const accType = acc ? String(acc.dataset.accountType || "").toUpperCase() : "";
+        const accStatus = acc ? String(acc.dataset.status || "ACTIVE").toUpperCase() : "";
+        if (!accountCode || !acc) {
+          result.errors.push("Line " + (idx + 1) + ": invalid or missing GL account.");
+          row.classList.add("je-row-invalid");
+        } else if (accStatus && accStatus !== "ACTIVE") {
+          result.errors.push("Line " + (idx + 1) + ": GL account is inactive/locked.");
+          row.classList.add("je-row-invalid");
+        }
+        if (debit > 0 && credit > 0) {
+          result.errors.push("Line " + (idx + 1) + ": debit and credit both entered.");
+          row.classList.add("je-row-invalid");
+        }
+        if (debit < 0 || credit < 0) {
+          result.errors.push("Line " + (idx + 1) + ": negative amount detected.");
+          row.classList.add("je-row-invalid");
+        }
+        if (accType === "EXPENSE" && credit > 0) {
+          result.warnings.push("Line " + (idx + 1) + ": expense account credited. Review account usage.");
+        }
+        if ((accType === "ASSET" || /cash|bank/i.test(accountSearchText(acc || row))) && credit > 50000) {
+          result.warnings.push("Line " + (idx + 1) + ": large cash/bank credit may create negative balance. Verify funds.");
+        }
+      });
+
+      debitTotal = Math.round(debitTotal * 100) / 100;
+      creditTotal = Math.round(creditTotal * 100) / 100;
+      if (validRows < 2) result.errors.push("Journal requires at least two valid lines.");
+      if (debitTotal !== creditTotal) result.errors.push("Debit and credit are not balanced. Debit " + debitTotal.toFixed(2) + ", Credit " + creditTotal.toFixed(2) + ".");
+      else result.passed.push("Debit and credit are balanced.");
+      if (validRows >= 2) result.passed.push("Minimum journal line count passed.");
+      if (narrationValue.length < 8) result.warnings.push("Narration is empty or too short.");
+      else result.passed.push("Narration looks usable.");
+      if (/vat|tax/i.test(narrationValue)) {
+        const hasVatLine = rows.some(function (row) {
+          const code = String((row.querySelector(".je-account-code") || {}).value || "").trim();
+          const acc = chartAccountByCode(code);
+          return acc && /vat|tax/i.test(accountSearchText(acc));
+        });
+        if (!hasVatLine) result.warnings.push("VAT/tax mentioned but no VAT/tax account line found.");
+        else result.passed.push("VAT/tax account line detected.");
+      } else {
+        result.passed.push("No VAT/tax keyword requiring validation.");
+      }
+      if (!journalForm.querySelector("input[name='default_cost_center']").value && !journalForm.querySelector("input[name='default_department']").value && !journalForm.querySelector("input[name='default_project']").value) {
+        result.warnings.push("Cost center/project/department is missing.");
+      } else {
+        result.passed.push("At least one dimension is present.");
+      }
+      if (/\b(closed|locked period|previous year)\b/i.test(narrationValue)) result.errors.push("Locked accounting period risk detected in narration.");
+      else result.passed.push("No locked-period keyword detected.");
+      if (/\b(usd|aed|sar|eur|kwd|dollar|dirham|riyal)\b/i.test(narrationValue)) result.warnings.push("Currency mentioned. Verify exchange rate before posting.");
+      else result.passed.push("No foreign currency keyword detected.");
+      if (/\b(invoice|bill|receipt|ocr)\b/i.test(narrationValue)) result.warnings.push("Document/OCR reference mentioned. Verify attachment and invoice matching.");
+      else result.suggestions.push("Attach invoice/supporting document if this journal is document-backed.");
+      if (debitTotal > 100000 || creditTotal > 100000) result.warnings.push("Abnormal/high value journal amount detected.");
+      if (/round|adjust|manual|write.?off|cash/i.test(narrationValue)) result.warnings.push("Manual adjustment/cash wording detected. Review fraud risk.");
+      result.suggestions.push("Review previous similar journals before posting.");
+      result.suggestions.push("Confirm user has posting authorization for this journal source.");
+      result.suggestions.push("Recurring journals should be compared with historical posting behavior.");
+      result.fraudRiskScore = Math.min(100, result.errors.length * 35 + result.warnings.length * 10);
+      result.confidence = Math.max(0, 100 - result.errors.length * 30 - result.warnings.length * 8);
+      renderAiValidation(result);
+      return result;
+    }
+
+    function validateJournalForm(action) {
+      const messages = [];
+      const voucherDate = journalForm ? journalForm.querySelector("input[name='voucher_date']") : null;
+      const isDraft = action === "draft";
+      let firstProblemField = null;
+      if (!voucherDate || !String(voucherDate.value || "").trim()) {
+        messages.push("Voucher Date is required.");
+        firstProblemField = voucherDate;
+      } else {
+        const closedMsg = closedPeriodMessage(voucherDate.value);
+        if (closedMsg) {
+          messages.push(closedMsg);
+          firstProblemField = voucherDate;
+          refreshVoucherDateClosedHint();
+        }
+      }
+
+      let validLineCount = 0;
+      let totalDebit = 0;
+      let totalCredit = 0;
+      const rows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
+      rows.forEach(function (row, idx) {
+        const rowNo = idx + 1;
+        const account = row.querySelector(".je-account-code");
+        const display = row.querySelector(".je-account-display");
+        const debit = row.querySelector("input[name='debit[]']");
+        const credit = row.querySelector("input[name='credit[]']");
+        const accountCode = String((account && account.value) || "").trim();
+        const dr = amountValue(debit);
+        const cr = amountValue(credit);
+        const hasAmount = dr > 0 || cr > 0;
+
+        if (!accountCode && hasAmount) {
+          messages.push("Line " + rowNo + ": select an account or party.");
+          if (!firstProblemField) firstProblemField = display || account;
+        }
+        if (accountCode && !hasAmount) {
+          messages.push("Line " + rowNo + ": enter either Debit or Credit.");
+          if (!firstProblemField) firstProblemField = debit || credit;
+        }
+        if (dr < 0 || cr < 0) {
+          messages.push("Line " + rowNo + ": Debit and Credit cannot be negative.");
+          if (!firstProblemField) firstProblemField = dr < 0 ? debit : credit;
+        }
+        if (dr > 0 && cr > 0) {
+          messages.push("Line " + rowNo + ": enter Debit or Credit, not both.");
+          if (!firstProblemField) firstProblemField = debit;
+        }
+        if (accountCode && hasAmount && !(dr > 0 && cr > 0)) {
+          validLineCount += 1;
+          totalDebit += Math.max(0, dr);
+          totalCredit += Math.max(0, cr);
+        }
+      });
+
+      totalDebit = Math.round(totalDebit * 100) / 100;
+      totalCredit = Math.round(totalCredit * 100) / 100;
+      if (isDraft && validLineCount < 1) {
+        messages.push("Add at least one journal line with account and non-zero amount before saving draft.");
+      }
+      if (!isDraft && validLineCount < 2) {
+        messages.push("Journal entry requires at least two valid lines.");
+      }
+      if (!isDraft && validLineCount >= 2 && totalDebit !== totalCredit) {
+        messages.push("Total Debit must equal Total Credit. Debit: " + totalDebit.toFixed(2) + ", Credit: " + totalCredit.toFixed(2) + ".");
+      }
+      return { ok: messages.length === 0, messages: messages, firstProblemField: firstProblemField };
+    }
+
+    function setPostingState(on) {
+      journalPosting = false;
+      document.body.classList.remove("je-is-posting");
+      postButtons.forEach(function (btn) {
+        btn.disabled = false;
+        const label = btn.querySelector(".je-post-label");
+        if (label) {
+          label.textContent = btn.classList.contains("je-form-footer-submit") ? "Post Journal" : "Post journal";
+        }
+      });
+    }
+
+    function resetSubmitButtons() {
+      setPostingState(false);
+      postButtons.forEach(function (btn) { btn.disabled = false; });
+      draftButtons.forEach(function (btn) { btn.disabled = false; });
+    }
+
+    function forceEnablePostButtons() {
+      postButtons.forEach(function (btn) { btn.disabled = false; btn.removeAttribute("disabled"); });
+      window.setTimeout(function () {
+        postButtons.forEach(function (btn) { btn.disabled = false; btn.removeAttribute("disabled"); });
+      }, 0);
+    }
+
+    function handlePostAction(action) {
+      if (journalAction) journalAction.value = action;
+      const result = validateJournalForm(action);
+      if (!result.ok) {
+        forceEnablePostButtons();
+        showJournalAlert(result.messages);
+        if (result.firstProblemField && typeof result.firstProblemField.focus === "function") {
+          result.firstProblemField.focus();
+        }
+        return false;
+      }
+      if (action !== "draft" && jeAiToggle && jeAiToggle.checked) {
+        const aiResult = runAiPostValidation();
+        if (aiResult.errors.length && !window.confirm("AI validation found errors. Continue posting anyway?\n\nErrors:\n- " + aiResult.errors.join("\n- "))) {
+          forceEnablePostButtons();
+          return false;
+        }
+        if (aiResult.warnings.length && !window.confirm("AI validation found warnings. Continue posting?\n\nWarnings:\n- " + aiResult.warnings.join("\n- "))) {
+          forceEnablePostButtons();
+          return false;
+        }
+      }
+      if (action !== "draft" && jeAiToggle && jeAiToggle.checked) {
+        rememberAiJournalPattern();
+      }
+      clearJournalAlert();
+      return true;
+    }
+
+    if (journalForm) {
+      resetSubmitButtons();
+      window.addEventListener("pageshow", resetSubmitButtons);
+
+      function submitJournalForm() {
+        // Post/Draft buttons are type="button" (and toolbar ones sit outside the form).
+        // requestSubmit(btn) throws TypeError for non-submit buttons — form never posts.
+        if (typeof journalForm.requestSubmit === "function") {
+          try {
+            journalForm.requestSubmit();
+            return;
+          } catch (err) {
+            console.warn("journal requestSubmit failed:", err);
+          }
+        }
+        journalForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+      }
+
+      postButtons.forEach(function (btn) {
+        btn.addEventListener("click", function (e) {
+          e.preventDefault();
+          const action = btn.getAttribute("data-action") || "post";
+          if (!handlePostAction(action)) return;
+          if (journalAction) journalAction.value = action;
+          submitJournalForm();
+        });
+      });
+
+      draftButtons.forEach(function (btn) {
+        btn.addEventListener("click", function (e) {
+          e.preventDefault();
+          clearJournalAlert();
+          if (!handlePostAction("draft")) return;
+          if (journalAction) journalAction.value = "draft";
+          submitJournalForm();
+        });
+      });
+
+      journalForm.addEventListener("input", function () { clearJournalAlert(); clearAiValidationState(); forceEnablePostButtons(); });
+      journalForm.addEventListener("change", function () { clearJournalAlert(); clearAiValidationState(); forceEnablePostButtons(); });
+    }
+
+    function setInput(row, selector, value) {
+      const input = row.querySelector(selector);
+      if (input) input.value = value == null ? "" : String(value);
+    }
+
+    function syncRowLookup(row, fieldName, code, label) {
+      const hidden = row.querySelector('input[name="' + fieldName + '"]');
+      if (!hidden) return;
+      const val = (code == null ? "" : String(code)).trim();
+      const show = (label == null ? "" : String(label)).trim() || val;
+      hidden.value = val;
+      const lookup = hidden.closest(".global-lookup, .odoo-lookup");
+      const display = lookup && lookup.querySelector(".global-lookup__input, .odoo-lookup__input");
+      if (display) display.value = show;
+      const clearBtn = lookup && lookup.querySelector(".global-lookup__clear, .odoo-lookup__clear");
+      if (clearBtn) clearBtn.hidden = !val;
+    }
+
+    function accountSearchText(row) {
+      return [
+        row.dataset.code || "",
+        row.dataset.display || "",
+        row.dataset.accountType || "",
+        row.getAttribute("data-search") || "",
+        row.textContent || ""
+      ].join(" ").toLowerCase();
+    }
+
+    function chartAccountRows() {
+      return Object.keys(jeAccountMetaByCode).map(function (code) {
+        const m = jeAccountMetaByCode[code] || {};
+        return {
+          dataset: {
+            code: code,
+            accountType: m.accountType || "",
+            status: m.status || "ACTIVE",
+            kind: m.kind || "GL",
+            partyType: ""
+          },
+          getAttribute: function (attr) {
+            if (attr === "data-search") {
+              return (code + " " + (m.name || "") + " " + (m.accountType || "") + " chart").toLowerCase();
+            }
+            return "";
+          }
+        };
+      }).filter(function (row) {
+        return (row.dataset.kind || "").toUpperCase() === "GL" && !(row.dataset.partyType || "").trim();
+      });
+    }
+
+    function findChartAccount(options) {
+      options = options || {};
+      const mustTypes = (options.types || []).map(function (x) { return String(x || "").toUpperCase(); });
+      const include = options.include || [];
+      const exclude = options.exclude || [];
+      let best = null;
+      let bestScore = -1;
+      chartAccountRows().forEach(function (row) {
+        const type = String(row.dataset.accountType || "").toUpperCase();
+        if (mustTypes.length && mustTypes.indexOf(type) < 0) return;
+        const raw = accountSearchText(row);
+        if (exclude.some(function (term) { return raw.indexOf(term) >= 0; })) return;
+        let score = 0;
+        include.forEach(function (terms, idx) {
+          const matched = terms.some(function (term) { return raw.indexOf(term) >= 0; });
+          if (matched) score += (include.length - idx) * 10;
+        });
+        if (mustTypes.length) score += 8;
+        if (raw.indexOf("expense") >= 0 && mustTypes.indexOf("EXPENSE") >= 0) score += 4;
+        if (raw.indexOf("asset") >= 0 && mustTypes.indexOf("ASSET") >= 0) score += 4;
+        if (raw.indexOf("liability") >= 0 && mustTypes.indexOf("LIABILITY") >= 0) score += 4;
+        if (score > bestScore) {
+          best = row;
+          bestScore = score;
+        }
+      });
+      const minScore = include.length ? (mustTypes.length ? 18 : 10) : (mustTypes.length ? 8 : 1);
+      return bestScore >= minScore ? best : null;
+    }
+
+    function aiAccountLabel(row) {
+      return row ? (row.dataset.display || row.dataset.code || "").trim() : "";
+    }
+
+    function parseAiAmount(text) {
+      const match = String(text || "").replace(/,/g, "").match(/(?:^|\s)(\d+(?:\.\d{1,2})?)(?:\s|$)/);
+      return match ? Number(match[1]) : 0;
+    }
+
+    function aiTokens(text) {
+      const stop = {
+        paid: true, pay: true, payment: true, by: true, for: true, the: true, and: true,
+        with: true, from: true, to: true, cash: false, bank: false, including: true,
+        include: true, vat: false, tax: false, expense: false
+      };
+      return String(text || "")
+        .toLowerCase()
+        .replace(/[0-9.,]+/g, " ")
+        .replace(/[^a-z0-9]+/g, " ")
+        .split(/\s+/)
+        .filter(function (word) { return word.length > 2 && stop[word] !== true; });
+    }
+
+    function loadAiMemory() {
+      try {
+        const raw = window.localStorage ? window.localStorage.getItem(jeAiMemoryKey) : "";
+        const items = raw ? JSON.parse(raw) : [];
+        return Array.isArray(items) ? items : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveAiMemory(items) {
+      try {
+        if (window.localStorage) window.localStorage.setItem(jeAiMemoryKey, JSON.stringify((items || []).slice(0, 40)));
+      } catch (e) {
+        // Ignore storage failures; AI can still use rule-based suggestions.
+      }
+    }
+
+    function findAiMemory(text) {
+      const tokens = aiTokens(text);
+      if (!tokens.length) return null;
+      let best = null;
+      let bestScore = 0;
+      loadAiMemory().forEach(function (item) {
+        const stored = Array.isArray(item.tokens) ? item.tokens : [];
+        if (!stored.length || !Array.isArray(item.lines) || !item.lines.length) return;
+        const common = tokens.filter(function (token) { return stored.indexOf(token) >= 0; }).length;
+        const score = common / Math.max(tokens.length, stored.length);
+        if ((common >= 2 || score >= 0.5) && score > bestScore) {
+          best = item;
+          bestScore = score;
+        }
+      });
+      return best;
+    }
+
+    function rememberAiJournalPattern() {
+      if (!journalForm || !jeAiToggle || !jeAiToggle.checked) return;
+      const narrationInput = journalForm.querySelector("input[name='narration']");
+      const text = [jeAiText ? jeAiText.value : "", narrationInput ? narrationInput.value : ""].join(" ").trim();
+      const tokens = aiTokens(text);
+      if (!tokens.length) return;
+      const lines = Array.prototype.slice.call(tbody.querySelectorAll("tr")).map(function (row) {
+        const code = String((row.querySelector(".je-account-code") || {}).value || "").trim();
+        const display = String((row.querySelector(".je-account-display") || {}).value || "").trim();
+        const debit = amountValue(row.querySelector("input[name='debit[]']"));
+        const credit = amountValue(row.querySelector("input[name='credit[]']"));
+        const remarks = String((row.querySelector("input[name='remarks[]']") || {}).value || "").trim();
+        return code && (debit > 0 || credit > 0) ? { accountCode: code, accountDisplay: display, debit: debit, credit: credit, remarks: remarks } : null;
+      }).filter(Boolean);
+      if (!lines.length) return;
+      const memory = loadAiMemory().filter(function (item) {
+        const stored = Array.isArray(item.tokens) ? item.tokens.join("|") : "";
+        return stored !== tokens.join("|");
+      });
+      memory.unshift({ tokens: tokens, text: text.slice(0, 160), lines: lines, usedAt: new Date().toISOString() });
+      saveAiMemory(memory);
+    }
+
+    function detectAiCurrency(text) {
+      const t = String(text || "").toLowerCase();
+      if (/\b(aed|dirham|dirhams)\b/.test(t)) return "AED";
+      if (/\b(sar|riyal|riyals)\b/.test(t)) return "SAR";
+      if (/\b(usd|dollar|dollars)\b/.test(t) || t.indexOf("$") >= 0) return "USD";
+      if (/\b(kwd|dinar|dinars)\b/.test(t)) return "KWD";
+      if (/\b(eur|euro|euros)\b/.test(t)) return "EUR";
+      return "";
+    }
+
+    function detectAiVatRate(text) {
+      const t = String(text || "").toLowerCase();
+      const pct = t.match(/(\d+(?:\.\d+)?)\s*%\s*(?:vat|tax)/) || t.match(/(?:vat|tax)\s*(\d+(?:\.\d+)?)\s*%/);
+      if (pct) return Number(pct[1]) / 100;
+      return /\b(vat|tax)\b/.test(t) ? 0.05 : 0;
+    }
+
+    function findChartAccountMatchingText(text, options) {
+      options = options || {};
+      const preferTypes = (options.types || []).map(function (x) { return String(x || "").toUpperCase(); });
+      const mustContainAny = options.mustContain || [];
+      const mustNotContain = options.exclude || [];
+      const monthWords = { jan: true, feb: true, mar: true, apr: true, may: true, jun: true, jul: true, aug: true, sep: true, oct: true, nov: true, dec: true };
+      const t = String(text || "").toLowerCase();
+      const words = t.replace(/[0-9.,]+/g, " ").split(/\s+/).filter(function (w) {
+        return w.length > 2 && !monthWords[w];
+      });
+      let best = null;
+      let bestScore = 0;
+      chartAccountRows().forEach(function (row) {
+        const type = String(row.dataset.accountType || "").toUpperCase();
+        if (preferTypes.length && preferTypes.indexOf(type) < 0) return;
+        const raw = accountSearchText(row);
+        if (mustNotContain.some(function (term) { return raw.indexOf(term) >= 0; })) return;
+        if (mustContainAny.length && !mustContainAny.some(function (term) { return raw.indexOf(term) >= 0; })) return;
+        let score = 0;
+        words.forEach(function (w) {
+          if (raw.indexOf(w) >= 0) score += 10;
+        });
+        if (t.indexOf("salary") >= 0 && raw.indexOf("salary") >= 0) score += 14;
+        if (t.indexOf("wage") >= 0 && raw.indexOf("wage") >= 0) score += 14;
+        if (t.indexOf("payroll") >= 0 && raw.indexOf("payroll") >= 0) score += 14;
+        if (t.indexOf("payable") >= 0 && raw.indexOf("payable") >= 0) score += 14;
+        if (t.indexOf("rent") >= 0 && raw.indexOf("rent") >= 0) score += 12;
+        if (t.indexOf("salary") >= 0 && raw.indexOf("accounts payable") >= 0) score -= 25;
+        if (t.indexOf("wage") >= 0 && raw.indexOf("accounts payable") >= 0) score -= 25;
+        if (t.indexOf("payroll") >= 0 && raw.indexOf("accounts payable") >= 0) score -= 25;
+        if (score > bestScore) {
+          best = row;
+          bestScore = score;
+        }
+      });
+      return bestScore >= 18 ? best : null;
+    }
+
+    function suggestDebitAccount(text) {
+      const t = String(text || "").toLowerCase();
+      if (/\b(salary|salaries|wage|wages|payroll)\b/.test(t) && /\bpayable\b/.test(t) && /\b(paid|payment|pay|settle|settled)\b/.test(t)) {
+        return findChartAccountMatchingText(text, {
+          types: ["LIABILITY"],
+          mustContain: ["payable"],
+          exclude: ["accounts payable", "account payable", "supplier", "trade", "expense", "receivable"]
+        }) || findChartAccount({
+          types: ["LIABILITY"],
+          include: [["salary payable", "wages payable", "payroll payable"], ["salary", "wage", "payroll"], ["payable"]],
+          exclude: ["accounts payable", "supplier", "expense", "receivable"]
+        });
+      }
+      if (/\b(furniture|computer|laptop|vehicle|equipment|asset)\b/.test(t)) {
+        return findChartAccount({ types: ["ASSET"], include: [["furniture", "equipment", "fixed asset", "asset"], ["office"]], exclude: ["cash", "bank", "receivable"] });
+      }
+      if (/\b(rent|rental)\b/.test(t) && !/\bpayable\b/.test(t)) return findChartAccount({ types: ["EXPENSE"], include: [["rent"], ["expense"]], exclude: ["payable", "receivable"] });
+      if (/\b(electricity|water|utility|utilities|telephone|internet)\b/.test(t)) return findChartAccount({ types: ["EXPENSE"], include: [["electricity", "utility", "utilities", "telephone", "internet"], ["expense"]], exclude: ["payable", "receivable"] });
+      if (/\b(salary|salaries|wage|wages|payroll)\b/.test(t)) {
+        return findChartAccountMatchingText(text, { types: ["EXPENSE"], mustContain: [], exclude: ["payable", "receivable", "liability"] })
+          || findChartAccount({ types: ["EXPENSE"], include: [["salary", "wage", "payroll", "salaries", "wages"], ["expense"]], exclude: ["payable", "receivable"] });
+      }
+      if (/\b(repair|maintenance)\b/.test(t)) return findChartAccount({ types: ["EXPENSE"], include: [["repair", "maintenance"], ["expense"]], exclude: ["payable", "receivable"] });
+      if (/\b(purchase|expense|paid|payment)\b/.test(t)) return findChartAccount({ types: ["EXPENSE"], include: [["purchase", "expense"], ["general", "admin"]], exclude: ["payable", "receivable"] });
+      return findChartAccount({ types: ["EXPENSE"], include: [["expense"], ["general", "admin"]], exclude: ["payable", "receivable"] });
+    }
+
+    function suggestCreditAccount(text) {
+      const t = String(text || "").toLowerCase();
+      if (/\b(cash|petty cash)\b/.test(t)) return findChartAccount({ types: ["ASSET"], include: [["petty cash", "cash"], ["asset"]], exclude: ["receivable", "customer"] });
+      if (/\b(bank|cheque|check|transfer|online)\b/.test(t) && !(/\bpayable\b/.test(t) && /\b(salary|wage|payroll)\b/.test(t))) {
+        return findChartAccount({ types: ["ASSET"], include: [["bank"], ["cash"]], exclude: ["receivable", "customer"] });
+      }
+      if (/\b(salary|salaries|wage|wages|payroll)\b/.test(t) && /\bpayable\b/.test(t)) {
+        return findChartAccountMatchingText(text, {
+          types: ["LIABILITY"],
+          mustContain: ["payable"],
+          exclude: ["accounts payable", "account payable", "supplier", "trade", "expense", "receivable"]
+        }) || findChartAccount({
+          types: ["LIABILITY"],
+          include: [["salary payable", "salaries payable", "wages payable", "payroll payable"], ["salary", "wages", "payroll"], ["payable"]],
+          exclude: ["accounts payable", "supplier", "trade", "expense", "receivable"]
+        });
+      }
+      if (/\b(rent)\b/.test(t) && /\bpayable\b/.test(t)) {
+        return findChartAccountMatchingText(text, { types: ["LIABILITY"], mustContain: ["payable"], exclude: ["accounts payable", "expense", "salary", "wage"] })
+          || findChartAccount({ types: ["LIABILITY"], include: [["rent payable", "rent"], ["payable"]], exclude: ["accounts payable", "expense"] });
+      }
+      if (/\b(accounts payable|supplier|vendor)\b/.test(t) || (/\bpayable\b/.test(t) && /\b(supplier|vendor|purchase)\b/.test(t))) {
+        return findChartAccount({ types: ["LIABILITY"], include: [["accounts payable", "payable"], ["supplier"]], exclude: ["salary", "wage", "payroll", "expense"] });
+      }
+      if (/\bpayable\b/.test(t)) {
+        return findChartAccountMatchingText(text, { types: ["LIABILITY"], mustContain: ["payable"], exclude: ["expense", "receivable"] });
+      }
+      if (/\b(credit|supplier)\b/.test(t)) return findChartAccount({ types: ["LIABILITY"], include: [["accounts payable", "payable"], ["supplier"]], exclude: ["expense", "salary", "wage"] });
+      return findChartAccount({ types: ["ASSET"], include: [["bank"], ["cash"]], exclude: ["receivable", "customer"] });
+    }
+
+    function suggestVatAccount() {
+      return findChartAccount({ types: ["ASSET"], include: [["vat input", "input vat", "tax input"], ["vat", "tax"]], exclude: ["output", "payable", "liability"] });
+    }
+
+    function clearJournalRows() {
+      while (tbody.rows.length > 2) tbody.deleteRow(tbody.rows.length - 1);
+      Array.prototype.slice.call(tbody.rows).forEach(function (row) {
+        row.querySelectorAll("input").forEach(function (input) {
+          if (input.name && (input.name.indexOf("debit") >= 0 || input.name.indexOf("credit") >= 0)) input.value = "0";
+          else input.value = "";
+        });
+      });
+    }
+
+    function aiQueryText() {
+      const narrationInput = journalForm ? journalForm.querySelector("input[name='narration']") : null;
+      return [jeAiText ? jeAiText.value : "", narrationInput ? narrationInput.value : ""].join(" ").trim();
+    }
+
+    function setJournalLine(idx, accountRow, debit, credit, remarks, fallbackCode, fallbackLabel) {
+      while (tbody.rows.length <= idx) addJournalRow();
+      const row = tbody.rows[idx];
+      const code = (accountRow && accountRow.dataset.code) || String(fallbackCode || "").trim();
+      const display = accountRow ? aiAccountLabel(accountRow) : (fallbackLabel || code);
+      setInput(row, ".je-account-code", code);
+      setInput(row, ".je-account-display", display);
+      setInput(row, ".je-party-type", "");
+      setInput(row, ".je-party-code", "");
+      setInput(row, "input[name='remarks[]']", remarks || "");
+      setInput(row, "input[name='debit[]']", debit ? Number(debit).toFixed(2) : "0");
+      setInput(row, "input[name='credit[]']", credit ? Number(credit).toFixed(2) : "0");
+    }
+
+    function aiOutput(data) {
+      if (!jeAiSuggestions) return;
+      let html = [
+        ["Suggested Accounts", data.accounts || "No accounts suggested."],
+        ["Suggested Tax", data.tax || "No VAT/tax detected."],
+        ["Duplicate Warning", data.duplicate || "No duplicate warning."],
+        ["Unusual Entry Warning", data.unusual || "No unusual entry warning."],
+        ["Previous Similar Transactions", data.previous || "No similar transactions loaded on this screen."]
+      ].map(function (item) {
+        return "<div class=\"je-ai-card\"><b>" + escapeHtml(item[0]) + "</b><span>" + escapeHtml(item[1]) + "</span></div>";
+      }).join("");
+      if (data.preview && data.preview.length) {
+        html += "<div class=\"je-ai-card\"><b>Journal Lines Preview</b><table class=\"je-ai-preview-table\"><thead><tr><th>Account</th><th>Debit</th><th>Credit</th><th>Remarks</th></tr></thead><tbody>";
+        data.preview.forEach(function (line) {
+          html += "<tr><td>" + escapeHtml(line.accountLabel || "not found") + "</td><td>" + escapeHtml(line.debit ? Number(line.debit).toFixed(2) : "-") + "</td><td>" + escapeHtml(line.credit ? Number(line.credit).toFixed(2) : "-") + "</td><td>" + escapeHtml(line.remarks || "") + "</td></tr>";
+        });
+        html += "</tbody></table><div class=\"je-ai-preview-actions\"><button type=\"button\" class=\"page-po__btn-primary\" id=\"jeAiApplyPreview\">OK - Copy to Lines</button><button type=\"button\" class=\"page-po__btn-secondary\" id=\"jeAiCancelPreview\">Cancel Preview</button></div></div>";
+      }
+      jeAiSuggestions.innerHTML = html;
+    }
+
+    function applyAiPreview() {
+      if (!pendingAiEntry) return;
+      const narrationInput = journalForm ? journalForm.querySelector("input[name='narration']") : null;
+      if (narrationInput) narrationInput.value = pendingAiEntry.narration || "";
+      if (pendingAiEntry.costCenter) setInput(journalForm, "input[name='default_cost_center']", pendingAiEntry.costCenter);
+      if (pendingAiEntry.project) setInput(journalForm, "input[name='default_project']", pendingAiEntry.project);
+      clearJournalRows();
+      pendingAiEntry.lines.forEach(function (line, idx) {
+        setJournalLine(idx, line.accountRow, line.debit, line.credit, line.remarks, line.accountCode, line.accountLabel);
+      });
+      clearJournalAlert();
+      aiOutput({
+        accounts: pendingAiEntry.summary.accounts,
+        tax: pendingAiEntry.summary.tax,
+        duplicate: "Preview copied to journal lines.",
+        unusual: pendingAiEntry.summary.unusual,
+        previous: pendingAiEntry.summary.previous
+      });
+      pendingAiEntry = null;
+    }
+
+    function _buildAiPreview(text, amount, vatRate, vatInclusive, historyLines, learnedPattern) {
+      const vatAccount = vatRate > 0 ? suggestVatAccount() : null;
+      const narration = text.charAt(0).toUpperCase() + text.slice(1);
+      const baseAmount = amount && vatInclusive ? amount / (1 + vatRate) : amount;
+      const vatAmount = amount && vatRate ? (vatInclusive ? amount - baseAmount : amount * vatRate) : 0;
+      const creditAmount = amount ? (vatInclusive ? amount : amount + vatAmount) : 0;
+      let previewLines = [];
+      let sourceLabel = "";
+
+      if (historyLines && historyLines.length >= 2) {
+        // Use DB history lines – scale amounts to current amount
+        const debitTotal = historyLines.reduce(function (s, l) { return s + Math.max(0, Number(l.debit || 0)); }, 0);
+        const creditTotal = historyLines.reduce(function (s, l) { return s + Math.max(0, Number(l.credit || 0)); }, 0);
+        previewLines = historyLines.map(function (line) {
+          const row = chartAccountByCode(line.account_code);
+          const debit = amount && line.debit > 0 && debitTotal > 0 ? amount * (line.debit / debitTotal) : Number(line.debit || 0);
+          const credit = amount && line.credit > 0 && creditTotal > 0 ? amount * (line.credit / creditTotal) : Number(line.credit || 0);
+          const histName = String(line.account_name || "").trim();
+          const label = aiAccountLabel(row)
+            || (line.account_code && histName ? line.account_code + " — " + histName : "")
+            || (line.account_code ? line.account_code + (line.party_code ? " (" + line.party_code + ")" : "") : "unknown");
+          return { accountRow: row, accountCode: line.account_code, accountLabel: label, debit: debit, credit: credit, remarks: line.remarks || narration };
+        });
+        sourceLabel = "DB_HISTORY";
+      } else if (learnedPattern && Array.isArray(learnedPattern.lines) && learnedPattern.lines.length) {
+        // Use localStorage learned pattern
+        const debitTotal = learnedPattern.lines.reduce(function (s, l) { return s + Math.max(0, Number(l.debit || 0)); }, 0);
+        const creditTotal = learnedPattern.lines.reduce(function (s, l) { return s + Math.max(0, Number(l.credit || 0)); }, 0);
+        previewLines = learnedPattern.lines.map(function (line) {
+          const row = chartAccountByCode(line.accountCode);
+          const debit = amount && line.debit > 0 && debitTotal > 0 ? amount * (line.debit / debitTotal) : Number(line.debit || 0);
+          const credit = amount && line.credit > 0 && creditTotal > 0 ? amount * (line.credit / creditTotal) : Number(line.credit || 0);
+          return { accountRow: row, accountLabel: aiAccountLabel(row) || line.accountDisplay || line.accountCode, debit: debit, credit: credit, remarks: narration };
+        });
+        sourceLabel = "LOCAL_MEMORY";
+      } else {
+        // Rule-based fallback
+        const debitAccount = suggestDebitAccount(text);
+        const creditAccount = suggestCreditAccount(text);
+        previewLines = [{ accountRow: debitAccount, accountLabel: aiAccountLabel(debitAccount), debit: baseAmount, credit: 0, remarks: narration }];
+        if (vatAmount > 0) {
+          previewLines.push({ accountRow: vatAccount, accountLabel: aiAccountLabel(vatAccount), debit: vatAmount, credit: 0, remarks: "Input VAT / tax" });
+        }
+        previewLines.push({ accountRow: creditAccount, accountLabel: aiAccountLabel(creditAccount), debit: 0, credit: creditAmount, remarks: narration });
+        sourceLabel = "RULE_BASED";
+      }
+
+      const debitAccount2 = (previewLines.find(function (l) { return l.debit > 0; }) || {}).accountRow || null;
+      const creditAccount2 = (previewLines.find(function (l) { return l.credit > 0; }) || {}).accountRow || null;
+      const warnings = [];
+      if (!amount) warnings.push("Amount was not detected, please enter debit/credit values manually.");
+      if (!debitAccount2 || !creditAccount2) warnings.push("One or more accounts could not be matched from Chart of Accounts.");
+      if (amount > 100000) warnings.push("High value transaction, review approval/supporting documents.");
+      const currency = detectAiCurrency(text);
+      const projectMatch = text.match(/\bproject\s+([a-z0-9_-]+)/i);
+      const costCenter = /\b(office|admin|rent|electricity|utility)\b/i.test(text) ? "ADMIN" : "";
+      const previousNote = sourceLabel === "DB_HISTORY" ? "Suggestion from posted journal history — accounts scaled to entered amount."
+        : sourceLabel === "LOCAL_MEMORY" ? ("Matched previous AI posting pattern: " + (learnedPattern && learnedPattern.text || ""))
+        : ((currency ? "Currency detected: " + currency + ". " : "") + (projectMatch ? "Project suggested: " + projectMatch[1].toUpperCase() + ". " : "") + (costCenter ? "Cost center suggested: " + costCenter + "." : "No cost center/project detected."));
+      const summary = {
+        accounts: "Debit: " + (aiAccountLabel(debitAccount2) || "not found") + (vatAmount > 0 ? " | VAT: " + (aiAccountLabel(vatAccount) || "not found") : "") + " | Credit: " + (aiAccountLabel(creditAccount2) || "not found"),
+        tax: vatRate ? ((vatRate * 100).toFixed(2).replace(".00", "") + "% VAT " + (vatInclusive ? "included" : "added") + ". VAT amount: " + vatAmount.toFixed(2)) : "No VAT/tax detected.",
+        duplicate: "Review the voucher list for same amount/date before posting.",
+        unusual: warnings.length ? warnings.join(" ") : "Entry looks normal. Please review before posting.",
+        previous: previousNote
+      };
+      return {
+        narration: narration,
+        costCenter: costCenter,
+        project: projectMatch ? projectMatch[1].toUpperCase() : "",
+        lines: previewLines,
+        summary: summary
+      };
+    }
+
+    function pickBestHistoryItem(items) {
+      if (!items || !items.length) return null;
+      let best = null;
+      let bestScore = -1;
+      items.forEach(function (it) {
+        const sc = Number(it.match_score || 0);
+        const lines = it.lines || [];
+        if (lines.length < 2) return;
+        if (sc > bestScore) {
+          best = it;
+          bestScore = sc;
+        }
+      });
+      return bestScore >= 25 ? best : null;
+    }
+
+    function generateAiEntry() {
+      const text = aiQueryText();
+      if (!text) {
+        aiOutput({ unusual: "Type a transaction first." });
+        if (jeAiText) jeAiText.focus();
+        return;
+      }
+      const amount = parseAiAmount(text);
+      const vatRate = detectAiVatRate(text);
+      const vatInclusive = /\b(including|inclusive|incl\.?)\b/i.test(text) && vatRate > 0;
+
+      if (jeAiSuggestions) jeAiSuggestions.innerHTML = "<div class='je-ai-card'><b>AI Accounting Assistant</b><span>Searching posted journal history…</span></div>";
+
+      const apiUrl = {{ url_for('accounts.journal_entry_history_suggest') | tojson }} + "?q=" + encodeURIComponent(text) + "&limit=8";
+      fetch(apiUrl, { credentials: "same-origin" })
+        .then(function (resp) {
+          if (!resp.ok) throw new Error("history suggest HTTP " + resp.status);
+          return resp.json();
+        })
+        .then(function (data) {
+          if (!data || !data.success) throw new Error((data && data.error) || "history suggest failed");
+          const historyVoucher = (data.success && data.items) ? pickBestHistoryItem(data.items) : null;
+          const historyLines = historyVoucher && historyVoucher.lines ? historyVoucher.lines : null;
+          const learnedPattern = historyLines ? null : findAiMemory(text);
+          const entry = _buildAiPreview(text, amount, vatRate, vatInclusive, historyLines, learnedPattern);
+          if (historyVoucher) {
+            entry.summary.previous = "Matched posted journal " + historyVoucher.voucher_no
+              + " (" + (historyVoucher.voucher_date || "") + ", score " + (historyVoucher.match_score || "") + ")"
+              + " — " + (historyVoucher.narration || "") + ". Same accounts as your prior posting; amounts scaled to this entry.";
+          } else if (learnedPattern) {
+            entry.summary.previous = "Matched your previous AI posting pattern: " + (learnedPattern.text || "");
+          } else {
+            entry.summary.previous = "No close match in posted journal history; accounts chosen from chart rules. Include keywords in narration when you post (e.g. office rent) so the next suggestion can find it.";
+          }
+          pendingAiEntry = entry;
+          aiOutput(Object.assign({}, entry.summary, { preview: entry.lines }));
+          clearJournalAlert();
+        })
+        .catch(function () {
+          const learnedPattern = findAiMemory(text);
+          const entry = _buildAiPreview(text, amount, vatRate, vatInclusive, null, learnedPattern);
+          entry.summary.previous = "Could not load journal history; using saved patterns or chart rules.";
+          pendingAiEntry = entry;
+          aiOutput(Object.assign({}, entry.summary, { preview: entry.lines }));
+          clearJournalAlert();
+        });
+    }
+
+    function addJournalRow() {
+      const row = tbody.rows[0];
+      const clone = row.cloneNode(true);
+      clone.querySelectorAll("input").forEach((input) => {
+        if (input.name && input.name.indexOf("remarks") >= 0) { input.value = ""; return; }
+        if (input.name && (input.name.indexOf("cost_center") >= 0 || input.name.indexOf("department") >= 0 || input.name.indexOf("project") >= 0)) { input.value = ""; return; }
+        if (input.classList && input.classList.contains("je-party-type")) { input.value = ""; return; }
+        if (input.classList && input.classList.contains("je-party-code")) { input.value = ""; return; }
+        if (input.classList && input.classList.contains("je-account-code")) { input.value = ""; return; }
+        if (input.classList && input.classList.contains("je-account-display")) { input.value = ""; return; }
+        if (input.name && (input.name.indexOf("debit") >= 0 || input.name.indexOf("credit") >= 0)) { input.value = "0"; return; }
+        input.value = "";
+      });
+      clone.querySelectorAll(".global-lookup, .odoo-lookup").forEach(function (el) {
+        delete el.dataset.odooLookupInit;
+        delete el.dataset.jeAcctBound;
+      });
+      clone.querySelectorAll("[data-je-nav-bound]").forEach(function (el) {
+        delete el.dataset.jeNavBound;
+      });
+      clone.querySelectorAll("[data-je-amount-bound]").forEach(function (el) {
+        delete el.dataset.jeAmountBound;
+      });
+      clone.querySelectorAll("[data-je-remarks-bound]").forEach(function (el) {
+        delete el.dataset.jeRemarksBound;
+      });
+      delete clone.dataset.jeManualAmount;
+      delete clone.dataset.jeManualRemarks;
+      clone.querySelectorAll(".global-lookup__clear, .odoo-lookup__clear").forEach(function (btn) { btn.hidden = true; });
+      tbody.appendChild(clone);
+      bindJournalLookups(clone);
+      return clone;
+    }
+
+    function applyInitialJournalLines() {
+      if (!Array.isArray(initialJournalLines) || !initialJournalLines.length) return;
+      while (tbody.rows.length < Math.max(2, initialJournalLines.length)) addJournalRow();
+      initialJournalLines.forEach(function (line, idx) {
+        const row = tbody.rows[idx];
+        if (!row) return;
+        setInput(row, ".je-account-code", line.account_code || "");
+        setInput(row, ".je-account-display", line.account_display || line.account_code || "");
+        setInput(row, ".je-party-type", line.party_type || "");
+        setInput(row, ".je-party-code", line.party_code || "");
+        setInput(row, "input[name='remarks[]']", line.remarks || "");
+        syncRowLookup(row, "cost_center[]", line.cost_center || "", line.cost_center || "");
+        syncRowLookup(row, "department[]", line.department || "", line.department || "");
+        syncRowLookup(row, "project[]", line.project || "", line.project || "");
+        setInput(row, "input[name='debit[]']", line.debit || "0");
+        setInput(row, "input[name='credit[]']", line.credit || "0");
+      });
+    }
+
+    applyInitialJournalLines();
+    bindJournalLookups(journalForm);
+    bindJournalNarrationCopy();
+
+    if (addBtn) {
+      addBtn.addEventListener("click", function () {
+        addJournalRow();
+      });
+    }
+
+    if (jeAiGenerate) {
+      jeAiGenerate.addEventListener("click", generateAiEntry);
+    }
+    if (jeAiClear) {
+      jeAiClear.addEventListener("click", function () {
+        if (jeAiText) {
+          jeAiText.value = "";
+          jeAiText.focus();
+        }
+        pendingAiEntry = null;
+        aiOutput({});
+      });
+    }
+
+    /* ---- Account picker popup (GL + supplier + customer) ---- */
+    const jeAccLookupUrl = {{ url_for('api.global_lookup', kind='gl_account')|tojson }};
+    let jeAccActiveRow = null;
+    let jeAccTab = "all";
+    let jeAccRows = [];
+    let jeAccSearchTimer = null;
+    let jeAccFetchSeq = 0;
+    let jeAccUiBound = false;
+
+    function jeAccEls() {
+      return {
+        modal: document.getElementById("jeAccountModal"),
+        search: document.getElementById("jeAccPickerSearch"),
+        body: document.getElementById("jeAccPickerBody"),
+      };
+    }
+
+    function jeAccEsc(s) {
+      return String(s == null ? "" : s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function jeAccLocalGlRows(q) {
+      const t = String(q || "").trim().toLowerCase();
+      const out = [];
+      Object.keys(jeAccountMetaByCode).forEach(function (code) {
+        const m = jeAccountMetaByCode[code] || {};
+        if (String(m.status || "ACTIVE").toUpperCase() === "INACTIVE") return;
+        const name = String(m.name || "");
+        const typ = String(m.accountType || m.type || "");
+        if (t) {
+          const hay = (code + " " + name + " " + typ).toLowerCase();
+          if (hay.indexOf(t) < 0) return;
+        }
+        const label = name ? (code + " — " + name + " (GL)") : (code + " (GL)");
+        out.push({
+          code: code,
+          name: name,
+          label: label,
+          kind: "GL",
+          party_type: "",
+          party_code: "",
+          account_type: typ,
+        });
+      });
+      out.sort(function (a, b) {
+        return String(a.code).localeCompare(String(b.code), undefined, { numeric: true });
+      });
+      return out;
+    }
+
+    function jeAccRowKey(r) {
+      const kind = String((r && r.kind) || (r && r.party_type) || "GL").toUpperCase();
+      const party = String((r && r.party_code) || "").trim();
+      const code = String((r && r.code) || "").trim();
+      return kind + "|" + party + "|" + code;
+    }
+
+    function jeAccKindBadge(kind) {
+      const k = String(kind || "GL").toUpperCase();
+      if (k === "SUPPLIER") return '<span class="je-acc-kind je-acc-kind--sup">SUP</span>';
+      if (k === "CUSTOMER") return '<span class="je-acc-kind je-acc-kind--cust">CUST</span>';
+      return '<span class="je-acc-kind">GL</span>';
+    }
+
+    function jeAccFmtBalance(n) {
+      const v = Number(n);
+      if (!Number.isFinite(v)) return "—";
+      const abs = Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return v < 0 ? ("-" + abs) : abs;
+    }
+
+    function jeAccBalanceForRow(r) {
+      const kind = String((r && (r.kind || r.party_type)) || "GL").toUpperCase();
+      if (kind === "SUPPLIER" || kind === "CUSTOMER") {
+        const party = jeNormPartyKey((r && r.party_code) || "");
+        if (!party) return null;
+        const map = jePartyBalanceByKind[kind] || {};
+        if (Object.prototype.hasOwnProperty.call(map, party)) return map[party];
+        return 0;
+      }
+      const code = String((r && r.code) || "").trim().toUpperCase();
+      if (!code) return null;
+      if (Object.prototype.hasOwnProperty.call(jeAccountBalanceByCode, code)) {
+        return jeAccountBalanceByCode[code];
+      }
+      return 0;
+    }
+
+    function renderJeAccPickerRows(list) {
+      const els = jeAccEls();
+      if (!els.body) return;
+      jeAccRows = list || [];
+      if (!jeAccRows.length) {
+        els.body.innerHTML = '<tr><td colspan="5" class="muted">No accounts found.</td></tr>';
+        return;
+      }
+      els.body.innerHTML = jeAccRows.map(function (r, idx) {
+        const kind = String(r.kind || r.party_type || "GL").toUpperCase() || "GL";
+        const code = String(r.code || "");
+        const name = String(r.name || "");
+        const party = String(r.party_code || "").trim();
+        const typ = String(r.account_type || "").trim();
+        const bal = jeAccBalanceForRow(r);
+        const balCls = "je-acc-bal" + (bal != null && bal < 0 ? " is-neg" : "");
+        const balTxt = bal == null ? "—" : jeAccFmtBalance(bal);
+        const sub = party
+          ? (kind === "SUPPLIER" ? "Supplier " : kind === "CUSTOMER" ? "Customer " : "") + party + (typ ? " · " + typ : "")
+          : (typ || "—");
+        return (
+          '<tr data-idx="' + idx + '" tabindex="0">' +
+          "<td>" + jeAccKindBadge(kind) + "</td>" +
+          "<td><strong>" + jeAccEsc(code) + "</strong></td>" +
+          "<td>" + jeAccEsc(name || r.label || code) +
+          (party ? '<div style="font-size:11px;color:#64748b;margin-top:2px;">' + jeAccEsc(sub) + "</div>" : "") +
+          "</td>" +
+          "<td>" + jeAccEsc(typ || "—") + "</td>" +
+          '<td class="' + balCls + '">' + jeAccEsc(balTxt) + "</td>" +
+          "</tr>"
+        );
+      }).join("");
+    }
+
+    function applyJeAccountSelection(row) {
+      if (!jeAccActiveRow || !row) return;
+      const lookup = jeAccActiveRow.querySelector(".je-account-lookup");
+      const codeInput = jeAccActiveRow.querySelector(".je-account-code");
+      const display = jeAccActiveRow.querySelector(".je-account-display");
+      const clearBtn = lookup ? lookup.querySelector(".global-lookup__clear, .odoo-lookup__clear") : null;
+      const code = String(row.code || "");
+      const label = String(row.label || (code + (row.name ? " — " + row.name : "")) || "");
+      if (codeInput) codeInput.value = code;
+      if (display) display.value = label;
+      if (clearBtn) clearBtn.hidden = !code;
+      if (lookup) {
+        lookup.dispatchEvent(new CustomEvent("global-lookup:select", {
+          bubbles: true,
+          detail: { code: code, label: label, row: row },
+        }));
+      }
+    }
+
+    function closeJeAccPicker() {
+      const els = jeAccEls();
+      if (els.modal) els.modal.classList.add("hidden");
+      jeAccActiveRow = null;
+    }
+
+    function setJeAccTab(tab) {
+      const els = jeAccEls();
+      jeAccTab = tab || "all";
+      if (els.modal) {
+        els.modal.querySelectorAll(".je-acc-picker-tabs button").forEach(function (btn) {
+          btn.classList.toggle("is-active", btn.getAttribute("data-tab") === jeAccTab);
+        });
+      }
+      refreshJeAccPicker();
+    }
+
+    function refreshJeAccPicker() {
+      const els = jeAccEls();
+      const q = els.search ? els.search.value : "";
+      const needApi = jeAccTab === "all" || jeAccTab === "supplier" || jeAccTab === "customer";
+      const localGl = (jeAccTab === "all" || jeAccTab === "gl") ? jeAccLocalGlRows(q) : [];
+
+      if (!needApi || jeAccTab === "gl") {
+        renderJeAccPickerRows(localGl.slice(0, 400));
+        return;
+      }
+
+      // Show GL immediately so the popup is never blank while API loads.
+      if (jeAccTab === "all" && localGl.length) {
+        renderJeAccPickerRows(localGl.slice(0, 400));
+      } else if (els.body) {
+        els.body.innerHTML = '<tr><td colspan="5" class="muted">Searching…</td></tr>';
+      }
+
+      const seq = ++jeAccFetchSeq;
+      const url = jeAccLookupUrl + "?q=" + encodeURIComponent(String(q || "").trim()) + "&limit=30";
+      fetch(url, { credentials: "same-origin", headers: { Accept: "application/json" } })
+        .then(function (res) {
+          if (!res.ok) throw new Error("lookup " + res.status);
+          return res.json();
+        })
+        .then(function (data) {
+          if (seq !== jeAccFetchSeq) return;
+          const apiRows = (data && data.success && Array.isArray(data.rows)) ? data.rows : [];
+          const merged = [];
+          const seen = {};
+          function push(r) {
+            if (!r) return;
+            const kind = String(r.kind || r.party_type || "GL").toUpperCase();
+            if (jeAccTab === "supplier" && kind !== "SUPPLIER") return;
+            if (jeAccTab === "customer" && kind !== "CUSTOMER") return;
+            if (jeAccTab === "gl" && kind !== "GL") return;
+            const key = jeAccRowKey(r);
+            if (seen[key]) return;
+            seen[key] = 1;
+            merged.push(r);
+          }
+          if (jeAccTab === "all" || jeAccTab === "gl") {
+            localGl.forEach(push);
+          }
+          apiRows.forEach(push);
+          renderJeAccPickerRows(merged.slice(0, 400));
+        })
+        .catch(function () {
+          if (seq !== jeAccFetchSeq) return;
+          if (localGl.length) {
+            renderJeAccPickerRows(localGl.slice(0, 400));
+          } else if (els.body) {
+            els.body.innerHTML = '<tr><td colspan="5" class="muted">Could not load accounts. Try again or type in the Account field.</td></tr>';
+          }
+        });
+    }
+
+    function bindJeAccPickerUi() {
+      if (jeAccUiBound) return;
+      const els = jeAccEls();
+      if (!els.modal) return;
+      jeAccUiBound = true;
+      els.modal.addEventListener("click", function (e) {
+        if (
+          e.target.classList.contains("modal__overlay") ||
+          (e.target.dataset && e.target.dataset.close === "jeAccountModal") ||
+          e.target.classList.contains("modal__close")
+        ) {
+          closeJeAccPicker();
+        }
+      });
+      els.modal.querySelectorAll(".je-acc-picker-tabs button").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          setJeAccTab(btn.getAttribute("data-tab") || "all");
+        });
+      });
+      if (els.search) {
+        els.search.addEventListener("input", function () {
+          if (jeAccSearchTimer) clearTimeout(jeAccSearchTimer);
+          jeAccSearchTimer = setTimeout(refreshJeAccPicker, 180);
+        });
+        els.search.addEventListener("keydown", function (e) {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            closeJeAccPicker();
+            return;
+          }
+          if (e.key === "ArrowDown" && els.body) {
+            e.preventDefault();
+            const first = els.body.querySelector("tr[data-idx]");
+            if (first) first.focus();
+          }
+        });
+      }
+      if (els.body) {
+        els.body.addEventListener("click", function (e) {
+          const tr = e.target.closest("tr[data-idx]");
+          if (!tr) return;
+          const idx = parseInt(tr.getAttribute("data-idx"), 10);
+          const row = jeAccRows[idx];
+          if (!row) return;
+          applyJeAccountSelection(row);
+          closeJeAccPicker();
+        });
+        els.body.addEventListener("keydown", function (e) {
+          const tr = e.target.closest("tr[data-idx]");
+          if (!tr) return;
+          if (e.key === "Enter") {
+            e.preventDefault();
+            tr.click();
+            return;
+          }
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            const next = tr.nextElementSibling;
+            if (next) next.focus();
+            return;
+          }
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            const prev = tr.previousElementSibling;
+            if (prev) prev.focus();
+            else if (els.search) els.search.focus();
+          }
+        });
+      }
+      document.addEventListener("keydown", function (e) {
+        const modal = jeAccEls().modal;
+        if (e.key === "Escape" && modal && !modal.classList.contains("hidden")) {
+          closeJeAccPicker();
+        }
+      });
+    }
+
+    function openJeAccPicker(tr) {
+      bindJeAccPickerUi();
+      const els = jeAccEls();
+      if (!els.modal || !tr) return;
+      jeAccActiveRow = tr;
+      jeAccTab = "all";
+      els.modal.querySelectorAll(".je-acc-picker-tabs button").forEach(function (btn) {
+        btn.classList.toggle("is-active", btn.getAttribute("data-tab") === "all");
+      });
+      if (els.search) els.search.value = "";
+      els.modal.classList.remove("hidden");
+      refreshJeAccPicker();
+      setTimeout(function () {
+        const s = jeAccEls().search;
+        if (s) s.focus();
+      }, 0);
+    }
+
+    if (tbody) {
+      tbody.addEventListener("click", function (e) {
+        const btn = e.target && e.target.closest ? e.target.closest(".je-account-picker") : null;
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const tr = btn.closest("tr");
+        if (tr) openJeAccPicker(tr);
+      });
+      tbody.addEventListener("keydown", function (e) {
+        if (e.key !== "F1") return;
+        const inp = e.target && e.target.closest ? e.target.closest(".je-account-display") : null;
+        if (!inp) return;
+        e.preventDefault();
+        const tr = inp.closest("tr");
+        if (tr) openJeAccPicker(tr);
+      });
+    }
+    bindJeAccPickerUi();
+    if (jeAiSuggestions) {
+      jeAiSuggestions.addEventListener("click", function (e) {
+        if (e.target && e.target.id === "jeAiApplyPreview") {
+          applyAiPreview();
+        } else if (e.target && e.target.id === "jeAiCancelPreview") {
+          pendingAiEntry = null;
+          aiOutput({ duplicate: "Preview cancelled. Journal lines were not changed." });
+        }
+      });
+    }
+
+  })();
+</script>
+<script src="{{ url_for('static', filename='js/transaction_recording_client.js') }}?v=8"></script>
+{% endif %}
+<div class="modal hidden" id="jeSourcePickerModal" role="dialog" aria-modal="true" aria-labelledby="jeSourcePickerTitle">
+  <div class="modal__overlay" data-close="jeSourcePickerModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3 id="jeSourcePickerTitle">Select source document</h3>
+      <button type="button" class="modal__close" data-close="jeSourcePickerModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="search-field" style="width:100%;">
+        <input type="text" id="jeSourcePickerSearch" class="input" placeholder="Search source code or name…" autocomplete="off" style="width:100%;">
+      </div>
+      <div id="jeSourcePickerScroll">
+        <table id="jeSourcePickerTable">
+          <thead>
+            <tr><th>Code</th><th>Source document</th></tr>
+          </thead>
+          <tbody id="jeSourcePickerBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var params = new URLSearchParams(window.location.search);
+    var autoPdf = params.get('open_journal_voucher_pdf');
+    if (autoPdf) {
+      var pdfUrl = {{ url_for('accounts.journal_voucher_pdf', voucher_no='__VNO__')|tojson }}.replace('__VNO__', encodeURIComponent(autoPdf));
+      window.open(pdfUrl, '_blank', 'noopener');
+      params.delete('open_journal_voucher_pdf');
+      var next = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (next ? '?' + next : '') + window.location.hash);
+    }
+  })();
+</script>
+<script>
+(function () {
+  var OPTIONS = {{ (source_options or [])|tojson }};
+  if (!Array.isArray(OPTIONS)) OPTIONS = [];
+  OPTIONS = [{ id: 'all', label: 'All sources' }].concat(OPTIONS);
+
+  var modal = document.getElementById('jeSourcePickerModal');
+  var btn = document.getElementById('jeSourcePickerBtn');
+  var hidden = document.getElementById('je_source');
+  var labelEl = document.getElementById('jeSourcePickerLabel');
+  var searchEl = document.getElementById('jeSourcePickerSearch');
+  var tbody = document.getElementById('jeSourcePickerBody');
+  if (!modal || !btn || !hidden || !tbody) return;
+
+  function esc(s) {
+    var d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+
+  function currentId() {
+    return String(hidden.value || 'all').trim() || 'all';
+  }
+
+  function openModal() {
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    if (searchEl) {
+      searchEl.value = '';
+      setTimeout(function () { searchEl.focus(); }, 20);
+    }
+    renderRows('');
+  }
+
+  function closeModal() {
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+
+  function renderRows(term) {
+    var q = String(term || '').toLowerCase().trim();
+    var cur = currentId().toUpperCase();
+    var list = OPTIONS.filter(function (o) {
+      if (!q) return true;
+      var id = String(o.id || '').toLowerCase();
+      var label = String(o.label || '').toLowerCase();
+      return id.indexOf(q) >= 0 || label.indexOf(q) >= 0;
+    });
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="2" style="color:#94a3b8;text-align:center;padding:20px;">No matching sources.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = list.map(function (o) {
+      var id = String(o.id || '');
+      var label = String(o.label || id);
+      var sel = id.toUpperCase() === cur ? ' is-selected' : '';
+      return '<tr class="' + sel + '" data-id="' + esc(id) + '" data-label="' + esc(label) + '">' +
+        '<td><strong>' + esc(id === 'all' ? '—' : id) + '</strong></td>' +
+        '<td>' + esc(label) + '</td></tr>';
+    }).join('');
+  }
+
+  function pick(id, label) {
+    hidden.value = id || 'all';
+    if (labelEl) labelEl.textContent = label || (id === 'all' ? 'All sources' : id);
+    closeModal();
+  }
+
+  btn.addEventListener('click', function (e) {
+    e.preventDefault();
+    openModal();
+  });
+  modal.querySelectorAll('[data-close="jeSourcePickerModal"]').forEach(function (el) {
+    el.addEventListener('click', closeModal);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) closeModal();
+  });
+  if (searchEl) {
+    searchEl.addEventListener('input', function () { renderRows(searchEl.value); });
+  }
+  tbody.addEventListener('click', function (e) {
+    var tr = e.target.closest('tr[data-id]');
+    if (!tr) return;
+    pick(tr.getAttribute('data-id'), tr.getAttribute('data-label'));
+  });
+})();
+</script>
+<script>
+(function () {
+  var table = document.getElementById('jeRecentTable');
+  if (!table) return;
+  var tbody = table.querySelector('tbody');
+  if (!tbody) return;
+
+  function cellValue(row, key, type) {
+    var raw = row.getAttribute('data-' + key);
+    if (raw == null || raw === '') raw = '';
+    if (type === 'number') {
+      var n = parseFloat(String(raw).replace(/,/g, ''));
+      return isNaN(n) ? 0 : n;
+    }
+    return String(raw).toLowerCase();
+  }
+
+  function reindex() {
+    var rows = tbody.querySelectorAll('tr.je-data-row');
+    rows.forEach(function (tr, i) {
+      tr.setAttribute('data-sl', String(i + 1));
+      var sl = tr.querySelector('.je-sl');
+      if (sl) sl.textContent = String(i + 1);
+    });
+  }
+
+  table.querySelectorAll('thead th.sortable').forEach(function (th) {
+    th.addEventListener('click', function () {
+      var key = th.getAttribute('data-sort');
+      var type = th.getAttribute('data-sort-type') || 'text';
+      if (!key) return;
+      var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr.je-data-row'));
+      if (!rows.length) return;
+
+      var dir = th.getAttribute('data-sort-dir') === 'asc' ? 'desc' : 'asc';
+      table.querySelectorAll('thead th.sortable').forEach(function (h) {
+        h.classList.remove('sort-asc', 'sort-desc');
+        h.removeAttribute('data-sort-dir');
+        var ind = h.querySelector('.sort-indicator');
+        if (ind) ind.textContent = '';
+      });
+      th.setAttribute('data-sort-dir', dir);
+      th.classList.add(dir === 'asc' ? 'sort-asc' : 'sort-desc');
+      var indicator = th.querySelector('.sort-indicator');
+      if (indicator) indicator.textContent = dir === 'asc' ? '▲' : '▼';
+
+      rows.sort(function (a, b) {
+        var av = cellValue(a, key, type);
+        var bv = cellValue(b, key, type);
+        var cmp = 0;
+        if (type === 'number') cmp = av - bv;
+        else cmp = av < bv ? -1 : av > bv ? 1 : 0;
+        return dir === 'asc' ? cmp : -cmp;
+      });
+      rows.forEach(function (r) { tbody.appendChild(r); });
+      if (key !== 'sl') reindex();
+    });
+  });
+})();
+</script>
+{% endblock %}

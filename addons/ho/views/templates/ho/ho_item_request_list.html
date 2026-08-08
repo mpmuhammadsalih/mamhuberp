@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body { background: #fff !important; }
+  .ir-wrap { width: 100%; max-width: none; margin: 0; }
+  .ir-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 12px; }
+  .ir-top-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .ir-refresh-slot .list-refresh-toolbar { margin-left: 0 !important; }
+  .ir-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+  .ir-tab {
+    text-decoration: none;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: #495057;
+    background: #fff;
+    font-size: 13px;
+  }
+  .ir-tab.active { background: #e7f1ff; border-color: #0d6efd; color: #0d6efd; font-weight: 600; }
+  .ir-table-wrap { border: 1px solid #dee2e6; border-radius: 6px; overflow: auto; max-height: 68vh; }
+  #irTable { width: 100%; min-width: 980px; border-collapse: collapse; font-size: 13px; }
+  #irTable th, #irTable td { border-bottom: 1px solid #dee2e6; padding: 8px 10px; }
+  #irTable thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; }
+</style>
+<div class="page-po ir-wrap nexa-list-page">
+  <div class="ir-top">
+    <div>
+      <h1 class="page-po__title">HO - Item Request</h1>
+      <p class="page-po__muted">Review item requests by status and open request form.</p>
+      {% if ir_branch_scoped %}
+      <p class="page-po__muted" style="margin-top: 6px; font-weight: 500;">
+        Showing requests for your branch only (<code>{{ ir_branch_scope_code }}</code>).
+      </p>
+      {% endif %}
+    </div>
+    <div class="ir-top-actions">
+      <div class="ir-refresh-slot">{% include 'includes/list_refresh_bar.html' %}</div>
+      <a href="{{ url_for('ho.item_request_form') }}" class="page-po__btn-primary">New Request</a>
+    </div>
+  </div>
+
+  <div class="ir-tabs">
+    <a class="ir-tab {% if selected_tab == 'pending' %}active{% endif %}" href="{{ url_for('ho.item_request', tab='pending') }}">
+      Pending ({{ counts.pending or 0 }})
+    </a>
+    <a class="ir-tab {% if selected_tab == 'approved' %}active{% endif %}" href="{{ url_for('ho.item_request', tab='approved') }}">
+      Approved ({{ counts.approved or 0 }})
+    </a>
+    <a class="ir-tab {% if selected_tab == 'rejected' %}active{% endif %}" href="{{ url_for('ho.item_request', tab='rejected') }}">
+      Rejected ({{ counts.rejected or 0 }})
+    </a>
+  </div>
+
+  <div class="ir-table-wrap">
+    <table id="irTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Item Code</th>
+          <th>Barcode</th>
+          <th>Item Name</th>
+          <th>Branch</th>
+          <th>Branch Code</th>
+          <th>Status</th>
+          <th>Created By</th>
+          <th>Created Date</th>
+          <th>Updated By</th>
+          <th>Updated Date</th>
+          <th>Reject note</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+          {% set _bkey = (r.branch or '')|upper %}
+          {% set _binfo = branch_info.get(_bkey, {}) %}
+          {% set _st = (r.status or '')|upper %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ r.itemcode or '' }}</td>
+            <td>{{ r.manufacturerid or '' }}</td>
+            <td>{{ r.itemname or '' }}</td>
+            <td>{{ _binfo.get('name') or r.branch or '' }}</td>
+            <td>{{ _binfo.get('dbcode') or '' }}</td>
+            <td>{{ r.status or '' }}</td>
+            <td>{{ r.createdby or '' }}</td>
+            <td>{{ r.createddate or '' }}</td>
+            <td>{{ r.updatedby or '' }}</td>
+            <td>{{ r.updateddate or '' }}</td>
+            <td class="muted">{{ r.rejectcomment or '' }}</td>
+            <td>
+              <a class="page-po__btn-secondary" style="padding: 2px 8px; font-size: 12px;"
+                 href="{{ url_for('ho.item_request_form', item_code=r.itemcode) }}">Open</a>
+              {% if ir_allow_convert_item and _st == 'PENDING' %}
+              <button
+                type="button"
+                class="page-po__btn-primary btnConvertItem"
+                data-itemcode="{{ r.itemcode }}"
+                style="padding: 2px 8px; font-size: 12px; margin-left: 6px;"
+              >Convert Item</button>
+              {% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="13" class="muted">No item requests found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<script>
+(function() {
+  const listBase = {{ url_for('ho.item_request')|tojson }};
+  document.querySelectorAll('.btnConvertItem').forEach((btn) => {
+    btn.addEventListener('click', async function() {
+      const code = this.dataset.itemcode || '';
+      if (!code) return;
+      if (!confirm('Convert this request into Central Itemmaster?')) return;
+      const oldText = this.textContent;
+      this.disabled = true;
+      this.textContent = 'Converting...';
+      try {
+        const res = await fetch(`/ho/item-request/convert/${encodeURIComponent(code)}`, {
+          method: 'POST',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error((data && (data.error || data.message)) || `Convert failed (HTTP ${res.status})`);
+        }
+        if (data.redirect_url) {
+          window.location.href = data.redirect_url;
+          return;
+        }
+        alert(data.message || 'Converted successfully.');
+        window.location.href = `${listBase}?tab=pending`;
+      } catch (e) {
+        alert(`Error: ${e.message || e}`);
+      } finally {
+        this.disabled = false;
+        this.textContent = oldText;
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

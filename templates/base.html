@@ -1,0 +1,1611 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title or "Nexus Erp" }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/font/bootstrap-icons.min.css') }}?v=1.11.3" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=29" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/nexa_list_page.css') }}?v=6" />
+    {% block extra_css %}{% endblock %}
+  </head>
+  <body>
+    <script>
+      (function () {
+        function nexaScrollbarPxFromEl(el) {
+          if (!el) return 0;
+          return Math.max(0, el.offsetWidth - el.clientWidth);
+        }
+        function nexaSyncScrollbarWidth() {
+          try {
+            var content = document.querySelector(".layout .content");
+            var w = nexaScrollbarPxFromEl(content);
+            if (!w) {
+              var root = document.documentElement;
+              w = Math.max(0, window.innerWidth - root.clientWidth);
+            }
+            document.documentElement.style.setProperty("--nexa-scrollbar-width", w + "px");
+          } catch (e) {}
+        }
+        nexaSyncScrollbarWidth();
+        window.addEventListener("resize", nexaSyncScrollbarWidth);
+        document.addEventListener("visibilitychange", function () {
+          if (!document.hidden) nexaSyncScrollbarWidth();
+        });
+        if (typeof requestAnimationFrame === "function") {
+          requestAnimationFrame(function () {
+            nexaSyncScrollbarWidth();
+          });
+        }
+        document.addEventListener("DOMContentLoaded", function () {
+          nexaSyncScrollbarWidth();
+          var content = document.querySelector(".layout .content");
+          if (content && typeof ResizeObserver !== "undefined") {
+            var ro = new ResizeObserver(function () {
+              nexaSyncScrollbarWidth();
+            });
+            ro.observe(content);
+          }
+        });
+      })();
+    </script>
+    {% set _p = ((request.path | default('') | string | lower | replace('\\', '/'))).rstrip('/') %}
+    {% set _is_login = _p == '/auth/login' or _p.endswith('/auth/login') %}
+    {% set show_app_shell = session.get('user') and (not _is_login) %}
+    <script>
+      window.nexaToggleSidebar = function (ev) {
+        if (ev) {
+          if (ev.preventDefault) ev.preventDefault();
+          if (ev.stopPropagation) ev.stopPropagation();
+        }
+        var s = document.getElementById("sidebar");
+        if (!s) return;
+        var l = s.closest(".layout");
+        if (!l) l = document.querySelector(".layout");
+        if (!l) return;
+        s.classList.toggle("collapsed");
+        l.classList.toggle("sidebar-collapsed");
+      };
+    </script>
+    <!-- Global loading overlay (use showLoadingOverlay() / hideLoadingOverlay() from any page) -->
+    <div id="globalLoadingOverlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 99999; align-items: center; justify-content: center; flex-direction: column; gap: 16px;">
+      <div id="globalLoadingSpinner" class="global-loading-spinner" style="width: 56px; height: 56px; border: 4px solid #e2e8f0; border-top-color: #3b82f6; border-radius: 50%; animation: global-loading-spin 0.8s linear infinite;"></div>
+      <p id="globalLoadingOverlayText" style="margin: 0; color: #fff; font-weight: 600; font-size: 16px;">Loading…</p>
+      <div id="globalLoadingProgressWrap" style="display: none; width: min(420px, 88vw);">
+        <div style="background: #334155; border-radius: 999px; height: 10px; overflow: hidden;">
+          <div id="globalLoadingProgressBar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #3b82f6, #22c55e); transition: width 0.25s ease;"></div>
+        </div>
+        <p id="globalLoadingProgressDetail" style="margin: 8px 0 0; color: #e2e8f0; font-size: 13px; text-align: center;"></p>
+      </div>
+    </div>
+    <style>
+      @keyframes global-loading-spin { to { transform: rotate(360deg); } }
+    </style>
+    <script>
+      window.showLoadingOverlay = function(message, opts) {
+        opts = opts || {};
+        var el = document.getElementById('globalLoadingOverlay');
+        var text = document.getElementById('globalLoadingOverlayText');
+        var progressWrap = document.getElementById('globalLoadingProgressWrap');
+        var bar = document.getElementById('globalLoadingProgressBar');
+        var detail = document.getElementById('globalLoadingProgressDetail');
+        var spinner = document.getElementById('globalLoadingSpinner');
+        if (text) text.textContent = message || 'Loading…';
+        if (opts.progress && progressWrap && bar) {
+          var cur = Number(opts.progress.current) || 0;
+          var tot = Number(opts.progress.total) || 0;
+          var pct = tot > 0 ? Math.min(100, Math.round((cur * 100) / tot)) : 0;
+          progressWrap.style.display = 'block';
+          bar.style.width = pct + '%';
+          if (detail) detail.textContent = (opts.progress.detail || (cur + ' of ' + tot + ' items'));
+          if (spinner) spinner.style.display = 'none';
+        } else {
+          if (progressWrap) progressWrap.style.display = 'none';
+          if (bar) bar.style.width = '0%';
+          if (detail) detail.textContent = '';
+          if (spinner) spinner.style.display = 'block';
+        }
+        if (el) el.style.display = 'flex';
+      };
+      window.updateLoadingOverlayProgress = function(current, total, message, phase) {
+        var cur = Number(current) || 0;
+        var tot = Number(total) || 0;
+        var phaseLabel = phase ? String(phase) : 'Processing';
+        var msg = message || (phaseLabel + '…');
+        var detail = phaseLabel + ': ' + cur + ' of ' + tot + ' items';
+        window.showLoadingOverlay(msg, { progress: { current: cur, total: tot, detail: detail } });
+      };
+      window.hideLoadingOverlay = function() {
+        var el = document.getElementById('globalLoadingOverlay');
+        var progressWrap = document.getElementById('globalLoadingProgressWrap');
+        var bar = document.getElementById('globalLoadingProgressBar');
+        var detail = document.getElementById('globalLoadingProgressDetail');
+        var spinner = document.getElementById('globalLoadingSpinner');
+        if (progressWrap) progressWrap.style.display = 'none';
+        if (bar) bar.style.width = '0%';
+        if (detail) detail.textContent = '';
+        if (spinner) spinner.style.display = 'block';
+        if (el) el.style.display = 'none';
+      };
+    </script>
+
+    {% if show_app_shell %}
+    <script>
+    (function() {
+      window.__GLOBAL_SAVE_NONCE = {{ (global_save_nonce | default("")) | tojson }};
+      window.__POS_SAVE_NONCE = {{ (pos_save_nonce | default("")) | tojson }};
+      window.__TX_RECORDING_ENABLED__ = {{ tx_recording_enabled | default(true) | tojson }};
+      if (!window.__POS_SAVE_NONCE && window.__GLOBAL_SAVE_NONCE) {
+        window.__POS_SAVE_NONCE = window.__GLOBAL_SAVE_NONCE;
+      }
+
+      function _fetchUrlString(url) {
+        return typeof url === "string" ? url : (url && url.url ? url.url : "");
+      }
+
+      function _isPosBillingFetchUrl(url) {
+        var u = _fetchUrlString(url);
+        return u.indexOf("/pos-billing/") !== -1;
+      }
+
+      function _applySaveNonceFromResponse(url, j) {
+        if (!j || typeof j.save_nonce !== "string" || j.save_nonce === "") return;
+        if (_isPosBillingFetchUrl(url)) {
+          window.__POS_SAVE_NONCE = j.save_nonce;
+        } else {
+          window.__GLOBAL_SAVE_NONCE = j.save_nonce;
+        }
+      }
+
+      function _saveNonceForFetchUrl(url) {
+        if (_isPosBillingFetchUrl(url) && typeof window.__POS_SAVE_NONCE === "string" && window.__POS_SAVE_NONCE !== "") {
+          return window.__POS_SAVE_NONCE;
+        }
+        if (typeof window.__GLOBAL_SAVE_NONCE === "string" && window.__GLOBAL_SAVE_NONCE !== "") {
+          return window.__GLOBAL_SAVE_NONCE;
+        }
+        return "";
+      }
+      window.APP_DBKEY = {{ (app_dbkey or session.get("tenant_id") or "HO")|tojson }};
+      window.APP_LOCATION_CODE = {{ (app_locationcode if app_locationcode is not none else "")|tojson }};
+
+      document.addEventListener("submit", function(ev) {
+        var form = ev.target;
+        if (!form || form.tagName !== "FORM") return;
+        var m = (form.getAttribute("method") || "").toLowerCase();
+        if (m !== "post") return;
+        var h = form.querySelector('input[name="save_nonce"], input[data-save-nonce-placeholder]');
+        if (!h) {
+          h = document.createElement("input");
+          h.type = "hidden";
+          h.name = "save_nonce";
+          h.setAttribute("data-save-nonce-placeholder", "1");
+          form.appendChild(h);
+        }
+        if (typeof window.__GLOBAL_SAVE_NONCE === "string" && window.__GLOBAL_SAVE_NONCE !== "") {
+          h.value = window.__GLOBAL_SAVE_NONCE;
+        } else if (h.value && String(h.value).trim() !== "") {
+          window.__GLOBAL_SAVE_NONCE = String(h.value).trim();
+        }
+      }, true);
+
+      function getContentTypeFromHeaders(hdrs) {
+        if (!hdrs) return "";
+        if (typeof hdrs.get === "function") {
+          return (hdrs.get("Content-Type") || hdrs.get("content-type") || "") || "";
+        }
+        return (hdrs["Content-Type"] || hdrs["content-type"] || "") || "";
+      }
+
+      var _originalFetch = window.fetch;
+      window.fetch = function(url, opts) {
+        opts = opts || {};
+        var loadingMessage = opts.loadingMessage;
+        if (loadingMessage && typeof window.showLoadingOverlay === "function") {
+          window.showLoadingOverlay(loadingMessage);
+          delete opts.loadingMessage;
+        }
+        var method = (opts.method || "GET").toUpperCase();
+        if (method === "GET") {
+          var u = typeof url === "string" ? url : (url && url.url ? url.url : "");
+          var sameOrigin = u && (u.charAt(0) === "/" || (typeof window !== "undefined" && window.location && u.indexOf(window.location.origin) === 0));
+          if (sameOrigin) {
+            var sep = u.indexOf("?") >= 0 ? "&" : "?";
+            url = u + sep + "dbkey=" + encodeURIComponent(window.APP_DBKEY || "") + "&locationcode=" + encodeURIComponent(String(window.APP_LOCATION_CODE !== undefined && window.APP_LOCATION_CODE !== null ? window.APP_LOCATION_CODE : ""));
+          }
+        } else {
+          var ctype = getContentTypeFromHeaders(opts.headers);
+          var isJson = ctype.indexOf("application/json") !== -1;
+          if ((method === "POST" || method === "PUT" || method === "PATCH") && opts.body) {
+            if (typeof FormData !== "undefined" && opts.body instanceof FormData) {
+              try {
+                var formNonce = _saveNonceForFetchUrl(url);
+                if (formNonce) {
+                  opts.body.set("save_nonce", formNonce);
+                }
+              } catch (eForm) {}
+            } else if (typeof opts.body === "string" && isJson) {
+              try {
+                var data = JSON.parse(opts.body);
+                if (data && typeof data === "object" && data.constructor === Object) {
+                  data.dbkey = data.dbkey || window.APP_DBKEY;
+                  data.locationcode = data.locationcode !== undefined && data.locationcode !== null ? data.locationcode : window.APP_LOCATION_CODE;
+                  var bodyNonce = _saveNonceForFetchUrl(url);
+                  if (bodyNonce) {
+                    data.save_nonce = bodyNonce;
+                  }
+                  opts.body = JSON.stringify(data);
+                }
+              } catch (e) {}
+            }
+          }
+        }
+        var rawPromise = _originalFetch.call(window, url, opts);
+        var p = rawPromise.then(function(r) {
+          try {
+            var ct = "";
+            if (r && r.headers) {
+              if (typeof r.headers.get === "function") {
+                ct = r.headers.get("Content-Type") || "";
+              } else {
+                ct = r.headers["content-type"] || r.headers["Content-Type"] || "";
+              }
+            }
+            if ((ct || "").indexOf("application/json") === -1) {
+              return r;
+            }
+            return r.clone().json().then(function(j) {
+              _applySaveNonceFromResponse(url, j);
+              return r;
+            }).catch(function() {
+              return r;
+            });
+          } catch (e) {
+            return r;
+          }
+        });
+        if (loadingMessage && typeof window.hideLoadingOverlay === "function") {
+          p.finally(function() { window.hideLoadingOverlay(); });
+        }
+        return p;
+      };
+    })();
+    </script>
+    {% endif %}
+
+    <div class="layout {% if not show_app_shell %}layout--auth{% else %}sidebar-collapsed{% endif %}">
+      {% if show_app_shell %}
+        <aside class="sidebar collapsed" id="sidebar">
+          <div class="sidebar__brand">
+            <a class="sidebar__brand-link" href="{{ url_for('dashboard.dashboard') }}" title="Nexus Erp">
+              <span class="sidebar__brand-text">Nexus Erp</span>
+            </a>
+            <button class="sidebar__toggle" type="button" id="sidebarToggle" aria-label="Toggle menu">☰</button>
+          </div>
+          <nav class="sidebar__menu">
+            {% if has_any_menu_permission(['dashboard.dashboard', 'chat.chat_page']) %}
+              <button class="sidebar__section" type="button" data-menu="home-root" data-icon="HM">Home</button>
+              <div class="sidebar__submenu" id="home-root">
+                {% if has_menu_permission('dashboard.dashboard') %}
+                  <a href="{{ url_for('dashboard.dashboard') }}" data-icon="DB">Dashboard</a>
+                {% endif %}
+                {% if has_menu_permission('chat.chat_page') %}
+                  <a href="{{ url_for('chat.chat_page') }}" data-icon="CH">Chat</a>
+                {% endif %}
+              </div>
+            {% endif %}
+            {% if has_menu_permission('demo_sales.dashboard') %}
+              <button class="sidebar__section" type="button" data-menu="demo-sales-addon" data-icon="DS">Demo Sales (sample)</button>
+              <div class="sidebar__submenu" id="demo-sales-addon">
+                <a href="{{ url_for('demo_sales.dashboard') }}" data-icon="SP">Sales cockpit</a>
+                <a href="{{ url_for('demo_sales.orders') }}" data-icon="SO">Orders</a>
+                <a href="{{ url_for('demo_sales.pipeline') }}" data-icon="FS">Pipeline</a>
+              </div>
+            {% endif %}
+            {% if has_any_menu_permission(['sales_ai.dashboard', 'ai_forecast.dashboard', 'ai_forecast.sales_forecast_page', 'ai_forecast.reports_page', 'reports.smart_list', 'reports.stock_aging_report', 'reports.integrity_dashboard_page', 'reports.gross_margin_dashboard_page']) %}
+              <button class="sidebar__section" type="button" data-menu="ai-forecast-root" data-icon="AI">AI</button>
+              <div class="sidebar__submenu" id="ai-forecast-root">
+                {% if has_menu_permission('sales_ai.dashboard') %}
+                <a href="{{ url_for('sales_ai.dashboard') }}" data-icon="SAI">Sales AI</a>
+                {% endif %}
+                {% if has_menu_permission('ai_forecast.dashboard') %}
+                <a href="{{ url_for('ai_forecast.dashboard') }}" data-icon="AFC">Forecast cockpit</a>
+                {% endif %}
+                {% if has_menu_permission('ai_forecast.sales_forecast_page') %}
+                <a href="{{ url_for('ai_forecast.sales_forecast_page') }}" data-icon="ASF">Sales forecast</a>
+                {% endif %}
+                {% if has_menu_permission('ai_forecast.purchase_forecast_page') %}
+                <a href="{{ url_for('ai_forecast.purchase_forecast_page') }}" data-icon="APF">Purchase forecast</a>
+                {% endif %}
+                {% if has_menu_permission('ai_forecast.reorder_page') %}
+                <a href="{{ url_for('ai_forecast.reorder_page') }}" data-icon="ARO">Smart reorder</a>
+                {% endif %}
+                {% if has_menu_permission('ai_forecast.products_page') %}
+                <a href="{{ url_for('ai_forecast.products_page') }}" data-icon="APP">Product performance</a>
+                {% endif %}
+                {% if has_menu_permission('ai_forecast.suppliers_page') %}
+                <a href="{{ url_for('ai_forecast.suppliers_page') }}" data-icon="ASU">Supplier analysis</a>
+                {% endif %}
+                {% if has_menu_permission('ai_forecast.customers_page') %}
+                <a href="{{ url_for('ai_forecast.customers_page') }}" data-icon="ACU">Customer analysis</a>
+                {% endif %}
+                {% if has_menu_permission('ai_forecast.reports_page') %}
+                <a href="{{ url_for('ai_forecast.reports_page') }}" data-icon="AIR">AI reports</a>
+                {% endif %}
+                {% if has_menu_permission('reports.smart_list') %}
+                <a href="{{ url_for('reports.smart_list') }}" data-icon="QB">Smart List</a>
+                {% endif %}
+                {% if has_menu_permission('reports.stock_aging_report') %}
+                <a href="{{ url_for('reports.stock_aging_report') }}" data-icon="SA">Stock Aging</a>
+                {% endif %}
+                {% if has_menu_permission('reports.integrity_dashboard_page') %}
+                <a href="{{ url_for('reports.integrity_dashboard_page') }}" data-icon="AID">Integrity Dashboard</a>
+                {% endif %}
+                {% if has_menu_permission('reports.gross_margin_dashboard_page') %}
+                <a href="{{ url_for('reports.gross_margin_dashboard_page') }}" data-icon="GMA">Gross Margin Analysis</a>
+                {% endif %}
+              </div>
+            {% endif %}
+            {% if has_menu_permission('tasveek.tasveek_list') or has_menu_permission('tasveek.tasveek_api_rawabi_data') %}
+              <button class="sidebar__section" type="button" data-menu="online-menu-root" data-icon="ON">Online</button>
+              <div class="sidebar__submenu" id="online-menu-root">
+                {% if has_menu_permission('tasveek.tasveek_list') %}
+                <a href="{{ url_for('tasveek.tasveek_list') }}" data-icon="TV">Tasveek</a>
+                {% endif %}
+                {% if has_menu_permission('tasveek.tasveek_api_rawabi_data') or allow_all_permissions %}
+                <a href="{{ url_for('tasveek.tasveek_api_rawabi_data') }}" data-icon="TW">Tasveek API data</a>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if has_any_menu_permission(['users.user_create', 'purchase.stock_transfer_approval_setup', 'tenants.tenant_list', 'roles.roles_list', 'system_config.system_config_list', 'setup.company_profile', 'setup.menu_price_points', 'setup.branch_location_master', 'setup.gl_dimension_master', 'setup.fiscal_year', 'setup.document_numbering', 'setup.transaction_date_setup', 'promotions.promotions_page', 'setup.new_company_setup', 'setup.approval_workflow_page', 'setup.general_setup_page', 'utilities.db_structure_sync', 'setup.dba_tools']) or allow_all_permissions %}
+              <button class="sidebar__section" type="button" data-menu="admin-setup" data-icon="ST">Setup</button>
+              <div class="sidebar__submenu" id="admin-setup">
+                {% if has_menu_permission('setup.company_profile') or allow_all_permissions %}
+                  <a href="{{ url_for('company_profile.company_list') }}" data-icon="CP">Companies</a>
+                {% endif %}
+                {% if has_menu_permission('setup.menu_price_points') or allow_all_permissions %}
+                  <a href="{{ url_for('menu_price_setup.menu_price_points_page') }}" data-icon="MP">Menu price &amp; points</a>
+                {% endif %}
+                {% if allow_all_permissions or has_menu_permission('setup.branch_location_master') %}
+                  <a href="{{ url_for('branch_location.branch_location_master') }}" data-icon="BL">Branch / Location Master</a>
+                {% endif %}
+                {% if allow_all_permissions or has_menu_permission('setup.gl_dimension_master') %}
+                  <a href="{{ url_for('gl_dimension.gl_dimension_list') }}" data-icon="GD">GL dimension master</a>
+                {% endif %}
+                {% if has_menu_permission('users.user_create') %}
+                  <a href="{{ url_for('users.user_list') }}" data-icon="UM">User Management</a>
+                {% endif %}
+                {% if has_menu_permission('purchase.stock_transfer_approval_setup') or allow_all_permissions %}
+                  <a href="{{ url_for('purchase.stock_transfer_approval_setup') }}" data-icon="TS">Transfer Approval Setup</a>
+                {% endif %}
+                {% if has_menu_permission('tenants.tenant_list') %}
+                  <a href="{{ url_for('tenants.tenant_list') }}" data-icon="TN">Tenants</a>
+                {% endif %}
+                {% if has_menu_permission('roles.roles_list') %}
+                  <a href="{{ url_for('roles.roles_list') }}" data-icon="RP">Roles & Permissions</a>
+                {% endif %}
+                {% if has_menu_permission('setup.fiscal_year') or allow_all_permissions %}
+                  <a href="{{ url_for('fiscal_year.fiscal_year_list') }}" data-icon="FY">Fiscal Year Setup</a>
+                {% endif %}
+                {% if has_menu_permission('setup.transaction_date_setup') or allow_all_permissions %}
+                  <a href="{{ url_for('transaction_date_setup.transaction_date_setup_page') }}" data-icon="TD">Transaction Date Setup</a>
+                {% endif %}
+                {% if has_menu_permission('setup.approval_workflow_page') or allow_all_permissions %}
+                  <a href="{{ url_for('approval_workflow.approval_workflow_page') }}" data-icon="AW">Approval Workflow</a>
+                {% endif %}
+                {% if has_menu_permission('setup.general_setup_page') or allow_all_permissions %}
+                  <a href="{{ url_for('general_setup.general_setup_page') }}" data-icon="GS">General Setup</a>
+                {% endif %}
+                {% if has_menu_permission('setup.document_numbering') or allow_all_permissions %}
+                  <a href="{{ url_for('document_numbering.document_numbering_page') }}" data-icon="DN">Document Numbering</a>
+                {% endif %}
+                {% if allow_all_permissions %}
+                  <a href="#" data-icon="CT">Currency & Tax Setup</a>
+                {% endif %}
+                {% if has_menu_permission('system_config.system_config_list') %}
+                  <a href="{{ url_for('system_config.system_config_list') }}" data-icon="SC">System Configuration</a>
+                {% endif %}
+                {% if has_menu_permission('promotions.promotions_page') %}
+                  <a href="{{ url_for('promotions.promotions_page') }}" data-icon="PR">Promotions</a>
+                {% endif %}
+                {% if has_menu_permission('setup.new_company_setup') or has_menu_permission('utilities.db_structure_sync') or allow_all_permissions %}
+                  <a href="{{ url_for('db_sync.new_company_setup_page') }}" data-icon="NC">New Company setup</a>
+                {% endif %}
+                {% if has_menu_permission('setup.dba_tools') or allow_all_permissions %}
+                  <a href="{{ url_for('dba_tools.dba_page') }}" data-icon="DB">DBA — Table Locks</a>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if has_menu_permission('ho.customer_central') or allow_all_permissions %}
+              <button class="sidebar__section" type="button" data-menu="ho-module" data-icon="HO">HO</button>
+              <div class="sidebar__submenu" id="ho-module">
+                {% if has_menu_permission('ho.customer_central') or allow_all_permissions %}
+                  <a href="{{ url_for('ho.customer_central') }}" data-icon="CC">Customer Creation</a>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if has_menu_permission('ho.customer_request') or allow_all_permissions %}
+              <button class="sidebar__section" type="button" data-menu="master-request" data-icon="MR">
+                Master Request
+              </button>
+              <div class="sidebar__submenu" id="master-request">
+                {% if has_menu_permission('ho.customer_request') or allow_all_permissions %}
+                  <a href="{{ url_for('ho.customer_request') }}" data-icon="CR" id="sidebarCustomerRequestLink">
+                    Customer Request
+                    <span id="crPendingBadge" style="display:none;margin-left:6px;background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;vertical-align:middle;"></span>
+                  </a>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if has_menu_permission('ho.item_request') or allow_all_permissions %}
+              <button class="sidebar__section" type="button" data-menu="item-request-module" data-icon="RQ">Item Request</button>
+              <div class="sidebar__submenu" id="item-request-module">
+                {% if has_menu_permission('ho.item_request') or allow_all_permissions %}
+                  <a href="{{ url_for('ho.item_request') }}" data-icon="RQ">Item Request</a>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if has_menu_permission('ho.itemmaster_central') or has_menu_permission('ho.supplier_central') or allow_all_permissions %}
+              <button class="sidebar__section" type="button" data-menu="itemmaster-central-module" data-icon="HC">Itemmaster Central</button>
+              <div class="sidebar__submenu" id="itemmaster-central-module">
+                {% if has_menu_permission('ho.itemmaster_central') or allow_all_permissions %}
+                  <a href="{{ url_for('ho.itemmaster_central') }}" data-icon="HC">Itemmaster Central</a>
+                {% endif %}
+                {% if has_menu_permission('ho.supplier_central') or allow_all_permissions %}
+                  <a href="{{ url_for('ho.supplier_central') }}" data-icon="SC">Supplier Central</a>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if has_any_menu_permission(['itemmaster.productlist', 'itemmaster.category_master_list', 'itemmaster.brand_master_list', 'itemmaster.unit_of_measurement_list', 'itemmaster.item_property_origin_list']) or allow_all_permissions %}
+              <button class="sidebar__section" type="button" data-menu="itemmaster-branch-module" data-icon="IB">Itemmaster Branch</button>
+              <div class="sidebar__submenu" id="itemmaster-branch-module">
+                {% if has_menu_permission('itemmaster.productlist') or allow_all_permissions %}
+                  <a href="{{ url_for('itemmaster.productlist') }}" data-icon="IM">Item Master</a>
+                {% endif %}
+                {% if has_menu_permission('itemmaster.category_master_list') or allow_all_permissions %}
+                  <a href="{{ url_for('itemmaster.category_master_list') }}" class="sidebar__submenu-bi"><i class="bi bi-diagram-2" aria-hidden="true"></i>Category Master</a>
+                {% endif %}
+                {% if has_menu_permission('itemmaster.brand_master_list') or allow_all_permissions %}
+                  <a href="{{ url_for('itemmaster.brand_master_list') }}" data-icon="BM">Brand Master</a>
+                {% endif %}
+                {% if has_menu_permission('itemmaster.unit_of_measurement_list') or allow_all_permissions %}
+                  <a href="{{ url_for('itemmaster.unit_of_measurement_list') }}" data-icon="UM">Unit of measurement</a>
+                {% endif %}
+                {% if has_menu_permission('itemmaster.item_property_origin_list') or allow_all_permissions %}
+                  <a href="{{ url_for('itemmaster.item_property_origin_list') }}" data-icon="IO">Property &amp; Origin</a>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if has_any_menu_permission(['customer.customer_list', 'employee.employee_list', 'supplier.supplier_list', 'salesman.salesman_list', 'route_master.route_list', 'customer_category.category_list', 'session_master.session_list', 'activity_log.activity_log_page']) %}
+              <button class="sidebar__section" type="button" data-menu="master" data-icon="MA">Master</button>
+              <div class="sidebar__submenu" id="master">
+                {% if has_menu_permission('customer.customer_list') %}
+                  <a href="{{ url_for('customer.customer_list') }}" data-icon="CU">Customer</a>
+                {% endif %}
+                {% if has_menu_permission('employee.employee_list') %}
+                  <a href="{{ url_for('employee.employee_list') }}" data-icon="EM">Employee</a>
+                {% endif %}
+                {% if has_menu_permission('supplier.supplier_list') %}
+                  <a href="{{ url_for('supplier.supplier_list') }}" data-icon="SM">Vendor</a>
+                {% endif %}
+                {% if has_menu_permission('salesman.salesman_list') %}
+                  <a href="{{ url_for('salesman.salesman_list') }}" data-icon="SX">Salesman</a>
+                {% endif %}
+                {% if has_menu_permission('route_master.route_list') %}
+                  <a href="{{ url_for('route_master.route_list') }}" data-icon="RT">Route</a>
+                {% endif %}
+                {% if has_menu_permission('customer_category.category_list') %}
+                  <a href="{{ url_for('customer_category.category_list') }}" data-icon="CC">Cust. category</a>
+                {% endif %}
+                {% if has_menu_permission('session_master.session_list') %}
+                  <a href="{{ url_for('session_master.session_list') }}" data-icon="SN">Session</a>
+                {% endif %}
+                {% if has_menu_permission('activity_log.activity_log_page') %}
+                  <a href="{{ url_for('activity_log.activity_log_page') }}" data-icon="LG">Activity log</a>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if has_any_menu_permission(['customer.missing_customer_recovery', 'customer.missing_customer_visit_tasks']) %}
+              <button class="sidebar__section" type="button" data-menu="plan" data-icon="PN">Plan</button>
+              <div class="sidebar__submenu" id="plan">
+                {% if has_menu_permission('customer.missing_customer_recovery') %}
+                  <a href="{{ url_for('customer.missing_customer_recovery') }}" data-icon="MR">Missing customers</a>
+                {% endif %}
+                {% if has_menu_permission('customer.missing_customer_visit_tasks') or allow_all_permissions %}
+                  <a href="{{ url_for('customer.missing_customer_recovery_tasks') }}" data-icon="VT">My visit tasks</a>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if has_any_menu_permission(['pos_billing.pos_billing_page', 'pos_billing.pos_shop_page', 'pos_billing.pos_verify_page', 'pos_billing.pos_bills_page', 'pos_billing.pos_save_queue_page', 'pos_billing.pos_receipt_design_page', 'pos_billing.pos_counter_setup_list', 'pos_billing.pos_tender_types_page', 'pos_billing.pos_accounts_configuration_page', 'pos_billing.pos_counter_operations_page', 'pos_billing.pos_price_edited_report_page']) or allow_all_permissions %}
+              <button class="sidebar__section" type="button" data-menu="pos-root" data-icon="PV">POS</button>
+              <div class="sidebar__submenu" id="pos-root">
+                <div class="sidebar__submenu-heading" data-icon="PZ">POS Setup</div>
+                {% if has_menu_permission('pos_billing.pos_billing_page') or allow_all_permissions %}
+                  <a href="{{ url_for('pos_billing.pos_billing_page') }}" data-icon="PB">POS Billing</a>
+                {% endif %}
+                {% if has_menu_permission('pos_billing.pos_shop_page') or allow_all_permissions %}
+                  <a href="{{ url_for('pos_billing.pos_shop_page') }}" data-icon="PS">POS Shop</a>
+                {% endif %}
+                {% if has_menu_permission('pos_billing.pos_verify_page') or allow_all_permissions %}
+                  <a href="{{ url_for('pos_billing.pos_verify_page') }}" data-icon="VF">POS Verify</a>
+                {% endif %}
+                {% if has_menu_permission('pos_billing.pos_bills_page') or allow_all_permissions %}
+                  <a href="{{ url_for('pos_billing.pos_bills_page') }}" data-icon="BI">POS Transactions</a>
+                {% endif %}
+                {% if has_menu_permission('pos_billing.pos_sales_list_page') or allow_all_permissions %}
+                  <a href="{{ url_for('pos_billing.pos_sales_list_page') }}" data-icon="PL">POS Sales List</a>
+                {% endif %}
+                {% if has_menu_permission('pos_billing.pos_price_edited_report_page') or allow_all_permissions %}
+                  <a href="{{ url_for('pos_billing.pos_price_edited_report_page') }}" class="sidebar__submenu-bi" data-icon="PE"><i class="bi bi-pencil-square" aria-hidden="true"></i>POS Price Edited Report</a>
+                {% endif %}
+                {% if has_menu_permission('pos_billing.pos_save_queue_page') or allow_all_permissions %}
+                  <a href="{{ url_for('pos_billing.pos_save_queue_page') }}" data-icon="PQ">POS Save Queue</a>
+                {% endif %}
+                {% if has_menu_permission('pos_billing.pos_counter_setup_list') or allow_all_permissions %}
+                  <a href="{{ url_for('pos_billing.pos_counter_setup_list') }}" data-icon="PY">POS Counter Setup</a>
+                {% endif %}
+                {% if has_menu_permission('pos_billing.pos_tender_types_page') or allow_all_permissions %}
+                  <a href="{{ url_for('pos_billing.pos_tender_types_page') }}" data-icon="TT">POS Tender Types</a>
+                {% endif %}
+                {% if has_menu_permission('pos_billing.pos_accounts_configuration_page') or allow_all_permissions %}
+                  <a href="{{ url_for('pos_billing.pos_accounts_configuration_page') }}" data-icon="AC">POS Accounts Configuration</a>
+                {% endif %}
+                {% if has_menu_permission('pos_billing.pos_counter_operations_page') or allow_all_permissions %}
+                  <a href="{{ url_for('pos_billing.pos_counter_operations_page') }}" data-icon="CK">POS Counter Operations</a>
+                {% endif %}
+                {% if has_menu_permission('pos_billing.pos_receipt_design_page') or allow_all_permissions %}
+                  <a href="{{ url_for('pos_billing.pos_receipt_design_page') }}" data-icon="RD">POS Receipt Design</a>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if has_any_menu_permission(['sales.sales_invoice', 'sales.sales_return', 'sales.sales_order', 'sales.sales_order_list', 'sales.sales_credit_note_list', 'promotions.promotions_page', 'temporary_invoices.temporary_invoices', 'reports.crystal_reports']) %}
+              <button class="sidebar__section" type="button" data-menu="sales" data-icon="SL">Sales</button>
+              <div class="sidebar__submenu" id="sales">
+                {% if allow_all_permissions %}
+                  <a href="#" data-icon="QT">Quotation</a>
+                  <a href="#" data-icon="DN">Delivery Note</a>
+                {% endif %}
+                {% if has_menu_permission('sales.sales_order_list') or allow_all_permissions %}
+                  <a href="{{ url_for('sales.sales_order_list') }}" data-icon="SO">Sales Order</a>
+                {% endif %}
+                {% if has_menu_permission('sales.sales_invoice') or allow_all_permissions %}
+                  <a href="{{ url_for('sales.sales_invoice_list', tab='invoice') }}" data-icon="SI">Sales Invoice</a>
+                {% endif %}
+                {% if has_menu_permission('sales.sales_return') or allow_all_permissions %}
+                  <a href="{{ url_for('sales.sales_invoice_list', tab='return') }}" data-icon="SR">Sales Return</a>
+                {% endif %}
+                {% if has_menu_permission('sales.sales_accounts_configuration') or allow_all_permissions %}
+                  <a href="{{ url_for('sales.sales_accounts_configuration') }}" data-icon="AC">Sales Accounts Configuration</a>
+                {% endif %}
+                {% if has_menu_permission('reports.crystal_reports') %}
+                  <a href="{{ url_for('reports.crystal_reports') }}" data-icon="XR">Printer configuration</a>
+                {% endif %}
+                {% if has_menu_permission('promotions.promotions_page') %}
+                  <a href="{{ url_for('promotions.promotions_page') }}" data-icon="DO">Discount & Promotions</a>
+                {% endif %}
+                {% if has_menu_permission('temporary_invoices.temporary_invoices') %}
+                  <a href="{{ url_for('temporary_invoices.invoice_analysis') }}" data-icon="SA">AI Reports</a>
+                {% endif %}
+                {% if allow_all_permissions and not has_any_menu_permission(['sales.sales_invoice', 'sales.sales_return', 'sales.sales_order', 'sales.sales_order_list']) %}
+                  <a href="{{ url_for('sales.sales_return') }}" data-icon="SRT">Sales Return</a>
+                {% endif %}
+                {% if has_menu_permission('sales.sales_credit_note_list') or allow_all_permissions %}
+                  <a href="{{ url_for('sales.sales_credit_note_list') }}" data-icon="CNN">Credit Note</a>
+                {% endif %}
+                {% if allow_all_permissions %}
+                  <a href="#" data-icon="SP">Salesman Performance</a>
+                {% endif %}
+                {% if allow_all_permissions %}
+                  <a href="#" data-icon="CS">Customer Wise Sales</a>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if has_any_menu_permission(['purchase.purchase_order_list', 'purchase.purchase_order_new', 'purchase.goods_receipt_list', 'purchase.purchase_return_order', 'purchase.purchase_return_request_list', 'purchase.purchase_return_list', 'purchase.purchase_debit_note_list', 'purchase.purchase_change_log']) or allow_all_permissions %}
+              <button class="sidebar__section" type="button" data-menu="purchase" data-icon="PU">Purchase</button>
+              <div class="sidebar__submenu" id="purchase">
+                {% if has_menu_permission('purchase.purchase_order_list') or allow_all_permissions %}
+                  <a href="{{ url_for('purchase.purchase_order_list') }}" data-icon="PO">Purchase Order</a>
+                {% endif %}
+                {% if has_menu_permission('purchase.goods_receipt_list') or allow_all_permissions %}
+                  <a href="{{ url_for('purchase.goods_receipt_list') }}" data-icon="GR">Goods Receipt Note (GRN)</a>
+                {% endif %}
+                {% if has_menu_permission('purchase.purchase_return_list') or allow_all_permissions %}
+                  <a href="{{ url_for('purchase.purchase_return_list') }}" data-icon="RR">Purchase Return</a>
+                {% endif %}
+                {% if has_menu_permission('purchase.purchase_debit_note_list') or allow_all_permissions %}
+                  <a href="{{ url_for('purchase.purchase_debit_note_list') }}" data-icon="DN">Debit Note</a>
+                {% endif %}
+                {% if has_menu_permission('purchase.purchase_change_log') or allow_all_permissions %}
+                  <a href="{{ url_for('purchase.purchase_change_log') }}" data-icon="CL">Edited / deleted log</a>
+                {% endif %}
+                {% if allow_all_permissions %}
+                  <a href="#" data-icon="SA">Supplier Aging</a>
+                  <a href="#" data-icon="PM">Price List Management</a>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if has_any_menu_permission(['purchase.stock_adjustment', 'purchase.stock_adjustment_list', 'purchase.repacking', 'purchase.repacking_list', 'purchase.stock_transfer', 'purchase.inventory_valuation', 'purchase.inventory_value_adjustment_list', 'purchase.item_journal_list', 'purchase.item_journal_summary_list', 'barcode_management.barcode_management_page']) or allow_all_permissions %}
+              <button class="sidebar__section" type="button" data-menu="inventory" data-icon="IV">Inventory Management</button>
+              <div class="sidebar__submenu" id="inventory">
+                {% if has_menu_permission('purchase.stock_adjustment_list') or allow_all_permissions %}
+                  <a href="{{ url_for('purchase.stock_adjustment_list') }}" data-icon="SA">Stock Adjustment</a>
+                {% endif %}
+                {% if has_menu_permission('purchase.repacking_list') or allow_all_permissions %}
+                  <a href="{{ url_for('purchase.repacking_list') }}" data-icon="RP">Repacking</a>
+                {% endif %}
+                {% if has_menu_permission('purchase.stock_transfer') or allow_all_permissions %}
+                  <a href="{% if user_transit_only %}{{ url_for('purchase.stock_transfer', workflow='transit') }}{% else %}{{ url_for('purchase.stock_transfer') }}{% endif %}" data-icon="XT">Store Transfer</a>
+                {% endif %}
+                {% if has_menu_permission('purchase.inventory_valuation') or allow_all_permissions %}
+                  <a href="{{ url_for('purchase.inventory_valuation') }}" data-icon="IV">Inventory Valuation</a>
+                {% endif %}
+                {% if has_menu_permission('purchase.inventory_value_adjustment_list') or allow_all_permissions %}
+                  <a href="{{ url_for('purchase.inventory_value_adjustment_list') }}" data-icon="VA">Inventory Value Adjustment</a>
+                {% endif %}
+                {% if has_menu_permission('purchase.item_journal_list') or allow_all_permissions %}
+                  <a href="{{ url_for('purchase.item_journal_list') }}" data-icon="IJ">Item Journal</a>
+                {% endif %}
+                {% if has_menu_permission('purchase.item_journal_summary_list') or allow_all_permissions %}
+                  <a href="{{ url_for('purchase.item_journal_summary_list') }}" data-icon="JS">Item Journal Summary</a>
+                {% endif %}
+                {% if has_menu_permission('purchase.purchase_verification') or allow_all_permissions %}
+                  <a href="{{ url_for('purchase.purchase_verification') }}" data-icon="PV">Purchase verification</a>
+                {% endif %}
+                {% if has_menu_permission('barcode_management.barcode_management_page') or allow_all_permissions %}
+                  <a href="{{ url_for('barcode_management.barcode_management_page') }}" data-icon="BC">Barcode Management</a>
+                {% endif %}
+                {% if has_menu_permission('itemmaster.unit_of_measurement_list') or allow_all_permissions %}
+                  <a href="{{ url_for('itemmaster.unit_of_measurement_list') }}" data-icon="UO">Unit of measurement</a>
+                {% endif %}
+                {% if allow_all_permissions %}
+                  <a href="#" data-icon="OS">Opening Stock</a>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if has_menu_permission('warehouse.warehouse_storage_list') or has_menu_permission('warehouse.warehouse_bin_stock') or has_menu_permission('warehouse.warehouse_visual_stock') or has_menu_permission('warehouse.warehouse_stock_verification') or has_menu_permission('warehouse.warehouse_stock_counting') or has_menu_permission('warehouse.warehouse_stock_count_price') or has_menu_permission('warehouse.warehouse_locations') or has_menu_permission('purchase.batch_lot_inquiry') or has_menu_permission('purchase.batch_lot_operator_checklist') or allow_all_permissions %}
+              <button class="sidebar__section" type="button" data-menu="warehouse" data-icon="WH">Warehouse Management</button>
+              <div class="sidebar__submenu" id="warehouse">
+                {% if has_menu_permission('warehouse.warehouse_locations') or allow_all_permissions %}
+                  <a href="{{ url_for('warehouse.warehouse_locations_list') }}" data-icon="WL">Warehouse locations</a>
+                {% endif %}
+                {% if has_menu_permission('warehouse.warehouse_storage_list') or allow_all_permissions %}
+                  <a href="{{ url_for('warehouse.warehouse_storage_list') }}" class="sidebar__submenu-bi"><i class="bi bi-layers" aria-hidden="true"></i>Shelf / Bin / Rack</a>
+                {% endif %}
+                {% if has_menu_permission('warehouse.warehouse_bin_stock') or allow_all_permissions %}
+                  <a href="{{ url_for('warehouse.warehouse_bin_stock') }}" data-icon="BS">Bin stock &amp; moves</a>
+                {% endif %}
+                {% if has_menu_permission('warehouse.warehouse_visual_stock') or allow_all_permissions %}
+                  <a href="{{ url_for('warehouse.warehouse_visual_stock') }}" class="sidebar__submenu-bi" data-icon="VS"><i class="bi bi-diagram-3" aria-hidden="true"></i>Visual Stock Report</a>
+                {% endif %}
+                {% if has_menu_permission('warehouse.warehouse_stock_verification') or allow_all_permissions %}
+                  <a href="{{ url_for('warehouse.warehouse_stock_verification') }}" class="sidebar__submenu-bi" data-icon="SV"><i class="bi bi-clipboard2-check" aria-hidden="true"></i>Stock verification</a>
+                {% endif %}
+                {% if has_menu_permission('warehouse.warehouse_stock_counting') or allow_all_permissions %}
+                  <a href="{{ url_for('warehouse.warehouse_stock_counting_list') }}" data-icon="SK">Stock Counting</a>
+                {% endif %}
+                {% if has_menu_permission('warehouse.warehouse_stock_count_price') or allow_all_permissions %}
+                  <a href="{{ url_for('warehouse.warehouse_stock_count_price_list') }}" data-icon="PU">Price Update</a>
+                {% endif %}
+                {% if has_menu_permission('purchase.batch_lot_inquiry') or allow_all_permissions %}
+                  <a href="{{ url_for('purchase.batch_lot_inquiry') }}" data-icon="BE">Batch / Expiry (lots)</a>
+                {% endif %}
+                {% if has_menu_permission('purchase.batch_lot_operator_checklist') or allow_all_permissions %}
+                  <a href="{{ url_for('purchase.batch_lot_operator_checklist') }}" data-icon="OC">Batch / lot — operator checklist</a>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if has_any_menu_permission(['accounts.chart_of_accounts_list', 'accounts.account_ledger_page', 'accounts.main_account_ledger', 'accounts.main_account_ledger_pdf', 'accounts.main_account_ledger_excel', 'accounts.account_ledger_pdf', 'accounts.supplier_ledger_page', 'accounts.supplier_ledger_pdf', 'accounts.customer_ledger_page', 'accounts.customer_ledger_pdf', 'accounts.accounts_payable', 'accounts.accounts_receivable', 'accounts.cash_payment_voucher', 'accounts.receipt_voucher', 'accounts.payment_voucher', 'accounts.contra_voucher', 'accounts.cash_flow', 'accounts.cash_flow_pdf', 'accounts.cash_flow_excel', 'accounts.bank_reconciliation', 'accounts.journal_entry', 'accounts.transaction_audit', 'accounts.opening_balance_import', 'accounts.period_closing_page', 'accounts.customer_opening_outstanding', 'accounts.supplier_opening_outstanding', 'accounts.tax_accounts', 'accounts.trial_balance', 'accounts.trial_balance_pdf', 'accounts.trial_balance_excel', 'accounts.trial_balance_ledger_api', 'accounts.profit_loss', 'accounts.profit_loss_pdf', 'accounts.profit_loss_excel', 'accounts.balance_sheet', 'accounts.balance_sheet_pdf', 'accounts.balance_sheet_excel', 'accounts.pdc_tracker']) or allow_all_permissions %}
+              <button class="sidebar__section" type="button" data-menu="finance" data-icon="AC">Accounts</button>
+              <div class="sidebar__submenu" id="finance">
+                {% if has_menu_permission('accounts.chart_of_accounts_list') or allow_all_permissions %}
+                <div class="sidebar__submenu-heading">Accounts Masters</div>
+                <a href="{{ url_for('accounts.chart_of_accounts_list') }}" data-icon="CA">Chart of Accounts</a>
+                {% endif %}
+
+                {% if has_any_menu_permission(['accounts.journal_entry', 'accounts.receipt_voucher', 'accounts.payment_voucher', 'accounts.cash_payment_voucher', 'accounts.contra_voucher']) or allow_all_permissions %}
+                <div class="sidebar__submenu-heading">Transactions</div>
+                {% if has_menu_permission('accounts.journal_entry') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.journal_entry') }}" data-icon="JE">Journal Entry</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.receipt_voucher') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.receipt_voucher') }}" data-icon="RV">Receipt Voucher</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.payment_voucher') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.payment_voucher') }}" data-icon="VP">Payment Voucher</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.cash_payment_voucher') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.cash_payment_voucher') }}" data-icon="CP">Cash Payment Voucher</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.contra_voucher') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.contra_voucher') }}" data-icon="CV">Contra Voucher</a>
+                {% endif %}
+                {% endif %}
+
+                {% if has_any_menu_permission(['accounts.accounts_receivable', 'accounts.accounts_payable', 'accounts.customer_opening_outstanding', 'accounts.supplier_opening_outstanding']) or allow_all_permissions %}
+                <div class="sidebar__submenu-heading">Receivables &amp; Payables</div>
+                {% if has_menu_permission('accounts.accounts_receivable') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.accounts_receivable') }}" data-icon="AR">Accounts Receivable (AR)</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.accounts_payable') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.accounts_payable') }}" data-icon="AP">Accounts Payable (AP)</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.customer_opening_outstanding') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.customer_opening_outstanding') }}" data-icon="CO">Customer Opening Outstanding</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.supplier_opening_outstanding') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.supplier_opening_outstanding') }}" data-icon="SO">Supplier Opening Outstanding</a>
+                {% endif %}
+                {% endif %}
+
+                {% if has_any_menu_permission(['accounts.bank_reconciliation', 'accounts.pdc_tracker']) or allow_all_permissions %}
+                <div class="sidebar__submenu-heading">Banking</div>
+                {% if has_menu_permission('accounts.bank_reconciliation') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.bank_reconciliation') }}" data-icon="BR">Bank Reconciliation</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.pdc_tracker') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.pdc_tracker') }}" data-icon="PD">PDC Check Tracking</a>
+                {% endif %}
+                {% endif %}
+
+                {% if has_any_menu_permission(['accounts.customer_ledger_page', 'accounts.supplier_ledger_page', 'accounts.account_ledger_page', 'accounts.main_account_ledger', 'accounts.cash_flow', 'accounts.transaction_audit', 'accounts.trial_balance', 'accounts.profit_loss', 'accounts.balance_sheet']) or allow_all_permissions %}
+                <div class="sidebar__submenu-heading">Accounts Reports</div>
+                {% if has_menu_permission('accounts.customer_ledger_page') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.customer_ledger_page') }}" data-icon="CU">Customer Ledger</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.supplier_ledger_page') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.supplier_ledger_page') }}" class="sidebar__submenu-bi"><i class="bi bi-journals" aria-hidden="true"></i>Supplier Ledger</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.account_ledger_page') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.account_ledger_page') }}" data-icon="AL">Account Ledger</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.main_account_ledger') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.main_account_ledger') }}" data-icon="ML">Main Account Ledger</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.cash_flow') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.cash_flow') }}" data-icon="CF">Cash Flow</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.transaction_audit') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.transaction_audit') }}" data-icon="AU">Transaction Accounts Audit</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.trial_balance') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.trial_balance') }}" data-icon="TB">Trial Balance</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.profit_loss') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.profit_loss') }}" data-icon="PF">Profit &amp; Loss</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.balance_sheet') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.balance_sheet') }}" data-icon="BS">Balance Sheet</a>
+                {% endif %}
+                {% endif %}
+
+                {% if has_any_menu_permission(['accounts.opening_balance_import', 'accounts.period_closing_page', 'accounts.tax_accounts']) or allow_all_permissions %}
+                <div class="sidebar__submenu-heading">Accounts Utilities</div>
+                {% if has_menu_permission('accounts.opening_balance_import') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.opening_balance_import') }}" data-icon="OB">Import Opening (CSV)</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.period_closing_page') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.period_closing_page') }}" data-icon="PC">Period Closing</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.tax_accounts') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.tax_accounts') }}" data-icon="TX">Tax (VAT / GST)</a>
+                {% endif %}
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if has_any_menu_permission(['fixed_assets.fa_category_list', 'fixed_assets.fa_asset_list', 'fixed_assets.fa_depreciation', 'fixed_assets.fa_sale_list', 'fixed_assets.fa_disposal_list', 'fixed_assets.fa_transfer_list']) or allow_all_permissions %}
+              <button class="sidebar__section" type="button" data-menu="fixed-assets" data-icon="FA">Fixed Assets</button>
+              <div class="sidebar__submenu" id="fixed-assets">
+                {% if has_menu_permission('fixed_assets.fa_category_list') or allow_all_permissions %}
+                  <a href="{{ url_for('fixed_assets.fa_category_list') }}" class="sidebar__submenu-bi" data-icon="FC"><i class="bi bi-tags" aria-hidden="true"></i>Categories</a>
+                {% endif %}
+                {% if has_menu_permission('fixed_assets.fa_asset_list') or allow_all_permissions %}
+                  <a href="{{ url_for('fixed_assets.fa_asset_list') }}" class="sidebar__submenu-bi" data-icon="FR"><i class="bi bi-building-gear" aria-hidden="true"></i>Asset Register</a>
+                {% endif %}
+                {% if has_menu_permission('fixed_assets.fa_depreciation') or allow_all_permissions %}
+                  <a href="{{ url_for('fixed_assets.fa_depreciation_page') }}" class="sidebar__submenu-bi" data-icon="FD"><i class="bi bi-graph-down-arrow" aria-hidden="true"></i>Depreciation</a>
+                {% endif %}
+                {% if has_menu_permission('fixed_assets.fa_sale_list') or allow_all_permissions %}
+                  <a href="{{ url_for('fixed_assets.fa_sale_list') }}" class="sidebar__submenu-bi" data-icon="FAS"><i class="bi bi-cash-coin" aria-hidden="true"></i>Fixed Asset Sale</a>
+                {% endif %}
+                {% if has_menu_permission('fixed_assets.fa_disposal_list') or allow_all_permissions %}
+                  <a href="{{ url_for('fixed_assets.fa_disposal_list') }}" class="sidebar__submenu-bi" data-icon="FDS"><i class="bi bi-trash3" aria-hidden="true"></i>Disposal</a>
+                {% endif %}
+                {% if has_menu_permission('fixed_assets.fa_transfer_list') or allow_all_permissions %}
+                  <a href="{{ url_for('fixed_assets.fa_transfer_list') }}" class="sidebar__submenu-bi" data-icon="FTR"><i class="bi bi-arrow-left-right" aria-hidden="true"></i>Transfer</a>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if has_any_menu_permission(['purchase.purchase_invoice_list', 'purchase.purchase_return_posting', 'purchase.purchase_return_list', 'pos_billing.pos_settlement_posting_page', 'accounts.online_settlement_page']) or allow_all_permissions %}
+              <button class="sidebar__section" type="button" data-menu="accounts-posting" data-icon="NP">Accounts Posting</button>
+              <div class="sidebar__submenu" id="accounts-posting">
+                {% if has_menu_permission('purchase.purchase_invoice_list') or allow_all_permissions %}
+                  <a href="{{ url_for('purchase.purchase_invoice_list') }}" data-icon="PI">Purchase Invoice</a>
+                {% endif %}
+                {% if has_menu_permission('purchase.purchase_return_posting') or allow_all_permissions %}
+                  <a href="{{ url_for('purchase.purchase_return_posting') }}" data-icon="PT">Purchase Return Posting</a>
+                {% endif %}
+                {% if has_menu_permission('pos_billing.pos_settlement_posting_page') or allow_all_permissions %}
+                  <a href="{{ url_for('pos_billing.pos_settlement_posting_page') }}" data-icon="ST">POS Settlement Posting</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.online_settlement_page') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.online_settlement_page') }}" data-icon="OS">Online Settlement</a>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if has_any_menu_permission(['business_summary.dashboard', 'sales_summary.sales_summary', 'temporary_invoices.temporary_invoices', 'reports.customer_outstanding_cr', 'reports.customer_outstanding_cr_month', 'reports.route_outstanding', 'reports.collection_report', 'reports.store_transfer_details', 'reports.purchase_details', 'reports.grn_details', 'reports.purchase_return_details', 'reports.sales_details', 'reports.last_transactions_report', 'reports.stock_report', 'reports.stock_report_datewise', 'reports.margin_report', 'reports.system_logs', 'transaction_recording_audit.viewer']) %}
+              <button class="sidebar__section" type="button" data-menu="reports" data-icon="RA">Reports & Analytics</button>
+              <div class="sidebar__submenu" id="reports">
+                {% if has_menu_permission('business_summary.dashboard') %}
+                  <a href="{{ url_for('business_summary.dashboard') }}" data-icon="BS">Business Summary</a>
+                {% endif %}
+                {% if has_menu_permission('sales_summary.sales_summary') %}
+                  <a href="{{ url_for('sales_summary.sales_summary') }}" data-icon="SS">Sales Summary</a>
+                {% endif %}
+                {% if has_menu_permission('temporary_invoices.temporary_invoices') %}
+                  <a href="{{ url_for('temporary_invoices.temporary_invoices') }}" data-icon="SL">Sales Invoices</a>
+                {% endif %}
+                {% if has_menu_permission('reports.customer_outstanding_cr') %}
+                  <a href="{{ url_for('reports.customer_outstanding_cr') }}" data-icon="CC">Customer Outstanding CR</a>
+                {% endif %}
+                {% if has_menu_permission('reports.customer_outstanding_cr_month') or allow_all_permissions %}
+                  <a href="{{ url_for('reports.customer_outstanding_cr_month') }}" data-icon="CY">Customer Outstanding CR (month)</a>
+                {% endif %}
+                {% if has_menu_permission('reports.route_outstanding') %}
+                  <a href="{{ url_for('reports.route_outstanding') }}" data-icon="RO">Route Outstanding</a>
+                {% endif %}
+                {% if has_menu_permission('reports.collection_report') %}
+                  <a href="{{ url_for('reports.collection_report') }}" data-icon="CR">Collection Report</a>
+                {% endif %}
+                {% if has_menu_permission('reports.store_transfer_details') %}
+                  <a href="{{ url_for('reports.store_transfer_details') }}" data-icon="TD">Store Transfer Details</a>
+                {% endif %}
+                {% if has_menu_permission('reports.purchase_details') %}
+                  <a href="{{ url_for('reports.purchase_details') }}" data-icon="DP">Purchase Details</a>
+                {% endif %}
+                {% if has_menu_permission('reports.grn_details') %}
+                  <a href="{{ url_for('reports.grn_details') }}" data-icon="DG">GRN Details</a>
+                {% endif %}
+                {% if has_menu_permission('reports.purchase_return_details') %}
+                  <a href="{{ url_for('reports.purchase_return_details') }}" data-icon="PG">Purchase Return Details</a>
+                {% endif %}
+                {% if has_menu_permission('reports.sales_details') %}
+                  <a href="{{ url_for('reports.sales_details') }}" data-icon="SD">Sales Details</a>
+                {% endif %}
+                {% if has_menu_permission('reports.last_transactions_report') %}
+                  <a href="{{ url_for('reports.last_transactions_report') }}" data-icon="LT">Last Transactions</a>
+                {% endif %}
+                {% if has_menu_permission('reports.stock_report') %}
+                  <a href="{{ url_for('reports.stock_report') }}" data-icon="SK">Stock Report</a>
+                {% endif %}
+                {% if has_menu_permission('reports.stock_report_datewise') %}
+                  <a href="{{ url_for('reports.stock_report_datewise') }}" data-icon="SD">Stock Report Datewise</a>
+                {% endif %}
+                {% if has_menu_permission('reports.margin_report') %}
+                  <a href="{{ url_for('reports.margin_report') }}" data-icon="MR">Margin Report</a>
+                {% endif %}
+                {% if has_menu_permission('reports.system_logs') %}
+                  <a href="{{ url_for('reports.system_logs') }}" data-icon="SG">System Logs</a>
+                {% endif %}
+                {% if has_menu_permission('transaction_recording_audit.viewer') or allow_all_permissions %}
+                  <a href="{{ url_for('transaction_recording_audit.dashboard_page') }}" data-icon="AD">Transaction Audit Dashboard</a>
+                  <a href="{{ url_for('transaction_recording_audit.viewer_page') }}" data-icon="AV">Transaction Audit Viewer</a>
+                {% endif %}
+                {% if allow_all_permissions %}
+                  <a href="#" data-icon="PS">Purchase Summary</a>
+                  <a href="#" data-icon="FS">Fast / Slow Moving Items</a>
+                  <a href="#" data-icon="BP">Branch Wise Profit</a>
+                  <a href="#" data-icon="IM">Item Wise Margin</a>
+                  <a href="#" data-icon="TR">Tax Reports</a>
+                  <a href="#" data-icon="EX">Export to Excel / PDF</a>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if has_any_menu_permission(['sms.sms_page', 'sms.sms_credit_page', 'sms.whatsapp_page', 'utilities.database_modes_guide', 'utilities.backup', 'auth.change_password']) or session.get('user','').strip().lower() in ('admin','super') %}
+              <button class="sidebar__section" type="button" data-menu="utilities" data-icon="UT">Utilities</button>
+              <div class="sidebar__submenu" id="utilities">
+                {% if has_menu_permission('sms.sms_page') %}
+                  <a href="{{ url_for('sms.sms_page') }}" data-icon="SE">Send SMS</a>
+                {% endif %}
+                {% if has_menu_permission('sms.sms_credit_page') %}
+                  <a href="{{ url_for('sms.sms_credit_page') }}" data-icon="XC">Send SMS Credit</a>
+                {% endif %}
+                {% if has_menu_permission('sms.whatsapp_page') %}
+                  <a href="{{ url_for('sms.whatsapp_page') }}" data-icon="WA">WhatsApp</a>
+                {% endif %}
+                {% if has_menu_permission('utilities.database_modes_guide') or session.get('user','').strip().lower() in ('admin','super') %}
+                  <a href="{{ url_for('utilities_db_modes.database_modes_guide_page') }}" data-icon="DM">DB modes guide</a>
+                {% endif %}
+                {% if has_menu_permission('utilities.backup') or session.get('user','').strip().lower() in ('admin','super') %}
+                  <a href="{{ url_for('utilities_backup.backup_page') }}" data-icon="BR">Backup</a>
+                {% endif %}
+                {% if has_menu_permission('auth.change_password') %}
+                  <a href="{{ url_for('auth.change_password') }}" data-icon="PC">Password Change</a>
+                {% endif %}
+                {% if allow_all_permissions %}
+                  <a href="#" data-icon="IE">Import / Export Data</a>
+                  {% if has_menu_permission('transaction_recording_audit.viewer') %}
+                  <a href="{{ url_for('transaction_recording_audit.viewer_page') }}" data-icon="AU">Audit Logs</a>
+                  {% else %}
+                  <a href="#" data-icon="AU">Audit Logs</a>
+                  {% endif %}
+                  <a href="#" data-icon="NS">Notification Settings</a>
+                  <a href="#" data-icon="MS">Mobile App Sync</a>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if has_menu_permission('notifications.outstanding_due') %}
+              <button class="sidebar__section" type="button" data-menu="notifications" data-icon="NF">Notifications</button>
+              <div class="sidebar__submenu" id="notifications">
+                <a href="{{ url_for('notifications.outstanding_due') }}" data-icon="OD">Outstanding due ({{ outstanding_due_count|default(0) }})</a>
+              </div>
+            {% endif %}
+          </nav>
+          <div class="sidebar__footer">
+            <!-- User, location and Logout shown in header bar below menu -->
+          </div>
+        </aside>
+        <script>
+          (function () {
+            var btn = document.getElementById("sidebarToggle");
+            if (!btn || btn.getAttribute("data-nexa-sidebar-bound") === "1") return;
+            if (typeof window.nexaToggleSidebar !== "function") return;
+            btn.setAttribute("data-nexa-sidebar-bound", "1");
+            btn.addEventListener("click", window.nexaToggleSidebar, true);
+          })();
+        </script>
+      {% endif %}
+
+      <div class="content">
+        {% if show_app_shell %}
+          <div class="location-header-sticky">
+            <div class="location-header-content">
+              <h1>{% if location_name %}{{ location_name }}{% if location_code is not none and location_code != '' %} — No. {{ location_code }}{% endif %}{% if session.get("tenant_id") %} — {{ session.get("tenant_id") }}{% endif %}{% elif session.get("location_name") %}{{ session.get("location_name") }}{% if location_code is not none and location_code != '' %} — No. {{ location_code }}{% endif %}{% if session.get("tenant_id") %} — {{ session.get("tenant_id") }}{% endif %}{% else %}&nbsp;{% endif %}</h1>
+            </div>
+            {% if quick_access_items %}
+            <nav class="location-header-quick-access" aria-label="Quick access">
+              {% for qa in quick_access_items %}
+                <a href="{{ url_for(qa.endpoint) }}" class="location-header-quick-access__item" title="{{ qa.label }}" aria-label="{{ qa.label }}">
+                  <i class="bi {{ qa.icon }}" aria-hidden="true"></i>
+                </a>
+              {% endfor %}
+            </nav>
+            {% endif %}
+            <div class="location-header-actions">
+{% if show_tenant_switcher and dbkeys_list is defined and dbkeys_list %}
+              <form method="POST" action="{{ url_for('dashboard.switch_dbkey') }}" id="dbkeySwitchForm" style="margin: 0;">
+                  <input type="hidden" name="dbkey" id="dbkeyHidden" value="{{ current_dbkey }}" />
+                  <span class="search-field search-field--popup dbkey-switch-field" style="min-width: 480px; width: 480px;">
+                    <input
+                      type="text"
+                      id="dbkeyDisplay"
+                      readonly
+                      class="input"
+                      style="padding: 6px 12px; font-size: 13px; cursor: pointer;"
+                      value="{% for dbkey_item in dbkeys_list %}{% if dbkey_item.code == current_dbkey %}{{ dbkey_item.name }} ({{ dbkey_item.code }}){% endif %}{% endfor %}"
+                      placeholder="Click to select DB..."
+                    />
+                    <button type="button" class="search-picker" id="dbkeyPicker" aria-label="Open DB selector">▾</button>
+                  </span>
+                </form>
+              {% endif %}
+              <span class="location-header__username">{{ session.get("user") }}</span>
+              <a class="location-header__logout" href="{{ url_for('auth.change_password') }}" title="Change Password" style="color:#6c757d;font-size:13px;text-decoration:none;border:1px solid #dee2e6;border-radius:4px;padding:3px 10px;">🔑 Change Password</a>
+              <a class="location-header__logout" href="{{ url_for('auth.logout') }}" data-app-logout="1">Logout</a>
+            </div>
+          </div>
+        {% endif %}
+        <main class="container">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-list">
+            {% for category, message in messages %}
+              <div class="flash flash--{{ category }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+        </main>
+      </div>
+    </div>
+
+    <!-- DBKey Switch Popup Modal -->
+    {% if show_tenant_switcher and dbkeys_list is defined and dbkeys_list %}
+    <div class="modal hidden" id="dbkeySwitchModal" role="dialog" aria-modal="true">
+      <div class="modal__overlay" data-close="dbkeySwitchModal"></div>
+      <div class="modal__content">
+        <div class="modal__header">
+          <h3>Switch Database</h3>
+          <button type="button" class="modal__close" data-close="dbkeySwitchModal">×</button>
+        </div>
+        <div class="modal__body">
+          <div class="modal__search">
+            <div class="search-field">
+              <input type="text" id="dbkeySwitchModalSearch" placeholder="Search database..." />
+              <button type="button" class="search-clear" id="dbkeySwitchModalClear">×</button>
+            </div>
+          </div>
+          <div class="scroll-table modal__table">
+            <table class="table" id="dbkeySwitchModalTable">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Location Name</th>
+                </tr>
+              </thead>
+              <tbody id="dbkeySwitchModalBody">
+                {% for dbkey_item in dbkeys_list %}
+                  <tr class="dbkey-row" data-code="{{ dbkey_item.code }}" data-name="{{ dbkey_item.name }}" style="cursor: pointer;">
+                    <td><strong>{{ dbkey_item.code }}</strong></td>
+                    <td>{{ dbkey_item.name }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% block scripts %}{% endblock %}
+    <script src="{{ url_for('static', filename='js/list_data_refresh.js') }}"></script>
+    <script>
+      (function () {
+        function bootListRefresh() {
+          try {
+            if (typeof ListDataRefresh !== 'undefined' && typeof ListDataRefresh.bootstrapReloadToolbars === 'function') {
+              ListDataRefresh.bootstrapReloadToolbars();
+            }
+          } catch (e) { /* non-list pages */ }
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootListRefresh);
+        else bootListRefresh();
+      })();
+    </script>
+    {% if show_app_shell %}
+      <script src="{{ url_for('static', filename='js/sidebar.js') }}?v=6"></script>
+      <script>
+      (function() {
+        var pathname = (((window.location && window.location.pathname) || "").toLowerCase()).replace(/\/*$/g, "");
+        var isPosBilling = pathname === "/pos-billing" || pathname.indexOf("/pos-billing/") === 0;
+        if (isPosBilling) {
+          return;
+        }
+        var IDLE_MS = 4 * 60 * 60 * 1000;
+        var logoutUrl = "{{ url_for('auth.logout') }}?idle=1";
+        var idleTimer = null;
+        function resetIdleTimer() {
+          if (idleTimer) clearTimeout(idleTimer);
+          idleTimer = setTimeout(function() {
+            try { localStorage.setItem("nexa_app_logout", String(Date.now())); } catch (e) {}
+            window.location.href = logoutUrl;
+          }, IDLE_MS);
+        }
+        function setupIdleLogout() {
+          resetIdleTimer();
+          ["mousemove", "keydown", "keypress", "click", "scroll", "touchstart"].forEach(function(ev) {
+            document.addEventListener(ev, resetIdleTimer);
+          });
+        }
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", setupIdleLogout);
+        } else {
+          setupIdleLogout();
+        }
+      })();
+      </script>
+      <script>
+      (function () {
+        // Cross-tab logout: when the user logs out in ANY tab, every other open
+        // tab of this app immediately follows to the login screen. Browsers do not
+        // allow closing user-opened tabs, so this is the equivalent behaviour.
+        var LOGOUT_URL = "{{ url_for('auth.logout') }}";
+        var KEY = "nexa_app_logout";
+        function broadcastLogout() {
+          try { localStorage.setItem(KEY, String(Date.now())); } catch (e) {}
+        }
+        // Flag the logout before the clicked link navigates away.
+        document.addEventListener("click", function (e) {
+          var link = e.target && e.target.closest ? e.target.closest("[data-app-logout]") : null;
+          if (link) broadcastLogout();
+        }, true);
+        // Other tabs react to the broadcast and leave the app. Only honour a
+        // fresh logout signal (within 15s) so a stale/leftover value can never
+        // kick a working, logged-in tab back to the login screen.
+        window.addEventListener("storage", function (e) {
+          if (e.key !== KEY || !e.newValue) return;
+          var ts = parseInt(e.newValue, 10) || 0;
+          if (!ts || (Date.now() - ts) > 15000) return;
+          try { window.close(); } catch (ignore) {}
+          window.location.href = LOGOUT_URL;
+        });
+      })();
+      </script>
+    {% endif %}
+    <script src="{{ url_for('static', filename='js/dropdown-search.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='js/odoo-lookup.js') }}?v=6"></script>
+    <script src="{{ url_for('static', filename='js/prevent-double-submit.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/form-enter-focus-only.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ctrl-s-save.js') }}?v=1"></script>
+    <script>
+      (function () {
+        function disableAutocompleteProjectWide() {
+          document.querySelectorAll('form').forEach(function (form) {
+            if (form.hasAttribute('data-allow-autocomplete')) return;
+            form.setAttribute('autocomplete', 'off');
+          });
+          document.querySelectorAll('input, textarea, select').forEach(function (el) {
+            if (el.hasAttribute('data-allow-autocomplete')) return;
+            el.setAttribute('autocomplete', 'off');
+          });
+        }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', disableAutocompleteProjectWide);
+        } else {
+          disableAutocompleteProjectWide();
+        }
+      })();
+    </script>
+    <script>
+      (function () {
+        // Block browser-level F1 help page everywhere in the app.
+        function blockBrowserF1(event) {
+          if (!event) return;
+          if (event.key === 'F1' || event.keyCode === 112) {
+            event.preventDefault();
+          }
+        }
+        window.addEventListener('keydown', blockBrowserF1, true);
+        document.addEventListener('keydown', blockBrowserF1, true);
+      })();
+    </script>
+    {% if show_tenant_switcher and dbkeys_list is defined and dbkeys_list %}
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        const dbkeyPicker = document.getElementById('dbkeyPicker');
+        const dbkeyDisplay = document.getElementById('dbkeyDisplay');
+        const dbkeyHidden = document.getElementById('dbkeyHidden');
+        const dbkeySwitchForm = document.getElementById('dbkeySwitchForm');
+        const dbkeySwitchModal = document.getElementById('dbkeySwitchModal');
+        const dbkeySwitchModalSearch = document.getElementById('dbkeySwitchModalSearch');
+        const dbkeySwitchModalClear = document.getElementById('dbkeySwitchModalClear');
+        const dbkeyRows = document.querySelectorAll('.dbkey-row');
+
+        if (dbkeyPicker && dbkeySwitchModal) {
+          // Open modal
+          dbkeyPicker.addEventListener('click', function(e) {
+            e.stopPropagation();
+            dbkeySwitchModal.classList.remove('hidden');
+            if (dbkeySwitchModalSearch) {
+              dbkeySwitchModalSearch.focus();
+            }
+          });
+
+          dbkeyDisplay.addEventListener('click', function() {
+            dbkeySwitchModal.classList.remove('hidden');
+            if (dbkeySwitchModalSearch) {
+              dbkeySwitchModalSearch.focus();
+            }
+          });
+
+          // Close modal
+          const closeModal = function() {
+            dbkeySwitchModal.classList.add('hidden');
+            if (dbkeySwitchModalSearch) {
+              dbkeySwitchModalSearch.value = '';
+              filterDbkeys('');
+            }
+          };
+
+          dbkeySwitchModal.addEventListener('click', function(e) {
+            if (e.target.classList.contains('modal__overlay') || e.target.classList.contains('modal__close')) {
+              closeModal();
+            }
+          });
+
+          // Search functionality
+          function filterDbkeys(searchTerm) {
+            const term = searchTerm.toLowerCase();
+            dbkeyRows.forEach(row => {
+              const code = row.dataset.code.toLowerCase();
+              const name = (row.dataset.name || '').toLowerCase();
+              if (code.includes(term) || name.includes(term)) {
+                row.style.display = '';
+              } else {
+                row.style.display = 'none';
+              }
+            });
+          }
+
+          if (dbkeySwitchModalSearch) {
+            dbkeySwitchModalSearch.addEventListener('input', function(e) {
+              filterDbkeys(e.target.value);
+            });
+          }
+
+          if (dbkeySwitchModalClear) {
+            dbkeySwitchModalClear.addEventListener('click', function() {
+              dbkeySwitchModalSearch.value = '';
+              filterDbkeys('');
+              dbkeySwitchModalSearch.focus();
+            });
+          }
+
+          // Select dbkey
+          dbkeyRows.forEach(row => {
+            row.addEventListener('click', function() {
+              const code = this.dataset.code;
+              const name = this.dataset.name;
+              
+              // Update display
+              if (dbkeyDisplay) {
+                dbkeyDisplay.value = name + ' (' + code + ')';
+              }
+              if (dbkeyHidden) {
+                dbkeyHidden.value = code;
+              }
+              
+              // Submit form
+              if (dbkeySwitchForm) {
+                dbkeySwitchForm.submit();
+              }
+            });
+          });
+        }
+      });
+    </script>
+    {% endif %}
+    {% if (user_customer_creation or allow_all_permissions) and session.get('user') and cr_alert_poll_enabled %}
+    <script>
+    (function () {
+      var POLL_URL = "/ho/api/customer-request-pending-count";
+      var DISMISS_URL = "/ho/api/customer-request-alert-dismiss";
+      var POLL_INTERVAL = 30000; // 30 seconds
+      var SOUND_REPEAT_INTERVAL = 5000; // repeat sound every 5s while toast is open
+      var LS_KEY = "cr_pending_count_last";
+      var LS_CODE_KEY = "cr_pending_latest_code_last";
+      var SOUND_SNOOZE_BASE_KEY = "cr_alert_sound_snooze_latest_code";
+      var _soundTimer = null; // repeating sound interval handle
+      var _audioCtx = null;   // shared AudioContext (created on first user gesture)
+      var _snoozeBase = parseInt(localStorage.getItem(SOUND_SNOOZE_BASE_KEY) || "-1", 10);
+      var _latestPolledCount = -1; // most recent server count seen in this tab
+      var _latestPolledCode = -1;  // most recent pending latest_code seen in this tab
+      var _crAiProcessInFlight = false; // avoid overlapping POSTs while one AI convert is running
+      var _crPollInFlight = false; // avoid overlapping pending-count polls (can otherwise stack microtasks / work)
+      var _crPollInterval = null; // cleared when org-wide polling is disabled in General Setup
+      var _crLastAiReloadAt = 0; // debounce location.reload after AI auto-convert on customer-request page
+      // Organization-wide AI auto-convert (synced from server each poll; list page can turn on/off for all users)
+      window.crGlobalAiAutoConvert = window.crGlobalAiAutoConvert || "N";
+      if (isNaN(_snoozeBase)) _snoozeBase = -1;
+
+      function _isSoundSnoozed() {
+        return _snoozeBase >= 0;
+      }
+
+      // Create/resume AudioContext — must be called inside a user gesture to unlock audio
+      function _getAudioCtx() {
+        if (!_audioCtx) {
+          _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        // Resume if browser suspended it (common in Chrome)
+        if (_audioCtx.state === "suspended") {
+          _audioCtx.resume();
+        }
+        return _audioCtx;
+      }
+
+      // Unlock audio on first any user interaction so polling can play later
+      function _unlockAudio() {
+        _getAudioCtx();
+        document.removeEventListener("click",    _unlockAudio);
+        document.removeEventListener("keydown",  _unlockAudio);
+        document.removeEventListener("touchstart", _unlockAudio);
+      }
+      document.addEventListener("click",     _unlockAudio);
+      document.addEventListener("keydown",   _unlockAudio);
+      document.addEventListener("touchstart", _unlockAudio);
+
+      function playAlertSound() {
+        if (_isSoundSnoozed()) return;
+        try {
+          var ctx = _getAudioCtx();
+
+          function beep(freq, startTime, duration, vol) {
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(freq, startTime);
+            gain.gain.setValueAtTime(vol, startTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+            osc.start(startTime);
+            osc.stop(startTime + duration);
+          }
+
+          var t = ctx.currentTime;
+          beep(880,  t,        0.18, 0.4);
+          beep(1100, t + 0.2,  0.18, 0.4);
+          beep(1320, t + 0.4,  0.28, 0.5);
+        } catch (e) { console.warn("CR alert sound error:", e); }
+      }
+
+      function stopRepeatingSound() {
+        if (_soundTimer) {
+          clearInterval(_soundTimer);
+          _soundTimer = null;
+        }
+      }
+
+      function startRepeatingSound() {
+        if (_isSoundSnoozed()) return;
+        stopRepeatingSound();
+        playAlertSound(); // play immediately
+        _soundTimer = setInterval(function () {
+          // only keep playing while the toast is still visible
+          if (document.getElementById("crAlertToast")) {
+            playAlertSound();
+          } else {
+            stopRepeatingSound();
+          }
+        }, SOUND_REPEAT_INTERVAL);
+      }
+
+      function dismissAlert() {
+        // Only hide current toast/sound locally.
+        // Pending unacknowledged requests will trigger sound again on next poll.
+        stopRepeatingSound();
+        var toast = document.getElementById("crAlertToast");
+        if (toast) toast.remove();
+      }
+      function acknowledgeCurrentAlerts(opts) {
+        var keepToast = !!(opts && opts.keepToast);
+        var baseCode = Math.max(0, isNaN(_latestPolledCode) ? 0 : _latestPolledCode);
+        var baseCount = Math.max(0, isNaN(_latestPolledCount) ? 0 : _latestPolledCount);
+        _snoozeBase = baseCode;
+        localStorage.setItem(SOUND_SNOOZE_BASE_KEY, String(_snoozeBase));
+        localStorage.setItem(LS_CODE_KEY, String(baseCode));
+        localStorage.setItem(LS_KEY, String(baseCount));
+        stopRepeatingSound();
+        if (!keepToast) {
+          var toast = document.getElementById("crAlertToast");
+          if (toast) toast.remove();
+        }
+        // Broadcast dismissal globally so all users stop alert sound.
+        fetch(DISMISS_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ latest_code: baseCode }),
+        }).catch(function () {});
+      }
+      function stopAlertSoundOnly() {
+        var lsCode = parseInt(localStorage.getItem(LS_CODE_KEY) || "-1", 10);
+        var base = Math.max(
+          0,
+          isNaN(_latestPolledCode) ? -1 : _latestPolledCode,
+          isNaN(lsCode) ? -1 : lsCode
+        );
+        _snoozeBase = base;
+        localStorage.setItem(SOUND_SNOOZE_BASE_KEY, String(_snoozeBase));
+        stopRepeatingSound();
+        // Refresh snooze base with actual server latest_code to avoid stale/local mismatches.
+        fetch(POLL_URL)
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            var code = parseInt((data && data.latest_code) || 0, 10);
+            if (!isNaN(code) && code >= 0) {
+              _latestPolledCode = code;
+              _snoozeBase = code;
+              localStorage.setItem(SOUND_SNOOZE_BASE_KEY, String(_snoozeBase));
+            }
+          })
+          .catch(function () {});
+      }
+      function resumeAlertSound() {
+        _snoozeBase = -1;
+        localStorage.removeItem(SOUND_SNOOZE_BASE_KEY);
+      }
+
+      function showToast(count) {
+        // if a toast is already open, just update the count and keep repeating
+        var existing = document.getElementById("crAlertToast");
+        if (existing) {
+          var strong = existing.querySelector("strong");
+          if (strong) strong.textContent = count + " customer request" + (count > 1 ? "s" : "") + " pending";
+          return;
+        }
+
+        var toast = document.createElement("div");
+        toast.id = "crAlertToast";
+        toast.innerHTML =
+          "<span style='font-size:20px;animation:crBell 0.6s infinite alternate;display:inline-block;'>🔔</span>&nbsp;" +
+          "<div style='flex:1;'>" +
+            "<strong id='crAlertMsg'>" + count + " customer request" + (count > 1 ? "s" : "") + " pending</strong><br>" +
+            "<a href='/ho/customer-request?tab=pending' onclick='window.crAcknowledgeAlerts && window.crAcknowledgeAlerts({keepToast:true})' style='color:#fde68a;text-decoration:underline;font-size:13px;font-weight:600;'>View Requests →</a>" +
+          "</div>" +
+          "<button onclick='window.crDismissAlert()' title='Dismiss' style='margin-left:10px;background:rgba(255,255,255,0.2);border:none;color:#fff;font-size:18px;width:28px;height:28px;border-radius:50%;cursor:pointer;line-height:1;flex-shrink:0;'>×</button>";
+
+        Object.assign(toast.style, {
+          position: "fixed",
+          bottom: "28px",
+          right: "28px",
+          background: "linear-gradient(135deg,#b91c1c,#dc2626)",
+          color: "#fff",
+          padding: "16px 18px",
+          borderRadius: "14px",
+          boxShadow: "0 6px 30px rgba(0,0,0,0.4)",
+          zIndex: "999999",
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          fontSize: "14px",
+          fontFamily: "inherit",
+          minWidth: "300px",
+          maxWidth: "380px",
+          animation: "crToastIn 0.35s ease"
+        });
+
+        if (!document.getElementById("crToastKeyframes")) {
+          var style = document.createElement("style");
+          style.id = "crToastKeyframes";
+          style.textContent =
+            "@keyframes crToastIn{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}" +
+            "@keyframes crBell{from{transform:rotate(-15deg)}to{transform:rotate(15deg)}}";
+          document.head.appendChild(style);
+        }
+
+        document.body.appendChild(toast);
+        // NO auto-dismiss — stays until user clicks ×
+      }
+
+      // expose dismiss globally so inline onclick can reach it
+      window.crDismissAlert = dismissAlert;
+      window.crAcknowledgeAlerts = acknowledgeCurrentAlerts;
+      // expose sound stop globally for customer-request page button
+      window.crStopAlertSound = stopAlertSoundOnly;
+      window.crResumeAlertSound = resumeAlertSound;
+      window.crIsAlertSoundMuted = function() { return _isSoundSnoozed(); };
+      window.addEventListener("storage", function(evt) {
+        try {
+          if (!evt) return;
+          if (evt.key === SOUND_SNOOZE_BASE_KEY) {
+            var v = parseInt(evt.newValue || "-1", 10);
+            _snoozeBase = isNaN(v) ? -1 : v;
+            if (_isSoundSnoozed()) stopRepeatingSound();
+          }
+        } catch (err) {
+          console.warn("CR storage handler:", err);
+        }
+      });
+
+      function updateBadge(count) {
+        var badge = document.getElementById("crPendingBadge");
+        if (!badge) return;
+        if (count > 0) {
+          badge.textContent = count;
+          badge.style.display = "inline-block";
+        } else {
+          badge.style.display = "none";
+        }
+      }
+
+      function stopCrAlertPolling() {
+        if (_crPollInterval !== null) {
+          clearInterval(_crPollInterval);
+          _crPollInterval = null;
+        }
+        stopRepeatingSound();
+        var openToast = document.getElementById("crAlertToast");
+        if (openToast) openToast.remove();
+        updateBadge(0);
+      }
+
+      function poll() {
+        if (_crPollInFlight) return;
+        _crPollInFlight = true;
+        fetch(POLL_URL)
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data && String(data.poll_enabled || "").toUpperCase() === "N") {
+              stopCrAlertPolling();
+              return;
+            }
+            var count = data.count || 0;
+            var latestCode = parseInt((data && data.latest_code) || 0, 10);
+            var lastAckCode = parseInt((data && data.last_ack_code) || 0, 10);
+            _latestPolledCount = count;
+            _latestPolledCode = isNaN(latestCode) ? 0 : latestCode;
+            var last = parseInt(localStorage.getItem(LS_KEY) || "-1", 10);
+            localStorage.setItem(LS_CODE_KEY, String(_latestPolledCode));
+            updateBadge(count);
+
+            // Keep alert continuous while any unacknowledged pending requests exist.
+            if (count > 0) {
+              if (_isSoundSnoozed()) {
+                // Continuous mode: do not keep stale snooze when pending alerts exist.
+                resumeAlertSound();
+              }
+              showToast(count);
+              if (!_soundTimer) {
+                startRepeatingSound();
+              }
+            } else {
+              stopRepeatingSound();
+              var openToast2 = document.getElementById("crAlertToast");
+              if (openToast2) openToast2.remove();
+            }
+            localStorage.setItem(LS_KEY, count);
+            if (data.ai_auto_convert === "Y" || data.ai_auto_convert === "N") {
+              window.crGlobalAiAutoConvert = data.ai_auto_convert;
+              try {
+                localStorage.setItem(
+                  "cr_ai_auto_convert",
+                  data.ai_auto_convert === "Y" ? "1" : "0"
+                );
+              } catch (e) {}
+            }
+            if (count > 0 && data.ai_auto_convert === "Y" && !_crAiProcessInFlight) {
+              _crAiProcessInFlight = true;
+              fetch("/ho/api/customer-request-ai-process", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: { "X-Requested-With": "XMLHttpRequest" },
+              })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                  if (!d || !d.ok) return;
+                  if (
+                    (d.action === "converted" || d.action === "ai_rejected") &&
+                    (window.location.pathname || "").toLowerCase().indexOf("/ho/customer-request") === 0
+                  ) {
+                    var now = Date.now();
+                    if (now - _crLastAiReloadAt < 2000) return;
+                    _crLastAiReloadAt = now;
+                    window.location.reload();
+                  }
+                })
+                .catch(function () {})
+                .then(function () { _crAiProcessInFlight = false; });
+            }
+          })
+          .catch(function () {})
+          .then(function () { _crPollInFlight = false; });
+      }
+
+      // If user opens customer-request notifications page, stop alert sound immediately.
+      if ((window.location.pathname || "").toLowerCase().indexOf("/ho/customer-request") === 0) {
+        acknowledgeCurrentAlerts({ keepToast: false });
+      }
+
+      // Poll soon so badge, snooze, and org-wide AI flag match the server; then every 30s
+      setTimeout(poll, 400);
+      _crPollInterval = setInterval(poll, POLL_INTERVAL);
+    })();
+    </script>
+    {% endif %}
+
+    {% block extra_js %}{% endblock %}
+  </body>
+</html>

@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Nexa ERP Transaction Audit Recorder",
+  "version": "1.0.1",
+  "description": "Silent tab recording for Nexa transaction audit — no Chrome Share dialog after install.",
+  "permissions": ["tabCapture", "offscreen", "storage", "activeTab"],
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "http://192.168.61.33/*",
+    "http://*/*",
+    "https://*/*",
+    "https://*.nexuserp.store/*",
+    "https://test.nexuserp.store/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "http://192.168.61.33/*",
+        "http://*/*",
+        "https://*/*",
+        "https://*.nexuserp.store/*",
+        "https://test.nexuserp.store/*"
+      ],
+      "js": ["content-bridge.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ]
+}

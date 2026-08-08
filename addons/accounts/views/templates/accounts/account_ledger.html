@@ -1,0 +1,681 @@
+{% extends "base.html" %}
+{% block title %}{% if account %}{{ account.code|e }} — {% endif %}Account ledger{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .al-wrap { max-width: 1200px; }
+  .al-top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+  .al-back { font-size: 13px; }
+  .al-back a { color: #1a56a4; text-decoration: none; }
+  .al-back a:hover { text-decoration: underline; }
+  .al-title { font-size: 1.5rem; font-weight: 600; color: #0f172a; margin: 0 0 4px 0; }
+  .al-sub { color: #64748b; font-size: 13px; margin: 0; }
+  .al-card {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 18px; margin-bottom: 16px;
+  }
+  .al-meta { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px 20px; font-size: 13px; }
+  .al-meta dt { color: #94a3b8; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin: 0; }
+  .al-meta dd { margin: 2px 0 0 0; font-weight: 600; color: #1e293b; }
+  .al-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+  .al-filters label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px; }
+  .al-filters input[type="date"] { padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; }
+  .al-filters .al-account-pick { display: flex; align-items: stretch; width: 100%; max-width: 520px; min-height: 40px; border: 1px solid #cbd5e1; border-radius: 10px; background: #f8fafc; overflow: hidden; }
+  .al-filters .al-account-pick:focus-within { border-color: #1a56a4; box-shadow: 0 0 0 2px rgba(26, 86, 164, 0.12); background: #fff; }
+  .al-filters .al-account-pick input[readonly] { flex: 1; min-width: 0; border: none; background: transparent; padding: 8px 10px; font-size: 14px; cursor: pointer; }
+  .al-filters .al-account-pick .search-clear { position: static; transform: none; width: 40px; background: #f1f5f9; border: none; border-left: 1px solid #e2e8f0; }
+  .al-filters .al-account-pick .search-picker { min-width: 44px; background: #1a56a4; color: #fff; border: none; border-left: 1px solid #e2e8f0; font-size: 16px; font-weight: 600; cursor: pointer; }
+  .al-filters .al-account-pick .search-picker:hover { background: #144a8a; }
+  .al-filters button[type="submit"] { background: #1a56a4; color: #fff; border: none; padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .al-filters .al-pdf-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+  .al-filters .al-pdf-link {
+    display: inline-flex; align-items: center; padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    text-decoration: none; border: 1px solid #cbd5e1; background: #fff; color: #334155;
+  }
+  .al-filters .al-pdf-link--primary { background: #1a56a4; color: #fff; border-color: #1a56a4; }
+  .al-filters .al-pdf-link--primary:hover { background: #144a8a; color: #fff; }
+  .al-filters .al-pdf-link:hover { background: #f1f5f9; color: #0f172a; }
+  .al-filters button[type="submit"]:hover { background: #144a8a; }
+  .al-err { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
+  .al-hint { font-size: 12px; color: #64748b; margin: 0 0 8px 0; }
+  .al-prompt { text-align: center; color: #64748b; padding: 28px 16px; font-size: 14px; }
+  #alLedgerTable { width: 100%; border-collapse: collapse; font-size: 13px; }
+  #alLedgerTable th, #alLedgerTable td { border: 1px solid #e2e8f0; padding: 8px 10px; }
+  #alLedgerTable thead th { background: #f1f5f9; font-weight: 600; text-align: left; color: #334155; }
+  #alLedgerTable td.num { text-align: right; font-family: ui-monospace, monospace; }
+  .nexa-list-page #alLedgerTable.co-table th.al-wrap-col,
+  .nexa-list-page #alLedgerTable.co-table td.al-wrap-cell {
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    max-width: 240px;
+    min-width: 100px;
+    vertical-align: top;
+  }
+  #alLedgerTable tbody tr:nth-child(even) { background: #fafbfc; }
+  .al-sum-row { font-weight: 600; background: #eff6ff !important; }
+  .nexa-setup-list-page .page-po__topbar-actions .al-pdf-link { margin-left: 8px; }
+  .nexa-setup-list-page .page-po__topbar-actions .al-pdf-link:first-child { margin-left: 0; }
+  .al-picker-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .al-picker-tab {
+    padding: 7px 12px; font-size: 12px; font-weight: 600; border: 1px solid #cbd5e1; border-radius: 8px;
+    background: #f8fafc; color: #475569; cursor: pointer;
+  }
+  .al-picker-tab:hover { background: #f1f5f9; }
+  .al-picker-tab.is-active { background: #1a56a4; border-color: #1a56a4; color: #fff; }
+</style>
+
+<div class="page-po nexa-list-page nexa-setup-list-page al-wrap">
+  {% if account %}
+  <section class="nexa-stat-grid" aria-label="Ledger totals">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-list-nested" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Lines</p>
+        <p class="nexa-stat-value">{{ "{:,}".format((ledger.lines or [])|length) }}</p>
+        <p class="nexa-stat-sub">In date range</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--cyan"><i class="bi bi-box-arrow-in-right" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Opening</p>
+        <p class="nexa-stat-value">{{ ledger.opening_balance|round(2) }}</p>
+        <p class="nexa-stat-sub">Before From date</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-plus-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Debit</p>
+        <p class="nexa-stat-value">{{ ledger.total_debit|round(2) }}</p>
+        <p class="nexa-stat-sub">Period total</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-dash-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Credit</p>
+        <p class="nexa-stat-value">{{ ledger.total_credit|round(2) }}</p>
+        <p class="nexa-stat-sub">Period total</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-calculator" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Closing</p>
+        <p class="nexa-stat-value">{{ ledger.closing_balance|round(2) }}</p>
+        <p class="nexa-stat-sub">Dr − Cr run</p>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  <div class="page-po__topbar">
+    <div>
+      <p class="al-back" style="margin:0 0 6px;"><a href="{{ url_for('accounts.chart_of_accounts_list') }}">← Chart of accounts</a></p>
+      <h1 class="page-po__title">Account ledger</h1>
+      <p class="page-po__muted">Find a chart account, supplier, or customer — then show the matching ledger for the date range.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% if account and selected_account_id is not none %}
+      <a class="al-pdf-link al-pdf-link--primary" href="{{ url_for('accounts.account_ledger_pdf', account_id=selected_account_id, date_from=date_from or none, date_to=date_to or none, party_type=selected_party_type or none, party_code=selected_party_code or none) }}" target="_blank" rel="noopener">PDF (A4)</a>
+      <a class="al-pdf-link" href="{{ url_for('accounts.account_ledger_excel', account_id=selected_account_id, date_from=date_from or none, date_to=date_to or none, party_type=selected_party_type or none, party_code=selected_party_code or none) }}">Excel</a>
+      {% endif %}
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div class="al-card">
+    <p class="al-hint">Balance column is cumulative <strong>debit − credit</strong> in the period, after the opening balance. Use <strong>Find</strong> to pick a chart account (this page), or a supplier / customer (opens their ledger). Optionally filter lines by <strong>party</strong>. Set dates, then <strong>Show ledger</strong>.</p>
+    <form method="get" action="{{ url_for('accounts.account_ledger_page') }}" class="al-filters nexa-list-filter-panel" id="alLedgerForm">
+      <div>
+        <label for="al_account_display">Find account / supplier / customer</label>
+        <input type="hidden" name="account_id" id="al_account_id" value="{{ selected_account_id if selected_account_id is not none else '' }}">
+        <span class="search-field search-field--popup al-account-pick" style="width:100%;max-width:520px;">
+          <input type="text" id="al_account_display" readonly placeholder="Click to find account, supplier, or customer…"
+            value="{% if account %}{{ (account.code or '')|e }} — {{ (account.name or '')|e }}{% endif %}">
+          <button type="button" class="search-clear" id="alAccountClear" title="Clear" aria-label="Clear" {% if not account %}style="display:none"{% endif %}>×</button>
+          <button type="button" class="search-picker" id="alAccountPickerOpen" aria-label="Open find list">▾</button>
+        </span>
+      </div>
+      <div>
+        <label for="al_party_display">Party filter (optional)</label>
+        <input type="hidden" name="party_type" id="al_party_type" value="{{ selected_party_type or '' }}">
+        <input type="hidden" name="party_code" id="al_party_code" value="{{ selected_party_code or '' }}">
+        <span class="search-field search-field--popup al-account-pick" style="width:100%;max-width:520px;">
+          <input type="text" id="al_party_display" readonly placeholder="All parties — click to filter by supplier or customer…"
+            value="{{ selected_party_display or '' }}">
+          <button type="button" class="search-clear" id="alPartyClear" title="Clear party filter" aria-label="Clear party filter" {% if not selected_party_code %}style="display:none"{% endif %}>×</button>
+          <button type="button" class="search-picker" id="alPartyPickerOpen" aria-label="Open party list">▾</button>
+        </span>
+      </div>
+      <div>
+        <label for="date_from">From</label>
+        <input type="date" id="date_from" name="date_from" value="{{ date_from or '' }}">
+      </div>
+      <div>
+        <label for="date_to">To</label>
+        <input type="date" id="date_to" name="date_to" value="{{ date_to or '' }}">
+      </div>
+      <div>
+        <button type="submit">Show ledger</button>
+      </div>
+    </form>
+  </div>
+
+  {% if account %}
+  <div class="al-card">
+    <dl class="al-meta">
+      <div><dt>Code</dt><dd>{{ account.code|e }}</dd></div>
+      <div><dt>Name</dt><dd>{{ account.name|e }}</dd></div>
+      <div><dt>Type</dt><dd>{{ (account.type or '—')|e }}</dd></div>
+      <div><dt>Currency</dt><dd>{{ (account.currency or 'QAR')|e }}</dd></div>
+      {% if selected_party_code %}
+      <div><dt>Party filter</dt><dd>{{ selected_party_display|e }}</dd></div>
+      {% endif %}
+    </dl>
+  </div>
+  {% endif %}
+
+  {% if ledger_error %}
+  <div class="al-err">Could not load ledger: {{ ledger_error|e }}</div>
+  {% endif %}
+
+  {% if account %}
+  <div class="table-wrap co-table-wrap" style="overflow-x:auto;">
+    <table id="alLedgerTable" class="co-table">
+      <thead>
+        <tr>
+          <th style="text-align:center;width:52px;">Sl.No</th>
+          <th>Date</th>
+          <th>Voucher</th>
+          <th>Reference</th>
+          <th class="al-wrap-col">Narration</th>
+          <th>Source</th>
+          <th class="al-wrap-col">Remarks (line)</th>
+          <th>Party</th>
+          <th class="num">Debit</th>
+          <th class="num">Credit</th>
+          <th class="num">Balance</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="al-op-row">
+          <td>—</td>
+          <td colspan="7">Opening balance (before {{ (date_from or '')|e }})</td>
+          <td class="num">—</td>
+          <td class="num">—</td>
+          <td class="num">{{ ledger.opening_balance|round(2) }}</td>
+        </tr>
+        {% for row in ledger.lines %}
+        <tr>
+          <td style="text-align:center;">{{ loop.index }}</td>
+          <td>{{ (row.voucher_date or '')|e }}</td>
+          <td>{% if row.voucher_no %}<a href="{{ url_for('accounts.journal_voucher_view', voucher_no=row.voucher_no) }}" target="_blank" rel="noopener" title="Open journal">{{ (row.voucher_no or '')|e }}</a>{% else %}—{% endif %}</td>
+          <td>{{ (row.reference_no or '')|e }}</td>
+          <td class="al-wrap-cell">{{ (row.narration or '')|e }}</td>
+          <td>{{ (row.source or '')|e }}</td>
+          <td class="al-wrap-cell">{{ (row.remarks or '')|e }}</td>
+          <td>{% if row.party_name %}{{ row.party_name|e }}{% elif row.party_type or row.party_code %}{{ (row.party_type or '')|e }}{% if row.party_code %} {{ (row.party_code or '')|e }}{% endif %}{% else %}—{% endif %}</td>
+          <td class="num">{% if row.debit %}{{ row.debit|round(2) }}{% else %}—{% endif %}</td>
+          <td class="num">{% if row.credit %}{{ row.credit|round(2) }}{% else %}—{% endif %}</td>
+          <td class="num">{{ row.running_balance|round(2) }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="11" style="text-align:center;color:#94a3b8;padding:24px;">No GL lines in this date range{% if selected_party_code %} for party <strong>{{ selected_party_display|e }}</strong>{% endif %}. Post journal entries or transactions that write to <strong>{{ account.code|e }}</strong> to see activity here.</td>
+        </tr>
+        {% endfor %}
+        {% if ledger.lines %}
+        <tr class="al-sum-row">
+          <td colspan="8">Period totals / closing</td>
+          <td class="num">{{ ledger.total_debit|round(2) }}</td>
+          <td class="num">{{ ledger.total_credit|round(2) }}</td>
+          <td class="num">{{ ledger.closing_balance|round(2) }}</td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="al-card al-prompt">Select a <strong>ledger account</strong> and date range above, then click <strong>Show ledger</strong> to see voucher lines and running balance.</div>
+  {% endif %}
+</div>
+
+<!-- Find picker: account / supplier / customer -->
+<div class="modal hidden" id="alAccountPickerModal" role="dialog" aria-modal="true" aria-labelledby="alAccPickerTitle">
+  <div class="modal__overlay" data-close="alAccountPickerModal"></div>
+  <div class="modal__content" style="width: min(720px, 95vw); max-height: 85vh;">
+    <div class="modal__header">
+      <h3 id="alAccPickerTitle">Find account, supplier, or customer</h3>
+      <button type="button" class="modal__close" data-close="alAccountPickerModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="al-picker-tabs" role="tablist" aria-label="Find type">
+        <button type="button" class="al-picker-tab is-active" data-al-tab="account" role="tab" aria-selected="true">Account</button>
+        <button type="button" class="al-picker-tab" data-al-tab="supplier" role="tab" aria-selected="false">Supplier</button>
+        <button type="button" class="al-picker-tab" data-al-tab="customer" role="tab" aria-selected="false">Customer</button>
+      </div>
+      <div class="modal__search" style="margin-bottom: 10px;">
+        <div class="search-field" style="width: 100%;">
+          <input type="text" id="alAccPickerSearch" placeholder="Search by code or name…" autocomplete="off" style="width: 100%;">
+          <button type="button" class="search-clear" id="alAccPickerSearchClear" style="display: none;">×</button>
+        </div>
+      </div>
+      <div class="scroll-table modal__table" style="max-height: 52vh;">
+        <table class="table" id="alAccPickerTable" style="width: 100%;">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th id="alAccPickerCol3">Type</th>
+            </tr>
+          </thead>
+          <tbody id="alAccPickerBody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Party filter picker: supplier / customer only -->
+<div class="modal hidden" id="alPartyPickerModal" role="dialog" aria-modal="true" aria-labelledby="alPartyPickerTitle">
+  <div class="modal__overlay" data-close="alPartyPickerModal"></div>
+  <div class="modal__content" style="width: min(720px, 95vw); max-height: 85vh;">
+    <div class="modal__header">
+      <h3 id="alPartyPickerTitle">Filter by party</h3>
+      <button type="button" class="modal__close" data-close="alPartyPickerModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="al-picker-tabs" role="tablist" aria-label="Party type">
+        <button type="button" class="al-picker-tab is-active" data-al-party-tab="supplier" role="tab" aria-selected="true">Supplier</button>
+        <button type="button" class="al-picker-tab" data-al-party-tab="customer" role="tab" aria-selected="false">Customer</button>
+      </div>
+      <div class="modal__search" style="margin-bottom: 10px;">
+        <div class="search-field" style="width: 100%;">
+          <input type="text" id="alPartyPickerSearch" placeholder="Search by code or name…" autocomplete="off" style="width: 100%;">
+          <button type="button" class="search-clear" id="alPartyPickerSearchClear" style="display: none;">×</button>
+        </div>
+      </div>
+      <div class="scroll-table modal__table" style="max-height: 52vh;">
+        <table class="table" style="width: 100%;">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th id="alPartyPickerCol3">Payable A/c</th>
+            </tr>
+          </thead>
+          <tbody id="alPartyPickerBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var AL_ACCOUNTS = {{ all_accounts|tojson }};
+  var AL_SUPPLIERS = {{ (all_suppliers or [])|tojson }};
+  var AL_CUSTOMERS = {{ (all_customers or [])|tojson }};
+  if (!Array.isArray(AL_ACCOUNTS)) AL_ACCOUNTS = [];
+  if (!Array.isArray(AL_SUPPLIERS)) AL_SUPPLIERS = [];
+  if (!Array.isArray(AL_CUSTOMERS)) AL_CUSTOMERS = [];
+  var SUPPLIER_LEDGER_URL = {{ url_for('accounts.supplier_ledger_page')|tojson }};
+  var CUSTOMER_LEDGER_URL = {{ url_for('accounts.customer_ledger_page')|tojson }};
+  var alTab = 'account';
+  var alModalList = [];
+
+  function esc(s) {
+    if (s == null) return '';
+    var d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+  }
+  function attrEsc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;');
+  }
+
+  function currentDateParams() {
+    var df = document.getElementById('date_from');
+    var dt = document.getElementById('date_to');
+    var p = new URLSearchParams();
+    if (df && df.value) p.set('date_from', df.value);
+    if (dt && dt.value) p.set('date_to', dt.value);
+    return p;
+  }
+
+  function setAlTab(tab) {
+    alTab = tab || 'account';
+    document.querySelectorAll('.al-picker-tab').forEach(function(btn) {
+      var on = btn.getAttribute('data-al-tab') === alTab;
+      btn.classList.toggle('is-active', on);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    var col3 = document.getElementById('alAccPickerCol3');
+    if (col3) {
+      col3.textContent = alTab === 'account' ? 'Type' : (alTab === 'supplier' ? 'Payable A/c' : 'Receivable A/c');
+    }
+    var s = document.getElementById('alAccPickerSearch');
+    if (s) s.placeholder = alTab === 'account'
+      ? 'Search by code, name, or type…'
+      : 'Search by code or name…';
+    if (alTab === 'account') alModalList = AL_ACCOUNTS.slice();
+    else if (alTab === 'supplier') alModalList = AL_SUPPLIERS.slice();
+    else alModalList = AL_CUSTOMERS.slice();
+    if (s) s.value = '';
+    var c = document.getElementById('alAccPickerSearchClear');
+    if (c) c.style.display = 'none';
+    renderAlPickerRows(alModalList);
+  }
+
+  function openAlAccPicker() {
+    var m = document.getElementById('alAccountPickerModal');
+    if (!m) return;
+    setAlTab('account');
+    var s = document.getElementById('alAccPickerSearch');
+    if (s) s.focus();
+    m.classList.remove('hidden');
+  }
+
+  function closeAlAccPicker() {
+    var m = document.getElementById('alAccountPickerModal');
+    if (m) m.classList.add('hidden');
+  }
+
+  function renderAlPickerRows(list) {
+    var tbody = document.getElementById('alAccPickerBody');
+    if (!tbody) return;
+    if (!(list || []).length) {
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:18px;">No matches.</td></tr>';
+      return;
+    }
+    if (alTab === 'account') {
+      tbody.innerHTML = (list || []).map(function(a) {
+        if (a.account_id == null) return '';
+        var id = String(a.account_id);
+        var code = String(a.code != null ? a.code : '');
+        var name = String(a.name != null ? a.name : '');
+        var typ = String(a.type != null ? a.type : '—');
+        return '<tr data-kind="account" data-id="' + id.replace(/"/g, '&quot;') + '" style="cursor:pointer;">' +
+          '<td><strong>' + esc(code) + '</strong></td><td>' + esc(name) + '</td><td>' + esc(typ) + '</td></tr>';
+      }).join('');
+      return;
+    }
+    if (alTab === 'supplier') {
+      tbody.innerHTML = (list || []).map(function(s) {
+        var code = String(s.suppliercode != null ? s.suppliercode : '').trim();
+        if (!code) return '';
+        var name = String(s.suppliername != null ? s.suppliername : '');
+        var pay = String(s.payableaccount != null ? s.payableaccount : '—');
+        return '<tr data-kind="supplier" data-code="' + attrEsc(code) + '" style="cursor:pointer;">' +
+          '<td><strong>' + esc(code) + '</strong></td><td>' + esc(name) + '</td><td>' + esc(pay) + '</td></tr>';
+      }).join('');
+      return;
+    }
+    tbody.innerHTML = (list || []).map(function(c) {
+      var code = String(c.customercode != null ? c.customercode : '').trim();
+      if (!code) return '';
+      var name = String(c.customername != null ? c.customername : '');
+      var recv = String(c.receivableaccount != null ? c.receivableaccount : '—');
+      return '<tr data-kind="customer" data-code="' + attrEsc(code) + '" style="cursor:pointer;">' +
+        '<td><strong>' + esc(code) + '</strong></td><td>' + esc(name) + '</td><td>' + esc(recv) + '</td></tr>';
+    }).join('');
+  }
+
+  function filterAlPickerRows(q) {
+    var t = (q || '').trim().toLowerCase();
+    if (!t) { renderAlPickerRows(alModalList); return; }
+    var f;
+    if (alTab === 'account') {
+      f = (alModalList || []).filter(function(a) {
+        return (String(a.code || '').toLowerCase().indexOf(t) !== -1) ||
+          (String(a.name || '').toLowerCase().indexOf(t) !== -1) ||
+          (String(a.type || '').toLowerCase().indexOf(t) !== -1);
+      });
+    } else if (alTab === 'supplier') {
+      f = (alModalList || []).filter(function(s) {
+        return (String(s.suppliercode || '').toLowerCase().indexOf(t) !== -1) ||
+          (String(s.suppliername || '').toLowerCase().indexOf(t) !== -1) ||
+          (String(s.payableaccount || '').toLowerCase().indexOf(t) !== -1);
+      });
+    } else {
+      f = (alModalList || []).filter(function(c) {
+        return (String(c.customercode || '').toLowerCase().indexOf(t) !== -1) ||
+          (String(c.customername || '').toLowerCase().indexOf(t) !== -1) ||
+          (String(c.receivableaccount || '').toLowerCase().indexOf(t) !== -1);
+      });
+    }
+    renderAlPickerRows(f);
+  }
+
+  document.getElementById('alAccountPickerOpen') && document.getElementById('alAccountPickerOpen').addEventListener('click', function(e) { e.preventDefault(); openAlAccPicker(); });
+  document.getElementById('al_account_display') && document.getElementById('al_account_display').addEventListener('click', function(e) { e.preventDefault(); openAlAccPicker(); });
+  document.querySelectorAll('.al-picker-tab').forEach(function(btn) {
+    btn.addEventListener('click', function() { setAlTab(btn.getAttribute('data-al-tab') || 'account'); });
+  });
+  var alModal = document.getElementById('alAccountPickerModal');
+  if (alModal) {
+    alModal.addEventListener('click', function(e) {
+      if (e.target.classList.contains('modal__overlay') || (e.target.dataset && e.target.dataset.close === 'alAccountPickerModal') || e.target.classList.contains('modal__close')) {
+        closeAlAccPicker();
+      }
+    });
+  }
+  var alBody = document.getElementById('alAccPickerBody');
+  if (alBody) {
+    alBody.addEventListener('click', function(e) {
+      var tr = e.target.closest('tr');
+      if (!tr) return;
+      var kind = tr.getAttribute('data-kind') || alTab;
+      if (kind === 'supplier') {
+        var sc = tr.getAttribute('data-code') || '';
+        if (!sc) return;
+        var sp = currentDateParams();
+        sp.set('supplier_code', sc);
+        window.location.href = SUPPLIER_LEDGER_URL + '?' + sp.toString();
+        return;
+      }
+      if (kind === 'customer') {
+        var cc = tr.getAttribute('data-code') || '';
+        if (!cc) return;
+        var cp = currentDateParams();
+        cp.set('customer_code', cc);
+        window.location.href = CUSTOMER_LEDGER_URL + '?' + cp.toString();
+        return;
+      }
+      var id = tr.getAttribute('data-id');
+      if (id) {
+        var rec = (AL_ACCOUNTS || []).filter(function(x) { return String(x && x.account_id) === id; })[0];
+        var label = rec ? (String(rec.code != null ? rec.code : '') + ' — ' + String(rec.name != null ? rec.name : '')) : '';
+        var hid = document.getElementById('al_account_id');
+        var disp = document.getElementById('al_account_display');
+        if (hid) hid.value = id;
+        if (disp) disp.value = label;
+        var clr = document.getElementById('alAccountClear');
+        if (clr) clr.style.display = 'block';
+      }
+      closeAlAccPicker();
+    });
+  }
+  var alSrch = document.getElementById('alAccPickerSearch');
+  var alSrchClr = document.getElementById('alAccPickerSearchClear');
+  if (alSrch) {
+    alSrch.addEventListener('input', function() {
+      filterAlPickerRows(alSrch.value);
+      if (alSrchClr) alSrchClr.style.display = alSrch.value ? 'block' : 'none';
+    });
+  }
+  if (alSrchClr) {
+    alSrchClr.addEventListener('click', function() {
+      if (alSrch) { alSrch.value = ''; alSrch.focus(); }
+      alSrchClr.style.display = 'none';
+      filterAlPickerRows('');
+    });
+  }
+  var alClear = document.getElementById('alAccountClear');
+  if (alClear) {
+    alClear.addEventListener('click', function(e) {
+      e.preventDefault();
+      var hid = document.getElementById('al_account_id');
+      var disp = document.getElementById('al_account_display');
+      if (hid) hid.value = '';
+      if (disp) disp.value = '';
+      alClear.style.display = 'none';
+    });
+  }
+
+  /* Party filter (optional) — supplier / customer on same account ledger */
+  var alPartyTab = 'supplier';
+  var alPartyModalList = [];
+
+  function setAlPartyTab(tab) {
+    alPartyTab = tab || 'supplier';
+    document.querySelectorAll('[data-al-party-tab]').forEach(function(btn) {
+      var on = btn.getAttribute('data-al-party-tab') === alPartyTab;
+      btn.classList.toggle('is-active', on);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    var col3 = document.getElementById('alPartyPickerCol3');
+    if (col3) col3.textContent = alPartyTab === 'supplier' ? 'Payable A/c' : 'Receivable A/c';
+    alPartyModalList = alPartyTab === 'supplier' ? AL_SUPPLIERS.slice() : AL_CUSTOMERS.slice();
+    var s = document.getElementById('alPartyPickerSearch');
+    if (s) s.value = '';
+    var c = document.getElementById('alPartyPickerSearchClear');
+    if (c) c.style.display = 'none';
+    renderAlPartyPickerRows(alPartyModalList);
+  }
+
+  function openAlPartyPicker() {
+    var m = document.getElementById('alPartyPickerModal');
+    if (!m) return;
+    setAlPartyTab('supplier');
+    var s = document.getElementById('alPartyPickerSearch');
+    if (s) s.focus();
+    m.classList.remove('hidden');
+  }
+
+  function closeAlPartyPicker() {
+    var m = document.getElementById('alPartyPickerModal');
+    if (m) m.classList.add('hidden');
+  }
+
+  function renderAlPartyPickerRows(list) {
+    var tbody = document.getElementById('alPartyPickerBody');
+    if (!tbody) return;
+    if (!(list || []).length) {
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:18px;">No matches.</td></tr>';
+      return;
+    }
+    if (alPartyTab === 'supplier') {
+      tbody.innerHTML = (list || []).map(function(s) {
+        var code = String(s.suppliercode != null ? s.suppliercode : '').trim();
+        if (!code) return '';
+        var name = String(s.suppliername != null ? s.suppliername : '');
+        var pay = String(s.payableaccount != null ? s.payableaccount : '—');
+        return '<tr data-kind="supplier" data-code="' + attrEsc(code) + '" data-name="' + attrEsc(name) + '" style="cursor:pointer;">' +
+          '<td><strong>' + esc(code) + '</strong></td><td>' + esc(name) + '</td><td>' + esc(pay) + '</td></tr>';
+      }).join('');
+      return;
+    }
+    tbody.innerHTML = (list || []).map(function(c) {
+      var code = String(c.customercode != null ? c.customercode : '').trim();
+      if (!code) return '';
+      var name = String(c.customername != null ? c.customername : '');
+      var recv = String(c.receivableaccount != null ? c.receivableaccount : '—');
+      return '<tr data-kind="customer" data-code="' + attrEsc(code) + '" data-name="' + attrEsc(name) + '" style="cursor:pointer;">' +
+        '<td><strong>' + esc(code) + '</strong></td><td>' + esc(name) + '</td><td>' + esc(recv) + '</td></tr>';
+    }).join('');
+  }
+
+  function filterAlPartyPickerRows(q) {
+    var t = (q || '').trim().toLowerCase();
+    if (!t) { renderAlPartyPickerRows(alPartyModalList); return; }
+    var f;
+    if (alPartyTab === 'supplier') {
+      f = (alPartyModalList || []).filter(function(s) {
+        return (String(s.suppliercode || '').toLowerCase().indexOf(t) !== -1) ||
+          (String(s.suppliername || '').toLowerCase().indexOf(t) !== -1) ||
+          (String(s.payableaccount || '').toLowerCase().indexOf(t) !== -1);
+      });
+    } else {
+      f = (alPartyModalList || []).filter(function(c) {
+        return (String(c.customercode || '').toLowerCase().indexOf(t) !== -1) ||
+          (String(c.customername || '').toLowerCase().indexOf(t) !== -1) ||
+          (String(c.receivableaccount || '').toLowerCase().indexOf(t) !== -1);
+      });
+    }
+    renderAlPartyPickerRows(f);
+  }
+
+  document.getElementById('alPartyPickerOpen') && document.getElementById('alPartyPickerOpen').addEventListener('click', function(e) { e.preventDefault(); openAlPartyPicker(); });
+  document.getElementById('al_party_display') && document.getElementById('al_party_display').addEventListener('click', function(e) { e.preventDefault(); openAlPartyPicker(); });
+  document.querySelectorAll('[data-al-party-tab]').forEach(function(btn) {
+    btn.addEventListener('click', function() { setAlPartyTab(btn.getAttribute('data-al-party-tab') || 'supplier'); });
+  });
+  var alPartyModal = document.getElementById('alPartyPickerModal');
+  if (alPartyModal) {
+    alPartyModal.addEventListener('click', function(e) {
+      if (e.target.classList.contains('modal__overlay') || (e.target.dataset && e.target.dataset.close === 'alPartyPickerModal') || e.target.classList.contains('modal__close')) {
+        closeAlPartyPicker();
+      }
+    });
+  }
+  var alPartyBody = document.getElementById('alPartyPickerBody');
+  if (alPartyBody) {
+    alPartyBody.addEventListener('click', function(e) {
+      var tr = e.target.closest('tr');
+      if (!tr) return;
+      var kind = tr.getAttribute('data-kind') || alPartyTab;
+      var code = tr.getAttribute('data-code') || '';
+      var name = tr.getAttribute('data-name') || '';
+      if (!code) return;
+      var ptEl = document.getElementById('al_party_type');
+      var pcEl = document.getElementById('al_party_code');
+      var disp = document.getElementById('al_party_display');
+      if (ptEl) ptEl.value = kind === 'customer' ? 'CUSTOMER' : 'SUPPLIER';
+      if (pcEl) pcEl.value = code;
+      if (disp) disp.value = code + (name ? (' — ' + name) : '');
+      var clr = document.getElementById('alPartyClear');
+      if (clr) clr.style.display = 'block';
+      closeAlPartyPicker();
+    });
+  }
+  var alPartySrch = document.getElementById('alPartyPickerSearch');
+  var alPartySrchClr = document.getElementById('alPartyPickerSearchClear');
+  if (alPartySrch) {
+    alPartySrch.addEventListener('input', function() {
+      filterAlPartyPickerRows(alPartySrch.value);
+      if (alPartySrchClr) alPartySrchClr.style.display = alPartySrch.value ? 'block' : 'none';
+    });
+  }
+  if (alPartySrchClr) {
+    alPartySrchClr.addEventListener('click', function() {
+      if (alPartySrch) { alPartySrch.value = ''; alPartySrch.focus(); }
+      alPartySrchClr.style.display = 'none';
+      filterAlPartyPickerRows('');
+    });
+  }
+  var alPartyClear = document.getElementById('alPartyClear');
+  if (alPartyClear) {
+    alPartyClear.addEventListener('click', function(e) {
+      e.preventDefault();
+      var ptEl = document.getElementById('al_party_type');
+      var pcEl = document.getElementById('al_party_code');
+      var disp = document.getElementById('al_party_display');
+      if (ptEl) ptEl.value = '';
+      if (pcEl) pcEl.value = '';
+      if (disp) disp.value = '';
+      alPartyClear.style.display = 'none';
+    });
+  }
+})();
+</script>
+{% endblock %}

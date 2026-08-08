@@ -1,0 +1,1172 @@
+  <style>
+    .pos-settlement-page {
+      max-width: 1680px;
+      margin: 0 auto;
+      padding: 0 12px 32px;
+      background: #f1f5f9;
+      min-height: calc(100vh - 48px);
+      box-sizing: border-box;
+    }
+    .pos-settlement-page .psp-shell {
+      background: transparent;
+    }
+    .pos-settlement-page .psp-page-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .pos-settlement-page .psp-page-head h1 {
+      margin: 0 0 4px;
+      font-size: clamp(1.35rem, 2.2vw, 1.65rem);
+      font-weight: 800;
+      color: #0f172a;
+      letter-spacing: -0.02em;
+    }
+    .pos-settlement-page .psp-page-head .psp-lead {
+      margin: 0;
+      font-size: 13px;
+      color: #64748b;
+      max-width: 640px;
+      line-height: 1.45;
+    }
+    .pos-settlement-page .psp-breadcrumb {
+      font-size: 12px;
+      color: #64748b;
+      white-space: nowrap;
+      padding-top: 4px;
+    }
+    .pos-settlement-page .psp-breadcrumb span { color: #94a3b8; }
+    .pos-settlement-page .psp-breadcrumb strong { color: #334155; font-weight: 600; }
+
+    /* KPI cards */
+    .pos-settlement-page .psp-kpi-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    @media (min-width: 1200px) {
+      .pos-settlement-page .psp-kpi-strip { grid-template-columns: repeat(6, 1fr); }
+    }
+    .pos-settlement-page .psp-kpi-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      background: #fff;
+      border-radius: 10px;
+      padding: 14px 16px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+    }
+    .pos-settlement-page .psp-kpi-card__icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      flex-shrink: 0;
+    }
+    .pos-settlement-page .psp-kpi-card__body { min-width: 0; flex: 1; }
+    .pos-settlement-page .psp-kpi-card__label {
+      margin: 0 0 4px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .pos-settlement-page .psp-kpi-card__value {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      color: #0f172a;
+      line-height: 1.25;
+    }
+    .pos-settlement-page .psp-kpi-card__sub {
+      margin: 4px 0 0;
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+    }
+    .pos-settlement-page .psp-kpi-card__icon--blue { background: #dbeafe; color: #1d4ed8; }
+    .pos-settlement-page .psp-kpi-card__icon--green { background: #d1fae5; color: #047857; }
+    .pos-settlement-page .psp-kpi-card__icon--purple { background: #ede9fe; color: #6d28d9; }
+    .pos-settlement-page .psp-kpi-card__icon--orange { background: #ffedd5; color: #c2410c; }
+    .pos-settlement-page .psp-kpi-card__icon--red { background: #ffe4e6; color: #be123c; }
+    .pos-settlement-page .psp-kpi-card__icon--teal { background: #ccfbf1; color: #0f766e; }
+
+    .pos-settlement-page .psp-nav-filters .psp-nav-kv--control {
+      align-items: center;
+    }
+    .pos-settlement-page .psp-nav-filters .psp-nav-kv__label label {
+      margin: 0;
+      cursor: inherit;
+      font-size: inherit;
+      font-weight: 600;
+      color: #3d5c73;
+      line-height: 1.35;
+      text-transform: none;
+      letter-spacing: normal;
+    }
+    .pos-settlement-page .psp-nav-filters .psp-nav-kv__control {
+      min-width: 0;
+    }
+    .pos-settlement-page .psp-nav-filters .psp-nav-kv__control > .input,
+    .pos-settlement-page .psp-nav-filters .psp-nav-kv__control > select.input {
+      width: 100%;
+      box-sizing: border-box;
+      border-radius: 2px;
+      border: 1px solid #b8c8d4;
+      font-size: 12px;
+      padding: 5px 8px;
+      background: #fff;
+    }
+    .pos-settlement-page .psp-nav-filters .psp-nav-kv__control > .input[readonly] {
+      background: #f4f7fb;
+      color: #334155;
+      cursor: default;
+    }
+    .pos-settlement-page .psp-nav-filters .psp-counter-pick {
+      display: flex;
+      gap: 6px;
+      align-items: stretch;
+    }
+    .pos-settlement-page .psp-nav-filters .psp-counter-pick .input {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    .pos-settlement-page .psp-nav-filters .psp-counter-pick__btn {
+      flex-shrink: 0;
+      padding: 6px 10px;
+      font-size: 11px;
+      border-radius: 2px;
+    }
+    .pos-settlement-page .psp-nav-filters__toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 10px;
+      padding: 8px 14px;
+      border-top: 1px solid #f0f4f8;
+      background: #fff;
+    }
+    .pos-settlement-page .psp-nav-filters__toolbar .psp-tree-expand-actions {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    .pos-settlement-page .psp-nav-filters__toolbar .psp-tree-expand-actions .psp-btn-outline {
+      padding: 6px 10px;
+      font-size: 11px;
+      border-radius: 2px;
+    }
+    .pos-settlement-page .psp-nav-filters__toolbar .psp-btn-load {
+      padding: 7px 14px;
+      font-size: 12px;
+      border-radius: 2px;
+    }
+    .pos-settlement-page .psp-nav-filters__toolbar .psp-btn-outline {
+      padding: 7px 12px;
+      font-size: 12px;
+      border-radius: 2px;
+    }
+    .pos-settlement-page .psp-nav-filters__toolbar-sep {
+      color: #94a3b8;
+      font-size: 11px;
+      user-select: none;
+      margin: 0 2px;
+    }
+
+    .pos-settlement-page .psp-btn-load {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 18px;
+      font-weight: 700;
+      font-size: 13px;
+      border-radius: 8px;
+      border: none;
+      background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+      color: #fff;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
+    }
+    .pos-settlement-page .psp-btn-load:hover { filter: brightness(1.05); }
+    .pos-settlement-page .psp-btn-outline {
+      padding: 9px 16px;
+      font-weight: 600;
+      font-size: 13px;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      color: #475569;
+      cursor: pointer;
+    }
+    .pos-settlement-page .psp-btn-outline:hover { background: #f8fafc; }
+
+    .pos-settlement-page .psp-tree-expand-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .pos-settlement-page .psp-tree-expand-actions .psp-btn-outline {
+      padding: 9px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .pos-settlement-page .psp-tree-expand-actions .psp-btn-outline:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .pos-settlement-page .psp-counter-pick {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+    .pos-settlement-page .psp-counter-pick .input {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    .pos-settlement-page .psp-counter-pick #pspCounterDisplay {
+      cursor: pointer;
+    }
+    .pos-settlement-page .psp-counter-pick__btn {
+      flex: 0 0 auto;
+      white-space: nowrap;
+      align-self: stretch;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .pos-settlement-page .psp-counter-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1080;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      box-sizing: border-box;
+    }
+    .pos-settlement-page .psp-counter-modal[hidden] {
+      display: none !important;
+    }
+    .pos-settlement-page .psp-counter-modal__backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      cursor: pointer;
+    }
+    .pos-settlement-page .psp-counter-modal__card {
+      position: relative;
+      width: min(440px, 100%);
+      max-height: min(72vh, 520px);
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .pos-settlement-page .psp-counter-modal__head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid #f1f5f9;
+      background: #f8fafc;
+    }
+    .pos-settlement-page .psp-counter-modal__head h2 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .pos-settlement-page .psp-counter-modal__close {
+      border: none;
+      background: transparent;
+      font-size: 22px;
+      line-height: 1;
+      color: #64748b;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+    .pos-settlement-page .psp-counter-modal__close:hover {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+    .pos-settlement-page .psp-counter-modal__card > .input {
+      margin: 12px 16px 8px;
+      width: calc(100% - 32px);
+      box-sizing: border-box;
+    }
+    .pos-settlement-page .psp-counter-modal__list {
+      flex: 1 1 auto;
+      overflow: auto;
+      padding: 4px 12px 14px;
+      min-height: 120px;
+    }
+    .pos-settlement-page .psp-counter-opt {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      background: #fff;
+      font-size: 13px;
+      color: #334155;
+      cursor: pointer;
+    }
+    .pos-settlement-page .psp-counter-opt:hover {
+      border-color: var(--nexa-focus-color);
+      background: #f0f9ff;
+    }
+    .pos-settlement-page .psp-counter-opt strong {
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .pos-settlement-page .psp-counter-opt code {
+      font-size: 12px;
+      color: #64748b;
+      font-weight: 600;
+      margin-left: 6px;
+    }
+    .pos-settlement-page .psp-counter-opt--all {
+      font-weight: 700;
+      border-style: dashed;
+    }
+    .pos-settlement-page .psp-counter-modal__hint {
+      padding: 24px 16px;
+      text-align: center;
+      color: #64748b;
+      font-size: 13px;
+    }
+
+    /* Legacy panel shell — still used where nav card is combined */
+    .pos-settlement-page .psp-table-panel {
+      background: #fff;
+      border-radius: 10px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+      padding: 14px 16px;
+      margin-bottom: 14px;
+    }
+    .pos-settlement-page .psp-table-panel__title {
+      margin: 0 0 12px;
+      font-size: 13px;
+      font-weight: 800;
+      color: #334155;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    /* POS Sales List — NAV worksheet (matches Lines) */
+    .pos-settlement-page .psp-invoice-panel.psp-nav-lines-card .psp-sales-grid-wrap {
+      border-radius: 0;
+      border: none;
+      border-top: 1px solid #c5d3df;
+      max-height: min(52vh, 560px);
+      background: #fafcfd;
+    }
+    .pos-settlement-page .co-table.psp-sales-grid--nav {
+      border-collapse: collapse;
+    }
+    .pos-settlement-page .co-table.psp-sales-grid--nav thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: linear-gradient(180deg, #f4f7fb 0%, #e8eef5 100%);
+      border-right: 1px solid #c5d3df;
+      border-bottom: 1px solid #9eb1c4;
+      font-size: 11px;
+      font-weight: 800;
+      color: #475569;
+      padding: 7px 8px;
+      vertical-align: middle;
+    }
+    .pos-settlement-page .co-table.psp-sales-grid--nav thead th:last-child {
+      border-right: none;
+    }
+    .pos-settlement-page .co-table.psp-sales-grid--nav tbody td {
+      border-right: 1px solid #e8eef0;
+      border-bottom: 1px solid #dce4ec;
+      font-size: 12px;
+      vertical-align: middle;
+      background: #fff;
+    }
+    .pos-settlement-page .co-table.psp-sales-grid--nav tbody td:last-child {
+      border-right: none;
+    }
+    .pos-settlement-page .co-table.psp-sales-grid--nav tbody tr:hover td {
+      background: #f7fafc !important;
+    }
+
+    .pos-settlement-page .co-table tbody tr.psp-group-row td {
+      background: #e0f2fe !important;
+      font-weight: 700;
+      color: #0369a1;
+      border-color: #bae6fd !important;
+      cursor: pointer;
+      user-select: none;
+    }
+    .pos-settlement-page .co-table tbody tr.psp-group-row:hover td {
+      background: #bae6fd !important;
+    }
+    .pos-settlement-page .co-table .psp-group-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 800;
+      color: #0c4a6e;
+    }
+    .pos-settlement-page .co-table tbody tr.psp-tree-child td.sl-no {
+      padding-left: 22px;
+      box-shadow: inset 3px 0 0 #bae6fd;
+    }
+    .pos-settlement-page .co-table tbody tr.psp-tree-depth-3 td.sl-no {
+      padding-left: 46px;
+      box-shadow: inset 9px 0 0 #bae6fd;
+    }
+    .pos-settlement-page .co-table tbody tr.psp-tree-depth-4 td.sl-no {
+      padding-left: 58px;
+      box-shadow: inset 12px 0 0 #bae6fd;
+    }
+    .pos-settlement-page .co-table tbody tr.psp-group-row--cup0 td {
+      background: #f0f9ff !important;
+      color: #0c4a6e !important;
+      border-color: #bae6fd !important;
+    }
+    .pos-settlement-page .co-table tbody tr.psp-group-row--cup1 td {
+      background: #f8fafc !important;
+      color: #334155 !important;
+      border-color: #e2e8f0 !important;
+    }
+    .pos-settlement-page .co-table tbody tr.psp-group-row--cup2 td {
+      background: #fff !important;
+      color: #475569 !important;
+      border-color: #e2e8f0 !important;
+    }
+    .pos-settlement-page .co-table tbody tr.psp-group-row--cup0 td:nth-child(2) {
+      padding-left: 22px;
+      box-shadow: inset 3px 0 0 rgba(14, 165, 233, 0.45);
+    }
+    .pos-settlement-page .co-table tbody tr.psp-group-row--cup1 td:nth-child(2) {
+      padding-left: 38px;
+      box-shadow: inset 6px 0 0 rgba(14, 165, 233, 0.35);
+    }
+    .pos-settlement-page .co-table tbody tr.psp-group-row--cup2 td:nth-child(2) {
+      padding-left: 54px;
+      box-shadow: inset 9px 0 0 rgba(14, 165, 233, 0.28);
+    }
+
+    .pos-settlement-page .co-table .psp-bill-link {
+      color: #1d4ed8;
+      font-weight: 700;
+      text-decoration: none;
+    }
+    .pos-settlement-page .co-table .psp-bill-link:hover { text-decoration: underline; }
+
+    .pos-settlement-page .nexa-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: #e0e7ff;
+      color: #4338ca;
+    }
+    .pos-settlement-page .nexa-badge--pending {
+      background: #ffedd5;
+      color: #c2410c;
+      border: 1px solid #fdba74;
+    }
+    .pos-settlement-page .nexa-badge--posted {
+      background: #d1fae5;
+      color: #047857;
+      border: 1px solid #6ee7b7;
+    }
+    .pos-settlement-page .nexa-badge--cancel {
+      background: #fee2e2;
+      color: #b91c1c;
+      border: 1px solid #fca5a5;
+    }
+
+    .pos-settlement-page .psp-main-layout {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    /* Lower cards: narrow payment summary (~33%) + accounts posting same row */
+    .pos-settlement-page .psp-cards-below {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: 1fr;
+      align-items: start;
+      min-width: 0;
+    }
+    @media (min-width: 768px) {
+      .pos-settlement-page .psp-cards-below {
+        grid-template-columns: minmax(220px, 33%) minmax(0, 1fr);
+      }
+    }
+    /* Bottom row: same NAV chrome as Lines / Filters */
+    .pos-settlement-page .psp-cards-below > .psp-nav-lines-card {
+      min-width: 0;
+      margin-bottom: 0;
+    }
+    .pos-settlement-page .psp-cards-below > .psp-nav-lines-card > .psp-table-panel__title {
+      margin: 0;
+    }
+    .pos-settlement-page .psp-nav-panel-body {
+      padding: 14px 16px 16px;
+      background: #fff;
+    }
+    .pos-settlement-page .psp-nav-panel-hint {
+      font-size: 12px;
+      color: #5c7288;
+      margin: 0 0 12px;
+      line-height: 1.45;
+    }
+    .pos-settlement-page .psp-nav-panel-toolbar {
+      display: flex;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 14px -16px -16px;
+      padding: 10px 16px;
+      border-top: 1px solid #c5d3df;
+      background: #f2f5f8;
+    }
+    .pos-settlement-page .psp-nav-panel-toolbar .psp-btn-outline {
+      padding: 7px 12px;
+      font-size: 12px;
+      border-radius: 2px;
+    }
+    .pos-settlement-page .psp-cards-below .psp-nav-panel-body .psp-field label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #3d5c73;
+      text-transform: none;
+      letter-spacing: normal;
+      margin-bottom: 5px;
+    }
+    .pos-settlement-page .psp-cards-below .psp-nav-panel-body .psp-acc-grid .input,
+    .pos-settlement-page .psp-cards-below .psp-nav-panel-body .psp-acc-grid select.input {
+      border-radius: 2px;
+      border: 1px solid #b8c8d4;
+      font-size: 12px;
+      padding: 6px 8px;
+    }
+    .pos-settlement-page .psp-cards-below .psp-nav-panel-body .psp-acc-grid .input.psp-clearing-ro {
+      background: #f1f5f9;
+      color: #334155;
+      cursor: default;
+    }
+    .pos-settlement-page .psp-cards-below .psp-nav-panel-body .psp-journal {
+      margin-top: 12px;
+      border-radius: 2px;
+      border: 1px solid #b8c8d4;
+      background: #fafcfd;
+    }
+    .pos-settlement-page .psp-cards-below .psp-nav-panel-body .psp-pay-row {
+      border-bottom-color: #e8eef5;
+    }
+    .pos-settlement-page .psp-cards-below .psp-nav-panel-body .psp-pay-total {
+      border-top: 2px solid #c5d3df;
+    }
+    .pos-settlement-page .psp-cards-below .psp-nav-panel-body .psp-pay-total span:last-child {
+      color: #14324a;
+    }
+
+    .pos-settlement-page .psp-settle-split {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px 20px;
+      align-items: start;
+    }
+    .pos-settlement-page .psp-settle-split > div {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .pos-settlement-page .psp-settle-split .psp-field {
+      margin-bottom: 0;
+    }
+    @media (max-width: 520px) {
+      .pos-settlement-page .psp-settle-split { grid-template-columns: 1fr; }
+    }
+    .pos-settlement-page .psp-field label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+      display: block;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      white-space: normal;
+      word-break: break-word;
+      line-height: 1.3;
+    }
+    .pos-settlement-page .psp-field {
+      margin-bottom: 10px;
+      min-width: 0;
+    }
+    .pos-settlement-page .psp-cards-below .psp-nav-panel-body .psp-acc-grid .psp-field {
+      margin-bottom: 0;
+    }
+    .pos-settlement-page .psp-field--danger .input {
+      color: #be123c;
+      font-weight: 800;
+      border-color: #fecdd3;
+      background: #fff1f2;
+    }
+
+    .pos-settlement-page .psp-pay-rows {
+      font-size: 13px;
+    }
+    .pos-settlement-page .psp-pay-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid #f1f5f9;
+      color: #475569;
+    }
+    .pos-settlement-page .psp-pay-row > span:first-child {
+      min-width: 0;
+      flex: 1;
+      line-height: 1.35;
+    }
+    .pos-settlement-page .psp-pay-row > strong {
+      flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+      color: #0f172a;
+    }
+    .pos-settlement-page .psp-pay-total {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 2px solid #bfdbfe;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 800;
+      font-size: 14px;
+    }
+    .pos-settlement-page .psp-pay-total span:last-child {
+      color: #1d4ed8;
+      font-variant-numeric: tabular-nums;
+      font-size: 1.05rem;
+    }
+
+    .pos-settlement-page .psp-acc-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+      gap: 12px 16px;
+      min-width: 0;
+    }
+    .pos-settlement-page .psp-acc-grid .psp-field {
+      margin-bottom: 0;
+    }
+    @media (max-width: 479px) {
+      .pos-settlement-page .psp-acc-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .pos-settlement-page .psp-journal {
+      width: 100%;
+      min-height: 100px;
+      margin-top: 10px;
+      box-sizing: border-box;
+      padding: 10px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 11px;
+      background: #f8fafc;
+    }
+
+    /* Action toolbar (below location header / top of page content) */
+    .pos-settlement-page .psp-action-footer {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 16px;
+      margin: 0 0 16px 0;
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+      box-sizing: border-box;
+    }
+    .pos-settlement-page .psp-footer-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: none;
+      font-weight: 700;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+    }
+    .pos-settlement-page .psp-footer-btn:hover { filter: brightness(1.06); }
+    .pos-settlement-page .psp-footer-btn--green { background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%); color: #fff; }
+    .pos-settlement-page .psp-footer-btn--blue { background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%); color: #fff; }
+    .pos-settlement-page .psp-footer-btn--navy { background: linear-gradient(180deg, #1e3a8a 0%, #1e40af 100%); color: #fff; }
+    .pos-settlement-page .psp-footer-btn--red { background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%); color: #fff; }
+    .pos-settlement-page .psp-footer-btn--teal { background: linear-gradient(180deg, #14b8a6 0%, #0d9488 100%); color: #fff; }
+    .pos-settlement-page .psp-footer-btn--orange { background: linear-gradient(180deg, #fb923c 0%, #ea580c 100%); color: #fff; }
+
+    .pos-settlement-page .psp-status-line {
+      font-size: 12px;
+      color: #64748b;
+      margin: 6px 0 12px;
+      min-height: 1.25em;
+    }
+    .pos-settlement-page .psp-status-line.psp-ok { color: #047857; font-weight: 700; }
+    .pos-settlement-page .psp-status-line.psp-warn { color: #c2410c; font-weight: 700; }
+
+    .pos-settlement-page .psp-busy-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10050;
+      background: rgba(15, 23, 42, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(2px);
+    }
+    .pos-settlement-page .psp-busy-overlay[hidden] {
+      display: none !important;
+    }
+    .pos-settlement-page .psp-busy-overlay__panel {
+      background: #fff;
+      padding: 28px 36px;
+      border-radius: 12px;
+      box-shadow: 0 12px 40px rgba(15, 23, 42, 0.2);
+      text-align: center;
+      min-width: 240px;
+      max-width: 90vw;
+    }
+    .pos-settlement-page .psp-busy-overlay__spinner {
+      width: 40px;
+      height: 40px;
+      margin: 0 auto 14px;
+      border: 3px solid #e2e8f0;
+      border-top-color: #2563eb;
+      border-radius: 50%;
+      animation: psp-busy-spin 0.75s linear infinite;
+    }
+    @keyframes psp-busy-spin {
+      to { transform: rotate(360deg); }
+    }
+    .pos-settlement-page .psp-busy-overlay__text {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 700;
+      color: #334155;
+      line-height: 1.4;
+    }
+
+    .pos-settlement-page .psp-cashier-settle-panel .psp-table-panel__title span {
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .pos-settlement-page .psp-cashier-grid-wrap {
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      overflow: auto;
+      max-height: min(440px, 52vh);
+      background: #fff;
+    }
+    .pos-settlement-page .psp-cashier-grid {
+      min-width: 920px;
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+    .pos-settlement-page .psp-cashier-grid thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: linear-gradient(180deg, #eaf2fa 0%, #dfeaf5 100%);
+      font-size: 11px;
+      font-weight: 800;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 10px 8px;
+      border-bottom: 1px solid #cbd5e1;
+      white-space: nowrap;
+    }
+    .pos-settlement-page .psp-cashier-grid tbody td {
+      padding: 8px;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 13px;
+      vertical-align: middle;
+    }
+    .pos-settlement-page .psp-cashier-grid tbody tr:hover td {
+      background: #f8fafc;
+    }
+    .pos-settlement-page .psp-cashier-grid .psp-cashier-name {
+      font-weight: 700;
+      color: #0f172a;
+      max-width: 200px;
+      word-break: break-word;
+      white-space: normal;
+      line-height: 1.25;
+    }
+    .pos-settlement-page .psp-cashier-grid .psp-cs-input {
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+      padding: 6px 8px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 12px;
+      background: #fff;
+    }
+    .pos-settlement-page .psp-cashier-grid .psp-cs-input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+    }
+    .pos-settlement-page .psp-cashier-grid td.num {
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .pos-settlement-page .psp-cashier-grid .psp-cs-cell--danger {
+      color: #be123c;
+      font-weight: 800;
+    }
+    .pos-settlement-page .psp-cashier-settle-footer {
+      display: grid;
+      grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+      gap: 14px 18px;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid #f1f5f9;
+      align-items: start;
+    }
+    .pos-settlement-page .psp-cashier-settle-footer .psp-field {
+      margin-bottom: 0;
+    }
+    .pos-settlement-page .psp-cashier-settle-footer .psp-field--remarks-line {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 12px;
+    }
+    .pos-settlement-page .psp-cashier-settle-footer .psp-field--remarks-line label {
+      flex: 0 0 auto;
+      margin-bottom: 0;
+      white-space: nowrap;
+    }
+    .pos-settlement-page .psp-cashier-settle-footer .psp-field--remarks-line .input {
+      flex: 1;
+      min-width: 0;
+    }
+    @media (max-width: 720px) {
+      .pos-settlement-page .psp-cashier-settle-footer {
+        grid-template-columns: 1fr;
+      }
+    }
+    .pos-settlement-page .psp-pay-row--danger strong {
+      color: #be123c !important;
+    }
+    .pos-settlement-page .psp-pay-total--danger span:last-child {
+      color: #be123c !important;
+    }
+
+    .pos-settlement-page .co-table td.psp-wrap {
+      white-space: normal;
+      max-width: 200px;
+      vertical-align: top;
+    }
+
+    /* NAV / Dynamics-style: General header + Lines worksheet */
+    .pos-settlement-page .psp-nav-general {
+      background: #fff;
+      border: 1px solid #b8c8d4;
+      border-radius: 2px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(15, 35, 55, 0.08);
+      overflow: hidden;
+    }
+    .pos-settlement-page .psp-nav-general > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 8px 14px;
+      font-weight: 700;
+      font-size: 13px;
+      color: #14324a;
+      background: linear-gradient(180deg, #e4ecf4 0%, #d5e1ec 100%);
+      border-bottom: 1px solid #a9bac9;
+      user-select: none;
+    }
+    .pos-settlement-page .psp-nav-general > summary::-webkit-details-marker {
+      display: none;
+    }
+    .pos-settlement-page .psp-nav-general > summary::before {
+      content: '▼';
+      display: inline-block;
+      margin-right: 8px;
+      font-size: 9px;
+      color: #456882;
+      transform: rotate(-90deg);
+      transition: transform 0.15s ease;
+    }
+    .pos-settlement-page .psp-nav-general[open] > summary::before {
+      transform: rotate(0deg);
+    }
+    .pos-settlement-page .psp-nav-general__body {
+      padding: 14px 18px 16px;
+      border-top: 1px solid #eef2f6;
+    }
+    .pos-settlement-page .psp-nav-general__grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px 36px;
+    }
+    @media (max-width: 900px) {
+      .pos-settlement-page .psp-nav-general__grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .pos-settlement-page .psp-nav-filters .psp-nav-general__grid--filters {
+      gap: 0 36px;
+    }
+    .pos-settlement-page .psp-nav-filters .psp-nav-general__grid--filters > .psp-nav-kv {
+      grid-template-columns: minmax(0, 148px) minmax(0, 1fr);
+      gap: 10px 12px;
+      align-items: center;
+      padding: 5px 0;
+      border-bottom: 1px solid #f0f4f8;
+      margin: 0;
+    }
+    .pos-settlement-page .psp-nav-filters .psp-nav-general__grid--filters > .psp-nav-kv:last-child {
+      border-bottom: none;
+    }
+    @media (min-width: 901px) {
+      .pos-settlement-page .psp-nav-filters .psp-nav-general__grid--filters > .psp-nav-kv:nth-last-child(2) {
+        border-bottom: none;
+      }
+    }
+    .pos-settlement-page .psp-nav-kv {
+      display: grid;
+      grid-template-columns: minmax(0, 148px) minmax(0, 1fr);
+      gap: 10px 12px;
+      font-size: 12px;
+      align-items: baseline;
+      padding: 5px 0;
+      border-bottom: 1px solid #f0f4f8;
+    }
+    .pos-settlement-page .psp-nav-kv:last-child {
+      border-bottom: none;
+    }
+    .pos-settlement-page .psp-nav-kv__label {
+      color: #3d5c73;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    .pos-settlement-page .psp-nav-kv__val {
+      color: #0f172a;
+      font-weight: 600;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+    .pos-settlement-page .psp-nav-link {
+      color: #0066c8;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: underline;
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: inherit;
+      font-family: inherit;
+    }
+    .pos-settlement-page .psp-nav-link:hover {
+      color: #004a93;
+    }
+
+    .pos-settlement-page .psp-nav-lines-card {
+      background: #fff;
+      border: 1px solid #b8c8d4;
+      border-radius: 2px;
+      box-shadow: 0 1px 3px rgba(15, 35, 55, 0.08);
+      padding: 0;
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+    .pos-settlement-page .psp-nav-lines-card .psp-table-panel__title {
+      margin: 0;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #14324a;
+      background: linear-gradient(180deg, #e4ecf4 0%, #d5e1ec 100%);
+      border-bottom: 1px solid #a9bac9;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .pos-settlement-page .psp-nav-lines-card .psp-table-panel__title span {
+      font-weight: 600;
+      color: #5c7288;
+      font-size: 11px;
+    }
+    .pos-settlement-page .psp-lines-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      background: #f2f5f8;
+      border-bottom: 1px solid #c5d3df;
+      font-size: 11px;
+      color: #334155;
+    }
+    .pos-settlement-page .psp-lines-toolbar__sep {
+      color: #94a3b8;
+      margin: 0 2px;
+      user-select: none;
+    }
+    .pos-settlement-page .psp-lines-toolbar button {
+      padding: 3px 10px;
+      border: 1px solid transparent;
+      border-radius: 2px;
+      background: transparent;
+      font-size: 11px;
+      font-weight: 600;
+      color: #1e4976;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .pos-settlement-page .psp-lines-toolbar button:hover {
+      background: #e2ecf4;
+      border-color: #a8bdd2;
+    }
+    .pos-settlement-page .psp-cashier-grid-wrap.psp-cashier-grid-wrap--nav {
+      border-radius: 0;
+      border: none;
+      border-top: 1px solid #c5d3df;
+      max-height: min(480px, 56vh);
+      background: #fafcfd;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav {
+      min-width: 1020px;
+      border-collapse: collapse;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav thead th {
+      background: linear-gradient(180deg, #f4f7fb 0%, #e8eef5 100%);
+      border-right: 1px solid #c5d3df;
+      border-bottom: 1px solid #9eb1c4;
+      box-shadow: none;
+      font-size: 11px;
+      padding: 7px 8px;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav thead th:last-child {
+      border-right: none;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav thead th.psp-cs-sortable {
+      cursor: pointer;
+      user-select: none;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav thead th.psp-cs-sortable:hover {
+      background: linear-gradient(180deg, #e8f0f9 0%, #d9e6f2 100%);
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav thead th.psp-cs-sortable.psp-cs-sort-active {
+      color: #0f172a;
+      box-shadow: inset 0 -2px 0 #2563eb;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav thead th.psp-cs-sortable .psp-cs-sort-icon {
+      font-size: 10px;
+      margin-left: 4px;
+      opacity: 0.45;
+      font-weight: 800;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav thead th.psp-cs-sortable.psp-cs-sort-active .psp-cs-sort-icon {
+      opacity: 1;
+      color: #1d4ed8;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav tbody td {
+      border-right: 1px solid #e2e8f0;
+      border-bottom: 1px solid #dce4ec;
+      padding: 5px 8px;
+      font-size: 12px;
+      background: #fff;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav tbody td:last-child {
+      border-right: none;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav tbody tr:nth-child(even) td {
+      background: #f7fafc;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav tbody tr:hover td {
+      background: #eef6ff !important;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav .psp-cs-tender {
+      font-weight: 700;
+      color: #14324a;
+      white-space: nowrap;
+    }
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav .psp-cs-terminal {
+      font-size: 11px;
+      color: #475569;
+      max-width: 140px;
+      word-break: break-word;
+      white-space: normal;
+      line-height: 1.25;
+    }
+    .pos-settlement-page .psp-nav-lines-card .psp-cashier-settle-footer {
+      margin: 0;
+      padding: 12px 14px;
+      border-top: 1px solid #c5d3df;
+      background: #f8fafc;
+    }
+
+    .pos-settlement-page .psp-cashier-grid.psp-cashier-grid--nav .psp-cs-na {
+      color: #94a3b8;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    @media print {
+      .pos-settlement-page .psp-action-footer,
+      .pos-settlement-page .psp-lines-toolbar,
+      .pos-settlement-page .psp-nav-filters__toolbar,
+      .pos-settlement-page .psp-busy-overlay { display: none !important; }
+      .pos-settlement-page { padding-bottom: 12px; background: #fff; }
+      .pos-settlement-page .co-table-wrap { max-height: none !important; }
+      .pos-settlement-page .psp-cards-below { grid-template-columns: 1fr !important; }
+    }
+  </style>

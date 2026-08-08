@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}Fixed Asset Register{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/fixed_assets_pages.css') }}?v=1" />
+
+{% set kpi = fa_kpis or {} %}
+<div class="page-po nexa-list-page fa-list-page">
+  {% include 'fixed_assets/_fa_nav.html' %}
+
+  <section class="fa-stat-grid" aria-label="Asset summary">
+    <div class="fa-stat-card">
+      <span class="fa-stat-icon fa-stat-icon--blue"><i class="bi bi-building-gear" aria-hidden="true"></i></span>
+      <div>
+        <p class="fa-stat-label">Total assets</p>
+        <p class="fa-stat-value">{{ "{:,}".format(kpi.total or 0) }}</p>
+        <p class="fa-stat-sub">Current filter</p>
+      </div>
+    </div>
+    <div class="fa-stat-card">
+      <span class="fa-stat-icon fa-stat-icon--green"><i class="bi bi-check2-square" aria-hidden="true"></i></span>
+      <div>
+        <p class="fa-stat-label">Posted to GL</p>
+        <p class="fa-stat-value">{{ "{:,}".format(kpi.posted or 0) }}</p>
+        <p class="fa-stat-sub">Acquisition capitalized</p>
+      </div>
+    </div>
+    <div class="fa-stat-card">
+      <span class="fa-stat-icon fa-stat-icon--amber"><i class="bi bi-cash-stack" aria-hidden="true"></i></span>
+      <div>
+        <p class="fa-stat-label">Total cost</p>
+        <p class="fa-stat-value">{{ "{:,.0f}".format(kpi.total_cost or 0) }}</p>
+        <p class="fa-stat-sub">Acquisition value</p>
+      </div>
+    </div>
+    <div class="fa-stat-card">
+      <span class="fa-stat-icon fa-stat-icon--cyan"><i class="bi bi-graph-up" aria-hidden="true"></i></span>
+      <div>
+        <p class="fa-stat-label">Net book value</p>
+        <p class="fa-stat-value">{{ "{:,.0f}".format(kpi.total_nbv or 0) }}</p>
+        <p class="fa-stat-sub">Cost minus accum. dep.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Fixed Asset Register</h1>
+      <p class="page-po__muted">Capital assets — acquisition posting, accumulated depreciation, and net book value.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('fixed_assets.fa_asset_form') }}" class="page-po__btn-primary">+ Register assets</a>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <form class="nexa-list-toolbar" method="get" action="{{ url_for('fixed_assets.fa_asset_list') }}" style="flex-wrap:wrap;">
+    <input type="text" id="faAssetSearch" class="input" placeholder="Search asset no, name, category…" style="min-width:220px; max-width:320px;" autocomplete="off" />
+    <select name="status" class="input" style="width:auto; min-width:140px;">
+      <option value="">All statuses</option>
+      <option value="ACTIVE" {% if filter_status == 'ACTIVE' %}selected{% endif %}>Active</option>
+      <option value="FULLY_DEP" {% if filter_status == 'FULLY_DEP' %}selected{% endif %}>Fully depreciated</option>
+      <option value="DISPOSED" {% if filter_status == 'DISPOSED' %}selected{% endif %}>Disposed</option>
+    </select>
+    <select name="category_id" class="input" style="width:auto; min-width:160px;">
+      <option value="">All categories</option>
+      {% for c in categories %}
+      <option value="{{ c.category_id }}" {% if filter_category_id == c.category_id %}selected{% endif %}>{{ c.code }} — {{ c.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="page-po__btn-secondary" style="padding:4px 10px; font-size:11px;">Apply</button>
+    <button type="button" class="page-po__btn-secondary" id="faAssetClear" style="padding:4px 10px; font-size:11px;">Clear search</button>
+    <span id="faAssetCount" class="nexa-num" style="margin-left:4px;">{{ rows|length }} records</span>
+  </form>
+
+  <div class="co-table-wrap">
+    <table class="co-table" id="faAssetTable">
+      <thead>
+        <tr>
+          <th style="text-align:center; width:52px;">Sl.No</th>
+          <th style="width:120px;">Asset no</th>
+          <th>Name</th>
+          <th style="width:88px;">Category</th>
+          <th style="width:96px;">Acq. date</th>
+          <th style="text-align:right; width:96px;">Cost</th>
+          <th style="text-align:right; width:96px;">Accum dep</th>
+          <th style="text-align:right; width:96px;">NBV</th>
+          <th style="width:88px;">GL</th>
+          <th style="width:96px;">Status</th>
+          <th style="text-align:center; width:80px;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if not rows %}
+        <tr><td colspan="11" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">No assets. <a href="{{ url_for('fixed_assets.fa_asset_form') }}">Register assets</a>.</td></tr>
+        {% else %}
+        {% for r in rows %}
+        {% set posted = (r.posted_acq or 'N')|upper == 'Y' %}
+        {% set st = (r.status or 'ACTIVE')|upper %}
+        <tr class="fa-row-clickable" data-search="{{ (r.asset_no or '') ~ ' ' ~ (r.name or '') ~ ' ' ~ (r.category_code or '') }}" data-edit-url="{{ url_for('fixed_assets.fa_asset_form', id=r.asset_id) }}">
+          <td style="text-align:center;">{{ loop.index }}</td>
+          <td><span class="fa-code">{{ r.asset_no }}</span></td>
+          <td>{{ r.name }}</td>
+          <td><span class="fa-code">{{ r.category_code }}</span></td>
+          <td>{{ r.acquisition_date }}</td>
+          <td class="fa-num">{{ '%.2f'|format(r.acquisition_cost|float) }}</td>
+          <td class="fa-num">{{ '%.2f'|format(r.accum_dep|float) }}</td>
+          <td class="fa-num">{{ '%.2f'|format(r.nbv|float) }}</td>
+          <td>{% if posted %}<span class="fa-status-badge fa-status-badge--posted">Posted</span>{% else %}<span class="fa-status-badge fa-status-badge--draft">Draft</span>{% endif %}</td>
+          <td>
+            {% if st == 'FULLY_DEP' %}<span class="fa-status-badge fa-status-badge--dep">Full dep</span>
+            {% elif st == 'DISPOSED' %}<span class="fa-status-badge fa-status-badge--inactive">Disposed</span>
+            {% else %}<span class="fa-status-badge fa-status-badge--active">Active</span>{% endif %}
+          </td>
+          <td style="text-align:center;"><a class="btn-view" href="{{ url_for('fixed_assets.fa_asset_form', id=r.asset_id) }}">Edit</a></td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function () {
+  var search = document.getElementById('faAssetSearch');
+  var clearBtn = document.getElementById('faAssetClear');
+  var countEl = document.getElementById('faAssetCount');
+  var tbody = document.querySelector('#faAssetTable tbody');
+  if (!tbody) return;
+
+  function applyFilter() {
+    var q = (search && search.value || '').trim().toLowerCase();
+    var visible = 0;
+    tbody.querySelectorAll('tr[data-search]').forEach(function (tr) {
+      var ok = !q || (tr.getAttribute('data-search') || '').toLowerCase().indexOf(q) !== -1;
+      tr.style.display = ok ? '' : 'none';
+      if (ok) visible++;
+    });
+    if (countEl) countEl.textContent = visible + ' records';
+  }
+
+  tbody.addEventListener('click', function (e) {
+    if (e.target.closest('a, button')) return;
+    var tr = e.target.closest('tr[data-edit-url]');
+    if (tr) window.location.href = tr.getAttribute('data-edit-url');
+  });
+
+  if (search) search.addEventListener('input', applyFilter);
+  if (clearBtn) clearBtn.addEventListener('click', function () { if (search) search.value = ''; applyFilter(); });
+  applyFilter();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% if lines %}
+{% for ln in lines %}
+{% set v = (ln.variance_qty or 0)|float %}
+<div class="scm-line-card" data-line="{{ ln.line_no }}">
+  <div class="scm-line-card__icon{% if v|abs > 0.0005 %} scm-line-card__icon--var{% endif %}">
+    <i class="bi bi-box-seam"></i>
+  </div>
+  <div class="scm-line-card__main">
+    <div class="scm-line-card__code">#{{ ln.itemcode }}{% if ln.barcode %} · {{ ln.barcode }}{% endif %}</div>
+    <p class="scm-line-card__name">{{ ln.item_name or 'Item ' ~ ln.itemcode }}</p>
+    {% if ln.warehouse_code or ln.warehouse_name or ln.warehouse_id %}
+    <p class="scm-line-card__meta text-muted" style="font-size:12px;margin:2px 0 0;">
+      {% if ln.warehouse_code %}{{ ln.warehouse_code }}{% if ln.warehouse_name %} · {{ ln.warehouse_name }}{% endif %}{% elif ln.warehouse_name %}{{ ln.warehouse_name }}{% else %}WH {{ ln.warehouse_id }}{% endif %}
+    </p>
+    {% endif %}
+    <div class="scm-line-card__nums">
+      <div><span>System</span><strong>{{ '%.3f'|format(ln.system_qty|float) if ln.system_qty is not none else '0' }}</strong></div>
+      <div><span>Counted</span><strong>{{ '%.3f'|format(ln.counted_qty|float) if ln.counted_qty is not none else '0' }}</strong></div>
+    </div>
+  </div>
+  <div class="scm-line-card__var{% if v > 0.0005 %} scm-line-card__var--pos{% elif v < -0.0005 %} scm-line-card__var--neg{% endif %}">
+    {{ '%+.3f'|format(v) if v|abs > 0.0005 else '—' }}
+  </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="scm-empty">
+  <i class="bi bi-inbox"></i>
+  <p>Scan a barcode to add the first line.</p>
+</div>
+{% endif %}

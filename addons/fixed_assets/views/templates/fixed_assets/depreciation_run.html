@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Fixed Asset Depreciation{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/fixed_assets_pages.css') }}?v=1" />
+
+{% set kpi = fa_kpis or {} %}
+<div class="page-po nexa-list-page fa-list-page">
+  {% include 'fixed_assets/_fa_nav.html' %}
+
+  <section class="fa-stat-grid" aria-label="Depreciation summary">
+    <div class="fa-stat-card">
+      <span class="fa-stat-icon fa-stat-icon--blue"><i class="bi bi-calendar3" aria-hidden="true"></i></span>
+      <div>
+        <p class="fa-stat-label">Period</p>
+        <p class="fa-stat-value">{{ period }}</p>
+        <p class="fa-stat-sub">YYYYMM</p>
+      </div>
+    </div>
+    <div class="fa-stat-card">
+      <span class="fa-stat-icon fa-stat-icon--green"><i class="bi bi-list-check" aria-hidden="true"></i></span>
+      <div>
+        <p class="fa-stat-label">Preview lines</p>
+        <p class="fa-stat-value">{{ preview_lines|length if preview_lines else 0 }}</p>
+        <p class="fa-stat-sub">Eligible assets</p>
+      </div>
+    </div>
+    <div class="fa-stat-card">
+      <span class="fa-stat-icon fa-stat-icon--amber"><i class="bi bi-currency-dollar" aria-hidden="true"></i></span>
+      <div>
+        <p class="fa-stat-label">Preview total</p>
+        <p class="fa-stat-value">{{ '{:,.0f}'.format(kpi.preview_total or 0) }}</p>
+        <p class="fa-stat-sub">Monthly depreciation</p>
+      </div>
+    </div>
+    <div class="fa-stat-card">
+      <span class="fa-stat-icon fa-stat-icon--purple"><i class="bi bi-clock-history" aria-hidden="true"></i></span>
+      <div>
+        <p class="fa-stat-label">Posted runs</p>
+        <p class="fa-stat-value">{{ kpi.posted_runs or 0 }}</p>
+        <p class="fa-stat-sub">All periods</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Depreciation run</h1>
+      <p class="page-po__muted">Straight-line monthly depreciation for posted assets. Preview → draft run → post to GL.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('fixed_assets.fa_asset_list') }}" class="page-po__btn-secondary">Asset register</a>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  {% if preview_err %}
+  <div style="padding:10px 12px; background:#fff5f5; border:1px solid #fecaca; border-radius:4px; color:#991b1b; margin-bottom:12px; font-size:13px;">{{ preview_err }}</div>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('fixed_assets.fa_depreciation_preview') }}" class="nexa-list-toolbar" style="flex-wrap:wrap; align-items:flex-end;">
+    <label style="font-size:11px; font-weight:700; color:#64748b; display:flex; flex-direction:column; gap:4px;">
+      Period (YYYYMM)
+      <input name="period" class="input" maxlength="6" pattern="[0-9]{6}" required value="{{ period }}" style="width:120px;" />
+    </label>
+    <button type="submit" class="page-po__btn-secondary" style="padding:6px 14px;">Preview</button>
+  </form>
+  {% if preview_lines %}
+  <form method="post" action="{{ url_for('fixed_assets.fa_depreciation_create_run') }}" class="nexa-list-toolbar" style="margin-top:-4px; margin-bottom:12px;">
+    <input type="hidden" name="period" value="{{ period }}" />
+    <button type="submit" class="page-po__btn-primary" style="padding:6px 14px;">Create draft run ({{ preview_lines|length }} assets)</button>
+  </form>
+  {% endif %}
+
+  {% if preview_lines %}
+  <div class="page-po__section-title" style="margin-top:8px;">Preview — {{ period }}</div>
+  <div class="co-table-wrap" style="margin-bottom:16px;">
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th style="width:120px;">Asset no</th>
+          <th>Name</th>
+          <th style="width:88px;">Category</th>
+          <th style="text-align:right; width:96px;">Dep amount</th>
+          <th style="text-align:right; width:110px;">Accum after</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ln in preview_lines %}
+        <tr>
+          <td><span class="fa-code">{{ ln.asset_no }}</span></td>
+          <td>{{ ln.asset_name }}</td>
+          <td><span class="fa-code">{{ ln.category_code }}</span></td>
+          <td class="fa-num">{{ '%.2f'|format(ln.dep_amount|float) }}</td>
+          <td class="fa-num">{{ '%.2f'|format(ln.accum_after|float) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if run %}
+  <div class="page-po__section-title">Run {{ run.run_no }} — {{ run.period_yyyymm }}
+    {% if run.status == 'POSTED' %}<span class="fa-status-badge fa-status-badge--posted">Posted</span>{% else %}<span class="fa-status-badge fa-status-badge--draft">Draft</span>{% endif %}
+  </div>
+  {% if run.gl_voucher_no %}<p class="page-po__muted" style="margin:0 0 10px;">GL voucher: <code>{{ run.gl_voucher_no }}</code></p>{% endif %}
+  {% if run.status != 'POSTED' and run_lines %}
+  <form method="post" action="{{ url_for('fixed_assets.fa_depreciation_post') }}" style="margin-bottom:12px;">
+    <input type="hidden" name="run_id" value="{{ run.run_id }}" />
+    <button type="submit" class="page-po__btn-primary" onclick="return confirm('Post depreciation to GL?');">Post to GL</button>
+  </form>
+  {% endif %}
+  <div class="co-table-wrap" style="margin-bottom:20px;">
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th style="width:120px;">Asset no</th>
+          <th>Name</th>
+          <th style="text-align:right; width:96px;">Dep amount</th>
+          <th style="text-align:right; width:96px;">Accum before</th>
+          <th style="text-align:right; width:96px;">Accum after</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ln in run_lines %}
+        <tr>
+          <td><span class="fa-code">{{ ln.asset_no }}</span></td>
+          <td>{{ ln.asset_name }}</td>
+          <td class="fa-num">{{ '%.2f'|format(ln.dep_amount|float) }}</td>
+          <td class="fa-num">{{ '%.2f'|format(ln.accum_before|float) }}</td>
+          <td class="fa-num">{{ '%.2f'|format(ln.accum_after|float) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="page-po__section-title">Run history</div>
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th style="width:140px;">Run no</th>
+          <th style="width:88px;">Period</th>
+          <th style="width:88px;">Status</th>
+          <th style="text-align:right; width:110px;">Total dep</th>
+          <th style="width:120px;">Voucher</th>
+          <th style="text-align:center; width:72px;">Open</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if not runs %}
+        <tr><td colspan="6" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">No depreciation runs yet.</td></tr>
+        {% else %}
+        {% for r in runs %}
+        <tr class="fa-row-clickable" data-edit-url="{{ url_for('fixed_assets.fa_depreciation_page', run_id=r.run_id) }}">
+          <td><span class="fa-code">{{ r.run_no }}</span></td>
+          <td>{{ r.period_yyyymm }}</td>
+          <td>{% if r.status == 'POSTED' %}<span class="fa-status-badge fa-status-badge--posted">Posted</span>{% else %}<span class="fa-status-badge fa-status-badge--draft">Draft</span>{% endif %}</td>
+          <td class="fa-num">{{ '%.2f'|format(r.total_dep|float) }}</td>
+          <td>{{ r.gl_voucher_no or '—' }}</td>
+          <td style="text-align:center;"><a class="btn-view" href="{{ url_for('fixed_assets.fa_depreciation_page', run_id=r.run_id) }}">Open</a></td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function () {
+  var tbody = document.querySelector('.fa-list-page .co-table-wrap:last-of-type tbody');
+  if (!tbody) return;
+  tbody.addEventListener('click', function (e) {
+    if (e.target.closest('a')) return;
+    var tr = e.target.closest('tr[data-edit-url]');
+    if (tr) window.location.href = tr.getAttribute('data-edit-url');
+  });
+})();
+</script>
+{% endblock %}

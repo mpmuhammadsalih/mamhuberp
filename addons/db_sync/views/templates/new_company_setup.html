@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+.db-sync-page { max-width: 720px; margin: 24px auto 48px; padding: 0 16px; }
+.db-sync-page h1 { font-size: 22px; margin-bottom: 8px; }
+.db-sync-page .muted { color: #6c757d; font-size: 13px; margin-bottom: 18px; line-height: 1.45; }
+.db-sync-card { background: #fff; border: 1px solid #dee2e6; border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; }
+.db-sync-card--danger { border-color: #f5c2c7; background: linear-gradient(#fffefc, #fff5f5); }
+.db-sync-card--danger h2 { color: #842029; margin-top: 0; }
+.db-sync-card h2 { margin: 0 0 12px; font-size: 15px; color: #212529; }
+.db-sync-card label { display: block; font-size: 12px; font-weight: 600; margin-top: 10px; color: #495057; }
+.db-sync-card input[type="text"], .db-sync-card input[type="password"] {
+  width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 14px;
+  border: 1px solid #ced4da; border-radius: 4px; margin-top: 4px;
+}
+.db-sync-actions { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.db-sync-actions button {
+  padding: 10px 18px; font-size: 14px; border: none; border-radius: 6px; cursor: pointer;
+}
+.btn-preview { background: #6c757d; color: #fff; }
+.btn-preview:hover { background: #5c636a; }
+.btn-fetch { background: #0d6efd; color: #fff; }
+.btn-fetch:hover { background: #0b5ed7; }
+.btn-fetch:disabled { background: #9ec5fe; cursor: wait; }
+.btn-clear { background: #842029; color: #fff; }
+.btn-clear:hover { background: #631f20; }
+.result-box { margin-top: 20px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 14px; font-family: ui-monospace, monospace; font-size: 12px; max-height: 420px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+</style>
+<div class="db-sync-page container">
+  <h1>New Company setup</h1>
+  <p class="muted">Truncate business data on an Oracle schema before loading a fresh company, or run <strong>constraint audit / heuristic FK preview &amp; apply</strong> (same tooling as <code>scripts/oracle_constraint_audit.py</code> and <code>scripts/oracle_apply_constraints.py</code>). Requires <code>admin</code> / <code>super</code> or Setup permission <code>New Company setup</code> (<code>setup.new_company_setup</code>; legacy <code>utilities.db_structure_sync</code> still honored).</p>
+
+  <form method="post" action="{{ url_for('db_sync.new_company_setup_page') }}" id="db-clear-form">
+    <div class="db-sync-card">
+      <h2>Target Oracle connection</h2>
+      <label for="target_user">User</label>
+      <input type="text" name="target_user" id="target_user" value="{{ target_user|default('', true) }}" required autocomplete="off" />
+
+      <label for="target_password">Password</label>
+      <input type="password" name="target_password" id="target_password" value="" autocomplete="new-password" required />
+
+      <label for="target_dsn">DSN (host:port/service)</label>
+      <input type="text" name="target_dsn" id="target_dsn" placeholder="192.168.1.225:1521/rgc" value="{{ target_dsn|default('', true) }}" required autocomplete="off" />
+    </div>
+
+    <div class="db-sync-card db-sync-card--danger">
+      <h2>Clear business data</h2>
+      <p style="margin: 0 0 12px; font-size: 13px; color: #495057; line-height: 1.5;">
+        Disables foreign keys, <strong>TRUNCATE</strong>s tables in this schema, then re-enables constraints.
+        Default: keeps <code>LOGIN_USERS</code>, <code>ROLES</code>, <code>ROLE_PERMISSIONS</code>, <code>TENANT_DATABASES</code> when the box below is checked.
+        Table structures are unchanged. Optionally reset <strong>Oracle sequences</strong> and clear <code>BILLNOTABLE</code> so bill / GRN / LPO numbers can start from #1 again.
+      </p>
+      <label style="margin-top: 0;"><input type="checkbox" name="wipe_preserve_auth" checked /> Preserve login / roles / permissions / tenant_database rows</label>
+      <label for="wipe_extra_protected" style="display:block; margin-top:12px;">Skip these tables (comma-separated)</label>
+      <textarea name="wipe_extra_protected" id="wipe_extra_protected" rows="3" autocomplete="off" style="width:100%; box-sizing:border-box; padding:8px 10px; font-size:13px; border:1px solid #ced4da; border-radius:4px; font-family: inherit;">{{ wipe_extra_protected|default('', true) }}</textarea>
+      <p class="muted" style="margin:6px 0 0; font-size:11px;">Default masters for new company setup are pre-filled. Edit only if you need a different skip list.</p>
+      <p style="font-size:12px; color:#842029; margin:12px 0 8px;"><strong>Execute</strong>: confirm below, type <kbd style="padding:2px 6px; background:#f8d7da; border-radius:4px;">CLEAR ALL DATA</kbd>, then submit.</p>
+      <label><input type="checkbox" name="confirm_wipe_execute" /> I confirm wiping truncatable target business data (cannot undo)</label>
+      <label style="margin-top:10px;"><input type="checkbox" name="reset_sequences_counters" checked /> After clear (or preview SQL): <strong>reset sequences &amp; document counters</strong> — truncate <code>BILLNOTABLE</code> (reserved bill numbers) and restart all <code>USER_SEQUENCES</code> (1 when source table is empty; preserved masters use MAX(id)+1)</label>
+      <p class="muted" style="margin:8px 0 0; font-size:11px;"><strong>Execute clear on target</strong> also runs <code>UPDATE ITEMMASTER SET CURRENTSTOCK = 0</code>, <code>UPDATE ITEMALTERNATEUOMMAP SET CURRENTSTOCK = 0</code>, and <code>UPDATE CUSTOMER SET CURRENTCREDITAMOUNT = 0</code> (exact column names from your schema) on preserved master tables after truncate.</p>
+      <label style="margin-top:10px;"><input type="checkbox" name="clear_session_state" checked /> After execute: clear <strong>browser session state</strong> (save tokens, save locks, POS counter binding, form once-keys) — recommended after a full data wipe</label>
+      <label for="wipe_phrase">Confirmation phrase</label>
+      <input type="text" name="wipe_phrase" id="wipe_phrase" autocomplete="off" placeholder="CLEAR ALL DATA" value="{{ wipe_phrase_value|default('', true) }}" style="max-width:280px;" />
+      <div class="db-sync-actions">
+        <button type="submit" name="action" value="clear_preview" class="btn-preview" title="Generate SQL only">Generate clear SQL</button>
+        <button type="submit" name="action" value="clear_execute" class="btn-clear" title="Run truncate on target">Execute clear on target</button>
+        <button type="submit" name="action" value="reset_counters_only" class="btn-fetch" title="Reset Oracle sequences and BILLNOTABLE without truncating other tables">Reset sequences &amp; counters only</button>
+        <button type="submit" name="action" value="clear_session_only" class="btn-fetch" title="Reset save tokens and locks without touching Oracle data">Clear session state only</button>
+      </div>
+    </div>
+
+    <div class="db-sync-card" style="border-color:#cfe2ff; background: linear-gradient(#fcfdff,#f8faff);">
+      <h2 style="margin-top:0;">Constraint audit &amp; heuristic foreign keys</h2>
+      <p style="margin: 0 0 12px; font-size: 13px; color: #495057; line-height: 1.5;">
+        Uses the logged-in user's entered <strong>Target Oracle connection</strong> above. Matching names can suggest wrong parents (review output). FK apply runs only with confirmation phrase below. Unique constraints are not auto-added.
+      </p>
+      <label for="fk_max_fks">Cap (audit hints / FK candidates, max 5000)</label>
+      <input type="number" name="fk_max_fks" id="fk_max_fks" min="1" max="5000" value="{{ fk_max_fks|default(800, true) }}" style="max-width:120px;" />
+      <label style="margin-top:12px;"><input type="checkbox" name="fk_novalidate_orphans" /> When orphans exist (execute / preview skips), prefer <code>NOVALIDATE</code> on apply</label>
+
+      <p style="font-size:12px; color:#666; margin:14px 0 8px;"><strong>Apply FK</strong>: check confirmation, type phrase (case-insensitive): <kbd style="padding:2px 6px; background:#e7f1ff; border-radius:4px;">APPLY HEURISTIC FKS</kbd></p>
+      <label><input type="checkbox" name="confirm_fk_execute" /> I confirm running heuristic <code>ALTER TABLE … ADD CONSTRAINT … FOREIGN KEY</code> on the target (review preview first)</label>
+      <label for="fk_phrase">FK confirmation phrase</label>
+      <input type="text" name="fk_phrase" id="fk_phrase" autocomplete="off" placeholder="APPLY HEURISTIC FKS" value="{{ fk_phrase_value|default('', true) }}" style="max-width:320px;" />
+
+      <div class="db-sync-actions">
+        <button type="submit" name="action" value="constraints_audit" class="btn-preview" title="Summarize PK/FK gaps and commented DDL hints">Run constraint audit</button>
+        <button type="submit" name="action" value="constraints_fk_preview" class="btn-preview" title="Dry-run DDL only">FK heuristic preview (dry-run)</button>
+        <button type="submit" name="action" value="constraints_fk_execute" class="btn-clear" style="background:#084298;" title="Execute ALTER TABLE ADD FOREIGN KEY">Execute heuristic FK apply</button>
+      </div>
+    </div>
+  </form>
+
+  {% if wipe_summary or wipe_sql or constraint_report or constraint_sql_hints %}
+  <h2 style="font-size:16px;margin-top:28px;">Result</h2>
+  {% if constraint_report %}
+  <h3 style="font-size:14px;margin-top:8px;">Constraint / FK output</h3>
+  <div class="result-box">{{ constraint_report }}</div>
+  {% endif %}
+  {% if constraint_sql_hints %}
+  <h3 style="font-size:14px;margin-top:16px;">Commented SQL hints (audit)</h3>
+  <div class="result-box">{{ constraint_sql_hints }}</div>
+  {% endif %}
+  {% if wipe_summary %}
+  <h3 style="font-size:14px;margin-top:16px;">Clear data</h3>
+  <div class="result-box">{{ wipe_summary }}</div>
+  {% endif %}
+  {% if wipe_sql %}
+  <h3 style="font-size:14px;margin-top:16px;">Generated clear SQL</h3>
+  <div class="result-box">{{ wipe_sql }}</div>
+  {% endif %}
+  {% endif %}
+</div>
+{% if session_cleared %}
+<script>
+(function () {
+  try {
+    if (window.sessionStorage) sessionStorage.clear();
+  } catch (e) {}
+  try {
+    if (window.localStorage) {
+      localStorage.removeItem('nexa-pos-billing-single-tab-v1');
+    }
+  } catch (e2) {}
+})();
+</script>
+{% endif %}
+{% endblock %}

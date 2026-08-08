@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+{% block title %}Stock Inventory Accounts Configuration{% endblock %}
+
+{% block content %}
+<div class="page-po nexa-list-page stk-adj-ac-page im-productlist-page" style="max-width:960px;">
+  <style>
+    .page-po.nexa-list-page.stk-adj-ac-page.im-productlist-page {
+      max-width: 960px !important;
+      margin: 0 auto !important;
+      padding: 8px 0 20px !important;
+    }
+    .stk-adj-ac-page .stk-adj-ac-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(160px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    @media (max-width: 900px) {
+      .stk-adj-ac-page .stk-adj-ac-stat-grid { grid-template-columns: 1fr; }
+    }
+    .stk-adj-ac-page .stk-adj-ac-stat-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      padding: 11px;
+      border: 1px solid #e5eaf2;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, .06);
+    }
+    .stk-adj-ac-page .stk-adj-ac-stat-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      flex: 0 0 36px;
+      border-radius: 9px;
+      color: #fff;
+      font-size: 17px;
+    }
+    .stk-adj-ac-page .stk-adj-ac-stat-icon--up { background: linear-gradient(135deg, #16a34a, #22c55e); }
+    .stk-adj-ac-page .stk-adj-ac-stat-icon--down { background: linear-gradient(135deg, #dc2626, #f97316); }
+    .stk-adj-ac-page .stk-adj-ac-stat-icon--open { background: linear-gradient(135deg, #2563eb, #6366f1); }
+    .stk-adj-ac-page .stk-adj-ac-stat-label { margin: 0 0 4px; color: #475569; font-size: 11px; font-weight: 700; }
+    .stk-adj-ac-page .stk-adj-ac-stat-value { margin: 0; color: #0f172a; font-size: clamp(16px, 1.45vw, 21px); font-weight: 850; line-height: 1.1; }
+    .stk-adj-ac-page .stk-adj-ac-stat-sub { margin: 3px 0 0; color: #64748b; font-size: 11px; }
+    .stk-adj-ac-page .stk-adj-ac-key { font-family: ui-monospace, monospace; font-weight: 700; color: #0f172a; }
+    .stk-adj-ac-page .stk-adj-ac-side {
+      display: inline-flex;
+      min-width: 34px;
+      justify-content: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #f0f9ff;
+      color: #1d4ed8;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .stk-adj-ac-page .stk-adj-ac-side--cr {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    .stk-adj-ac-page #stkAdjAcStatusLine { font-size: 13px; margin-top: 10px; min-height: 1.2em; color: #64748b; }
+    .stk-adj-ac-page #stkAdjAcStatusLine.stk-adj-ac--warn { color: #b45309; }
+    .stk-adj-ac-page #stkAdjAcStatusLine.stk-adj-ac--ok { color: #047857; }
+    .stk-adj-ac-page .stk-adj-ac-mode-card {
+      margin-bottom: 14px;
+      padding: 14px 16px;
+      border: 1px solid #bfdbfe;
+      border-radius: 10px;
+      background: #f8fafc;
+    }
+    .stk-adj-ac-page .stk-adj-ac-mode-card label {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      cursor: pointer;
+      user-select: none;
+      font-size: 13px;
+      color: #0f172a;
+      line-height: 1.45;
+    }
+    .stk-adj-ac-page .stk-adj-ac-mode-card input { margin-top: 3px; flex-shrink: 0; }
+  </style>
+
+  <section class="stk-adj-ac-stat-grid" aria-label="Stock adjustment account setup summary">
+    <div class="stk-adj-ac-stat-card">
+      <span class="stk-adj-ac-stat-icon stk-adj-ac-stat-icon--up" aria-hidden="true"><i class="bi bi-arrow-up-circle"></i></span>
+      <div>
+        <p class="stk-adj-ac-stat-label">Increase (+)</p>
+        <p class="stk-adj-ac-stat-value" id="stkAdjAcStatIncrease">—</p>
+        <p class="stk-adj-ac-stat-sub">Credits when stock quantity goes up</p>
+      </div>
+    </div>
+    <div class="stk-adj-ac-stat-card">
+      <span class="stk-adj-ac-stat-icon stk-adj-ac-stat-icon--down" aria-hidden="true"><i class="bi bi-arrow-down-circle"></i></span>
+      <div>
+        <p class="stk-adj-ac-stat-label">Decrease (−)</p>
+        <p class="stk-adj-ac-stat-value" id="stkAdjAcStatDecrease">—</p>
+        <p class="stk-adj-ac-stat-sub">Debits when stock quantity goes down</p>
+      </div>
+    </div>
+    <div class="stk-adj-ac-stat-card">
+      <span class="stk-adj-ac-stat-icon stk-adj-ac-stat-icon--open" aria-hidden="true"><i class="bi bi-box-seam"></i></span>
+      <div>
+        <p class="stk-adj-ac-stat-label">Opening stock (+)</p>
+        <p class="stk-adj-ac-stat-value" id="stkAdjAcStatOpening">—</p>
+        <p class="stk-adj-ac-stat-sub">Credits when importing opening balances (equity 3900)</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Stock Inventory Accounts Configuration</h1>
+      <p class="page-po__muted">Choose GL accounts for Stock Adjustment and Stock Count posting. Inventory accounts still come from each item's <strong>INVENTORYACCOUNT</strong> on Item Master (typically <strong>1300</strong>). Opening stock uses equity account <strong>3900</strong> instead of expense <strong>5199</strong>.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a class="page-po__btn-secondary" href="{{ stock_count_list_url }}">Stock Count List</a>
+      <a class="page-po__btn-secondary" href="{{ stock_adjustment_list_url }}">Stock Adjustment List</a>
+      <button type="button" class="page-po__btn-primary" id="stkAdjAcSave">Save configuration</button>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div class="stk-adj-ac-mode-card">
+    <label for="stkAdjAcOpeningMode">
+      <input type="checkbox" id="stkAdjAcOpeningMode" />
+      <span><strong>Opening stock import</strong> — when enabled, Stock Adjustment and Stock Count post Dr inventory (1300) / Cr opening balance (3900), not expense 5199. Turn off after opening balances are loaded.</span>
+    </label>
+  </div>
+
+  <div class="co-table-wrap">
+    <table class="co-table" id="stkAdjAcTable" aria-label="Stock adjustment accounts configuration">
+      <thead>
+        <tr>
+          <th>Difference</th>
+          <th>Purpose</th>
+          <th>GL account</th>
+          <th>Account name</th>
+          <th style="text-align:center;">Normal side</th>
+        </tr>
+      </thead>
+      <tbody id="stkAdjAcTbody"></tbody>
+    </table>
+  </div>
+  <p id="stkAdjAcStatusLine" role="status"></p>
+</div>
+
+<script>
+(function () {
+  var apiBootstrapUrl = {{ api_bootstrap_url|tojson }};
+  var apiSaveUrl = {{ api_save_url|tojson }};
+  var listUrl = {{ list_url|tojson }};
+  var rows = [];
+  var coa = [];
+  var openingStockMode = false;
+  var statusEl = document.getElementById('stkAdjAcStatusLine');
+  var openingModeEl = document.getElementById('stkAdjAcOpeningMode');
+
+  var helpText = {
+    INCREASE: 'Offset account when adjustment lines increase stock (credit offset to inventory debit).',
+    DECREASE: 'Offset account when adjustment lines decrease stock (debit offset to inventory credit).',
+    OPENING: 'Offset account when importing opening stock (credit to equity opening balance, not P&amp;L expense).'
+  };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+  }
+
+  function setStatus(msg, kind) {
+    statusEl.textContent = msg || '';
+    statusEl.className = kind === 'ok' ? 'stk-adj-ac--ok' : kind === 'warn' ? 'stk-adj-ac--warn' : '';
+  }
+
+  function accountName(code) {
+    var c = String(code || '').trim();
+    if (!c) return '—';
+    for (var i = 0; i < coa.length; i++) {
+      if (String(coa[i].code || '').trim() === c) return String(coa[i].name || '').trim() || '—';
+    }
+    return '—';
+  }
+
+  function selectHtml(row) {
+    var current = String(row.account_code || '').trim();
+    var html = '<select class="input stk-adj-ac-account" data-key="' + esc(row.config_key) + '"><option value="">Select…</option>';
+    coa.forEach(function (a) {
+      var code = String(a.code || '').trim();
+      html += '<option value="' + esc(code) + '"' + (code === current ? ' selected' : '') + '>' +
+        esc(code + ' — ' + (a.name || '')) + '</option>';
+    });
+    html += '</select>';
+    return html;
+  }
+
+  function updateStats() {
+    var inc = rows.find(function (r) { return r.config_key === 'INCREASE'; });
+    var dec = rows.find(function (r) { return r.config_key === 'DECREASE'; });
+    var opn = rows.find(function (r) { return r.config_key === 'OPENING'; });
+    document.getElementById('stkAdjAcStatIncrease').textContent = inc && inc.account_code ? inc.account_code : 'Not set';
+    document.getElementById('stkAdjAcStatDecrease').textContent = dec && dec.account_code ? dec.account_code : 'Not set';
+    document.getElementById('stkAdjAcStatOpening').textContent = opn && opn.account_code ? opn.account_code : 'Not set';
+  }
+
+  function render() {
+    var body = document.getElementById('stkAdjAcTbody');
+    if (!body) return;
+    body.innerHTML = rows.map(function (r) {
+      var side = String(r.normal_side || '').trim() || 'Dr';
+      return '<tr data-key="' + esc(r.config_key) + '">' +
+        '<td><span class="stk-adj-ac-key">' + esc(r.label || r.config_key) + '</span></td>' +
+        '<td>' + esc(helpText[r.config_key] || '') + '</td>' +
+        '<td>' + selectHtml(r) + '</td>' +
+        '<td data-name-for="' + esc(r.config_key) + '">' + esc(accountName(r.account_code)) + '</td>' +
+        '<td style="text-align:center;"><span class="stk-adj-ac-side ' + (side === 'Cr' ? 'stk-adj-ac-side--cr' : '') + '">' + esc(side) + '</span></td>' +
+        '</tr>';
+    }).join('');
+    updateStats();
+    Array.prototype.forEach.call(body.querySelectorAll('.stk-adj-ac-account'), function (sel) {
+      sel.addEventListener('change', function () {
+        var key = sel.getAttribute('data-key');
+        var row = rows.find(function (x) { return x.config_key === key; });
+        if (row) row.account_code = sel.value || '';
+        var nm = body.querySelector('[data-name-for="' + key + '"]');
+        if (nm) nm.textContent = accountName(sel.value);
+        updateStats();
+        setStatus('', '');
+      });
+    });
+  }
+
+  function load() {
+    setStatus('Loading configuration…', '');
+    fetch(apiBootstrapUrl, { credentials: 'same-origin' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) throw new Error(data.error || 'Load failed');
+        rows = data.accounts || [];
+        coa = data.coa || [];
+        openingStockMode = !!data.opening_stock_mode;
+        if (openingModeEl) openingModeEl.checked = openingStockMode;
+        render();
+        setStatus('Configuration loaded.', 'ok');
+      })
+      .catch(function (e) {
+        setStatus(e.message || 'Load failed', 'warn');
+      });
+  }
+
+  if (openingModeEl) {
+    openingModeEl.addEventListener('change', function () {
+      openingStockMode = !!openingModeEl.checked;
+      setStatus('', '');
+    });
+  }
+
+  document.getElementById('stkAdjAcSave').addEventListener('click', function () {
+    setStatus('Saving configuration…', '');
+    fetch(apiSaveUrl, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        accounts: rows,
+        opening_stock_mode: !!(openingModeEl && openingModeEl.checked),
+      })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) throw new Error(data.error || 'Save failed');
+        window.location.href = listUrl;
+      })
+      .catch(function (e) {
+        setStatus(e.message || 'Save failed', 'warn');
+      });
+  });
+
+  load();
+})();
+</script>
+{% endblock %}

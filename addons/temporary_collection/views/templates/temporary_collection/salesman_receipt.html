@@ -1,0 +1,646 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+  body { background: #fff !important; }
+  .page-po .sr-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0 24px; margin-bottom: 20px; }
+  .page-po .sr-form-grid .form-group { margin-bottom: 12px; }
+  .page-po .sr-form-grid .form-group label { font-size: 13px; color: #495057; margin-bottom: 4px; display: block; }
+  .page-po .sr-form-grid .form-group .input { width: 100%; font-size: 13px; padding: 6px 0; border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; background: transparent; }
+  .page-po .sr-form-grid .form-group .input:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .page-po .sr-form-grid .form-group .input[readonly] { background: transparent; color: #6c757d; }
+  .page-po .sr-form-grid .span-2 { grid-column: span 2; }
+  .page-po .sr-form-grid .search-field { display: inline-flex; align-items: center; border: none; border-bottom: 1px solid #dee2e6; min-width: 0; }
+  .page-po .sr-form-grid .search-field .input { border: none; }
+  .page-po .sr-form-grid .search-picker { background: transparent; color: #007bff; border: none; padding: 6px 10px; cursor: pointer; }
+  .page-po .sr-form-grid .search-clear { background: transparent; border: none; padding: 6px 10px; cursor: pointer; color: #6c757d; }
+  .modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal.hidden { display: none; }
+  .modal__overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.4); cursor: pointer; }
+  .modal__content { position: relative; background: #fff; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); max-width: 500px; width: 100%; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; border: 1px solid #dee2e6; }
+  .modal__header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid #dee2e6; }
+  .modal__header h4 { margin: 0; font-size: 16px; color: #212529; }
+  .modal__close { background: none; border: none; font-size: 24px; cursor: pointer; color: #6c757d; padding: 0 4px; }
+  .modal__body { padding: 12px; overflow: auto; }
+  .modal__search { margin-bottom: 10px; }
+  .modal__table { max-height: 320px; overflow: auto; }
+  #typeModal { z-index: 1001; }
+</style>
+
+<div class="page-po" style="max-width: 1200px;"
+     data-transaction-audit="Receipt"
+     data-transaction-no-selector="#voucherno"
+     data-save-button="#btnSave"
+     data-track-root=".page-po"
+     data-save-url-pattern="salesman_receipt.*save|/api/save">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Salesman Receipt</h1>
+      <p class="page-po__muted">Record salesman receipts and view voucher history.</p>
+    </div>
+    <div class="page-po__actions">
+      <button type="button" class="page-po__btn-primary" id="btnNew">New</button>
+      <button type="button" class="page-po__btn-primary" id="btnSave" disabled>Save</button>
+      <a href="{{ url_for('temporary_collection.temporary_collection_list') }}" class="page-po__btn-secondary" style="text-decoration: none;">Exit</a>
+    </div>
+  </div>
+
+  <div class="page-po__section-title">Receipt details</div>
+  <div class="sr-form-grid">
+    <div class="form-group">
+      <label for="voucherno">Voucher No</label>
+      <input type="text" id="voucherno" class="input" value="{{ next_voucherno }}" readonly />
+    </div>
+    <div class="form-group">
+      <label for="voucherdate">Voucher Date</label>
+      <input type="text" id="voucherdate" class="input" value="{{ transaction_date or '' }}" readonly />
+    </div>
+    <div class="form-group span-2">
+      <label for="salesmanDisplay">Salesman</label>
+      <span class="search-field search-field--popup" style="display: inline-flex; width: 100%; max-width: 320px;">
+        <input type="text" id="salesmanDisplay" class="input" placeholder="Click to select salesman..." readonly />
+        <button type="button" class="search-clear" id="salesmanClear" aria-label="Clear salesman" style="display: none;">×</button>
+        <button type="button" class="search-picker" id="salesmanPicker" aria-label="Open salesman list">▾</button>
+      </span>
+      <input type="hidden" id="salesmancode" value="" />
+    </div>
+    <div class="form-group">
+      <label for="outstanding">Outstanding</label>
+      <input type="text" id="outstanding" class="input" readonly value="0" />
+    </div>
+    <div class="form-group">
+      <label for="morepaid">More Paid</label>
+      <input type="text" id="morepaid" class="input" readonly value="0" />
+    </div>
+    <div class="form-group">
+      <label for="unadjusted">Unadjusted</label>
+      <input type="text" id="unadjusted" class="input" readonly value="0" />
+    </div>
+    <div class="form-group span-2">
+      <label for="typeDisplay">Type (Reason)</label>
+      <span class="search-field search-field--popup" style="display: inline-flex; width: 100%; max-width: 320px;">
+        <input type="text" id="typeDisplay" class="input" placeholder="Click to select type/reason..." readonly />
+        <button type="button" class="search-clear" id="typeClear" aria-label="Clear type" style="display: none;">×</button>
+        <button type="button" class="search-picker" id="typePicker" aria-label="Open type list">▾</button>
+      </span>
+      <input type="hidden" id="typecode" value="" />
+      <input type="hidden" id="typename" value="" />
+    </div>
+    <div class="form-group">
+      <label for="amount">Amount</label>
+      <input type="number" id="amount" class="input" step="0.01" min="0" value="" placeholder="0" />
+    </div>
+    <div class="form-group span-2">
+      <label for="remark">Remark</label>
+      <input type="text" id="remark" class="input" placeholder="Remark" />
+    </div>
+  </div>
+
+  <div class="page-po__section-title">Settlements for selected salesman</div>
+  <p class="page-po__muted" style="margin: -8px 0 12px 0;">Voucher history for the salesman chosen above.</p>
+  <div class="table-responsive">
+    <div class="scroll-table">
+      <table class="table" id="settlementsTable">
+        <thead>
+          <tr>
+            <th>Voucher No</th>
+            <th>Date</th>
+            <th>Type</th>
+            <th>Remarks</th>
+            <th>Amount</th>
+            <th>Total Amount</th>
+          </tr>
+        </thead>
+        <tbody id="settlementsBody">
+          <tr><td colspan="6" class="muted">Select a salesman to load list.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Salesman Selection Popup -->
+  <div class="modal hidden" id="salesmanModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="salesmanModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>Select Salesman</h4>
+      <button type="button" class="modal__close" data-close="salesmanModal">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__search">
+        <span class="search-field search-field--wide">
+          <input type="text" id="salesmanModalSearch" placeholder="Search salesman..." />
+          <button type="button" class="search-clear" id="salesmanModalClear">×</button>
+        </span>
+      </div>
+      <div class="scroll-table modal__table">
+        <table class="table" id="salesmanModalTable">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+            </tr>
+          </thead>
+          <tbody id="salesmanModalBody">
+            <tr><td colspan="2" class="muted">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- Type (Reason) Selection Popup - from tblpaymentreason -->
+  <div class="modal hidden" id="typeModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="typeModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h4>Select Type (Reason)</h4>
+      <button type="button" class="modal__close" data-close="typeModal">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__search">
+        <span class="search-field search-field--wide">
+          <input type="text" id="typeModalSearch" placeholder="Search code or reason..." />
+          <button type="button" class="search-clear" id="typeModalClear">×</button>
+        </span>
+      </div>
+      <div class="scroll-table modal__table">
+        <table class="table" id="typeModalTable">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody id="typeModalBody">
+            <tr><td colspan="2" class="muted">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+(function() {
+  const baseUrl = {{ url_for('temporary_collection.salesman_receipt')|tojson }};
+  const apiTransactionDate = {{ url_for('temporary_collection.api_salesman_receipt_transaction_date')|tojson }};
+  const apiNextVoucherno = {{ url_for('temporary_collection.api_salesman_receipt_next_voucherno')|tojson }};
+  const apiSalesman = {{ url_for('temporary_collection.api_salesman_receipt_salesman')|tojson }};
+  const apiSettlements = {{ url_for('temporary_collection.api_salesman_receipt_settlements')|tojson }};
+  const apiSave = {{ url_for('temporary_collection.api_salesman_receipt_save')|tojson }};
+  const apiSalesmanList = {{ url_for('temporary_collection.api_salesman_list')|tojson }};
+  const apiPaymentReasons = {{ url_for('temporary_collection.api_salesman_receipt_payment_reasons')|tojson }};
+
+  const vouchernoEl = document.getElementById('voucherno');
+  const voucherdateEl = document.getElementById('voucherdate');
+  const salesmanDisplay = document.getElementById('salesmanDisplay');
+  const salesmancodeEl = document.getElementById('salesmancode');
+  const salesmanClear = document.getElementById('salesmanClear');
+  const salesmanPicker = document.getElementById('salesmanPicker');
+  const salesmanModal = document.getElementById('salesmanModal');
+  const salesmanModalSearch = document.getElementById('salesmanModalSearch');
+  const salesmanModalClear = document.getElementById('salesmanModalClear');
+  const salesmanModalBody = document.getElementById('salesmanModalBody');
+  const outstandingEl = document.getElementById('outstanding');
+  const morepaidEl = document.getElementById('morepaid');
+  const unadjustedEl = document.getElementById('unadjusted');
+  const typeDisplay = document.getElementById('typeDisplay');
+  const typecodeEl = document.getElementById('typecode');
+  const typenameEl = document.getElementById('typename');
+  const typeClear = document.getElementById('typeClear');
+  const typePicker = document.getElementById('typePicker');
+  const typeModal = document.getElementById('typeModal');
+  const typeModalSearch = document.getElementById('typeModalSearch');
+  const typeModalClear = document.getElementById('typeModalClear');
+  const typeModalBody = document.getElementById('typeModalBody');
+  const amountEl = document.getElementById('amount');
+  const remarkEl = document.getElementById('remark');
+  const btnNew = document.getElementById('btnNew');
+  const btnSave = document.getElementById('btnSave');
+  const tbody = document.getElementById('settlementsBody');
+
+  let isNewMode = true;
+  let salesmenList = [];
+  let paymentReasonsList = [];
+
+  function openSalesmanModal() {
+    if (!salesmanModal) return;
+    closeTypeModal();
+    salesmanModal.classList.remove('hidden');
+    if (salesmanModalSearch) {
+      salesmanModalSearch.value = '';
+      salesmanModalSearch.focus();
+    }
+    fetch(apiSalesmanList)
+      .then(r => r.json())
+      .then(d => {
+        if (!d.salesmen) {
+          salesmanModalBody.innerHTML = '<tr><td colspan="2" class="muted">No salesmen found.</td></tr>';
+          return;
+        }
+        salesmenList = d.salesmen;
+        renderSalesmanRows(salesmenList);
+      })
+      .catch(() => {
+        salesmanModalBody.innerHTML = '<tr><td colspan="2" class="muted">Error loading list.</td></tr>';
+      });
+  }
+
+  function closeSalesmanModal() {
+    if (salesmanModal) salesmanModal.classList.add('hidden');
+  }
+
+  function renderSalesmanRows(list) {
+    if (!list || !list.length) {
+      salesmanModalBody.innerHTML = '<tr><td colspan="2" class="muted">No salesmen found.</td></tr>';
+      return;
+    }
+    salesmanModalBody.innerHTML = list.map(function(sm) {
+      const code = (sm.code != null && sm.code !== '') ? String(sm.code) : '';
+      const name = (sm.name != null && sm.name !== '') ? String(sm.name).replace(/</g, '&lt;') : '-';
+      return '<tr data-code="' + code.replace(/"/g, '&quot;') + '" data-name="' + (sm.name || '').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '"><td>' + (code || '-') + '</td><td>' + name + '</td></tr>';
+    }).join('');
+  }
+
+  function filterSalesmanRows(q) {
+    const qq = (q || '').trim().toLowerCase();
+    if (!qq) {
+      renderSalesmanRows(salesmenList);
+      return;
+    }
+    const filtered = salesmenList.filter(function(sm) {
+      const code = (sm.code != null ? String(sm.code) : '').toLowerCase();
+      const name = (sm.name != null ? String(sm.name) : '').toLowerCase();
+      return code.indexOf(qq) !== -1 || name.indexOf(qq) !== -1;
+    });
+    renderSalesmanRows(filtered);
+  }
+
+  function clearSalesman() {
+    if (salesmanDisplay) salesmanDisplay.value = '';
+    if (salesmancodeEl) salesmancodeEl.value = '';
+    if (salesmanClear) salesmanClear.style.display = 'none';
+    outstandingEl.value = '0';
+    morepaidEl.value = '0';
+    unadjustedEl.value = '0';
+    tbody.innerHTML = '<tr><td colspan="6" class="muted">Select a salesman to load list.</td></tr>';
+  }
+
+  function clearForm() {
+    if (salesmanDisplay) salesmanDisplay.value = '';
+    salesmancodeEl.value = '';
+    if (salesmanClear) salesmanClear.style.display = 'none';
+    outstandingEl.value = '0';
+    morepaidEl.value = '0';
+    unadjustedEl.value = '0';
+    if (typeDisplay) typeDisplay.value = '';
+    typecodeEl.value = '';
+    typenameEl.value = '';
+    if (typeClear) typeClear.style.display = 'none';
+    amountEl.value = '';
+    remarkEl.value = '';
+    tbody.innerHTML = '<tr><td colspan="6" class="muted">Select a salesman to load list.</td></tr>';
+  }
+
+  if (salesmanPicker) {
+    salesmanPicker.addEventListener('click', function(e) { e.preventDefault(); openSalesmanModal(); });
+  }
+  if (salesmanDisplay) {
+    salesmanDisplay.addEventListener('click', function(e) { e.preventDefault(); openSalesmanModal(); });
+  }
+  if (salesmanClear) {
+    salesmanClear.addEventListener('click', function(e) { e.preventDefault(); clearSalesman(); });
+  }
+  if (salesmanModal) {
+    salesmanModal.addEventListener('click', function(e) {
+      if (e.target && (e.target.dataset.close === 'salesmanModal' || e.target.classList.contains('modal__close'))) {
+        closeSalesmanModal();
+      }
+    });
+  }
+  if (salesmanModalSearch) {
+    salesmanModalSearch.addEventListener('input', function() {
+      filterSalesmanRows(salesmanModalSearch.value);
+      if (salesmanModalClear) salesmanModalClear.style.display = salesmanModalSearch.value ? 'block' : 'none';
+    });
+  }
+  if (salesmanModalClear) {
+    salesmanModalClear.addEventListener('click', function() {
+      if (salesmanModalSearch) {
+        salesmanModalSearch.value = '';
+        filterSalesmanRows('');
+        salesmanModalSearch.focus();
+      }
+      salesmanModalClear.style.display = 'none';
+    });
+  }
+  const salesmanModalTable = document.getElementById('salesmanModalTable');
+  if (salesmanModalTable) {
+    salesmanModalTable.addEventListener('click', function(e) {
+      const row = e.target.closest('tbody tr');
+      if (!row || !row.getAttribute('data-code')) return;
+      const code = row.getAttribute('data-code') || '';
+      const name = row.getAttribute('data-name') || '';
+      if (salesmanDisplay) salesmanDisplay.value = code ? (code + ' - ' + name).trim() : '';
+      if (salesmancodeEl) salesmancodeEl.value = code;
+      if (salesmanClear) salesmanClear.style.display = code ? 'block' : 'none';
+      closeSalesmanModal();
+      loadSalesmanInfo(code);
+    });
+  }
+  function openTypeModal() {
+    if (!typeModal) return;
+    closeSalesmanModal();
+    typeModal.classList.remove('hidden');
+    if (typeModalSearch) {
+      typeModalSearch.value = '';
+      typeModalSearch.focus();
+    }
+    if (typeModalBody) typeModalBody.innerHTML = '<tr><td colspan="2" class="muted">Loading...</td></tr>';
+    fetch(apiPaymentReasons)
+      .then(function(r) {
+        if (!r.ok) {
+          if (typeModalBody) typeModalBody.innerHTML = '<tr><td colspan="2" class="muted">Error loading list (' + r.status + ').</td></tr>';
+          return null;
+        }
+        return r.json();
+      })
+      .then(function(d) {
+        if (!d) return;
+        if (!d.payment_reasons) {
+          if (typeModalBody) typeModalBody.innerHTML = '<tr><td colspan="2" class="muted">No payment reasons found.</td></tr>';
+          return;
+        }
+        paymentReasonsList = d.payment_reasons;
+        renderTypeRows(paymentReasonsList);
+      })
+      .catch(function(err) {
+        if (typeModalBody) typeModalBody.innerHTML = '<tr><td colspan="2" class="muted">Error loading list.</td></tr>';
+      });
+  }
+
+  function closeTypeModal() {
+    if (typeModal) typeModal.classList.add('hidden');
+  }
+
+  function renderTypeRows(list) {
+    if (!list || !list.length) {
+      typeModalBody.innerHTML = '<tr><td colspan="2" class="muted">No payment reasons found.</td></tr>';
+      return;
+    }
+    typeModalBody.innerHTML = list.map(function(r) {
+      const code = (r.code != null && r.code !== '') ? String(r.code) : '';
+      const reason = (r.reason != null && r.reason !== '') ? String(r.reason).replace(/</g, '&lt;') : '-';
+      return '<tr data-code="' + code.replace(/"/g, '&quot;') + '" data-reason="' + (r.reason || '').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '"><td>' + (code || '-') + '</td><td>' + reason + '</td></tr>';
+    }).join('');
+  }
+
+  function filterTypeRows(q) {
+    const qq = (q || '').trim().toLowerCase();
+    if (!qq) {
+      renderTypeRows(paymentReasonsList);
+      return;
+    }
+    const filtered = paymentReasonsList.filter(function(r) {
+      const code = (r.code != null ? String(r.code) : '').toLowerCase();
+      const reason = (r.reason != null ? String(r.reason) : '').toLowerCase();
+      return code.indexOf(qq) !== -1 || reason.indexOf(qq) !== -1;
+    });
+    renderTypeRows(filtered);
+  }
+
+  function clearType() {
+    if (typeDisplay) typeDisplay.value = '';
+    typecodeEl.value = '';
+    typenameEl.value = '';
+    if (typeClear) typeClear.style.display = 'none';
+    remarkEl.value = '';
+  }
+
+  if (typePicker) {
+    typePicker.addEventListener('click', function(e) { e.preventDefault(); openTypeModal(); });
+  }
+  if (typeDisplay) {
+    typeDisplay.addEventListener('click', function(e) { e.preventDefault(); openTypeModal(); });
+  }
+  if (typeClear) {
+    typeClear.addEventListener('click', function(e) { e.preventDefault(); clearType(); });
+  }
+  if (typeModal) {
+    typeModal.addEventListener('click', function(e) {
+      if (e.target && (e.target.dataset.close === 'typeModal' || e.target.classList.contains('modal__close'))) {
+        closeTypeModal();
+      }
+    });
+  }
+  if (typeModalSearch) {
+    typeModalSearch.addEventListener('input', function() {
+      filterTypeRows(typeModalSearch.value);
+      if (typeModalClear) typeModalClear.style.display = typeModalSearch.value ? 'block' : 'none';
+    });
+  }
+  if (typeModalClear) {
+    typeModalClear.addEventListener('click', function() {
+      if (typeModalSearch) {
+        typeModalSearch.value = '';
+        filterTypeRows('');
+        typeModalSearch.focus();
+      }
+      typeModalClear.style.display = 'none';
+    });
+  }
+  const typeModalTable = document.getElementById('typeModalTable');
+  if (typeModalTable) {
+    typeModalTable.addEventListener('click', function(e) {
+      const row = e.target.closest('tbody tr');
+      if (!row || !row.getAttribute('data-code')) return;
+      const code = row.getAttribute('data-code') || '';
+      const reason = row.getAttribute('data-reason') || '';
+      if (typeDisplay) typeDisplay.value = code ? (code + ' - ' + reason).trim() : '';
+      typecodeEl.value = code;
+      typenameEl.value = reason;
+      if (typeClear) typeClear.style.display = code ? 'block' : 'none';
+      remarkEl.value = reason;
+      closeTypeModal();
+      amountEl.focus();
+    });
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && salesmanModal && !salesmanModal.classList.contains('hidden')) {
+      closeSalesmanModal();
+    }
+    if (e.key === 'Escape' && typeModal && !typeModal.classList.contains('hidden')) {
+      closeTypeModal();
+    }
+  });
+
+  function setMode(newMode, focusSalesman) {
+    isNewMode = newMode;
+    vouchernoEl.readOnly = !newMode;
+    btnSave.disabled = !newMode;
+    if (newMode) {
+      fetch(apiNextVoucherno).then(r => r.json()).then(d => {
+        if (d.success) vouchernoEl.value = d.voucherno;
+      }).catch(() => {});
+      fetch(apiTransactionDate).then(r => r.json()).then(d => {
+        if (d.success) voucherdateEl.value = d.transaction_date || '';
+      }).catch(() => {});
+    } else {
+      vouchernoEl.value = '';
+    }
+    clearForm();
+    if (newMode && focusSalesman && salesmanDisplay) salesmanDisplay.focus();
+  }
+
+  btnNew.addEventListener('click', function() {
+    setMode(true, true);
+  });
+
+  function loadSalesmanInfo(code) {
+    if (!code) {
+      outstandingEl.value = '0';
+      morepaidEl.value = '0';
+      unadjustedEl.value = '0';
+      tbody.innerHTML = '<tr><td colspan="6" class="muted">Select a salesman to load list.</td></tr>';
+      return;
+    }
+    fetch(apiSalesman + '?code=' + encodeURIComponent(code))
+      .then(r => r.json())
+      .then(d => {
+        if (!d.success) {
+          outstandingEl.value = '0';
+          morepaidEl.value = '0';
+          unadjustedEl.value = '0';
+          tbody.innerHTML = '<tr><td colspan="6" class="muted">Salesman not found.</td></tr>';
+          return;
+        }
+        const s = d.salesman;
+        outstandingEl.value = s.outstandingamount != null ? s.outstandingamount : '0';
+        morepaidEl.value = s.morepaid != null ? s.morepaid : '0';
+        unadjustedEl.value = s.unadjusted != null ? s.unadjusted : '0';
+        loadSettlements(code);
+      })
+      .catch(() => {
+        tbody.innerHTML = '<tr><td colspan="6" class="muted">Error loading salesman.</td></tr>';
+      });
+  }
+
+  function loadSettlements(code) {
+    if (!code) return;
+    fetch(apiSettlements + '?salesman_code=' + encodeURIComponent(code))
+      .then(r => r.json())
+      .then(d => {
+        if (!d.success || !d.settlements || !d.settlements.length) {
+          tbody.innerHTML = '<tr><td colspan="6" class="muted">No settlements.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = d.settlements.map(row => {
+          const vno = row.voucherno != null ? row.voucherno : '';
+          const vdt = row.voucherdate != null ? String(row.voucherdate).substring(0, 10) : '';
+          const typ = row.type != null ? String(row.type).replace(/</g, '&lt;') : '';
+          const rem = row.remarks != null ? String(row.remarks).replace(/</g, '&lt;') : '';
+          const amt = row.amount != null ? row.amount : '';
+          const tot = row.totalamount != null ? row.totalamount : '';
+          return '<tr><td>' + vno + '</td><td>' + vdt + '</td><td>' + typ + '</td><td>' + rem + '</td><td>' + amt + '</td><td>' + tot + '</td></tr>';
+        }).join('');
+      })
+      .catch(() => {
+        tbody.innerHTML = '<tr><td colspan="6" class="muted">Error loading list.</td></tr>';
+      });
+  }
+
+  remarkEl.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') btnSave.focus();
+  });
+  amountEl.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') remarkEl.focus();
+  });
+
+  btnSave.addEventListener('click', function() {
+    const voucherno = vouchernoEl.value.trim();
+    const voucherdate = voucherdateEl.value.trim();
+    const salesmancode = salesmancodeEl.value.trim();
+    const typecode = typecodeEl.value.trim();
+    const typename = typenameEl.value.trim();
+    const amount = parseFloat(amountEl.value) || 0;
+    const remark = remarkEl.value.trim();
+    const previous_outstanding = parseFloat(outstandingEl.value) || 0;
+
+    if (!voucherno) {
+      alert('Please click New button.');
+      return;
+    }
+    if (!voucherdate) {
+      alert('Please set voucher date.');
+      return;
+    }
+    if (amount <= 0 && (typecode === '2' || typecode === '3')) {
+      alert('Please check amount.');
+      return;
+    }
+    if (!salesmancode || !typecode || !typename || !remark) {
+      alert('Please check data (salesman, type, amount, remark).');
+      return;
+    }
+
+    fetch(apiSave, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        voucherno: parseInt(voucherno, 10),
+        voucherdate: voucherdate,
+        salesman_code: salesmancode,
+        typecode: parseInt(typecode, 10),
+        typename: typename,
+        amount: amount,
+        remark: remark,
+        previous_outstanding: previous_outstanding
+      })
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          window.dispatchEvent(new CustomEvent('nexa-transaction-save-success', { detail: d }));
+          vouchernoEl.value = d.next_voucherno != null ? d.next_voucherno : (parseInt(voucherno, 10) + 1);
+          clearForm();
+          const code = salesmancodeEl.value.trim();
+          if (code) loadSalesmanInfo(code);
+          amountEl.focus();
+          if (d.pdf_base64) {
+            try {
+              const bin = atob(d.pdf_base64);
+              const arr = new Uint8Array(bin.length);
+              for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+              const blob = new Blob([arr], { type: 'application/pdf' });
+              const url = URL.createObjectURL(blob);
+              window.open(url, '_blank');
+            } catch (e) {
+              console.warn('PDF open failed', e);
+            }
+          }
+          alert('Data saved.');
+        } else {
+          window.dispatchEvent(new CustomEvent('nexa-transaction-save-failed', { detail: d }));
+          alert(d.error || 'Save failed.');
+        }
+      })
+      .catch(() => {
+        window.dispatchEvent(new CustomEvent('nexa-transaction-save-failed', { detail: {} }));
+        alert('Save failed.');
+      });
+  });
+
+  fetch(apiSalesmanList).then(r => r.json()).then(d => {
+    if (d.salesmen) salesmenList = d.salesmen;
+  }).catch(() => {});
+
+  setMode(true, false);
+})();
+</script>
+<script src="{{ url_for('static', filename='js/transaction_recording_client.js') }}?v=7"></script>
+{% endblock %}

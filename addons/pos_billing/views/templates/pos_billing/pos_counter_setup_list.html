@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}POS Counter Setup{% endblock %}
+
+{# Stable sort key for data-sort-value attributes (numbers, ISO-ish dates, else text). #}
+{% macro pos_counter_sort_val(val) -%}
+{%- if val is none -%}
+{%- elif val is number -%}{{ val }}
+{%- elif val.isoformat is defined -%}{{ val.isoformat() }}
+{%- else -%}{{ val|string|trim }}
+{%- endif -%}
+{%- endmacro %}
+
+{% block content %}
+<div class="page-po nexa-list-page pos-counter-setup-list" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">POS Counter Setup</h1>
+      <p class="page-po__muted">Rows in <code>COUNTER</code> — location, counter code, workstation name/IP (register via <strong>+ New counter</strong>).</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a class="page-po__btn-primary" href="{{ url_for('pos_billing.pos_counter_setup_new') }}">+ New counter</a>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  {% if not columns %}
+    <p class="page-po__muted" style="margin-top:10px;"><code>COUNTER</code> is not available or could not be read in this database.</p>
+  {% else %}
+    <div class="nexa-list-toolbar">
+      <input type="text" id="posCounterListFilter" class="input" placeholder="Filter rows…"
+             style="min-width:220px; max-width:360px;" autocomplete="off" />
+      <span id="posCounterListMeta" class="nexa-num">{{ rows|length }} row{% if rows|length != 1 %}s{% endif %}</span>
+    </div>
+
+    <style>
+      .pos-counter-setup-list #posCounterTable thead th.sortable { cursor: pointer; user-select: none; }
+      .pos-counter-setup-list #posCounterTable thead th.sortable:hover { filter: brightness(0.97); }
+    </style>
+    <div class="co-table-wrap">
+      <table class="co-table" id="posCounterTable">
+        <thead>
+          <tr>
+            <th class="sortable" style="text-align:center; width:52px;" data-sort="#" data-sort-col="0" data-sort-type="number" title="Sort by row">#<span class="sort-arrow"></span></th>
+            {% for c in columns %}
+              {% set cl = (c|string)|lower %}
+              {% if cl in ('countercode', 'locationcode') or (cl.endswith('code') and cl not in ('approved', 'onlinesale')) %}
+                {% set stype = 'number' %}
+              {% elif 'date' in cl %}
+                {% set stype = 'date' %}
+              {% else %}
+                {% set stype = 'text' %}
+              {% endif %}
+              <th class="sortable" data-sort="{{ c }}" data-sort-col="{{ loop.index }}" data-sort-type="{{ stype }}" title="Sort by {{ (c | replace('_', ' ')) }}">{{ (c | replace('_', ' ')) }}<span class="sort-arrow"></span></th>
+            {% endfor %}
+            <th style="text-align:right; width:148px; white-space:nowrap;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="posCounterTbody">
+          {% if not rows %}
+            <tr class="pos-counter-empty-row">
+              <td colspan="{{ columns|length + 2 }}" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">
+                No counters yet. Use <strong>+ New counter</strong> to register this workstation.
+              </td>
+            </tr>
+          {% else %}
+            {% for row in rows %}
+              <tr data-search="{% for c in columns %}{{ row.get(c, '') }} {% endfor %}">
+                <td class="sl-no" style="text-align:center; color:#6b7280;">{{ loop.index }}</td>
+                {% for c in columns %}
+                  {% set v = row.get(c, '') %}
+                  <td data-sort-value="{{ pos_counter_sort_val(v)|e }}">{{ v }}</td>
+                {% endfor %}
+                <td style="text-align:right; white-space:nowrap;">
+                  {% set rid = row.get('rowid') %}
+                  {% if rid %}
+                  <a class="page-po__btn-secondary" style="padding:4px 10px; font-size:12px;" href="{{ url_for('pos_billing.pos_counter_setup_edit') }}?rowid={{ rid|string|urlencode }}">Edit</a>
+                  <form method="post" action="{{ url_for('pos_billing.pos_counter_setup_delete') }}" style="display:inline-block; margin-left:6px;" onsubmit="return confirm('Delete this counter from COUNTER setup? This cannot be undone.');">
+                    <input type="hidden" name="rowid" value="{{ rid|string }}" />
+                    <button type="submit" class="page-po__btn-secondary" style="padding:4px 10px; font-size:12px; color:#b91c1c; border-color:rgba(185,28,28,0.35);">Delete</button>
+                  </form>
+                  {% else %}
+                  <span class="page-po__muted">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+(function () {
+  var inp = document.getElementById('posCounterListFilter');
+  var tbody = document.getElementById('posCounterTbody');
+  var meta = document.getElementById('posCounterListMeta');
+  var table = document.getElementById('posCounterTable');
+  if (!inp || !tbody || !table) return;
+
+  function dataRows() {
+    return Array.prototype.slice.call(tbody.querySelectorAll('tr[data-search]'));
+  }
+
+  function visibleCount() {
+    var trs = tbody.querySelectorAll('tr');
+    var n = 0;
+    for (var i = 0; i < trs.length; i++) {
+      var tr = trs[i];
+      if (tr.classList.contains('pos-counter-empty-row')) continue;
+      if (tr.style.display === 'none') continue;
+      n++;
+    }
+    return n;
+  }
+
+  function renumberVisibleSl() {
+    var trs = dataRows();
+    var n = 0;
+    for (var i = 0; i < trs.length; i++) {
+      var tr = trs[i];
+      if (tr.style.display === 'none') continue;
+      n++;
+      var c0 = tr.cells[0];
+      if (c0) c0.textContent = String(n);
+    }
+  }
+
+  function syncMeta() {
+    if (!meta) return;
+    var trs = tbody.querySelectorAll('tr');
+    var hasEmpty = tbody.querySelector('.pos-counter-empty-row');
+    if (hasEmpty) {
+      meta.textContent = '0 rows';
+      return;
+    }
+    var n = visibleCount();
+    meta.textContent = n + ' row' + (n === 1 ? '' : 's');
+  }
+
+  function applyFilter() {
+    var q = (inp.value || '').trim().toLowerCase();
+    var trs = dataRows();
+    for (var i = 0; i < trs.length; i++) {
+      var hay = (trs[i].getAttribute('data-search') || '').toLowerCase();
+      trs[i].style.display = (!q || hay.indexOf(q) !== -1) ? '' : 'none';
+    }
+    renumberVisibleSl();
+    syncMeta();
+  }
+
+  inp.addEventListener('input', applyFilter);
+
+  var sortCol = -1;
+  var sortAsc = true;
+
+  function getCellSortValue(row, colIndex, type) {
+    var cell = row.cells[colIndex];
+    if (!cell) return type === 'number' ? 0 : '';
+    var raw = (cell.textContent || '').trim();
+    var dataVal = cell.getAttribute('data-sort-value');
+    if (type === 'number') {
+      if (colIndex === 0) {
+        var t = parseInt(raw, 10);
+        return isNaN(t) ? 0 : t;
+      }
+      var num = dataVal !== null && dataVal !== '' ? parseFloat(dataVal) : parseFloat(raw.replace(/,/g, ''));
+      return isNaN(num) ? 0 : num;
+    }
+    if (type === 'date') {
+      var d = dataVal || raw || '';
+      return d;
+    }
+    return ((dataVal !== null && dataVal !== '') ? dataVal : raw).toLowerCase();
+  }
+
+  function sortTable(colIndex, type, thClicked) {
+    var rows = dataRows();
+    if (!rows.length) return;
+    if (sortCol === colIndex) sortAsc = !sortAsc;
+    else { sortCol = colIndex; sortAsc = true; }
+
+    var heads = table.querySelectorAll('thead th.sortable');
+    for (var h = 0; h < heads.length; h++) {
+      heads[h].classList.remove('sort-asc', 'sort-desc');
+    }
+    if (thClicked) thClicked.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
+
+    rows.sort(function (a, b) {
+      var aVal = getCellSortValue(a, colIndex, type);
+      var bVal = getCellSortValue(b, colIndex, type);
+      var cmp = 0;
+      if (type === 'number') cmp = aVal - bVal;
+      else if (type === 'date') cmp = String(aVal || '').localeCompare(String(bVal || ''));
+      else cmp = String(aVal).localeCompare(String(bVal));
+      var dir = sortAsc ? 1 : -1;
+      if (cmp < 0) return -dir;
+      if (cmp > 0) return dir;
+      return 0;
+    });
+    for (var i = 0; i < rows.length; i++) tbody.appendChild(rows[i]);
+    renumberVisibleSl();
+    syncMeta();
+  }
+
+  table.querySelectorAll('thead th.sortable').forEach(function (th) {
+    th.addEventListener('click', function () {
+      var col = parseInt(th.getAttribute('data-sort-col'), 10);
+      if (isNaN(col)) return;
+      var type = th.getAttribute('data-sort-type') || 'text';
+      sortTable(col, type, th);
+    });
+  });
+
+  applyFilter();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,763 @@
+{% extends "base.html" %}
+{% block title %}POS Sales List{% endblock %}
+
+{% block content %}
+<div class="page-po nexa-list-page pos-settlement-page">
+{% include 'pos_billing/_pos_settlement_sales_worksheet_styles.html' %}
+
+  <div class="psp-shell">
+    <div id="pspBusyOverlay" class="psp-busy-overlay" hidden aria-hidden="true">
+      <div class="psp-busy-overlay__panel" role="status" aria-live="polite">
+        <div class="psp-busy-overlay__spinner" aria-hidden="true"></div>
+        <p class="psp-busy-overlay__text">Please wait…</p>
+      </div>
+    </div>
+
+    <div class="psp-page-head">
+      <div>
+        <h1>POS Sales List</h1>
+        <p class="psp-lead">Same filters and bill grid as POS Settlement — view-only list for the branch. Summary totals match the POS X Report / shift close calculation. Use <a href="{{ settlement_workflow_url }}">POS Settlement</a> to reconcile and post.</p>
+      </div>
+      <nav class="psp-breadcrumb" aria-label="Breadcrumb">
+        <span>POS</span> <span>›</span>
+        <strong>POS Sales List</strong>
+      </nav>
+    </div>
+
+    <section class="psp-kpi-strip" aria-label="Summary KPIs">
+      <article class="psp-kpi-card">
+        <div class="psp-kpi-card__icon psp-kpi-card__icon--blue" aria-hidden="true"><i class="bi bi-person-check"></i></div>
+        <div class="psp-kpi-card__body">
+          <p class="psp-kpi-card__label">Direct customer</p>
+          <p class="psp-kpi-card__value" id="pspSumDirect">0.00</p>
+          <p class="psp-kpi-card__sub">Bill type C</p>
+        </div>
+      </article>
+      <article class="psp-kpi-card">
+        <div class="psp-kpi-card__icon psp-kpi-card__icon--orange" aria-hidden="true"><i class="bi bi-journal-text"></i></div>
+        <div class="psp-kpi-card__body">
+          <p class="psp-kpi-card__label">Credit</p>
+          <p class="psp-kpi-card__value" id="pspSumCredit">0.00</p>
+          <p class="psp-kpi-card__sub">Bill type R</p>
+        </div>
+      </article>
+      <article class="psp-kpi-card">
+        <div class="psp-kpi-card__icon psp-kpi-card__icon--green" aria-hidden="true"><i class="bi bi-graph-up-arrow"></i></div>
+        <div class="psp-kpi-card__body">
+          <p class="psp-kpi-card__label">Total Sales</p>
+          <p class="psp-kpi-card__value" id="pspSumTotal">0.00</p>
+          <p class="psp-kpi-card__sub" id="pspKpiTotalSub">C + R</p>
+        </div>
+      </article>
+      <article class="psp-kpi-card">
+        <div class="psp-kpi-card__icon psp-kpi-card__icon--purple" aria-hidden="true"><i class="bi bi-percent"></i></div>
+        <div class="psp-kpi-card__body">
+          <p class="psp-kpi-card__label">Total Discount</p>
+          <p class="psp-kpi-card__value" id="pspSumDiscount">0.00</p>
+          <p class="psp-kpi-card__sub">From bill header</p>
+        </div>
+      </article>
+      <article class="psp-kpi-card">
+        <div class="psp-kpi-card__icon psp-kpi-card__icon--red" aria-hidden="true"><i class="bi bi-arrow-return-left"></i></div>
+        <div class="psp-kpi-card__body">
+          <p class="psp-kpi-card__label">Sales returns</p>
+          <p class="psp-kpi-card__value" id="pspSumReturns">0.00</p>
+          <p class="psp-kpi-card__sub">Negative bill lines</p>
+        </div>
+      </article>
+      <article class="psp-kpi-card">
+        <div class="psp-kpi-card__icon psp-kpi-card__icon--red" aria-hidden="true"><i class="bi bi-x-circle"></i></div>
+        <div class="psp-kpi-card__body">
+          <p class="psp-kpi-card__label">Total Cancel</p>
+          <p class="psp-kpi-card__value" id="pspSumCancel">0.00</p>
+          <p class="psp-kpi-card__sub">Voided carts</p>
+        </div>
+      </article>
+      <article class="psp-kpi-card">
+        <div class="psp-kpi-card__icon psp-kpi-card__icon--purple" aria-hidden="true"><i class="bi bi-credit-card"></i></div>
+        <div class="psp-kpi-card__body">
+          <p class="psp-kpi-card__label">Card</p>
+          <p class="psp-kpi-card__value" id="pspSumCard">0.00</p>
+          <p class="psp-kpi-card__sub" id="pspKpiWalletSub">Wallet 0.00</p>
+        </div>
+      </article>
+      <article class="psp-kpi-card">
+        <div class="psp-kpi-card__icon psp-kpi-card__icon--teal" aria-hidden="true"><i class="bi bi-cash-stack"></i></div>
+        <div class="psp-kpi-card__body">
+          <p class="psp-kpi-card__label">Cash in Box</p>
+          <p class="psp-kpi-card__value" id="pspSumCash">0.00</p>
+          <p class="psp-kpi-card__sub" id="pspKpiBillCount">0 bills</p>
+        </div>
+      </article>
+    </section>
+
+    <details class="psp-nav-general" open aria-label="Statement header">
+      <summary>General</summary>
+      <div class="psp-nav-general__body">
+        <div class="psp-nav-general__grid">
+          <div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Branch code</span>
+              <span class="psp-nav-kv__val" id="pspGenBranchCode">—</span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Branch name</span>
+              <span class="psp-nav-kv__val" id="pspGenBranchName">—</span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Period</span>
+              <span class="psp-nav-kv__val" id="pspGenPeriod">—</span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Settlement status</span>
+              <span class="psp-nav-kv__val" id="pspGenStatusFilter">—</span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">POS counters</span>
+              <span class="psp-nav-kv__val" id="pspGenCounterFilter">—</span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Cashier filter</span>
+              <span class="psp-nav-kv__val" id="pspGenCashierFilter">—</span>
+            </div>
+          </div>
+          <div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Shift</span>
+              <span class="psp-nav-kv__val" id="pspGenShift">—</span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Bills in list</span>
+              <span class="psp-nav-kv__val"><button type="button" class="psp-nav-link" id="pspGenScrollList" title="Scroll to list"><span id="pspGenBillCount">0</span></button></span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Pending (in view)</span>
+              <span class="psp-nav-kv__val"><button type="button" class="psp-nav-link" id="pspGenScrollPending"><span id="pspGenPendingCount">0</span></button></span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Posted (in view)</span>
+              <span class="psp-nav-kv__val"><span id="pspGenPostedCount">0</span></span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Distinct cashiers</span>
+              <span class="psp-nav-kv__val" id="pspGenCashierCount">0</span>
+            </div>
+            <div class="psp-nav-kv">
+              <span class="psp-nav-kv__label">Rows selected</span>
+              <span class="psp-nav-kv__val" id="pspGenSelectedCount">0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <details class="psp-nav-general psp-nav-filters" open aria-label="Filters">
+      <summary>Filters</summary>
+      <div class="psp-nav-general__body">
+        <div class="psp-nav-general__grid psp-nav-general__grid--filters">
+          <div class="psp-nav-kv psp-nav-kv--control">
+            <span class="psp-nav-kv__label"><label for="pspFrom">From Date</label></span>
+            <div class="psp-nav-kv__control"><input type="date" id="pspFrom" class="input" autocomplete="off" /></div>
+          </div>
+          <div class="psp-nav-kv psp-nav-kv--control">
+            <span class="psp-nav-kv__label"><label for="pspTo">To Date</label></span>
+            <div class="psp-nav-kv__control"><input type="date" id="pspTo" class="input" autocomplete="off" /></div>
+          </div>
+          <div class="psp-nav-kv psp-nav-kv--control">
+            <span class="psp-nav-kv__label"><label for="pspBranchDisplay">Branch</label></span>
+            <div class="psp-nav-kv__control">
+              <input type="text" id="pspBranchDisplay" class="input" readonly autocomplete="off" value="{{ branch_display }}" title="Current branch for this session" />
+              <input type="hidden" id="pspBranch" value="{{ location_code }}" />
+            </div>
+          </div>
+          <div class="psp-nav-kv psp-nav-kv--control">
+            <span class="psp-nav-kv__label"><label for="pspCounterDisplay">POS Counter</label></span>
+            <div class="psp-nav-kv__control">
+              <div class="psp-counter-pick">
+                <input type="text" id="pspCounterDisplay" class="input" readonly autocomplete="off" value="All counters" placeholder="All counters" title="Choose counter from list" />
+                <input type="hidden" id="pspCounter" value="" />
+                <button type="button" class="psp-btn-outline psp-counter-pick__btn" id="pspBtnPickCounter" aria-haspopup="dialog" aria-controls="pspCounterModal"><i class="bi bi-shop-window"></i> Pick…</button>
+              </div>
+            </div>
+          </div>
+          <div class="psp-nav-kv psp-nav-kv--control">
+            <span class="psp-nav-kv__label"><label for="pspCashier">Cashier / User</label></span>
+            <div class="psp-nav-kv__control"><input type="text" id="pspCashier" class="input" placeholder="Filter cashier" autocomplete="off" /></div>
+          </div>
+          <div class="psp-nav-kv psp-nav-kv--control">
+            <span class="psp-nav-kv__label"><label for="pspShift">Shift</label></span>
+            <div class="psp-nav-kv__control">
+              <select id="pspShift" class="input">
+                <option value="">All shifts</option>
+                <option value="1">Shift 1</option>
+                <option value="2">Shift 2</option>
+                <option value="3">Shift 3</option>
+              </select>
+            </div>
+          </div>
+          <div class="psp-nav-kv psp-nav-kv--control">
+            <span class="psp-nav-kv__label"><label for="pspStatus">Settlement status</label></span>
+            <div class="psp-nav-kv__control">
+              <select id="pspStatus" class="input">
+                <option value="">All (pending + posted + cancelled)</option>
+                <option value="Pending" selected>Pending — not yet settled</option>
+                <option value="Posted">Posted — already settled</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+            </div>
+          </div>
+          <div class="psp-nav-kv psp-nav-kv--control">
+            <span class="psp-nav-kv__label"><label for="pspQuickSearch">Search</label></span>
+            <div class="psp-nav-kv__control"><input type="search" id="pspQuickSearch" class="input" placeholder="Bill No / Customer / Remarks" autocomplete="off" /></div>
+          </div>
+        </div>
+      </div>
+      <div class="psp-nav-filters__toolbar" role="toolbar" aria-label="Filter actions">
+        <button type="button" class="psp-btn-load" id="pspBtnLoad"><i class="bi bi-arrow-repeat"></i> Load POS Sales</button>
+        <button type="button" class="psp-btn-outline" id="pspBtnReset">Reset</button>
+        <span class="psp-nav-filters__toolbar-sep" aria-hidden="true">|</span>
+        <button type="button" class="psp-btn-outline" id="pspBtnShowSummary">Show Summary</button>
+        <button type="button" class="psp-btn-outline" id="pspBtnSearch">Apply filters</button>
+        <button type="button" class="psp-btn-outline" id="pspBtnExcel"><i class="bi bi-file-earmark-spreadsheet"></i> Export CSV</button>
+      </div>
+    </details>
+
+    <p class="psp-status-line" id="pspStatusLine" aria-live="polite"></p>
+
+    <div class="psp-main-layout">
+      <section class="psp-nav-lines-card psp-invoice-panel" aria-label="POS sales list">
+        <h2 class="psp-table-panel__title">POS Sales <span style="font-weight:600;color:#94a3b8;">(sorted by bill date)</span></h2>
+        <div class="co-table-wrap psp-sales-grid-wrap">
+          <table class="co-table psp-sales-grid--nav" id="pspTable">
+            <thead>
+              <tr>
+                <th class="sl-no" style="width:40px;"><input type="checkbox" id="pspSelectAll" title="Select all" /></th>
+                <th>Bill No</th>
+                <th>Bill Date</th>
+                <th>Cashier / User</th>
+                <th>POS Counter</th>
+                <th>Customer</th>
+                <th>Payment Type</th>
+                <th class="num">Gross Amount</th>
+                <th class="num">Discount</th>
+                <th class="num">Tax</th>
+                <th class="num">Net Amount</th>
+                <th>Settlement Status</th>
+                <th>Posted Voucher No</th>
+                <th>Remarks</th>
+              </tr>
+            </thead>
+            <tbody id="pspTbody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <div id="pspCounterModal" class="psp-counter-modal" hidden aria-hidden="true">
+      <div class="psp-counter-modal__backdrop" id="pspCounterModalBackdrop"></div>
+      <div class="psp-counter-modal__card" role="dialog" aria-modal="true" aria-labelledby="pspCounterModalTitle">
+        <div class="psp-counter-modal__head">
+          <h2 id="pspCounterModalTitle">POS Counter</h2>
+          <button type="button" class="psp-counter-modal__close" id="pspCounterModalClose" aria-label="Close">&times;</button>
+        </div>
+        <input type="search" id="pspCounterModalSearch" class="input" placeholder="Search name or code…" autocomplete="off" />
+        <div class="psp-counter-modal__list" id="pspCounterModalList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var apiUrl = {{ api_bills_url|tojson }};
+  var apiCountersUrl = {{ api_counters_url|tojson }};
+  var apiSummaryUrl = {{ api_summary_url|tojson }};
+  var tbody = document.getElementById('pspTbody');
+  var statusEl = document.getElementById('pspStatusLine');
+  var rows = [];
+  var summaryData = null;
+  var _summaryLoadAbort = null;
+  var counterPickRows = [];
+  var counterModalEl = document.getElementById('pspCounterModal');
+  var counterModalSearch = document.getElementById('pspCounterModalSearch');
+  var counterModalList = document.getElementById('pspCounterModalList');
+
+  function inr(n) {
+    var x = Number(n);
+    if (!isFinite(x)) x = 0;
+    return x.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function setStatus(msg, kind) {
+    statusEl.textContent = msg || '';
+    statusEl.className = 'psp-status-line' + (kind === 'ok' ? ' psp-ok' : kind === 'warn' ? ' psp-warn' : '');
+  }
+
+  function setBusy(on, msg) {
+    var el = document.getElementById('pspBusyOverlay');
+    if (!el) return;
+    var label = el.querySelector('.psp-busy-overlay__text');
+    if (label) label.textContent = msg || 'Please wait…';
+    el.hidden = !on;
+    el.setAttribute('aria-hidden', on ? 'false' : 'true');
+  }
+
+  function withBranch(url) {
+    var br = (document.getElementById('pspBranch') && document.getElementById('pspBranch').value || '').trim();
+    if (!br) return url;
+    return url + (url.indexOf('?') >= 0 ? '&' : '?') + 'location_code=' + encodeURIComponent(br);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  }
+
+  function selectedRows() {
+    return rows.filter(function (r) { return r.selected; });
+  }
+
+  function rowMatchesFilters(r) {
+    var csh = (document.getElementById('pspCashier').value || '').trim().toLowerCase();
+    var ctr = (document.getElementById('pspCounter').value || '').trim();
+    var st = (document.getElementById('pspStatus').value || '').trim();
+    if (csh && String(r.cashier).toLowerCase().indexOf(csh) < 0) return false;
+    if (ctr) {
+      var billCtr = String(r.counter != null && r.counter !== undefined ? r.counter : '').trim();
+      if (billCtr !== String(ctr).trim()) return false;
+    }
+    if (st && String(r.settlementStatus || 'Pending') !== st) return false;
+    var q = (document.getElementById('pspQuickSearch').value || '').trim().toLowerCase();
+    if (q) {
+      var blob = [r.billNo, r.customer, r.remarks, r.paymentType].join(' ').toLowerCase();
+      if (blob.indexOf(q) < 0) return false;
+    }
+    return true;
+  }
+
+  function visibleRows() {
+    return rows.filter(rowMatchesFilters);
+  }
+
+  function summaryQueryParams() {
+    var params = new URLSearchParams();
+    var from = document.getElementById('pspFrom').value;
+    var to = document.getElementById('pspTo').value;
+    var br = document.getElementById('pspBranch').value;
+    var ctr = (document.getElementById('pspCounter').value || '').trim();
+    var shift = (document.getElementById('pspShift').value || '').trim();
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    if (br) params.set('location_code', br);
+    if (ctr) params.set('counter_code', ctr);
+    if (shift) params.set('shift_code', shift);
+    return params;
+  }
+
+  function loadSummary() {
+    if (_summaryLoadAbort) {
+      try { _summaryLoadAbort.abort(); } catch (e) { /* ignore */ }
+    }
+    _summaryLoadAbort = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var url = apiSummaryUrl + '?' + summaryQueryParams().toString();
+    var fetchOpts = { credentials: 'same-origin', headers: { 'Accept': 'application/json' } };
+    if (_summaryLoadAbort) fetchOpts.signal = _summaryLoadAbort.signal;
+    return fetch(url, fetchOpts)
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) {
+          summaryData = null;
+          return;
+        }
+        summaryData = data.summary || null;
+      })
+      .catch(function (e) {
+        if (e && e.name === 'AbortError') return;
+        summaryData = null;
+      })
+      .finally(function () {
+        _summaryLoadAbort = null;
+      });
+  }
+
+  function applySummaryToKpis() {
+    var s = summaryData || {};
+    document.getElementById('pspSumDirect').textContent = inr(s.direct_customer || 0);
+    document.getElementById('pspSumCredit').textContent = inr(s.credit_sales || 0);
+    document.getElementById('pspSumTotal').textContent = inr(s.total_sales || 0);
+    document.getElementById('pspSumDiscount').textContent = inr(s.total_discount || 0);
+    document.getElementById('pspSumReturns').textContent = inr(s.sales_returns || 0);
+    document.getElementById('pspSumCancel').textContent = inr(s.total_cancel || 0);
+    document.getElementById('pspSumCard').textContent = inr(s.card_total || 0);
+    document.getElementById('pspSumCash').textContent = inr(s.cash_in_box || 0);
+    var billN = s.bill_count != null ? s.bill_count : 0;
+    document.getElementById('pspKpiBillCount').textContent = billN + ' bill' + (billN === 1 ? '' : 's');
+    var wallet = Number(s.wallet_total) || 0;
+    document.getElementById('pspKpiWalletSub').textContent = wallet > 0.005 ? ('Wallet ' + inr(wallet)) : 'Cash tender total';
+    var period = (s.from_date && s.to_date && s.from_date !== s.to_date)
+      ? (s.from_date + ' → ' + s.to_date)
+      : (s.from_date || s.to_date || 'Filtered period');
+    document.getElementById('pspKpiTotalSub').textContent = period;
+  }
+
+  function distinctCashiersInView() {
+    var m = {};
+    visibleRows().forEach(function (r) {
+      m[String(r.cashier || '').trim() || '—'] = true;
+    });
+    return Object.keys(m).length;
+  }
+
+  function updateGeneralStatementHeader() {
+    function setText(id, text) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = text;
+    }
+    var brCodeEl = document.getElementById('pspBranch');
+    var brDispEl = document.getElementById('pspBranchDisplay');
+    setText('pspGenBranchCode', (brCodeEl && String(brCodeEl.value || '').trim()) ? String(brCodeEl.value).trim() : '—');
+    setText('pspGenBranchName', (brDispEl && String(brDispEl.value || '').trim()) ? String(brDispEl.value).trim() : '—');
+    var fromEl = document.getElementById('pspFrom');
+    var toEl = document.getElementById('pspTo');
+    var fd = (fromEl && fromEl.value) ? fromEl.value : '';
+    var td = (toEl && toEl.value) ? toEl.value : '';
+    setText('pspGenPeriod', (!fd && !td) ? 'Open / all dates in scope' : (fd || '…') + '  →  ' + (td || '…'));
+    var statusSel = document.getElementById('pspStatus');
+    var statusTxt = '—';
+    if (statusSel && statusSel.selectedIndex >= 0) {
+      statusTxt = statusSel.options[statusSel.selectedIndex].textContent || statusTxt;
+    }
+    setText('pspGenStatusFilter', statusTxt);
+    var ctrDisp = document.getElementById('pspCounterDisplay');
+    setText('pspGenCounterFilter', (ctrDisp && String(ctrDisp.value || '').trim()) ? String(ctrDisp.value).trim() : 'All counters');
+    var cashF = document.getElementById('pspCashier');
+    var cf = (cashF && String(cashF.value || '').trim()) ? String(cashF.value).trim() : '';
+    setText('pspGenCashierFilter', cf || '—');
+    var shiftSel = document.getElementById('pspShift');
+    var shiftTxt = 'All shifts';
+    if (shiftSel && shiftSel.selectedIndex >= 0) {
+      shiftTxt = shiftSel.options[shiftSel.selectedIndex].textContent || shiftTxt;
+    }
+    setText('pspGenShift', shiftTxt);
+    var vr = visibleRows();
+    var pendingN = 0;
+    var postedN = 0;
+    vr.forEach(function (r) {
+      var st = String(r.settlementStatus || 'Pending').trim();
+      if (st === 'Posted') postedN++;
+      else if (st === 'Pending') pendingN++;
+    });
+    setText('pspGenBillCount', String(vr.length));
+    setText('pspGenPendingCount', String(pendingN));
+    setText('pspGenPostedCount', String(postedN));
+    setText('pspGenCashierCount', String(distinctCashiersInView()));
+    var sel = selectedRows().filter(rowMatchesFilters);
+    setText('pspGenSelectedCount', String(sel.length));
+  }
+
+  function refreshSummaries() {
+    applySummaryToKpis();
+    updateGeneralStatementHeader();
+  }
+
+  function appendBillRow(r) {
+    var tr = document.createElement('tr');
+    tr.className = 'psp-bill-row';
+    tr.dataset.bill = r.billNo;
+    var st = (r.settlementStatus || 'Pending').trim();
+    var chipClass = 'nexa-badge nexa-badge--pending';
+    if (st === 'Posted') chipClass = 'nexa-badge nexa-badge--posted';
+    else if (st === 'Cancelled') chipClass = 'nexa-badge nexa-badge--cancel';
+
+    tr.innerHTML =
+      '<td class="sl-no"><input type="checkbox" class="psp-row-check"' + (r.selected ? ' checked' : '') + ' /></td>' +
+      '<td><span class="psp-bill-num">' + escapeHtml(String(r.billNo)) + '</span></td>' +
+      '<td>' + escapeHtml(String(r.billDate)) + '</td>' +
+      '<td>' + escapeHtml(String(r.cashier)) + '</td>' +
+      '<td>' + escapeHtml(String(r.counter)) + '</td>' +
+      '<td class="psp-wrap">' + escapeHtml(String(r.customer)) + '</td>' +
+      '<td>' + escapeHtml(String(r.paymentType)) + '</td>' +
+      '<td class="num">' + inr(r.grossAmount) + '</td>' +
+      '<td class="num">' + inr(r.discount) + '</td>' +
+      '<td class="num">' + inr(r.tax) + '</td>' +
+      '<td class="num">' + inr(r.netAmount) + '</td>' +
+      '<td><span class="' + chipClass + '">' + escapeHtml(st) + '</span></td>' +
+      '<td>' + escapeHtml(String(r.postedVoucher || '—')) + '</td>' +
+      '<td class="psp-wrap">' + escapeHtml(String(r.remarks || '')) + '</td>';
+
+    var cb = tr.querySelector('.psp-row-check');
+    cb.addEventListener('click', function (e) { e.stopPropagation(); });
+    cb.addEventListener('change', function () {
+      r.selected = cb.checked;
+      syncSelectAll();
+      refreshSummaries();
+    });
+    tbody.appendChild(tr);
+  }
+
+  function renderTable() {
+    tbody.innerHTML = '';
+    var list = visibleRows().slice();
+    list.sort(function (a, b) {
+      return String(a.billDate).localeCompare(String(b.billDate)) || String(a.billNo).localeCompare(String(b.billNo));
+    });
+
+    if (!rows.length) {
+      var tr0 = document.createElement('tr');
+      tr0.innerHTML = '<td colspan="14" style="text-align:center;padding:24px;color:#64748b;">No data — use filters and click <strong>Load POS Sales</strong>.</td>';
+      tbody.appendChild(tr0);
+      return;
+    }
+    if (!list.length) {
+      var tr1 = document.createElement('tr');
+      tr1.innerHTML = '<td colspan="14" style="text-align:center;padding:24px;color:#64748b;">No rows match filters / search.</td>';
+      tbody.appendChild(tr1);
+      return;
+    }
+
+    list.forEach(function (r) {
+      appendBillRow(r);
+    });
+    syncSelectAll();
+  }
+
+  function syncSelectAll() {
+    var vis = visibleRows();
+    var all = document.getElementById('pspSelectAll');
+    if (!all || !vis.length) return;
+    var sel = vis.every(function (r) { return r.selected; });
+    var none = vis.every(function (r) { return !r.selected; });
+    all.checked = sel;
+    all.indeterminate = !sel && !none;
+  }
+
+  document.getElementById('pspSelectAll').addEventListener('change', function () {
+    var on = document.getElementById('pspSelectAll').checked;
+    visibleRows().forEach(function (r) { r.selected = on; });
+    renderTable();
+    refreshSummaries();
+  });
+
+  function applyFilters() {
+    renderTable();
+    loadSummary().then(function () { refreshSummaries(); });
+    setStatus('Filters applied.', 'ok');
+  }
+
+  function resetFilters() {
+    var td = localIsoDate(new Date());
+    document.getElementById('pspFrom').value = td;
+    document.getElementById('pspTo').value = td;
+    document.getElementById('pspCounter').value = '';
+    var ctrDisp = document.getElementById('pspCounterDisplay');
+    if (ctrDisp) ctrDisp.value = 'All counters';
+    document.getElementById('pspCashier').value = '';
+    document.getElementById('pspShift').value = '';
+    document.getElementById('pspStatus').value = '';
+    document.getElementById('pspQuickSearch').value = '';
+    rows.forEach(function (r) { r.selected = true; });
+    renderTable();
+    refreshSummaries();
+    setStatus('Reset.', '');
+  }
+
+  var _billsLoadAbort = null;
+
+  function loadBills(showBusy) {
+    if (_billsLoadAbort) {
+      try { _billsLoadAbort.abort(); } catch (e) { /* ignore */ }
+    }
+    _billsLoadAbort = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    if (showBusy) setBusy(true, 'Loading POS sales…');
+    setStatus('Loading…', '');
+    var params = new URLSearchParams();
+    var from = document.getElementById('pspFrom').value;
+    var to = document.getElementById('pspTo').value;
+    var br = document.getElementById('pspBranch').value;
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    if (br) params.set('location_code', br);
+    var st = (document.getElementById('pspStatus').value || '').trim();
+    var scope = 'all';
+    if (st === 'Pending') scope = 'pending';
+    else if (st === 'Posted') scope = 'settled';
+    else if (st === 'Cancelled') scope = 'cancelled';
+    params.set('settlement_scope', scope);
+    params.set('include_credit', '1');
+    params.set('fast', '1');
+    params.set('limit', '300');
+    var url = apiUrl + (params.toString() ? '?' + params.toString() : '');
+    var fetchOpts = { credentials: 'same-origin' };
+    if (_billsLoadAbort) fetchOpts.signal = _billsLoadAbort.signal;
+    fetch(url, fetchOpts)
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) {
+          setStatus(data.error || 'Load failed', 'warn');
+          return loadSummary();
+        }
+        rows = (data.bills || []).map(function (b) {
+          return Object.assign({ selected: true }, b);
+        });
+        var ms = data.elapsed_ms != null ? ' · ' + data.elapsed_ms + ' ms' : '';
+        return loadSummary().then(function () {
+          window.requestAnimationFrame(function () {
+            renderTable();
+            refreshSummaries();
+            setStatus('Loaded ' + rows.length + ' bill(s).' + ms, 'ok');
+          });
+        });
+      })
+      .catch(function (e) {
+        if (e && e.name === 'AbortError') return;
+        setStatus(e.message || 'Network error', 'warn');
+      })
+      .finally(function () {
+        if (showBusy) setBusy(false);
+        _billsLoadAbort = null;
+      });
+  }
+
+  function closeCounterModal() {
+    if (!counterModalEl) return;
+    counterModalEl.hidden = true;
+    counterModalEl.setAttribute('aria-hidden', 'true');
+  }
+
+  function applyCounterSelection(code, label) {
+    document.getElementById('pspCounter').value = code === '' || code === null ? '' : String(code);
+    var disp = document.getElementById('pspCounterDisplay');
+    if (disp) disp.value = label || 'All counters';
+    closeCounterModal();
+    applyFilters();
+  }
+
+  function renderCounterModalList() {
+    if (!counterModalList) return;
+    var q = (counterModalSearch && counterModalSearch.value || '').trim().toLowerCase();
+    var chunks = ['<button type="button" class="psp-counter-opt psp-counter-opt--all" data-code="" data-label="All counters">All counters</button>'];
+    var n = 0;
+    counterPickRows.forEach(function (row) {
+      var cc = row.countercode;
+      var nm = String(row.countername || '').trim();
+      var blob = (nm + ' ' + String(cc)).toLowerCase();
+      if (q && blob.indexOf(q) < 0) return;
+      n++;
+      var label = (nm ? nm + ' — ' : '') + String(cc);
+      chunks.push(
+        '<button type="button" class="psp-counter-opt" data-code="' + escapeHtml(String(cc)) + '" data-label="' + escapeHtml(label) + '">' +
+        '<strong>' + escapeHtml(nm || 'Counter') + '</strong><code>' + escapeHtml(String(cc)) + '</code></button>'
+      );
+    });
+    var hint = '';
+    if (q && n === 0 && counterPickRows.length) hint = '<p class="psp-counter-modal__hint">No counters match search.</p>';
+    if (!counterPickRows.length && !q) hint = '<p class="psp-counter-modal__hint">No counters registered for this branch.</p>';
+    counterModalList.innerHTML = chunks.join('') + hint;
+  }
+
+  function openCounterModal() {
+    if (!counterModalEl || !counterModalList) return;
+    counterModalEl.hidden = false;
+    counterModalEl.setAttribute('aria-hidden', 'false');
+    if (counterModalSearch) counterModalSearch.value = '';
+    counterModalList.innerHTML = '<p class="psp-counter-modal__hint">Loading counters…</p>';
+    var br = (document.getElementById('pspBranch') && document.getElementById('pspBranch').value || '').trim();
+    var url = apiCountersUrl + (apiCountersUrl.indexOf('?') >= 0 ? '&' : '?') + 'location_code=' + encodeURIComponent(br);
+    fetch(url, { credentials: 'same-origin' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) {
+          counterModalList.innerHTML = '<p class="psp-counter-modal__hint">' + escapeHtml(data.error || 'Could not load counters') + '</p>';
+          return;
+        }
+        counterPickRows = data.counters || [];
+        renderCounterModalList();
+        if (counterModalSearch) counterModalSearch.focus();
+      })
+      .catch(function (e) {
+        counterModalList.innerHTML = '<p class="psp-counter-modal__hint">' + escapeHtml(e.message || 'Network error') + '</p>';
+      });
+  }
+
+  function pspScrollTo(sel) {
+    var el = document.querySelector(sel);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  document.getElementById('pspQuickSearch').addEventListener('input', function () {
+    renderTable();
+    refreshSummaries();
+  });
+
+  document.getElementById('pspBtnLoad').addEventListener('click', function () {
+    loadBills(true);
+  });
+  document.getElementById('pspBtnSearch').addEventListener('click', applyFilters);
+  document.getElementById('pspBtnReset').addEventListener('click', resetFilters);
+  document.getElementById('pspBtnShowSummary').addEventListener('click', function () {
+    document.querySelector('.psp-kpi-strip').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  document.getElementById('pspBtnExcel').addEventListener('click', function () {
+    var sel = selectedRows().filter(rowMatchesFilters);
+    var src = sel.length ? sel : visibleRows();
+    var hdr = ['BillNo', 'BillDate', 'Cashier', 'Counter', 'Customer', 'Payment', 'Gross', 'Discount', 'Tax', 'Net', 'Status', 'Voucher', 'Remarks'];
+    var csv = [hdr.join(',')];
+    src.forEach(function (r) {
+      csv.push([r.billNo, r.billDate, r.cashier, r.counter, '"' + String(r.customer).replace(/"/g, '""') + '"', r.paymentType, r.grossAmount, r.discount, r.tax, r.netAmount, r.settlementStatus, r.postedVoucher, '"' + String(r.remarks || '').replace(/"/g, '""') + '"'].join(','));
+    });
+    var blob = new Blob([csv.join('\n')], { type: 'text/csv;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'pos_sales_list.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setStatus('Exported CSV.', 'ok');
+  });
+
+  if (counterModalList) {
+    counterModalList.addEventListener('click', function (e) {
+      var btn = e.target.closest('.psp-counter-opt');
+      if (!btn) return;
+      var code = btn.getAttribute('data-code');
+      if (code === null) code = '';
+      var label = btn.getAttribute('data-label') || 'All counters';
+      applyCounterSelection(code, label);
+    });
+  }
+  var pspBtnPickCounter = document.getElementById('pspBtnPickCounter');
+  var pspCounterDisplayEl = document.getElementById('pspCounterDisplay');
+  if (pspBtnPickCounter) pspBtnPickCounter.addEventListener('click', openCounterModal);
+  if (pspCounterDisplayEl) pspCounterDisplayEl.addEventListener('click', openCounterModal);
+  var pspCounterModalBackdrop = document.getElementById('pspCounterModalBackdrop');
+  var pspCounterModalClose = document.getElementById('pspCounterModalClose');
+  if (pspCounterModalBackdrop) pspCounterModalBackdrop.addEventListener('click', closeCounterModal);
+  if (pspCounterModalClose) pspCounterModalClose.addEventListener('click', closeCounterModal);
+  if (counterModalSearch) counterModalSearch.addEventListener('input', renderCounterModalList);
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (!counterModalEl || counterModalEl.hidden) return;
+    closeCounterModal();
+  });
+
+  var pspGenScrollList = document.getElementById('pspGenScrollList');
+  if (pspGenScrollList) pspGenScrollList.addEventListener('click', function () { pspScrollTo('.psp-invoice-panel'); });
+  var pspGenScrollPending = document.getElementById('pspGenScrollPending');
+  if (pspGenScrollPending) pspGenScrollPending.addEventListener('click', function () { pspScrollTo('.psp-invoice-panel'); });
+
+  function localIsoDate(d) {
+    var y = d.getFullYear();
+    var m = d.getMonth() + 1;
+    var day = d.getDate();
+    return y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+  }
+
+  var todayStr = localIsoDate(new Date());
+  document.getElementById('pspFrom').value = todayStr;
+  document.getElementById('pspTo').value = todayStr;
+
+  rows = [];
+  renderTable();
+  loadSummary().then(refreshSummaries);
+})();
+</script>
+{% endblock %}

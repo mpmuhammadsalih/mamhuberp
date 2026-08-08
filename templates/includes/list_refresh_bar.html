@@ -1,0 +1,10 @@
+{# Toolbar: static/js/list_data_refresh.js — base calls bootstrapReloadToolbars() for SSR lists (manual full-page Refresh only; no auto interval). Set list_refresh_skip_bootstrap=true + initJsonPolling() for periodic JSON data refresh (Auto-refresh checkbox). #}
+<div class="list-refresh-toolbar" role="toolbar" aria-label="List refresh" {% if list_refresh_skip_bootstrap|default(false) %}data-bootstrap="off"{% endif %} style="display:inline-flex;align-items:center;gap:14px;margin-left:auto;flex-shrink:0;flex-wrap:wrap;">
+  {% if list_refresh_skip_bootstrap|default(false) %}
+  <label style="margin:0;font-size:13px;color:#495057;display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
+    <input type="checkbox" id="listRefreshAuto" {% if list_refresh_auto_checked|default(true) %}checked{% endif %} autocomplete="off" />
+    Auto-refresh data
+  </label>
+  {% endif %}
+  <button type="button" class="btn-list-refresh-now" id="listRefreshNow" title="{% if list_refresh_skip_bootstrap|default(false) %}Fetch latest list data now{% else %}Reload entire page{% endif %}" style="padding:6px 12px;font-size:13px;border:1px solid #dee2e6;background:#fff;border-radius:4px;cursor:pointer;color:#495057;">Refresh</button>
+</div>

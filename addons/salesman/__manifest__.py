@@ -1,0 +1,2 @@
+"""Addon manifest — Salesman."""
+MANIFEST = {'technical_name': 'salesman', 'name': 'Salesman', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Salesman master (SALESMAN table)', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/salesman'}, 'flask': {'blueprint': 'salesman', 'blueprint_ref': 'addons.salesman.controllers.routes:bp', 'routes_module': 'addons.salesman.controllers.routes'}}

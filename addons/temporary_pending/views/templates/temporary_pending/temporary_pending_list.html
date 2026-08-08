@@ -1,0 +1,781 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="tpl-container nexa-list-page">
+<style>
+  body { overflow-x: auto; min-height: 100vh; background: #fff; color: #212529; }
+  .tpl-page { max-width: 1200px; margin: 0 auto; padding: 14px 16px 16px; }
+  .tpl-topbar { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #dee2e6; }
+  .tpl-topbar h1 { margin: 0; font-size: 22px; font-weight: 400; color: #212529; line-height: 1.2; }
+  .tpl-filters { margin-bottom: 12px; padding: 6px 0 8px; border-bottom: 1px solid #dee2e6; }
+  .tpl-filters .form-grid { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: flex-end; max-width: 820px; }
+  .tpl-filters .form-group { margin: 0; }
+  .tpl-filters .form-group label { margin: 0 0 2px 0; font-size: 12px; font-weight: 400; color: #495057; display: block; line-height: 1.2; }
+  .tpl-filters .form-group:has(button) label { display: none; }
+  .tpl-filters .input { border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; padding: 4px 0 3px; font-size: 13px; background: transparent; width: 100%; max-width: 280px; line-height: 1.25; }
+  .tpl-filters .input:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .tpl-filters .tpl-toolbar-row { display: flex; justify-content: flex-end; align-items: center; margin-top: 4px; flex-wrap: wrap; gap: 6px; }
+  .tpl-filters .list-refresh-toolbar { gap: 10px !important; }
+  .tpl-filters .list-refresh-toolbar label { font-size: 12px !important; }
+  .tpl-filters .btn-list-refresh-now { padding: 4px 10px !important; font-size: 12px !important; line-height: 1.2 !important; }
+  .tpl-btn-secondary { background: transparent; border: 1px solid #dee2e6; color: #495057; padding: 5px 12px; border-radius: 4px; font-size: 12px; line-height: 1.2; cursor: pointer; }
+  .tpl-btn-secondary:hover { background: #f8f9fa; }
+  .tpl-section-title { font-size: 14px; font-weight: 600; color: #212529; margin: 4px 0 8px; padding-bottom: 6px; border-bottom: 2px solid #007bff; display: inline-block; line-height: 1.2; }
+  #pendingListTable thead { position: sticky; top: 0; z-index: 1; background: #f8f9fa !important; }
+  #pendingListTable thead th { background: #f8f9fa !important; color: #495057 !important; padding: 10px 12px; font-weight: 600; font-size: 12px; border: none; border-bottom: 1px solid #dee2e6; }
+  #pendingListTable thead th.sortable { cursor: pointer; }
+  #pendingListTable thead th.sortable:hover { background: #e9ecef !important; }
+  #pendingListTable tbody td { padding: 8px 12px; border: none; border-bottom: 1px solid #dee2e6; font-size: 13px; }
+  #pendingListTable tbody tr:hover { background: #f8f9fa !important; }
+  .tpl-container .scroll-table { border: 1px solid #dee2e6; border-radius: 4px; background: #fff; overflow: auto; }
+  .tpl-container .table-total { background: #f8f9fa !important; }
+  .tpl-container .table-total td { font-weight: 700; color: #212529; padding: 8px 12px !important; }
+  .status-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+  .status-badge--pending { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+  .status-badge--completed { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+  .tpl-container .btn-print-pdf { background: #007bff !important; border: none !important; color: #fff !important; padding: 4px 10px !important; border-radius: 4px !important; font-size: 12px !important; cursor: pointer !important; }
+  .tpl-container .btn-print-pdf:hover:not(:disabled) { background: #0056b3 !important; }
+  .tpl-container .btn-print-pdf:disabled { opacity: 0.6; cursor: not-allowed; }
+  .tpl-tabbar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-bottom: 8px; }
+  .tpl-tab-btn {
+    padding: 4px 12px;
+    border: 1px solid #dee2e6;
+    background: #fff;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    color: #495057;
+  }
+  .tpl-tab-btn:hover { background: #f8f9fa; }
+  .tpl-tab-btn.is-active { background: #007bff; color: #fff; border-color: #007bff; }
+  .tpl-btn-primary-action {
+    padding: 5px 12px;
+    background: #28a745 !important;
+    border: none !important;
+    color: #fff !important;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .tpl-btn-primary-action:hover:not(:disabled) { background: #218838 !important; }
+  .tpl-btn-primary-action:disabled { opacity: 0.55; cursor: not-allowed; }
+  .tpl-th-select, .tpl-cell-select { width: 40px; text-align: center; vertical-align: middle; padding: 8px 4px !important; }
+  .tpl-cell-select input[type="checkbox"] { cursor: pointer; margin: 0; }
+  @keyframes tpl-bulk-spin { to { transform: rotate(360deg); } }
+</style>
+<div class="tpl-page">
+  <div class="tpl-topbar">
+    <h1>Temporary Pending List</h1>
+  </div>
+
+  <div class="tpl-filters">
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="tplDateFrom">Bill date from</label>
+        <input type="date" id="tplDateFrom" class="input" style="max-width:160px;" value="{{ tpl_date_from or '' }}" title="Inclusive start (optional). Overrides single-day transaction filter." />
+      </div>
+      <div class="form-group">
+        <label for="tplDateTo">Bill date to</label>
+        <input type="date" id="tplDateTo" class="input" style="max-width:160px;" value="{{ tpl_date_to or '' }}" title="Inclusive end (optional)" />
+      </div>
+      <div class="form-group">
+        <label for="searchSalesman">Search</label>
+        <input type="text" id="searchSalesman" class="input" placeholder="Search by code or name..." />
+      </div>
+      <div class="form-group">
+        <button type="button" id="btnClearSearch" class="tpl-btn-secondary">Clear</button>
+      </div>
+    </div>
+    <div class="tpl-toolbar-row">
+      {% with list_refresh_skip_bootstrap=true %}{% include 'includes/list_refresh_bar.html' %}{% endwith %}
+    </div>
+  </div>
+
+  <h3 class="tpl-section-title">Records</h3>
+  <div class="tpl-tabbar" style="justify-content: space-between; align-items: center;">
+    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+      <button type="button" class="tpl-tab-btn is-active" id="tplTabPending" data-tpl-tab="pending">Pending</button>
+      <button type="button" class="tpl-tab-btn" id="tplTabCompleted" data-tpl-tab="completed">Completed</button>
+    </div>
+    <button type="button" class="tpl-btn-primary-action" id="btnBulkUpdatePending" disabled title="Run Temporary Credit update for all checked pending groups (same as detail page)">Update selected</button>
+  </div>
+  <div class="scroll-table">
+    <table class="table" id="pendingListTable">
+        <thead>
+          <tr>
+            <th class="tpl-th-select" scope="col"><input type="checkbox" id="tplSelectAllPending" title="Select visible pending rows" aria-label="Select all pending" /></th>
+            <th class="sortable" data-sort-col="1" data-sort-type="number" title="Sort by Sl.No">Sl.No <span class="sort-icon"></span></th>
+            <th class="sortable" data-sort-col="2" data-sort-type="date" title="Sort by Date">Date <span class="sort-icon"></span></th>
+            <th class="sortable" data-sort-col="3" data-sort-type="text" title="Sort by Salesman Code">Salesman Code <span class="sort-icon"></span></th>
+            <th class="sortable" data-sort-col="4" data-sort-type="text" title="Sort by Salesman Name">Salesman Name <span class="sort-icon"></span></th>
+            <th class="sortable" data-sort-col="5" data-sort-type="number" title="Sort by Invoice Count" style="text-align: right;">Invoice Count <span class="sort-icon"></span></th>
+            <th class="sortable" data-sort-col="6" data-sort-type="number" title="Sort by Sum(Amount)" style="text-align: right;">Sum(Invoice Amount) <span class="sort-icon"></span></th>
+            <th class="sortable" data-sort-col="7" data-sort-type="text" title="Sort by Status">Status <span class="sort-icon"></span></th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="pendingListBody">
+          {% if pendings %}
+            {% for item in pendings %}
+              <tr class="pending-list-row"
+                  data-tp-status="{% if item.min_status == 1 %}completed{% else %}pending{% endif %}"
+                  data-salesman-code="{{ item.salesmancode or '' }}"
+                  data-bill-date="{{ item.billdate or '' }}"
+                  data-bill-date-iso="{% if item.billdate %}{% if item.billdate is string %}{{ item.billdate }}{% else %}{{ item.billdate.strftime('%Y-%m-%d') }}{% endif %}{% endif %}"
+                  style="cursor: pointer;">
+                <td class="tpl-cell-select">
+                  {% if item.min_status == 1 %}
+                    <span aria-hidden="true"></span>
+                  {% else %}
+                    <input type="checkbox" class="tpl-pending-cb" title="Select for bulk update" aria-label="Select row {{ loop.index }}" />
+                  {% endif %}
+                </td>
+                <td>{{ loop.index }}</td>
+                <td data-sort-value="{% if item.billdate %}{% if item.billdate is string %}{{ item.billdate }}{% else %}{{ item.billdate.strftime('%Y-%m-%d') }}{% endif %}{% else %}{% endif %}">
+                  {% if item.billdate %}
+                    {% if item.billdate is string %}
+                      {{ item.billdate }}
+                    {% else %}
+                      {{ item.billdate.strftime('%d/%b/%Y').upper() }}
+                    {% endif %}
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td>{{ item.salesmancode or '-' }}</td>
+                <td>{{ item.salesmanname or '-' }}</td>
+                <td style="text-align: right;">{{ item.invoicecount or 0 }}</td>
+                <td style="text-align: right;" data-sort-value="{{ (item.totalamount|default(0))|float }}">{{ "%.2f"|format((item.totalamount|default(0))|float) }}</td>
+                <td>
+                  {% if item.min_status == 1 %}
+                    <span class="status-badge status-badge--completed">Completed</span>
+                  {% elif item.min_status == 0 %}
+                    <span class="status-badge status-badge--pending">Pending</span>
+                  {% else %}
+                    <span class="status-badge status-badge--pending">Pending</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <button type="button" class="btn-print-pdf" 
+                          data-salesman-code="{{ item.salesmancode or '' }}" 
+                          data-bill-date="{% if item.billdate %}{% if item.billdate is string %}{{ item.billdate }}{% else %}{{ item.billdate.strftime('%Y-%m-%d') }}{% endif %}{% endif %}"
+                          style="padding: 4px 8px; font-size: 11px; cursor: pointer;" 
+                          title="Print PDF Receipt">🖨️ Print</button>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr class="table-empty">
+              <td colspan="9">No temporary pending records found.</td>
+            </tr>
+          {% endif %}
+          <tr id="pendingListNoResults" class="table-empty" style="display: none;">
+            <td colspan="9">No matching records. Try different search criteria.</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr id="pendingListTotalRow" class="table-total" style="display: none;">
+            <td colspan="5" style="text-align: right; font-weight: 700;" id="pendingListTotalLabel">Total (pending)</td>
+            <td id="listTotalInvoiceCount" style="text-align: right; font-weight: 700;">0</td>
+            <td id="listTotalAmount" style="text-align: right; font-weight: 700;">0.00</td>
+            <td></td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+  </div>
+</div>
+
+<div id="tplBulkUpdateOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:9999; align-items:center; justify-content:center;">
+  <div style="background:#fff; padding:24px 28px; border-radius:8px; max-width:400px; text-align:center; box-shadow:0 4px 24px rgba(0,0,0,0.15);">
+    <div style="width:48px;height:48px;border:4px solid #dee2e6;border-top-color:#28a745;border-radius:50%;animation: tpl-bulk-spin 0.8s linear infinite; margin:0 auto 14px;"></div>
+    <p id="tplBulkUpdateMsg" style="margin:0; font-size:14px; color:#212529;">Updating…</p>
+  </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var TEMP_PENDING_LIST_ROWS_URL = {{ url_for('temporary_pending.api_temporary_pending_list_rows')|tojson }};
+var TP_GROUP_ITEMS_URL = {{ url_for('temporary_pending.api_temporary_pending_group_items')|tojson }};
+var TP_UPDATE_URL = {{ url_for('temporary_pending.api_update_temporary')|tojson }};
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const tplDateFrom = document.getElementById('tplDateFrom');
+  const tplDateTo = document.getElementById('tplDateTo');
+  const searchInput = document.getElementById('searchSalesman');
+  const btnClear = document.getElementById('btnClearSearch');
+  const tbody = document.getElementById('pendingListBody');
+  const noResultsRow = document.getElementById('pendingListNoResults');
+  const tplTabPending = document.getElementById('tplTabPending');
+  const tplTabCompleted = document.getElementById('tplTabCompleted');
+  let activeTplTab = 'pending';
+  let sortCol = -1;
+  let sortDir = 1;
+  var pendingRefreshCtl = null;
+
+  const tplSelectAllPending = document.getElementById('tplSelectAllPending');
+  const btnBulkUpdatePending = document.getElementById('btnBulkUpdatePending');
+  const tplBulkOverlay = document.getElementById('tplBulkUpdateOverlay');
+  const tplBulkMsg = document.getElementById('tplBulkUpdateMsg');
+
+  function updateTplTabButtons() {
+    if (!tplTabPending || !tplTabCompleted) return;
+    tplTabPending.classList.toggle('is-active', activeTplTab === 'pending');
+    tplTabCompleted.classList.toggle('is-active', activeTplTab === 'completed');
+  }
+  if (tplTabPending) tplTabPending.addEventListener('click', function() {
+    activeTplTab = 'pending';
+    updateTplTabButtons();
+    filterRows();
+  });
+  if (tplTabCompleted) tplTabCompleted.addEventListener('click', function() {
+    activeTplTab = 'completed';
+    updateTplTabButtons();
+    tbody.querySelectorAll('.tpl-pending-cb').forEach(function(cb) { cb.checked = false; });
+    if (tplSelectAllPending) {
+      tplSelectAllPending.checked = false;
+      tplSelectAllPending.indeterminate = false;
+    }
+    filterRows();
+  });
+  updateTplTabButtons();
+
+  function tplVisiblePendingBoxes() {
+    const out = [];
+    tbody.querySelectorAll('.tpl-pending-cb').forEach(function(cb) {
+      var row = cb.closest('.pending-list-row');
+      if (row && row.style.display !== 'none' && (row.dataset.tpStatus || '') === 'pending') {
+        out.push(cb);
+      }
+    });
+    return out;
+  }
+
+  function syncTplSelectAllCheckbox() {
+    if (!tplSelectAllPending) return;
+    const boxes = tplVisiblePendingBoxes();
+    if (!boxes.length) {
+      tplSelectAllPending.checked = false;
+      tplSelectAllPending.indeterminate = false;
+      return;
+    }
+    const nChecked = boxes.filter(function(b) { return b.checked; }).length;
+    tplSelectAllPending.checked = nChecked === boxes.length;
+    tplSelectAllPending.indeterminate = nChecked > 0 && nChecked < boxes.length;
+  }
+
+  function syncTplBulkBtn() {
+    if (!btnBulkUpdatePending) return;
+    const n = tplVisiblePendingBoxes().filter(function(b) { return b.checked; }).length;
+    btnBulkUpdatePending.disabled = n === 0;
+  }
+
+  if (tplSelectAllPending) {
+    tplSelectAllPending.addEventListener('click', function() {
+      const on = this.checked;
+      tplVisiblePendingBoxes().forEach(function(cb) { cb.checked = on; });
+      syncTplBulkBtn();
+    });
+  }
+
+  tbody.addEventListener('change', function(e) {
+    if (e.target && e.target.classList && e.target.classList.contains('tpl-pending-cb')) {
+      syncTplSelectAllCheckbox();
+      syncTplBulkBtn();
+    }
+  });
+
+  function escapeHtml(untrusted) {
+    return String(untrusted == null ? '' : untrusted)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function escapeAttr(untrusted) {
+    return escapeHtml(untrusted).replace(/'/g, '&#39;');
+  }
+
+  function rebuildPendingListTableBody(rows) {
+    var selectedKeys = {};
+    tbody.querySelectorAll('.tpl-pending-cb:checked').forEach(function(cb) {
+      var row = cb.closest('.pending-list-row');
+      if (!row) return;
+      var code = String(row.getAttribute('data-salesman-code') || '').trim();
+      var bd = String(row.getAttribute('data-bill-date-iso') || '').trim();
+      selectedKeys[code + '\0' + bd] = true;
+    });
+
+    tbody.querySelectorAll('.pending-list-row').forEach(function(tr) { tr.remove(); });
+    tbody.querySelectorAll('tr.table-empty').forEach(function(tr) {
+      if (tr.id !== 'pendingListNoResults') tr.remove();
+    });
+    var nr = document.getElementById('pendingListNoResults');
+    if (!rows || !rows.length) {
+      var trE = document.createElement('tr');
+      trE.className = 'table-empty';
+      var tdN = document.createElement('td');
+      tdN.setAttribute('colspan', '9');
+      tdN.textContent = 'No temporary pending records found.';
+      trE.appendChild(tdN);
+      tbody.insertBefore(trE, nr);
+    } else {
+      rows.forEach(function(item, ix) {
+        var ms = Number(item.min_status) || 0;
+        var bdIso = item.bill_date_iso || '';
+        var bdDisp = item.bill_date_display || '-';
+        var badge = ms === 1
+          ? '<span class="status-badge status-badge--completed">Completed</span>'
+          : '<span class="status-badge status-badge--pending">Pending</span>';
+        var invc = String(item.invoicecount != null ? item.invoicecount : 0);
+        var amt = (item.totalamount != null ? Number(item.totalamount) : 0).toFixed(2);
+        var amtSort = String(item.totalamount != null && !isNaN(Number(item.totalamount)) ? Number(item.totalamount) : 0);
+        var selectCell = ms === 1
+          ? '<td class="tpl-cell-select"><span aria-hidden="true"></span></td>'
+          : '<td class="tpl-cell-select"><input type="checkbox" class="tpl-pending-cb" title="Select for bulk update" /></td>';
+        var tr = document.createElement('tr');
+        tr.className = 'pending-list-row';
+        tr.setAttribute('data-tp-status', ms === 1 ? 'completed' : 'pending');
+        tr.setAttribute('data-salesman-code', item.salesman_code || '');
+        tr.setAttribute('data-bill-date', '');
+        tr.setAttribute('data-bill-date-iso', bdIso);
+        tr.style.cursor = 'pointer';
+        tr.innerHTML =
+          selectCell +
+          '<td>' + (ix + 1) + '</td>' +
+          '<td data-sort-value="' + escapeAttr(bdIso) + '">' + escapeHtml(bdDisp) + '</td>' +
+          '<td>' + escapeHtml(item.salesman_code || '-') + '</td>' +
+          '<td>' + escapeHtml(item.salesman_name || '-') + '</td>' +
+          '<td style="text-align: right;">' + escapeHtml(invc) + '</td>' +
+          '<td style="text-align: right;" data-sort-value="' + escapeAttr(amtSort) + '">' + escapeHtml(amt) + '</td>' +
+          '<td>' + badge + '</td>' +
+          '<td><button type="button" class="btn-print-pdf" data-salesman-code="' + escapeAttr(item.salesman_code || '') +
+          '" data-bill-date="' + escapeAttr(bdIso) +
+          '" style="padding: 4px 8px; font-size: 11px; cursor: pointer;" title="Print PDF Receipt">🖨️ Print</button></td>';
+        tbody.insertBefore(tr, nr);
+        if (ms !== 1) {
+          var selKey = String(item.salesman_code || '').trim() + '\0' + String(bdIso || '').trim();
+          if (selectedKeys[selKey]) {
+            var cb = tr.querySelector('.tpl-pending-cb');
+            if (cb) cb.checked = true;
+          }
+        }
+      });
+    }
+    sortCol = -1;
+    sortDir = 1;
+    refreshSortIcons();
+    filterRows();
+    syncTplSelectAllCheckbox();
+    syncTplBulkBtn();
+  }
+
+  function refreshSortIcons() {
+    document.querySelectorAll('#pendingListTable thead th.sortable').forEach(function(th) {
+      var col = parseInt(th.getAttribute('data-sort-col'), 10);
+      var span = th.querySelector('.sort-icon');
+      if (!span) return;
+      span.textContent = (sortCol === col) ? (sortDir === 1 ? ' ▲' : ' ▼') : ' ⇅';
+    });
+  }
+
+  function pendingListRowsUrlWithDates() {
+    var base = TEMP_PENDING_LIST_ROWS_URL;
+    var df = tplDateFrom && tplDateFrom.value ? String(tplDateFrom.value).trim().substring(0, 10) : '';
+    var dt = tplDateTo && tplDateTo.value ? String(tplDateTo.value).trim().substring(0, 10) : '';
+    var parts = [];
+    if (df) parts.push('date_from=' + encodeURIComponent(df));
+    if (dt) parts.push('date_to=' + encodeURIComponent(dt));
+    if (!parts.length) return base;
+    var sep = base.indexOf('?') >= 0 ? '&' : '?';
+    return base + sep + parts.join('&');
+  }
+
+  function tplPendingRefreshNow() {
+    if (pendingRefreshCtl && typeof pendingRefreshCtl.refreshNow === 'function') {
+      pendingRefreshCtl.refreshNow();
+    }
+  }
+
+  function attachPendingJsonRefresh() {
+    if (!window.ListDataRefresh || typeof ListDataRefresh.initJsonPolling !== 'function') return;
+    if (pendingRefreshCtl && typeof pendingRefreshCtl.stop === 'function') pendingRefreshCtl.stop();
+    pendingRefreshCtl = null;
+    pendingRefreshCtl = ListDataRefresh.initJsonPolling({
+      getUrl: pendingListRowsUrlWithDates,
+      intervalMs: 5000,
+      shouldSkipPoll: function() {
+        try {
+          if (typeof document !== 'undefined' && document.hidden) return true;
+        } catch (e) {}
+        var si = document.getElementById('searchSalesman');
+        if (si && document.activeElement === si) return true;
+        var df = document.getElementById('tplDateFrom');
+        var dt = document.getElementById('tplDateTo');
+        if (df && document.activeElement === df) return true;
+        if (dt && document.activeElement === dt) return true;
+        return false;
+      },
+      onPayload: function(resp) {
+        if (!resp || resp.success !== true || !Array.isArray(resp.rows)) return;
+        rebuildPendingListTableBody(resp.rows);
+      }
+    });
+  }
+  attachPendingJsonRefresh();
+
+  function filterRows() {
+    const q = (searchInput.value || '').trim().toLowerCase();
+    const rows = tbody.querySelectorAll('.pending-list-row');
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+      const code = (row.dataset.salesmanCode || '').toString().toLowerCase();
+      const nameCell = row.cells[4];
+      const name = (nameCell ? nameCell.textContent : '').trim().toLowerCase();
+      const rowTp = (row.dataset.tpStatus || '').toString();
+      const tabMatch = activeTplTab === 'pending'
+        ? rowTp === 'pending'
+        : rowTp === 'completed';
+      const match = tabMatch && (!q || code.indexOf(q) !== -1 || name.indexOf(q) !== -1);
+      if (match) {
+        row.style.display = '';
+        visibleCount++;
+      } else {
+        row.style.display = 'none';
+      }
+    });
+
+    if (noResultsRow) {
+      noResultsRow.style.display = (visibleCount === 0 && rows.length > 0) ? '' : 'none';
+    }
+
+    let sl = 0;
+    let sumCount = 0;
+    let sumAmount = 0;
+    rows.forEach(row => {
+      if (row.style.display !== 'none') {
+        sl++;
+        var slCell = row.cells[1];
+        if (slCell) slCell.textContent = sl;
+        sumCount += parseInt(String(row.cells[5].textContent || '0').replace(/,/g, ''), 10) || 0;
+        sumAmount += parseFloat(String(row.cells[6].textContent || '0').replace(/,/g, '')) || 0;
+      }
+    });
+
+    const totalRow = document.getElementById('pendingListTotalRow');
+    const totalCountEl = document.getElementById('listTotalInvoiceCount');
+    const totalAmountEl = document.getElementById('listTotalAmount');
+    const totalLabelEl = document.getElementById('pendingListTotalLabel');
+    if (totalLabelEl) {
+      totalLabelEl.textContent = activeTplTab === 'completed' ? 'Total (completed)' : 'Total (pending)';
+    }
+    if (totalRow && totalCountEl && totalAmountEl) {
+      if (visibleCount > 0) {
+        totalRow.style.display = '';
+        totalCountEl.textContent = sumCount;
+        totalAmountEl.textContent = sumAmount.toFixed(2);
+      } else {
+        totalRow.style.display = 'none';
+      }
+    }
+
+    syncTplSelectAllCheckbox();
+    syncTplBulkBtn();
+  }
+
+  searchInput.addEventListener('input', filterRows);
+  searchInput.addEventListener('keyup', filterRows);
+  if (tplDateFrom) tplDateFrom.addEventListener('change', tplPendingRefreshNow);
+  if (tplDateTo) tplDateTo.addEventListener('change', tplPendingRefreshNow);
+
+  if (btnClear) {
+    btnClear.addEventListener('click', function() {
+      searchInput.value = '';
+      if (tplDateFrom) tplDateFrom.value = '';
+      if (tplDateTo) tplDateTo.value = '';
+      searchInput.focus();
+      tplPendingRefreshNow();
+      filterRows();
+    });
+  }
+
+  function getCellSortValue(row, colIndex, type) {
+    const cell = row.cells[colIndex];
+    if (!cell) return '';
+    const raw = (cell.textContent || '').trim();
+    const dataVal = cell.getAttribute('data-sort-value');
+    if (type === 'number') {
+      if (colIndex === 1) return parseInt(raw, 10) || 0;
+      const num = dataVal !== null && dataVal !== '' ? parseFloat(dataVal) : parseFloat(raw.replace(/,/g, ''));
+      return isNaN(num) ? 0 : num;
+    }
+    if (type === 'date') {
+      return dataVal || raw || '';
+    }
+    return (raw || '').toLowerCase();
+  }
+
+  function sortTable(colIndex, type) {
+    if (sortCol === colIndex) sortDir = -sortDir;
+    else { sortCol = colIndex; sortDir = 1; }
+    const rows = Array.from(tbody.querySelectorAll('.pending-list-row'));
+    rows.sort(function(a, b) {
+      const aVal = getCellSortValue(a, colIndex, type);
+      const bVal = getCellSortValue(b, colIndex, type);
+      let cmp = 0;
+      if (type === 'number') cmp = aVal - bVal;
+      else if (type === 'date') cmp = (aVal || '').localeCompare(bVal || '');
+      else cmp = String(aVal).localeCompare(String(bVal));
+      return sortDir * (cmp < 0 ? -1 : cmp > 0 ? 1 : 0);
+    });
+    const fragment = document.createDocumentFragment();
+    rows.forEach(r => fragment.appendChild(r));
+    if (noResultsRow) tbody.insertBefore(fragment, noResultsRow);
+    refreshSortIcons();
+    filterRows();
+  }
+
+  document.querySelectorAll('#pendingListTable thead .sortable').forEach(function(th) {
+    th.addEventListener('click', function() {
+      const col = parseInt(this.getAttribute('data-sort-col'), 10);
+      const type = this.getAttribute('data-sort-type') || 'text';
+      sortTable(col, type);
+    });
+
+  });
+
+  refreshSortIcons();
+
+  function runPendingPdfPrint(btn) {
+    const salesmanCode = btn.getAttribute('data-salesman-code') || '';
+    const billDate = btn.getAttribute('data-bill-date') || '';
+    if (!salesmanCode) {
+      alert('Salesman code is missing.');
+      return;
+    }
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = 'Loading...';
+    var params = new URLSearchParams();
+    params.set('salesman_code', salesmanCode);
+    if (billDate) params.set('billdate', billDate);
+    fetch('/accounts/temporary-pending/print-pdf?' + params.toString())
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        if (res.success && res.pdf_base64 && res.pdf_filename) {
+          try {
+            var pdfBytes = atob(res.pdf_base64);
+            var pdfArray = new Uint8Array(pdfBytes.length);
+            for (var i = 0; i < pdfBytes.length; i++) {
+              pdfArray[i] = pdfBytes.charCodeAt(i);
+            }
+            var blob = new Blob([pdfArray], { type: 'application/pdf' });
+            if (blob.size === 0) throw new Error('PDF file is empty');
+            var printUrl = URL.createObjectURL(blob);
+            var printWindow = window.open(printUrl, '_blank');
+            if (printWindow) {
+              printWindow.onload = function() {
+                printWindow.print();
+                setTimeout(function() { URL.revokeObjectURL(printUrl); }, 1000);
+              };
+              printWindow.onerror = function() {
+                URL.revokeObjectURL(printUrl);
+                alert('Error opening PDF. Please try downloading instead.');
+              };
+            } else {
+              var downloadUrl = URL.createObjectURL(blob);
+              var downloadLink = document.createElement('a');
+              downloadLink.href = downloadUrl;
+              downloadLink.download = res.pdf_filename;
+              downloadLink.style.display = 'none';
+              document.body.appendChild(downloadLink);
+              downloadLink.click();
+              document.body.removeChild(downloadLink);
+              setTimeout(function() {
+                URL.revokeObjectURL(downloadUrl);
+                URL.revokeObjectURL(printUrl);
+              }, 1000);
+            }
+          } catch (pdfErr) {
+            console.error('PDF handling error:', pdfErr);
+            alert('Error processing PDF: ' + (pdfErr.message || 'Unknown error') + '\n\nPlease check if PDF was generated correctly.');
+          }
+        } else {
+          var errorMsg = res.error || res.pdf_error || 'Failed to generate PDF.';
+          alert(errorMsg + '\n\nPlease check server logs for details or contact administrator.');
+          console.error('PDF generation failed:', res);
+        }
+      })
+      .catch(function(err) {
+        console.error('PDF fetch error:', err);
+        alert('Error generating PDF. Please try again.');
+      })
+      .finally(function() {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      });
+  }
+
+  function normalizeTpItem(it) {
+    var o = {
+      billno: String(it.billno || '').trim(),
+      customercode: String(it.customercode || '').trim(),
+      billdate: '',
+      amount: Number(it.amount) || 0,
+      remarks: (it.remarks && String(it.remarks).trim()) ? String(it.remarks).trim() : null,
+    };
+    if (it.billdate) o.billdate = String(it.billdate).substring(0, 10);
+    if (it.expecteddate) o.expecteddate = String(it.expecteddate).substring(0, 10);
+    if (it.employeecode != null && String(it.employeecode).trim() !== '') {
+      try {
+        o.employeecode = parseInt(Number(it.employeecode), 10);
+      } catch (e0) {}
+    }
+    return o;
+  }
+
+  async function runBulkUpdateSelected() {
+    var pairs = [];
+    tbody.querySelectorAll('.tpl-pending-cb:checked').forEach(function(cb) {
+      var row = cb.closest('.pending-list-row');
+      if (!row) return;
+      if ((row.dataset.tpStatus || '') !== 'pending') return;
+      var sm = String(row.dataset.salesmanCode || '').trim();
+      var bd = String(row.dataset.billDateIso || '').trim();
+      if (!sm || bd.length < 10) return;
+      pairs.push({ sm: sm, bd: bd.substring(0, 10) });
+    });
+    if (!pairs.length) {
+      alert('Select at least one pending row.');
+      return;
+    }
+    if (
+      !confirm(
+        'Update ' +
+          pairs.length +
+          ' selected group(s) as Temporary Credit?\nSame behaviour as Temporary Pending Detail. Updates run one group at a time (reliable).\nBulk mode skips generating a PDF each time.'
+      )
+    )
+      return;
+
+    if (pendingRefreshCtl && typeof pendingRefreshCtl.stop === 'function') pendingRefreshCtl.stop();
+    pendingRefreshCtl = null;
+
+    if (tplBulkOverlay) {
+      tplBulkOverlay.style.display = 'flex';
+    }
+    if (tplBulkMsg) tplBulkMsg.textContent = 'Updating…';
+    if (btnBulkUpdatePending) btnBulkUpdatePending.disabled = true;
+
+    var ok = 0;
+    var errors = [];
+    var abortedEarly = false;
+
+    try {
+      for (var i = 0; i < pairs.length; i++) {
+        var g = pairs[i];
+        if (tplBulkMsg) tplBulkMsg.textContent = 'Updating ' + (i + 1) + ' of ' + pairs.length + '…';
+        var giUrl =
+          TP_GROUP_ITEMS_URL +
+          '?salesman_code=' +
+          encodeURIComponent(g.sm) +
+          '&billdate=' +
+          encodeURIComponent(g.bd);
+        var gr = await fetch(giUrl);
+        var gj = await gr.json().catch(function() {
+          return {};
+        });
+        if (!gr.ok || !gj.success || !gj.items || !gj.items.length) {
+          errors.push(g.sm + ' / ' + (gj.billdate || g.bd) + ': ' + (gj.error || 'No lines'));
+          abortedEarly = true;
+          break;
+        }
+        var payload = {
+          salesman_code: gj.salesman_code,
+          billdate: gj.billdate,
+          items: gj.items.map(normalizeTpItem),
+          skip_pdf: true,
+        };
+        var pu = await fetch(TP_UPDATE_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        var pj = await pu.json().catch(function() {
+          return {};
+        });
+        if (!pu.ok || !pj.success) {
+          errors.push(g.sm + ' / ' + g.bd + ': ' + (pj.error || 'HTTP ' + pu.status));
+          abortedEarly = true;
+          break;
+        }
+        ok++;
+      }
+
+      try {
+        var fr = await fetch(TEMP_PENDING_LIST_ROWS_URL);
+        var fres = await fr.json();
+        if (fres && fres.success === true && Array.isArray(fres.rows)) rebuildPendingListTableBody(fres.rows);
+      } catch (eRf) {}
+
+      attachPendingJsonRefresh();
+
+      var report;
+      if (abortedEarly && errors.length) {
+        report =
+          'Update stopped on first error so nothing else was sent.\n' +
+          ok +
+          ' group(s) saved before that.\n\n' +
+          errors[0];
+      } else {
+        report = ok + ' of ' + pairs.length + ' group(s) updated.';
+        if (errors.length > 0) {
+          report += '\nIssues:\n' + errors.slice(0, 12).join('\n');
+        }
+      }
+      alert(report);
+    } catch (err) {
+      alert('Bulk update failed: ' + (err.message || String(err)));
+      attachPendingJsonRefresh();
+    } finally {
+      if (tplBulkOverlay) tplBulkOverlay.style.display = 'none';
+      if (btnBulkUpdatePending) btnBulkUpdatePending.disabled = false;
+      syncTplSelectAllCheckbox();
+      syncTplBulkBtn();
+    }
+  }
+
+  if (btnBulkUpdatePending) {
+    btnBulkUpdatePending.addEventListener('click', function() {
+      runBulkUpdateSelected();
+    });
+  }
+
+  tbody.addEventListener('click', function(e) {
+    var pb = e.target.closest('.btn-print-pdf');
+    if (pb) {
+      e.stopPropagation();
+      runPendingPdfPrint(pb);
+      return;
+    }
+    if (e.target.closest('.tpl-cell-select')) return;
+    var row = e.target.closest('.pending-list-row');
+    if (!row) return;
+    var code = row.dataset.salesmanCode || '';
+    var billdateIso = row.dataset.billDateIso || '';
+    var isCompletedTab = activeTplTab === 'completed';
+    var isCompletedRow = (row.dataset.tpStatus || '').toLowerCase() === 'completed';
+    if (code) {
+      var url = '/accounts/temporary-pending/detail?salesman_code=' + encodeURIComponent(code);
+      if (billdateIso) url += '&billdate=' + encodeURIComponent(billdateIso);
+      if (isCompletedTab || isCompletedRow) url += '&include_completed=1';
+      window.location.href = url;
+    }
+  });
+
+  filterRows();
+});
+</script>
+{% endblock %}

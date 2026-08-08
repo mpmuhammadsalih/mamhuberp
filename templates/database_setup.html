@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body { background: #f8f9fa !important; }
+  .dbsetup { max-width: 520px; margin: 24px auto 48px; padding: 0 16px; }
+  .dbsetup h1 { font-size: 22px; margin: 0 0 8px; color: #212529; border-bottom: 2px solid #0d6efd; display: inline-block; }
+  .dbsetup p.muted { font-size: 13px; color: #6c757d; margin: 0 0 16px; }
+  .dbsetup .card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .dbsetup label { font-size: 13px; font-weight: 600; color: #495057; display: block; margin-top: 10px; }
+  .dbsetup input[type="text"], .dbsetup input[type="password"] { width: 100%; padding: 8px 10px; font-size: 14px; border: 1px solid #ced4da; border-radius: 4px; margin-top: 4px; box-sizing: border-box; }
+  .dbsetup .row-mode { display: flex; gap: 16px; margin: 16px 0; flex-wrap: wrap; }
+  .dbsetup .row-mode label { display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer; margin: 0; }
+  .dbsetup .checks label { display: flex; align-items: flex-start; gap: 8px; font-weight: normal; margin-top: 8px; }
+  .dbsetup button.submit { width: 100%; margin-top: 18px; padding: 10px; font-size: 15px; background: #198754; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+  .dbsetup button.submit:hover { background: #157347; }
+  .dbsetup .dbsetup-copybtn {
+    display: inline-block; margin-bottom: 10px; padding: 6px 12px; font-size: 13px;
+    background: #e9ecef; color: #212529; border: 1px solid #ced4da; border-radius: 4px; cursor: pointer;
+  }
+  .dbsetup .dbsetup-copybtn:hover { background: #dee2e6; }
+  .dbsetup .sections { display: none; }
+  .dbsetup .sections.visible { display: block; }
+  .dbsetup .flash-list { margin-bottom: 12px; }
+</style>
+<div class="dbsetup">
+  <h1>Database configuration</h1>
+  {% if editing_existing %}
+  <div style="background:#e7f1ff;border-left:4px solid #0d6efd;padding:12px 14px;border-radius:6px;margin-bottom:14px;font-size:14px;color:#084298;">
+    <strong>Editing existing connection.</strong> Saving will update <code>.env</code>, test Oracle, and run bootstrap. Invalid credentials can disrupt access — keep a backup and prefer maintenance windows when possible.
+  </div>
+  {% endif %}
+  <p class="muted">Writes <code>.env</code> at the project root, tests Oracle connectivity, then runs startup schema bootstrap (<code>bootstrap_application_schema</code>). This is the app’s <strong>Odoo-like install path</strong> for <em>app-owned</em> tables (<code>ensure_*</code>). Full legacy RFIM wholesale DDL is handled separately — see below.</p>
+
+  <details class="dbsetup-strategy" style="max-width: 720px; margin: 0 auto 20px; padding: 0 16px;">
+    <summary style="cursor: pointer; font-weight: 600; color: #0d6efd;">Schema strategies (A / B / C)</summary>
+    <div style="margin-top: 12px; padding: 14px 16px; background: #fff; border: 1px solid #dee2e6; border-radius: 8px; font-size: 13px; line-height: 1.55; color: #212529;">
+      <p style="margin: 0 0 10px;"><strong>(A) New / custom tables — like Odoo modules</strong></p>
+      <p style="margin: 0 0 10px;">Core login/roles/chat always run at boot. Check <strong>&quot;Apply extended business tables on startup&quot;</strong> below to mirror <code>AUTO_ENSURE_FULL_SCHEMA=1</code> — that runs registered <code>ensure_*</code> steps on the tenant DB (company profile, GL, warehouse, lots, …). Add steps in code: <code>db.get_app_owned_extended_bootstrap_steps()</code>.</p>
+      {% if bootstrap_extended_steps|default([]) %}
+      <p style="margin: 0 0 8px; font-size: 12px; color: #495057;"><strong>Current extended steps:</strong> {% for step in bootstrap_extended_steps %}<code>{{ step }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+      {% endif %}
+      <p style="margin: 12px 0 8px;"><strong>(B) Clone full RFIM structure once</strong> (empty new Oracle user / tenant)</p>
+      <p style="margin: 0 0 10px;">Not done in the browser. From the project folder, after creating the target Oracle user with quota: run <code>python scripts/oracle_export_schema_ddl.py --profile rfim -o exports/rfim.sql</code>, review SQL, then apply in SQL Developer; or use <code>oracle_apply_schema_ddl.py</code> with <code>--execute --i-confirm</code>. Full data clone: Data Pump (DBA).</p>
+      <p style="margin: 12px 0 8px;"><strong>(C) Long-term auto-DDL for <em>all</em> legacy RFIM tables</strong></p>
+      <p style="margin: 0;">There is no in-app ORM that materializes hundreds of RFIM tables from Python. Use existing RFIM DB, or one-time clone (B).</p>
+    </div>
+  </details>
+
+  <div class="card">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-list">
+          {% for category, message in messages %}
+            <div class="flash flash--{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <form method="post" class="form">
+      <input type="hidden" name="setup_token" value="{{ setup_token }}" />
+
+      <div class="row-mode">
+        <label><input type="radio" name="db_mode" value="single" {% if mode != 'multi' %}checked{% endif %} id="mode-single" /> Single DB — one Oracle schema for login + business</label>
+        <label><input type="radio" name="db_mode" value="multi" {% if mode == 'multi' %}checked{% endif %} id="mode-multi" /> Multi-DB — Auth DB + tenant DBs per user</label>
+      </div>
+      <p class="muted" style="margin: 0 0 12px;">
+        You can switch <strong>Single ↔ Multi</strong> here anytime (save updates <code>.env</code>).
+        <span style="display: block; margin-top: 6px;">Single mode clears <code>AUTH_DB_*</code>. Multi mode requires Auth Oracle credentials; optional “mirror” keeps <code>DB_*</code> aligned for legacy routes.</span>
+      </p>
+      {% if editing_existing %}
+      <div style="background:#fff8e6;border-radius:6px;padding:10px 12px;font-size:13px;color:#5c4d00;border:1px solid #ffe082;margin-bottom:12px;">
+        <strong>Changing deployment mode:</strong> after moving to Multi-DB, ensure users have <code>tenant_id</code> in <code>LOGIN_USERS</code> and rows in <code>tenant_databases</code> as required. Test with a maintenance window and a backup of <code>.env</code>.
+      </div>
+      {% endif %}
+
+      <div id="single-section" class="sections {% if mode != 'multi' %}visible{% endif %}">
+        <label for="db_username">Oracle user</label>
+        <input type="text" name="db_username" id="db_username" value="{{ single_user }}" autocomplete="off" />
+
+        <label for="db_password">Oracle password</label>
+        <input type="password" name="db_password" id="db_password" value="{{ single_pass }}" autocomplete="new-password" />
+
+        <label for="db_dsn">DSN</label>
+        <input type="text" name="db_dsn" id="db_dsn" value="{{ single_dsn }}" placeholder="192.168.1.225:1521/rgc" autocomplete="off" />
+      </div>
+
+      <div id="multi-section" class="sections {% if mode == 'multi' %}visible{% endif %}">
+        <p class="muted" style="margin: 0 0 8px;">Auth / common schema (login, users, tenants). Often a dedicated schema apart from tenant business DBs.</p>
+        <button type="button" id="copy-single-to-auth" class="dbsetup-copybtn">Copy from Single DB fields</button>
+        <label for="auth_username">Auth Oracle user</label>
+        <input type="text" name="auth_username" id="auth_username" value="{{ auth_user }}" autocomplete="off" />
+
+        <label for="auth_password">Auth Oracle password</label>
+        <input type="password" name="auth_password" id="auth_password" value="{{ auth_pass }}" autocomplete="new-password" />
+
+        <label for="auth_dsn">Auth DSN</label>
+        <input type="text" name="auth_dsn" id="auth_dsn" value="{{ auth_dsn }}" placeholder="192.168.1.225:1521/rgc" autocomplete="off" />
+
+        <div class="checks">
+          <label><input type="checkbox" name="mirror_db_to_same" {% if auth_user and single_user == auth_user %}checked{% endif %} /> Also set <code>DB_*</code> to the same values (legacy / non-tenant routes)</label>
+        </div>
+        <div class="checks">
+          <label><input type="checkbox" name="bootstrap_all_tenants" {% if bootstrap_multi %}checked{% endif %} /> On startup, run extended DDL on <strong>every</strong> active tenant (Multi-DB)</label>
+        </div>
+      </div>
+
+      {% if show_initial_app_login %}
+      <div style="margin-top: 18px; padding-top: 16px; border-top: 1px solid #dee2e6;">
+        <p style="margin: 0 0 10px; font-size: 14px; font-weight: 600; color: #212529;">Application login (first sign-in user)</p>
+        <p class="muted" style="margin-bottom: 12px;">Creates the first row in <code>LOGIN_USERS</code>. Leave blank for defaults: <strong>admin</strong> / <strong>admin123</strong>.</p>
+        <label for="app_login_username">Username (optional)</label>
+        <input type="text" name="app_login_username" id="app_login_username" maxlength="100" value="" autocomplete="off" autocapitalize="none" />
+
+        <label for="app_login_password">Password (optional)</label>
+        <input type="password" name="app_login_password" id="app_login_password" value="" autocomplete="new-password" />
+
+        <label for="app_login_password_confirm">Confirm password</label>
+        <input type="password" name="app_login_password_confirm" id="app_login_password_confirm" value="" autocomplete="new-password" />
+      </div>
+      {% endif %}
+
+      <label for="flask_secret_key">FLASK_SECRET_KEY (leave blank to auto-generate)</label>
+      <input type="password" name="flask_secret_key" id="flask_secret_key" placeholder="{% if flask_secret_ok %}configured{% else %}recommended{% endif %}" autocomplete="off" />
+
+      <div class="checks">
+        <label><input type="checkbox" name="auto_full_schema" {% if auto_full %}checked{% endif %} /> <strong>(A)</strong> Apply extended business tables on startup — <code>AUTO_ENSURE_FULL_SCHEMA</code> (company profile, GL, warehouse, lots, …). Add new modules in <code>get_app_owned_extended_bootstrap_steps()</code> in <code>db.py</code>.</label>
+      </div>
+
+      <button type="submit" class="submit">Save configuration &amp; test connection</button>
+    </form>
+  </div>
+</div>
+
+<script>
+(function() {
+  function sync() {
+    var multi = document.getElementById("mode-multi").checked;
+    document.getElementById("single-section").classList.toggle("visible", !multi);
+    document.getElementById("multi-section").classList.toggle("visible", multi);
+  }
+  document.getElementById("mode-single").addEventListener("change", sync);
+  document.getElementById("mode-multi").addEventListener("change", sync);
+  sync();
+
+  document.getElementById("copy-single-to-auth").addEventListener("click", function() {
+    document.getElementById("auth_username").value = document.getElementById("db_username").value;
+    document.getElementById("auth_password").value = document.getElementById("db_password").value;
+    document.getElementById("auth_dsn").value = document.getElementById("db_dsn").value;
+  });
+})();
+</script>
+{% endblock %}

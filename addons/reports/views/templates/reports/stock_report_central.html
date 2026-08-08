@@ -1,0 +1,977 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .page { --page-width: 98vw; max-width: var(--page-width); width: var(--page-width); margin: 0 auto; padding: 12px 8px; }
+  .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; border-bottom: 1px solid #dee2e6; padding-bottom: 10px; }
+  .title { margin: 0; font-size: 20px; font-weight: 400; color: #212529; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { border: 1px solid #dee2e6; background: #fff; color: #0f172a; border-radius: 4px; padding: 6px 10px; font-size: 12px; text-decoration: none; cursor: pointer; }
+  .btn-primary { background: #007bff; border-color: #007bff; color: #fff; }
+  .btn-filter.active { background: #0f172a; border-color: #0f172a; color: #fff; }
+  .grid { display: grid; grid-template-columns: repeat(6, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .stock-report-fg {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+  .stock-report-fg > label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: 0.02em;
+    line-height: 1.35;
+  }
+  .stock-report-fg .input::placeholder {
+    color: #475569;
+    opacity: 1;
+  }
+  .input { width: 100%; border: 1px solid #dee2e6; border-radius: 4px; padding: 6px 8px; font-size: 12px; box-sizing: border-box; }
+  .table-wrap { overflow: auto; max-height: 72vh; border: 1px solid #adb5bd; border-radius: 4px; background: #fff; }
+  table { width: 100%; min-width: 1000px; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
+  th, td { padding: 6px 8px; border: 1px solid #adb5bd; text-align: left; box-sizing: border-box; }
+  td { white-space: normal; overflow: hidden; text-overflow: clip; overflow-wrap: anywhere; word-break: break-word; vertical-align: top; }
+  th { background: #f8f9fa; font-weight: 600; font-size: 10px; white-space: nowrap; }
+  #microTable thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f8f9fa;
+    box-shadow: 0 1px 0 0 #adb5bd;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    color: #1e293b !important;
+    letter-spacing: 0.02em;
+  }
+  #microTable tfoot td { position: sticky; bottom: 0; z-index: 2; background: #f1f5f9 !important; box-shadow: 0 -1px 0 0 #adb5bd; }
+  .num { text-align: right; }
+  .empty { padding: 16px; color: #6c757d; font-style: italic; }
+  tr.row-red td { background: #fee2e2; }
+  tr.row-yellow td { background: #fef9c3; }
+  tr.row-green td { background: #dcfce7; }
+  th.sortable { cursor: pointer; user-select: none; position: relative; }
+  th.sortable::after { content: " \2195"; color: #9ca3af; font-size: 10px; }
+  th.sortable.sort-asc::after { content: " \2191"; color: #334155; }
+  th.sortable.sort-desc::after { content: " \2193"; color: #334155; }
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(15, 23, 42, 0.35);
+    display: none; align-items: center; justify-content: center; z-index: 2000;
+  }
+  .modal-backdrop.show { display: flex; }
+  .modal-backdrop .modal {
+    width: min(560px, 92vw); max-height: 80vh; overflow: auto; background: #fff;
+    border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px;
+  }
+  .modal-backdrop .modal-title { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: #0f172a; }
+  .columns-grid { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 8px; margin-bottom: 10px; }
+  .col-opt { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #0f172a; }
+  .col-resizer {
+    position: absolute; top: 0; right: -2px; width: 8px; height: 100%;
+    cursor: col-resize; user-select: none; touch-action: none; z-index: 3;
+  }
+  .col-resizer:hover, .col-resizer.active { background: rgba(37, 99, 235, 0.25); }
+  .section-title { margin: 10px 0 6px; font-size: 13px; font-weight: 600; color: #1f2937; }
+  .micro-link { color: #0b57d0; text-decoration: none; cursor: pointer; }
+  .micro-link:hover { text-decoration: underline; }
+  .filter-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #334155; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 14px; padding: 3px 8px; }
+  .fetch-info { margin: 6px 0 10px; border: 1px solid #cbd5e1; background: #f8fafc; border-radius: 6px; padding: 8px 10px; font-size: 12px; color: #1f2937; }
+  .fetch-loc-tag { display: inline-block; margin: 3px 6px 0 0; padding: 2px 8px; border: 1px solid #cbd5e1; border-radius: 999px; background: #fff; font-size: 11px; }
+  tr.js-micro-row { cursor: pointer; }
+  tr.js-micro-row:hover td { outline: 1px solid #93c5fd; outline-offset: -1px; }
+  tr.js-item-row { cursor: pointer; }
+  tr.js-item-row:hover td { outline: 1px solid #a7f3d0; outline-offset: -1px; }
+  .central-stock-pick-wrap { min-width: 0; width: 100%; }
+  .central-stock-pick-wrap .search-field--popup { width: 100%; }
+  .central-stock-pick-wrap .search-field--popup .input {
+    flex: 1; min-width: 0; cursor: pointer; font-size: 12px; padding: 6px 8px;
+    border: 1px solid #dee2e6; border-radius: 4px; box-sizing: border-box;
+  }
+  #centralStockPickModal .modal__content {
+    width: min(560px, 92vw);
+    max-height: 82vh;
+  }
+  #centralStockPickModal .modal__body { min-height: 0; }
+  #centralStockPickModal tbody tr { cursor: pointer; }
+  #centralStockPickModal tbody tr:hover { background: #f1f5f9; }
+  #centralStockPickModal .modal__header h3 { font-size: 16px; font-weight: 700; color: #0f172a; margin: 0; }
+  #centralStockPickModal label.search { font-size: 12px; font-weight: 600; color: #0f172a; }
+  #centralStockPickModal table thead th { font-size: 12px !important; font-weight: 700 !important; color: #1e293b !important; }
+</style>
+
+<div class="page">
+  <div class="top">
+    <h1 class="title">{{ report_title | default('Stock Report Central') }}</h1>
+    <div class="actions">
+      <button class="btn btn-primary" type="button" id="columnPopupBtn">Tool</button>
+      <button class="btn" type="button" id="widthDec">Width -</button>
+      <button class="btn" type="button" id="widthInc">Width +</button>
+      <a class="btn" href="{{ export_url }}">Export Summary CSV</a>
+      <a class="btn" href="{{ export_micro_url | default(export_url) }}">Export Micro CSV</a>
+      <a class="btn" href="{{ export_items_url | default(export_url) }}">Export Items CSV</a>
+      <a class="btn" href="{{ export_location_items_url | default(export_url) }}">Export Location Items CSV</a>
+    </div>
+  </div>
+  <div class="actions" style="margin-bottom: 10px;">
+    <button class="btn btn-filter active" type="button" data-color-filter="all">All</button>
+    <button class="btn btn-filter" type="button" data-color-filter="red">Red</button>
+    <button class="btn btn-filter" type="button" data-color-filter="yellow">Yellow</button>
+    <button class="btn btn-filter" type="button" data-color-filter="green">Green</button>
+  </div>
+
+  <form id="centralFilterForm" method="get" action="{{ form_action | default(url_for('reports.stock_report_central')) }}">
+    <div class="grid">
+      <div class="stock-report-fg">
+        <label for="sr_c_filter_days">Days</label>
+        <input id="sr_c_filter_days" class="input" type="number" name="days" min="1" max="3650" placeholder="Default 30" value="{{ filters.days or '30' }}" />
+      </div>
+      <div class="stock-report-fg">
+        <label for="locationCodeInput">Location</label>
+        <div class="central-stock-pick-wrap">
+          <span class="search-field search-field--popup">
+            <input id="locationCodeInput" class="input js-central-stock-pick" type="text" name="location_filter" placeholder="Pick code / name…" value="{{ filters.location_filter or '' }}" readonly autocomplete="off" />
+            <button type="button" class="search-clear" data-sr-clear="location_filter" aria-label="Clear location">×</button>
+            <button type="button" class="search-picker" data-sr-pick="location_filter" aria-label="Open locations">▾</button>
+          </span>
+        </div>
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_c_filter_rawabicode">Raw ABI code</label>
+        <input id="sr_c_filter_rawabicode" class="input" type="text" name="rawabicode" placeholder="Optional" value="{{ filters.rawabicode or '' }}" />
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_c_filter_itemcode">Item code</label>
+        <input id="sr_c_filter_itemcode" class="input" type="text" name="itemcode" placeholder="Optional" value="{{ filters.itemcode or '' }}" />
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_c_filter_itemname">Item name</label>
+        <div class="central-stock-pick-wrap">
+          <span class="search-field search-field--popup">
+            <input id="sr_c_filter_itemname" class="input js-central-stock-pick" type="text" name="itemname" placeholder="Pick…" value="{{ filters.itemname or '' }}" readonly autocomplete="off" />
+            <button type="button" class="search-clear" data-sr-clear="itemname" aria-label="Clear item name">×</button>
+            <button type="button" class="search-picker" data-sr-pick="itemname" aria-label="Open item names">▾</button>
+          </span>
+        </div>
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_c_filter_suppliername">Supplier name</label>
+        <div class="central-stock-pick-wrap">
+          <span class="search-field search-field--popup">
+            <input id="sr_c_filter_suppliername" class="input js-central-stock-pick" type="text" name="suppliername" placeholder="Pick…" value="{{ filters.suppliername or '' }}" readonly autocomplete="off" />
+            <button type="button" class="search-clear" data-sr-clear="suppliername" aria-label="Clear supplier">×</button>
+            <button type="button" class="search-picker" data-sr-pick="suppliername" aria-label="Open suppliers">▾</button>
+          </span>
+        </div>
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_c_filter_unit">Unit</label>
+        <div class="central-stock-pick-wrap">
+          <span class="search-field search-field--popup">
+            <input id="sr_c_filter_unit" class="input js-central-stock-pick" type="text" name="unit" placeholder="Pick…" value="{{ filters.unit or '' }}" readonly autocomplete="off" />
+            <button type="button" class="search-clear" data-sr-clear="unit" aria-label="Clear unit">×</button>
+            <button type="button" class="search-picker" data-sr-pick="unit" aria-label="Open units">▾</button>
+          </span>
+        </div>
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_c_filter_brandname">Brand name</label>
+        <div class="central-stock-pick-wrap">
+          <span class="search-field search-field--popup">
+            <input id="sr_c_filter_brandname" class="input js-central-stock-pick" type="text" name="brandname" placeholder="Pick…" value="{{ filters.brandname or '' }}" readonly autocomplete="off" />
+            <button type="button" class="search-clear" data-sr-clear="brandname" aria-label="Clear brand">×</button>
+            <button type="button" class="search-picker" data-sr-pick="brandname" aria-label="Open brands">▾</button>
+          </span>
+        </div>
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_c_filter_microcategoryname">Micro category</label>
+        <div class="central-stock-pick-wrap">
+          <span class="search-field search-field--popup">
+            <input id="sr_c_filter_microcategoryname" class="input js-central-stock-pick" type="text" name="microcategoryname" placeholder="Pick…" value="{{ filters.microcategoryname or '' }}" readonly autocomplete="off" />
+            <button type="button" class="search-clear" data-sr-clear="microcategoryname" aria-label="Clear micro category">×</button>
+            <button type="button" class="search-picker" data-sr-pick="microcategoryname" aria-label="Open micro categories">▾</button>
+          </span>
+        </div>
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_c_filter_categoryname">Category name</label>
+        <div class="central-stock-pick-wrap">
+          <span class="search-field search-field--popup">
+            <input id="sr_c_filter_categoryname" class="input js-central-stock-pick" type="text" name="categoryname" placeholder="Pick…" value="{{ filters.categoryname or '' }}" readonly autocomplete="off" />
+            <button type="button" class="search-clear" data-sr-clear="categoryname" aria-label="Clear category">×</button>
+            <button type="button" class="search-picker" data-sr-pick="categoryname" aria-label="Open categories">▾</button>
+          </span>
+        </div>
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_c_filter_propertyname">Property name</label>
+        <div class="central-stock-pick-wrap">
+          <span class="search-field search-field--popup">
+            <input id="sr_c_filter_propertyname" class="input js-central-stock-pick" type="text" name="propertyname" placeholder="Pick…" value="{{ filters.propertyname or '' }}" readonly autocomplete="off" />
+            <button type="button" class="search-clear" data-sr-clear="propertyname" aria-label="Clear property">×</button>
+            <button type="button" class="search-picker" data-sr-pick="propertyname" aria-label="Open properties">▾</button>
+          </span>
+        </div>
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_c_filter_min_stock">Min stock</label>
+        <input id="sr_c_filter_min_stock" class="input" type="number" step="0.001" name="min_stock" placeholder="Optional" value="{{ filters.min_stock or '' }}" />
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_c_filter_max_stock">Max stock</label>
+        <input id="sr_c_filter_max_stock" class="input" type="number" step="0.001" name="max_stock" placeholder="Optional" value="{{ filters.max_stock or '' }}" />
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_c_filter_min_avgdaily">Min avg daily</label>
+        <input id="sr_c_filter_min_avgdaily" class="input" type="number" step="0.01" name="min_avgdaily" placeholder="Optional" value="{{ filters.min_avgdaily or '' }}" />
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_c_filter_max_avgdaily">Max avg daily</label>
+        <input id="sr_c_filter_max_avgdaily" class="input" type="number" step="0.01" name="max_avgdaily" placeholder="Optional" value="{{ filters.max_avgdaily or '' }}" />
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_c_filter_min_days">Min remaining days</label>
+        <input id="sr_c_filter_min_days" class="input" type="number" step="0.01" name="min_days" placeholder="Optional" value="{{ filters.min_days or '' }}" />
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_c_filter_max_days">Max remaining days</label>
+        <input id="sr_c_filter_max_days" class="input" type="number" step="0.01" name="max_days" placeholder="Optional" value="{{ filters.max_days or '' }}" />
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_c_filter_min_total_stock">Min total stock</label>
+        <input id="sr_c_filter_min_total_stock" class="input" type="number" step="0.001" name="min_total_stock" placeholder="Optional" value="{{ filters.min_total_stock or '' }}" />
+      </div>
+      <div class="stock-report-fg">
+        <label for="sr_c_filter_max_total_stock">Max total stock</label>
+        <input id="sr_c_filter_max_total_stock" class="input" type="number" step="0.001" name="max_total_stock" placeholder="Optional" value="{{ filters.max_total_stock or '' }}" />
+      </div>
+    </div>
+    <div class="actions" style="margin-bottom: 10px;">
+      <label class="btn btn-filter {% if filters.exclude_avg_zero %}active{% endif %}" style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; margin: 0;">
+        <input type="checkbox" name="exclude_avg_zero" value="1" {% if filters.exclude_avg_zero %}checked{% endif %} style="margin: 0;" />
+        <span>Exclude avg = 0</span>
+      </label>
+      <button class="btn btn-primary" type="submit">Apply Filters</button>
+      <button class="btn" type="button" id="columnPopupBtnAlt">Tool</button>
+      <a class="btn" href="{{ clear_url | default(url_for('reports.stock_report_central')) }}">Clear</a>
+    </div>
+  </form>
+  <div class="fetch-info" id="fetchInfoBox">
+    {% if tenant_status and tenant_status|length > 0 %}
+      <strong>Fetched Locations ({{ tenant_status|length }}):</strong>
+      <div>
+        {% for t in tenant_status %}
+          <span class="fetch-loc-tag">
+            {{ t.locationname or t.tenant }} (rows: {{ t.row_count or 0 }}{% if t.status %}, {{ t.status }}{% endif %})
+          </span>
+        {% endfor %}
+      </div>
+    {% elif fetched_locations and fetched_locations|length > 0 %}
+      <strong>Fetched Locations ({{ fetched_locations|length }}):</strong>
+      <div>{% for loc in fetched_locations %}<span class="fetch-loc-tag">{{ loc }}</span>{% endfor %}</div>
+    {% else %}
+      <strong>Fetched Locations:</strong> No location data found for current filters.
+    {% endif %}
+  </div>
+
+  <div class="section-title">Micro Category Wise Remaining Days</div>
+  <div class="table-wrap" style="margin-top: 6px;">
+    <table id="microTable">
+      <thead>
+        <tr>
+          <th class="sortable">Micro Category</th>
+          {% for b in branch_columns %}
+          <th class="num sortable">{{ b.name }} Stock Value</th>
+          {% endfor %}
+          <th class="num sortable">Stock Value</th>
+          <th class="num sortable">Avg Daily Value</th>
+          <th class="num sortable">Stock Remaining Days</th>
+        </tr>
+      </thead>
+      <tbody id="microBody">
+        {% for m in micro_rows %}
+        {% set _m_days = (m.stockremainingdays or 0)|float %}
+        <tr class="js-micro-row {% if _m_days <= 7 %}row-red{% elif _m_days <= 14 %}row-yellow{% else %}row-green{% endif %}" data-micro="{{ m.microcategoryname or '' }}">
+          <td><a href="#" class="micro-link js-micro-filter" data-micro="{{ m.microcategoryname or '' }}">{{ m.microcategoryname or '' }}</a></td>
+          {% for b in branch_columns %}
+          <td class="num">{{ '%.2f'|format((m['stockvalue_' ~ b.code] or 0)|float) }}</td>
+          {% endfor %}
+          <td class="num">{{ '%.2f'|format((m.stockvalue or 0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format((m.avgdailyvalue or 0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format((m.stockremainingdays or 0)|float) }}</td>
+        </tr>
+        {% else %}
+        <tr><td class="empty" colspan="{{ 4 + (branch_columns|length) }}">No micro category rows found.</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="micro-total-row" style="font-weight: 600; background: #f1f5f9;">
+          <td>Total Stock Value</td>
+          {% for b in branch_columns %}
+          {% set _bt = namespace(v=0) %}
+          {% for m in micro_rows %}
+          {% set _bt.v = _bt.v + (m['stockvalue_' ~ b.code]|default(0)|float) %}
+          {% endfor %}
+          <td class="num">{{ '%.2f'|format(_bt.v) }}</td>
+          {% endfor %}
+          {% set _gt = namespace(v=0) %}
+          {% for m in micro_rows %}
+          {% set _gt.v = _gt.v + (m.stockvalue|default(0)|float) %}
+          {% endfor %}
+          <td class="num">{{ '%.2f'|format(_gt.v) }}</td>
+          <td class="num">—</td>
+          <td class="num">—</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div class="section-title">Item Wise Remaining Days</div>
+  <div class="actions" style="margin-bottom: 6px;">
+    <span id="activeMicroChip" class="filter-chip" style="display:none;">
+      Micro Category: <strong id="activeMicroText"></strong>
+      <button class="btn" type="button" id="clearMicroFilterBtn" style="padding:2px 6px; font-size:11px;">Clear</button>
+    </span>
+    <span id="activeItemChip" class="filter-chip" style="display:none;">
+      Item: <strong id="activeItemText"></strong>
+      <button class="btn" type="button" id="clearItemFilterBtn" style="padding:2px 6px; font-size:11px;">Clear</button>
+    </span>
+  </div>
+  <div class="table-wrap" style="margin-top: 6px;">
+    <table id="itemTable">
+      <thead>
+        <tr>
+          <th class="sortable">Raw ABI</th>
+          <th class="sortable">Item Name</th>
+          <th class="sortable">Unit</th>
+          <th class="sortable">Micro Category</th>
+          <th class="num sortable">Current Stock</th>
+          <th class="num sortable">Total Quantity</th>
+          <th class="num sortable">Avg Daily Qty</th>
+          <th class="num sortable">Stock Remaining Days</th>
+        </tr>
+      </thead>
+      <tbody id="itemBody">
+        {% for it in item_rows %}
+        {% set _it_days = (it.stockremainingdays or 0)|float %}
+        <tr class="js-item-row {% if _it_days <= 7 %}row-red{% elif _it_days <= 14 %}row-yellow{% else %}row-green{% endif %}" data-micro="{{ it.microcategoryname or '' }}" data-itemkey="{{ (it.rawabicode or '') ~ '||' ~ (it.itemname or '') }}">
+          <td>{{ it.rawabicode or '' }}</td>
+          <td>{{ it.itemname or '' }}</td>
+          <td>{{ it.unit or '' }}</td>
+          <td>{{ it.microcategoryname or '' }}</td>
+          <td class="num">{{ '%.3f'|format((it.currentstock or 0)|float) }}</td>
+          <td class="num">{{ '%.3f'|format((it.totalqty or 0)|float) }}</td>
+          <td class="num">{{ '%.3f'|format((it.avgdailyqty or 0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format((it.stockremainingdays or 0)|float) }}</td>
+        </tr>
+        {% else %}
+        <tr><td class="empty" colspan="8">No item rows found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section-title">Locationwise Item Remaining</div>
+  <div class="table-wrap" style="margin-top: 6px;">
+    <table id="locationItemTable">
+      <thead>
+        <tr>
+          <th class="sortable">Location</th>
+          <th class="sortable">Raw ABI</th>
+          <th class="sortable">Item Name</th>
+          <th class="sortable">Unit</th>
+          <th class="sortable">Micro Category</th>
+          <th class="num sortable">Current Stock</th>
+          <th class="num sortable">Total Quantity</th>
+          <th class="num sortable">Avg Daily Qty</th>
+          <th class="num sortable">Stock Remaining Days</th>
+        </tr>
+      </thead>
+      <tbody id="locationItemBody">
+        {% for it in location_item_rows %}
+        {% set _lit_days = (it.stockremainingdays or 0)|float %}
+        <tr class="{% if _lit_days <= 7 %}row-red{% elif _lit_days <= 14 %}row-yellow{% else %}row-green{% endif %}" data-micro="{{ it.microcategoryname or '' }}" data-itemkey="{{ (it.rawabicode or '') ~ '||' ~ (it.itemname or '') }}">
+          <td>{{ it.locationname or '' }}</td>
+          <td>{{ it.rawabicode or '' }}</td>
+          <td>{{ it.itemname or '' }}</td>
+          <td>{{ it.unit or '' }}</td>
+          <td>{{ it.microcategoryname or '' }}</td>
+          <td class="num">{{ '%.3f'|format((it.currentstock or 0)|float) }}</td>
+          <td class="num">{{ '%.3f'|format((it.totalqty or 0)|float) }}</td>
+          <td class="num">{{ '%.3f'|format((it.avgdailyqty or 0)|float) }}</td>
+          <td class="num">{{ '%.2f'|format((it.stockremainingdays or 0)|float) }}</td>
+        </tr>
+        {% else %}
+        <tr><td class="empty" colspan="9">No locationwise item rows found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<div id="columnModalBackdrop" class="modal-backdrop" aria-hidden="true">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="columnModalTitle">
+    <h3 id="columnModalTitle" class="modal-title">Show / Hide Columns</h3>
+    <div id="columnOptionsWrap" class="columns-grid"></div>
+    <div class="actions">
+      <button class="btn" type="button" id="columnSelectAll">Select All</button>
+      <button class="btn" type="button" id="columnClearAll">Clear All</button>
+      <button class="btn btn-primary" type="button" id="columnCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+<div class="modal hidden" id="centralStockPickModal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="modal__overlay" data-close="centralStockPickModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3 id="centralStockPickModalTitle">Pick</h3>
+      <button type="button" class="modal__close" data-close="centralStockPickModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <label class="search">
+        Search
+        <span class="search-field search-field--wide">
+          <input type="text" id="centralStockPickModalSearch" placeholder="Search by code or name…" autocomplete="off" />
+          <button type="button" class="search-clear" id="centralStockPickModalClear" aria-label="Clear search">×</button>
+        </span>
+      </label>
+      <div class="scroll-table modal__table">
+        <table class="table table-fixed" id="centralStockPickModalTable">
+          <thead>
+            <tr>
+              <th id="centralStockPickModalColHeader">Value</th>
+            </tr>
+          </thead>
+          <tbody id="centralStockPickModalBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<script type="application/json" id="srFilterOptionsJson">{{ (options or {}) | tojson }}</script>
+<script>
+(function () {
+  var page = document.querySelector('.page');
+  var decBtn = document.getElementById('widthDec');
+  var incBtn = document.getElementById('widthInc');
+  var widthKey = 'stockReportCentralPageWidthV1';
+  function applyWidth(vw) {
+    if (!page) return;
+    var safe = Math.max(70, Math.min(98, vw));
+    page.style.setProperty('--page-width', safe + 'vw');
+    try { localStorage.setItem(widthKey, String(safe)); } catch (e) {}
+  }
+  try {
+    var saved = parseFloat(localStorage.getItem(widthKey) || '');
+    if (!isNaN(saved)) applyWidth(saved);
+  } catch (e) {}
+  if (decBtn) decBtn.addEventListener('click', function () {
+    var curr = parseFloat(getComputedStyle(page).getPropertyValue('--page-width')) || 98;
+    applyWidth(curr - 4);
+  });
+  if (incBtn) incBtn.addEventListener('click', function () {
+    var curr = parseFloat(getComputedStyle(page).getPropertyValue('--page-width')) || 98;
+    applyWidth(curr + 4);
+  });
+
+  /* Modal pick lists — Item Master category-style popup */
+  var filterForm = document.getElementById('centralFilterForm');
+  var srPickModal = document.getElementById('centralStockPickModal');
+  var srPickTitle = document.getElementById('centralStockPickModalTitle');
+  var srPickSearch = document.getElementById('centralStockPickModalSearch');
+  var srPickClearBtn = document.getElementById('centralStockPickModalClear');
+  var srPickBody = document.getElementById('centralStockPickModalBody');
+  var srPickColHeader = document.getElementById('centralStockPickModalColHeader');
+  var srPickTargetInput = null;
+  var SR_OPT_KEYS = {
+    location_filter: 'locations',
+    itemname: 'itemnames',
+    suppliername: 'suppliernames',
+    unit: 'units',
+    brandname: 'brandnames',
+    microcategoryname: 'microcategories',
+    categoryname: 'categories',
+    propertyname: 'properties'
+  };
+  var SR_OPT_LABELS = {
+    location_filter: 'Location',
+    itemname: 'Item name',
+    suppliername: 'Supplier name',
+    unit: 'Unit',
+    brandname: 'Brand name',
+    microcategoryname: 'Micro category',
+    categoryname: 'Category name',
+    propertyname: 'Property name'
+  };
+  var srFilterOptions = {};
+  try {
+    var sj = document.getElementById('srFilterOptionsJson');
+    if (sj && sj.textContent) srFilterOptions = JSON.parse(sj.textContent) || {};
+  } catch (e) { srFilterOptions = {}; }
+
+  function getSrValues(fieldName) {
+    var k = SR_OPT_KEYS[fieldName];
+    var arr = k ? srFilterOptions[k] : null;
+    return Array.isArray(arr) ? arr : [];
+  }
+
+  function closeSrPick() {
+    if (!srPickModal) return;
+    srPickModal.classList.add('hidden');
+    srPickModal.setAttribute('aria-hidden', 'true');
+    srPickTargetInput = null;
+  }
+
+  function filterSrPickRows(needleRaw) {
+    if (!srPickBody) return;
+    var needle = (needleRaw || '').toLowerCase().trim();
+    Array.prototype.slice.call(srPickBody.querySelectorAll('tr')).forEach(function (tr) {
+      var t = (tr.getAttribute('data-text') || tr.textContent || '').toLowerCase();
+      tr.style.display = (!needle || t.indexOf(needle) !== -1) ? '' : 'none';
+    });
+  }
+
+  function openSrPick(fieldName, inputEl) {
+    if (!srPickModal || !srPickBody || !srPickTitle) return;
+    srPickTargetInput = inputEl || null;
+    var title = SR_OPT_LABELS[fieldName] || fieldName;
+    srPickTitle.textContent = title;
+    if (srPickColHeader) srPickColHeader.textContent = title;
+    var vals = getSrValues(fieldName);
+    srPickBody.innerHTML = '';
+    vals.forEach(function (v) {
+      var tr = document.createElement('tr');
+      var td = document.createElement('td');
+      td.textContent = v;
+      tr.setAttribute('data-text', String(v || '').toLowerCase());
+      tr.appendChild(td);
+      tr.addEventListener('click', function () {
+        if (srPickTargetInput) srPickTargetInput.value = v;
+        closeSrPick();
+      });
+      srPickBody.appendChild(tr);
+    });
+    if (vals.length === 0) {
+      var tr0 = document.createElement('tr');
+      var td0 = document.createElement('td');
+      td0.style.color = '#6c757d';
+      td0.style.fontStyle = 'italic';
+      td0.textContent = 'No values loaded. Apply filters with fewer restrictions or check tenant data.';
+      tr0.appendChild(td0);
+      srPickBody.appendChild(tr0);
+    }
+    if (srPickSearch) {
+      srPickSearch.value = '';
+      filterSrPickRows('');
+      setTimeout(function () { srPickSearch.focus(); }, 0);
+    }
+    srPickModal.classList.remove('hidden');
+    srPickModal.setAttribute('aria-hidden', 'false');
+  }
+
+  if (srPickSearch) {
+    srPickSearch.addEventListener('input', function () {
+      filterSrPickRows(srPickSearch.value);
+    });
+    srPickSearch.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeSrPick();
+      }
+    });
+  }
+  if (srPickClearBtn) {
+    srPickClearBtn.addEventListener('click', function () {
+      if (srPickSearch) {
+        srPickSearch.value = '';
+        filterSrPickRows('');
+        srPickSearch.focus();
+      }
+    });
+  }
+  if (srPickModal) {
+    srPickModal.addEventListener('click', function (e) {
+      if (e.target.getAttribute('data-close') === 'centralStockPickModal' || e.target.classList.contains('modal__close')) {
+        closeSrPick();
+      }
+    });
+    srPickModal.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeSrPick();
+      }
+    });
+  }
+  Array.prototype.slice.call(document.querySelectorAll('[data-sr-pick]')).forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var fn = btn.getAttribute('data-sr-pick');
+      if (!fn || !filterForm) return;
+      var inp = filterForm.querySelector('[name="' + fn + '"]');
+      openSrPick(fn, inp);
+    });
+  });
+  Array.prototype.slice.call(document.querySelectorAll('[data-sr-clear]')).forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var fn = btn.getAttribute('data-sr-clear');
+      if (!fn || !filterForm) return;
+      var inp = filterForm.querySelector('[name="' + fn + '"]');
+      if (inp) inp.value = '';
+    });
+  });
+  Array.prototype.slice.call(document.querySelectorAll('#centralFilterForm .js-central-stock-pick')).forEach(function (inp) {
+    inp.addEventListener('click', function () {
+      var name = inp.getAttribute('name');
+      if (name) openSrPick(name, inp);
+    });
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'F1') {
+        e.preventDefault();
+        var name = inp.getAttribute('name');
+        if (name) openSrPick(name, inp);
+      }
+    });
+  });
+  window.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (srPickModal && !srPickModal.classList.contains('hidden')) closeSrPick();
+  });
+
+  var table = document.getElementById('itemTable');
+  var body = document.getElementById('itemBody');
+  if (!table || !body) return;
+
+  var allHeaders = Array.prototype.slice.call(table.querySelectorAll('thead th'));
+  var headers = Array.prototype.slice.call(table.querySelectorAll('thead th.sortable'));
+  var sortState = { index: -1, dir: 'asc' };
+  var suppressSortUntil = 0;
+  var numericIdx = {};
+  headers.forEach(function (h, i) { if (h.classList.contains('num')) numericIdx[i] = true; });
+
+  function isNumericColumn(idx) { return !!numericIdx[idx]; }
+  function getCellText(row, idx) {
+    var cell = row.children[idx];
+    return cell ? (cell.textContent || '').trim() : '';
+  }
+  function compareRows(a, b, idx, dir) {
+    var av = getCellText(a, idx);
+    var bv = getCellText(b, idx);
+    if (isNumericColumn(idx)) {
+      var an = parseFloat(av.replace(/,/g, '')); an = isNaN(an) ? 0 : an;
+      var bn = parseFloat(bv.replace(/,/g, '')); bn = isNaN(bn) ? 0 : bn;
+      return dir === 'asc' ? (an - bn) : (bn - an);
+    }
+    av = av.toLowerCase(); bv = bv.toLowerCase();
+    if (av < bv) return dir === 'asc' ? -1 : 1;
+    if (av > bv) return dir === 'asc' ? 1 : -1;
+    return 0;
+  }
+  headers.forEach(function (h, idx) {
+    h.addEventListener('click', function () {
+      if (Date.now() < suppressSortUntil) return;
+      var rows = Array.prototype.slice.call(body.querySelectorAll('tr'));
+      if (!rows.length) return;
+      if (sortState.index === idx) sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc';
+      else { sortState.index = idx; sortState.dir = 'asc'; }
+      headers.forEach(function (x) { x.classList.remove('sort-asc', 'sort-desc'); });
+      h.classList.add(sortState.dir === 'asc' ? 'sort-asc' : 'sort-desc');
+      rows.sort(function (r1, r2) { return compareRows(r1, r2, idx, sortState.dir); });
+      rows.forEach(function (r) { body.appendChild(r); });
+    });
+  });
+
+  function setColumnWidth(colIdx, px) {
+    var safe = Math.max(60, Math.round(px));
+    allHeaders.forEach(function (th, i) {
+      if (i === colIdx) {
+        th.style.width = safe + 'px';
+        th.style.maxWidth = safe + 'px';
+        th.style.minWidth = '60px';
+      }
+    });
+    Array.prototype.slice.call(body.querySelectorAll('tr')).forEach(function (tr) {
+      var td = tr.children[colIdx];
+      if (!td) return;
+      td.style.width = safe + 'px';
+      td.style.maxWidth = safe + 'px';
+      td.style.minWidth = '60px';
+    });
+  }
+
+  function initColumnPopup() {
+    var popupBtn = document.getElementById('columnPopupBtn');
+    var popupBtnAlt = document.getElementById('columnPopupBtnAlt');
+    var modalBackdrop = document.getElementById('columnModalBackdrop');
+    var optionsWrap = document.getElementById('columnOptionsWrap');
+    var closeBtn = document.getElementById('columnCloseBtn');
+    var selectAllBtn = document.getElementById('columnSelectAll');
+    var clearAllBtn = document.getElementById('columnClearAll');
+    if (!modalBackdrop || !optionsWrap) return;
+    var storageKey = 'stockReportCentralHiddenColsV1';
+
+    function setColumnVisible(colIdx, visible) {
+      allHeaders.forEach(function (h, i) { if (i === colIdx) h.style.display = visible ? '' : 'none'; });
+      Array.prototype.slice.call(body.querySelectorAll('tr')).forEach(function (tr) {
+        var td = tr.children[colIdx];
+        if (td) td.style.display = visible ? '' : 'none';
+      });
+    }
+    function getHiddenSet() {
+      try { return JSON.parse(localStorage.getItem(storageKey) || '{}') || {}; } catch (e) { return {}; }
+    }
+    function saveHiddenSet(hiddenSet) {
+      try { localStorage.setItem(storageKey, JSON.stringify(hiddenSet)); } catch (e) {}
+    }
+    function applyStoredHidden() {
+      var hidden = getHiddenSet();
+      allHeaders.forEach(function (_, idx) { setColumnVisible(idx, !hidden[idx]); });
+      Array.prototype.slice.call(optionsWrap.querySelectorAll('input[type="checkbox"]')).forEach(function (cb) {
+        var idx = parseInt(cb.getAttribute('data-col-idx') || '-1', 10);
+        cb.checked = !hidden[idx];
+      });
+    }
+    function renderOptions() {
+      optionsWrap.innerHTML = '';
+      allHeaders.forEach(function (h, idx) {
+        var label = document.createElement('label');
+        label.className = 'col-opt';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = true;
+        cb.setAttribute('data-col-idx', String(idx));
+        cb.addEventListener('change', function () {
+          var hidden = getHiddenSet();
+          if (cb.checked) delete hidden[idx];
+          else hidden[idx] = true;
+          saveHiddenSet(hidden);
+          setColumnVisible(idx, cb.checked);
+        });
+        var span = document.createElement('span');
+        span.textContent = (h.textContent || '').replace(/\s+/g, ' ').trim() || ('Column ' + (idx + 1));
+        label.appendChild(cb);
+        label.appendChild(span);
+        optionsWrap.appendChild(label);
+      });
+      applyStoredHidden();
+    }
+    function showModal() { modalBackdrop.classList.add('show'); modalBackdrop.setAttribute('aria-hidden', 'false'); }
+    function hideModal() { modalBackdrop.classList.remove('show'); modalBackdrop.setAttribute('aria-hidden', 'true'); }
+    if (popupBtn) popupBtn.addEventListener('click', showModal);
+    if (popupBtnAlt) popupBtnAlt.addEventListener('click', showModal);
+    if (closeBtn) closeBtn.addEventListener('click', hideModal);
+    if (selectAllBtn) selectAllBtn.addEventListener('click', function () {
+      saveHiddenSet({});
+      allHeaders.forEach(function (_, idx) { setColumnVisible(idx, true); });
+      Array.prototype.slice.call(optionsWrap.querySelectorAll('input[type="checkbox"]')).forEach(function (cb) { cb.checked = true; });
+    });
+    if (clearAllBtn) clearAllBtn.addEventListener('click', function () {
+      var hidden = {};
+      allHeaders.forEach(function (_, idx) { hidden[idx] = true; setColumnVisible(idx, false); });
+      saveHiddenSet(hidden);
+      Array.prototype.slice.call(optionsWrap.querySelectorAll('input[type="checkbox"]')).forEach(function (cb) { cb.checked = false; });
+    });
+    modalBackdrop.addEventListener('click', function (e) { if (e.target === modalBackdrop) hideModal(); });
+    window.addEventListener('keydown', function (e) { if (e.key === 'Escape') hideModal(); });
+    renderOptions();
+  }
+
+  allHeaders.forEach(function (th, colIdx) {
+    if (th.querySelector('.col-resizer')) return;
+    var grip = document.createElement('span');
+    grip.className = 'col-resizer';
+    th.appendChild(grip);
+    grip.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var startX = e.clientX;
+      var startW = th.getBoundingClientRect().width;
+      var moved = false;
+      grip.classList.add('active');
+      function onMove(ev) {
+        var dx = ev.clientX - startX;
+        if (Math.abs(dx) > 1) moved = true;
+        setColumnWidth(colIdx, startW + dx);
+      }
+      function onUp() {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        grip.classList.remove('active');
+        if (moved) suppressSortUntil = Date.now() + 250;
+      }
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    });
+  });
+
+  initColumnPopup();
+
+  var centralFilterForm = document.getElementById('centralFilterForm');
+  var locationCodeInput = document.getElementById('locationCodeInput');
+  if (centralFilterForm && locationCodeInput) {
+    centralFilterForm.addEventListener('submit', function (e) {
+      var v = (locationCodeInput.value || '').trim();
+      if (v.indexOf(' - ') >= 0) {
+        locationCodeInput.value = v.split(' - ')[0].trim();
+      }
+    });
+  }
+})();
+</script>
+<script>
+(function () {
+  function initSortableTable(tableId, bodyId) {
+    var table = document.getElementById(tableId);
+    var body = document.getElementById(bodyId);
+    if (!table || !body) return;
+    var headers = Array.prototype.slice.call(table.querySelectorAll('thead th.sortable'));
+    if (!headers.length) return;
+    var sortState = { index: -1, dir: 'asc' };
+    var numericIdx = {};
+    headers.forEach(function (h, i) { if (h.classList.contains('num')) numericIdx[i] = true; });
+
+    function getCellText(row, idx) {
+      var cell = row.children[idx];
+      return cell ? (cell.textContent || '').trim() : '';
+    }
+    function compareRows(a, b, idx, dir) {
+      var av = getCellText(a, idx);
+      var bv = getCellText(b, idx);
+      if (numericIdx[idx]) {
+        var an = parseFloat(av.replace(/,/g, '')); an = isNaN(an) ? 0 : an;
+        var bn = parseFloat(bv.replace(/,/g, '')); bn = isNaN(bn) ? 0 : bn;
+        return dir === 'asc' ? (an - bn) : (bn - an);
+      }
+      av = av.toLowerCase(); bv = bv.toLowerCase();
+      if (av < bv) return dir === 'asc' ? -1 : 1;
+      if (av > bv) return dir === 'asc' ? 1 : -1;
+      return 0;
+    }
+    headers.forEach(function (h, idx) {
+      h.addEventListener('click', function () {
+        var rows = Array.prototype.slice.call(body.querySelectorAll('tr')).filter(function (r) { return !r.querySelector('.empty'); });
+        if (!rows.length) return;
+        if (sortState.index === idx) sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc';
+        else { sortState.index = idx; sortState.dir = 'asc'; }
+        headers.forEach(function (x) { x.classList.remove('sort-asc', 'sort-desc'); });
+        h.classList.add(sortState.dir === 'asc' ? 'sort-asc' : 'sort-desc');
+        rows.sort(function (r1, r2) { return compareRows(r1, r2, idx, sortState.dir); });
+        rows.forEach(function (r) { body.appendChild(r); });
+      });
+    });
+  }
+
+  initSortableTable('microTable', 'microBody');
+  initSortableTable('itemTable', 'itemBody');
+  initSortableTable('locationItemTable', 'locationItemBody');
+  window.initSortableTable = initSortableTable;
+})();
+</script>
+<script>
+(function () {
+  var colorButtons = Array.prototype.slice.call(document.querySelectorAll('[data-color-filter]'));
+  var microLinks = Array.prototype.slice.call(document.querySelectorAll('.js-micro-filter'));
+  var microRows = Array.prototype.slice.call(document.querySelectorAll('.js-micro-row'));
+  var itemRows = Array.prototype.slice.call(document.querySelectorAll('.js-item-row'));
+  var activeMicroChip = document.getElementById('activeMicroChip');
+  var activeMicroText = document.getElementById('activeMicroText');
+  var clearMicroFilterBtn = document.getElementById('clearMicroFilterBtn');
+  var activeItemChip = document.getElementById('activeItemChip');
+  var activeItemText = document.getElementById('activeItemText');
+  var clearItemFilterBtn = document.getElementById('clearItemFilterBtn');
+  var selectedMicro = '';
+  var selectedItemKey = '';
+  var selectedColor = 'all';
+  if (!colorButtons.length) return;
+
+  function matchesColorClass(row, color) {
+    if (color === 'red') return row.classList.contains('row-red');
+    if (color === 'yellow') return row.classList.contains('row-yellow');
+    if (color === 'green') return row.classList.contains('row-green');
+    return true;
+  }
+
+  function applyCombinedFilters() {
+    ['microBody', 'itemBody', 'locationItemBody'].forEach(function (bodyId) {
+      var tbody = document.getElementById(bodyId);
+      if (!tbody) return;
+      Array.prototype.slice.call(tbody.querySelectorAll('tr')).forEach(function (row) {
+        if (row.querySelector('.empty')) {
+          row.style.display = (selectedColor === 'all' && !selectedMicro && !selectedItemKey) ? '' : 'none';
+          return;
+        }
+        var okColor = matchesColorClass(row, selectedColor);
+        var okMicro = true;
+        var okItem = true;
+        if (selectedMicro && (bodyId === 'itemBody' || bodyId === 'locationItemBody')) {
+          okMicro = ((row.getAttribute('data-micro') || '').trim().toLowerCase() === selectedMicro.toLowerCase());
+        }
+        if (selectedItemKey && bodyId === 'locationItemBody') {
+          okItem = ((row.getAttribute('data-itemkey') || '').trim().toLowerCase() === selectedItemKey.toLowerCase());
+        }
+        row.style.display = (okColor && okMicro && okItem) ? '' : 'none';
+      });
+    });
+    colorButtons.forEach(function (btn) {
+      btn.classList.toggle('active', (btn.getAttribute('data-color-filter') || 'all') === selectedColor);
+    });
+    if (activeMicroChip && activeMicroText) {
+      if (selectedMicro) {
+        activeMicroText.textContent = selectedMicro;
+        activeMicroChip.style.display = 'inline-flex';
+      } else {
+        activeMicroChip.style.display = 'none';
+      }
+    }
+    if (activeItemChip && activeItemText) {
+      if (selectedItemKey) {
+        var p = selectedItemKey.split('||');
+        activeItemText.textContent = ((p[0] || '').trim() + ' - ' + (p[1] || '').trim()).trim();
+        activeItemChip.style.display = 'inline-flex';
+      } else {
+        activeItemChip.style.display = 'none';
+      }
+    }
+  }
+
+  colorButtons.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      selectedColor = (btn.getAttribute('data-color-filter') || 'all').toLowerCase();
+      applyCombinedFilters();
+    });
+  });
+
+  document.body.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('a.js-micro-filter')) {
+      e.preventDefault();
+    }
+    var microRow = e.target.closest ? e.target.closest('.js-micro-row') : null;
+    if (microRow && !e.target.closest('a.js-micro-filter')) {
+      selectedMicro = (microRow.getAttribute('data-micro') || '').trim();
+      applyCombinedFilters();
+      return;
+    }
+    var microLink = e.target.closest ? e.target.closest('a.js-micro-filter') : null;
+    if (microLink) {
+      selectedMicro = (microLink.getAttribute('data-micro') || '').trim();
+      applyCombinedFilters();
+      return;
+    }
+    var itemRow = e.target.closest ? e.target.closest('.js-item-row') : null;
+    if (itemRow) {
+      selectedItemKey = (itemRow.getAttribute('data-itemkey') || '').trim();
+      applyCombinedFilters();
+    }
+  });
+
+  if (clearMicroFilterBtn) {
+    clearMicroFilterBtn.addEventListener('click', function () {
+      selectedMicro = '';
+      applyCombinedFilters();
+    });
+  }
+  if (clearItemFilterBtn) {
+    clearItemFilterBtn.addEventListener('click', function () {
+      selectedItemKey = '';
+      applyCombinedFilters();
+    });
+  }
+})();
+</script>
+{% endblock %}

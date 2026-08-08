@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+{% block title %}{% if customer %}{{ (customer.customercode or selected_customer_code or '')|e }} — {% endif %}Customer ledger{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .cl-wrap { max-width: 1200px; }
+  .cl-top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+  .cl-back { font-size: 13px; }
+  .cl-back a { color: #1a56a4; text-decoration: none; }
+  .cl-back a:hover { text-decoration: underline; }
+  .cl-title { font-size: 1.5rem; font-weight: 600; color: #0f172a; margin: 0 0 4px 0; }
+  .cl-sub { color: #64748b; font-size: 13px; margin: 0; }
+  .cl-card {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 18px; margin-bottom: 16px;
+  }
+  .cl-meta { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px 20px; font-size: 13px; }
+  .cl-meta dt { color: #94a3b8; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin: 0; }
+  .cl-meta dd { margin: 2px 0 0 0; font-weight: 600; color: #1e293b; }
+  .cl-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+  .cl-filters label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px; }
+  .cl-filters input[type="date"] { padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; }
+  .cl-filters .cl-cust-pick { display: flex; align-items: stretch; width: 100%; max-width: 520px; min-height: 40px; border: 1px solid #cbd5e1; border-radius: 10px; background: #f8fafc; overflow: hidden; }
+  .cl-filters .cl-cust-pick:focus-within { border-color: #1a56a4; box-shadow: 0 0 0 2px rgba(26, 86, 164, 0.12); background: #fff; }
+  .cl-filters .cl-cust-pick input[readonly] { flex: 1; min-width: 0; border: none; background: transparent; padding: 8px 10px; font-size: 14px; cursor: pointer; }
+  .cl-filters .cl-cust-pick .search-clear { position: static; transform: none; width: 40px; background: #f1f5f9; border: none; border-left: 1px solid #e2e8f0; }
+  .cl-filters .cl-cust-pick .search-picker { min-width: 44px; background: #1a56a4; color: #fff; border: none; border-left: 1px solid #e2e8f0; font-size: 16px; font-weight: 600; cursor: pointer; }
+  .cl-filters .cl-cust-pick .search-picker:hover { background: #144a8a; }
+  .cl-filters button[type="submit"] { background: #1a56a4; color: #fff; border: none; padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .cl-filters .cl-pdf-link {
+    display: inline-flex; align-items: center; padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    text-decoration: none; border: 1px solid #cbd5e1; background: #fff; color: #334155;
+  }
+  .cl-filters .cl-pdf-link--primary { background: #1a56a4; color: #fff; border-color: #1a56a4; }
+  .cl-filters .cl-pdf-link--primary:hover { background: #144a8a; color: #fff; }
+  .cl-filters .cl-pdf-label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px; }
+  .cl-filters .cl-pdf-note { font-size: 11px; color: #64748b; margin: 4px 0 0 0; max-width: 240px; }
+  .cl-filters button[type="submit"]:hover { background: #144a8a; }
+  .cl-err { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
+  .cl-hint { font-size: 12px; color: #64748b; margin: 0 0 8px 0; }
+  .cl-prompt { text-align: center; color: #64748b; padding: 28px 16px; font-size: 14px; }
+  #clLedgerTable { width: 100%; border-collapse: collapse; font-size: 13px; }
+  #clLedgerTable th, #clLedgerTable td { border: 1px solid #e2e8f0; padding: 8px 10px; }
+  #clLedgerTable thead th { background: #f1f5f9; font-weight: 600; text-align: left; color: #334155; }
+  #clLedgerTable td.num { text-align: right; font-family: ui-monospace, monospace; }
+  #clLedgerTable tbody tr:nth-child(even) { background: #fafbfc; }
+  .cl-sum-row { font-weight: 600; background: #eff6ff !important; }
+  .nexa-setup-list-page .page-po__topbar-actions .cl-pdf-link { margin-left: 8px; }
+</style>
+
+<div class="page-po nexa-list-page nexa-setup-list-page cl-wrap">
+  {% if customer and selected_customer_code %}
+  <section class="nexa-stat-grid" aria-label="Ledger totals">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-list-nested" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Lines</p>
+        <p class="nexa-stat-value">{{ "{:,}".format((ledger.lines or [])|length) }}</p>
+        <p class="nexa-stat-sub">In date range</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--cyan"><i class="bi bi-box-arrow-in-right" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Opening</p>
+        <p class="nexa-stat-value">{{ ledger.opening_balance|round(2) }}</p>
+        <p class="nexa-stat-sub">Dr − Cr basis</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-plus-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Debit</p>
+        <p class="nexa-stat-value">{{ ledger.total_debit|round(2) }}</p>
+        <p class="nexa-stat-sub">Period</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-dash-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Credit</p>
+        <p class="nexa-stat-value">{{ ledger.total_credit|round(2) }}</p>
+        <p class="nexa-stat-sub">Period</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-calculator" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Closing</p>
+        <p class="nexa-stat-value">{{ ledger.closing_balance|round(2) }}</p>
+        <p class="nexa-stat-sub">Dr − Cr</p>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  <div class="page-po__topbar">
+    <div>
+      <p class="cl-back" style="margin:0 0 6px;"><a href="{{ url_for('accounts.chart_of_accounts_list') }}">← Chart of accounts</a></p>
+      <h1 class="page-po__title">Customer ledger</h1>
+      <p class="page-po__muted">Asset GL lines with party <strong>CUSTOMER</strong> — receivables-style sub-ledger.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% if selected_customer_code %}
+      <a class="cl-pdf-link cl-pdf-link--primary" href="{{ url_for('accounts.customer_ledger_pdf', customer_code=selected_customer_code, date_from=date_from or none, date_to=date_to or none) }}" target="_blank" rel="noopener">PDF (A4)</a>
+      {% endif %}
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div class="cl-card">
+    <p class="cl-hint">The ledger includes only <strong>ASSET</strong> chart accounts with this customer as party. Use <strong>From / To</strong> to limit the period, or leave them blank to include all such lines. For a <strong>lifetime</strong> running balance, set <strong>From</strong> to an early date (e.g. 2000-01-01).</p>
+    <form method="get" action="{{ url_for('accounts.customer_ledger_page') }}" class="cl-filters nexa-list-filter-panel" id="clLedgerForm">
+      <div>
+        <label for="cl_customer_display">Customer</label>
+        <input type="hidden" name="customer_code" id="cl_customer_code" value="{{ (selected_customer_code or '')|e }}">
+        <span class="search-field search-field--popup cl-cust-pick" style="width:100%;max-width:520px;">
+          <input type="text" id="cl_customer_display" readonly placeholder="Click to search and select customer…"
+            value="{% if customer and selected_customer_code %}{{ (customer.customercode or selected_customer_code or '')|e }} — {{ (customer.customername or '')|e }}{% endif %}">
+          <button type="button" class="search-clear" id="clCustomerClear" title="Clear" aria-label="Clear" {% if not selected_customer_code %}style="display:none"{% endif %}>×</button>
+          <button type="button" class="search-picker" id="clCustomerPickerOpen" aria-label="Open customer list">▾</button>
+        </span>
+      </div>
+      <div>
+        <label for="cl_date_from">From</label>
+        <input type="date" id="cl_date_from" name="date_from" value="{{ date_from or '' }}">
+      </div>
+      <div>
+        <label for="cl_date_to">To</label>
+        <input type="date" id="cl_date_to" name="date_to" value="{{ date_to or '' }}">
+      </div>
+      <div>
+        <button type="submit">Show ledger</button>
+      </div>
+    </form>
+  </div>
+
+  {% if customer and selected_customer_code %}
+  <div class="cl-card">
+    <dl class="cl-meta">
+      <div><dt>Code</dt><dd>{{ (customer.customercode or selected_customer_code or '')|e }}</dd></div>
+      <div><dt>Name</dt><dd>{{ (customer.customername or '—')|e }}</dd></div>
+      <div><dt>Receivable A/c</dt><dd>{{ (customer.receivableaccount or '—')|e }}</dd></div>
+      <div><dt>GL filter</dt><dd>Asset only (receivables / AR-style)</dd></div>
+    </dl>
+  </div>
+  {% endif %}
+
+  {% if ledger_error %}
+  <div class="cl-err">Could not load ledger: {{ ledger_error|e }}</div>
+  {% endif %}
+
+  {% if customer and selected_customer_code %}
+  <div class="table-wrap co-table-wrap" style="overflow-x:auto;">
+    <table id="clLedgerTable" class="co-table">
+      <thead>
+        <tr>
+          <th style="text-align:center;width:52px;">Sl.No</th>
+          <th>Date</th>
+          <th>Voucher</th>
+          <th>Reference</th>
+          <th>GL account</th>
+          <th>Narration</th>
+          <th>Source</th>
+          <th>Remarks (line)</th>
+          <th class="num">Debit</th>
+          <th class="num">Credit</th>
+          <th class="num">Balance (Dr−Cr)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="cl-op-row">
+          <td>—</td>
+          <td colspan="7">Opening balance (before {{ (date_from or '')|e }})</td>
+          <td class="num">—</td>
+          <td class="num">—</td>
+          <td class="num">{{ ledger.opening_balance|round(2) }}</td>
+        </tr>
+        {% for row in ledger.lines %}
+        <tr>
+          <td style="text-align:center;">{{ loop.index }}</td>
+          <td>{{ (row.voucher_date or '')|e }}</td>
+          <td>{{ (row.voucher_no or '')|e }}</td>
+          <td>{{ (row.reference_no or '')|e }}</td>
+          <td>{{ (row.account_code or '')|e }}</td>
+          <td>{{ (row.narration or '')|e }}</td>
+          <td>{{ (row.source or '')|e }}</td>
+          <td>{{ (row.remarks or '')|e }}</td>
+          <td class="num">{% if row.debit %}{{ row.debit|round(2) }}{% else %}—{% endif %}</td>
+          <td class="num">{% if row.credit %}{{ row.credit|round(2) }}{% else %}—{% endif %}</td>
+          <td class="num">{{ row.running_balance|round(2) }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="11" style="text-align:center;color:#94a3b8;padding:24px;">No customer-tagged GL lines in this range. Post transactions with <strong>party = CUSTOMER</strong> and this customer code, or adjust dates.</td>
+        </tr>
+        {% endfor %}
+        {% if ledger.lines %}
+        <tr class="cl-sum-row">
+          <td colspan="8">Period totals / closing</td>
+          <td class="num">{{ ledger.total_debit|round(2) }}</td>
+          <td class="num">{{ ledger.total_credit|round(2) }}</td>
+          <td class="num">{{ ledger.closing_balance|round(2) }}</td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="cl-card cl-prompt">Select a <strong>customer</strong> and date range above, then click <strong>Show ledger</strong>.</div>
+  {% endif %}
+</div>
+
+<div class="modal hidden" id="clCustomerPickerModal" role="dialog" aria-modal="true" aria-labelledby="clCustPickerTitle">
+  <div class="modal__overlay" data-close="clCustomerPickerModal"></div>
+  <div class="modal__content" style="width: min(700px, 95vw); max-height: 85vh;">
+    <div class="modal__header">
+      <h3 id="clCustPickerTitle">Select customer</h3>
+      <button type="button" class="modal__close" data-close="clCustomerPickerModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__search" style="margin-bottom: 10px;">
+        <div class="search-field" style="width: 100%;">
+          <input type="text" id="clCustPickerSearch" placeholder="Search by code or name…" autocomplete="off" style="width: 100%;">
+          <button type="button" class="search-clear" id="clCustPickerSearchClear" style="display: none;">×</button>
+        </div>
+      </div>
+      <div class="scroll-table modal__table" style="max-height: 52vh;">
+        <table class="table" id="clCustPickerTable" style="width: 100%;">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Receivable A/c</th>
+            </tr>
+          </thead>
+          <tbody id="clCustPickerBody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var CL_CUSTOMERS = {{ all_customers|tojson }};
+  if (!Array.isArray(CL_CUSTOMERS)) CL_CUSTOMERS = [];
+  var clModalList = [];
+
+  function esc(s) {
+    if (s == null) return '';
+    var d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+  }
+
+  function openClCustPicker() {
+    var m = document.getElementById('clCustomerPickerModal');
+    if (!m) return;
+    clModalList = CL_CUSTOMERS.slice();
+    renderClCustPickerRows(clModalList);
+    var s = document.getElementById('clCustPickerSearch');
+    if (s) { s.value = ''; s.focus(); }
+    var c = document.getElementById('clCustPickerSearchClear');
+    if (c) c.style.display = 'none';
+    m.classList.remove('hidden');
+  }
+
+  function closeClCustPicker() {
+    var m = document.getElementById('clCustomerPickerModal');
+    if (m) m.classList.add('hidden');
+  }
+
+  function renderClCustPickerRows(list) {
+    var tbody = document.getElementById('clCustPickerBody');
+    if (!tbody) return;
+    tbody.innerHTML = (list || []).map(function(c) {
+      var code = c.customercode != null ? String(c.customercode) : '';
+      if (!code) return '';
+      var name = c.customername != null ? String(c.customername) : '';
+      var ra = c.receivableaccount != null ? String(c.receivableaccount) : '—';
+      return '<tr data-code="' + esc(code).replace(/"/g, '&quot;') + '" style="cursor:pointer;">' +
+        '<td><strong>' + esc(code) + '</strong></td><td>' + esc(name) + '</td><td>' + esc(ra) + '</td></tr>';
+    }).join('');
+  }
+
+  function filterClCustPickerRows(q) {
+    var t = (q || '').trim().toLowerCase();
+    if (!t) { renderClCustPickerRows(clModalList); return; }
+    var f = (clModalList || []).filter(function(c) {
+      return (String(c.customercode != null ? c.customercode : '').toLowerCase().indexOf(t) !== -1) ||
+        (String(c.customername || '').toLowerCase().indexOf(t) !== -1);
+    });
+    renderClCustPickerRows(f);
+  }
+
+  document.getElementById('clCustomerPickerOpen') && document.getElementById('clCustomerPickerOpen').addEventListener('click', function(e) { e.preventDefault(); openClCustPicker(); });
+  document.getElementById('cl_customer_display') && document.getElementById('cl_customer_display').addEventListener('click', function(e) { e.preventDefault(); openClCustPicker(); });
+  var clModal = document.getElementById('clCustomerPickerModal');
+  if (clModal) {
+    clModal.addEventListener('click', function(e) {
+      if (e.target.classList.contains('modal__overlay') || (e.target.dataset && e.target.dataset.close === 'clCustomerPickerModal') || e.target.classList.contains('modal__close')) {
+        closeClCustPicker();
+      }
+    });
+  }
+  var clBody = document.getElementById('clCustPickerBody');
+  if (clBody) {
+    clBody.addEventListener('click', function(e) {
+      var tr = e.target.closest('tr');
+      if (!tr) return;
+      var code = tr.getAttribute('data-code');
+      if (code) {
+        var rec = (CL_CUSTOMERS || []).filter(function(x) { return String(x && x.customercode) === code; })[0];
+        var label = rec ? (String(rec.customercode != null ? rec.customercode : '') + ' — ' + String(rec.customername != null ? rec.customername : '')) : (code + ' — ');
+        var hid = document.getElementById('cl_customer_code');
+        var disp = document.getElementById('cl_customer_display');
+        if (hid) hid.value = code;
+        if (disp) disp.value = label;
+        var clr = document.getElementById('clCustomerClear');
+        if (clr) clr.style.display = 'block';
+      }
+      closeClCustPicker();
+    });
+  }
+  var clSrch = document.getElementById('clCustPickerSearch');
+  var clSrchClr = document.getElementById('clCustPickerSearchClear');
+  if (clSrch) {
+    clSrch.addEventListener('input', function() {
+      filterClCustPickerRows(clSrch.value);
+      if (clSrchClr) clSrchClr.style.display = clSrch.value ? 'block' : 'none';
+    });
+  }
+  if (clSrchClr) {
+    clSrchClr.addEventListener('click', function() {
+      if (clSrch) { clSrch.value = ''; clSrch.focus(); }
+      clSrchClr.style.display = 'none';
+      filterClCustPickerRows('');
+    });
+  }
+  var clClear = document.getElementById('clCustomerClear');
+  if (clClear) {
+    clClear.addEventListener('click', function(e) {
+      e.preventDefault();
+      var hid = document.getElementById('cl_customer_code');
+      var disp = document.getElementById('cl_customer_display');
+      if (hid) hid.value = '';
+      if (disp) disp.value = '';
+      clClear.style.display = 'none';
+    });
+  }
+})();
+</script>
+{% endblock %}

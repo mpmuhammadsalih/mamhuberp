@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/integrity_dashboard.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="aid-page" id="integrityDashboardApp"
+     data-api="{{ api_data_url }}"
+     data-journal="{{ api_journal_url }}"
+     data-movement="{{ api_item_movement_url }}"
+     data-stock-item="{{ api_stock_item_url }}"
+     data-stock-gl-drill="{{ api_stock_gl_drill_url }}"
+     data-export-excel="{{ export_excel_url }}"
+     data-export-pdf="{{ export_pdf_url }}">
+
+  <header class="aid-header">
+    <div>
+      <h1 class="aid-title">Accounting &amp; Inventory Integrity Dashboard</h1>
+      <p class="aid-sub">
+        Verify GL postings, inventory valuation, AR/AP reconciliation, tax, cash/bank, and master account mappings
+        before month-end close. Green = OK, Yellow = Warning, Red = Critical.
+      </p>
+    </div>
+    <div class="aid-actions">
+      <button type="button" class="aid-btn" id="aidBtnPrint">Print</button>
+      <button type="button" class="aid-btn" id="aidBtnEmail">Email Report</button>
+      <a class="aid-btn" id="aidBtnExcel" href="{{ export_excel_url }}">Export Excel</a>
+      <a class="aid-btn" id="aidBtnPdf" href="{{ export_pdf_url }}">Export PDF</a>
+      <button type="button" class="aid-btn" id="aidBtnRefresh">Refresh</button>
+      <button type="button" class="aid-btn aid-btn--primary" id="aidBtnRun">Run Full Audit</button>
+      <button type="button" class="aid-btn aid-btn--ai" id="aidBtnAi">Generate AI Analysis</button>
+      <span class="aid-status" id="aidStatus"></span>
+    </div>
+  </header>
+
+  <div id="aidError" class="aid-error hidden"></div>
+
+  <section class="aid-kpi-grid" id="aidKpiGrid" aria-label="Audit summary">
+    <div class="aid-kpi" data-kpi="total_transactions_checked" data-kpi-drill="transactions" title="Click for posting verification details"><div class="aid-kpi__label">Transactions Checked</div><div class="aid-kpi__val">—</div></div>
+    <div class="aid-kpi aid-kpi--ok" data-kpi="successful_postings" data-kpi-drill="successful" title="Click for successful posting details"><div class="aid-kpi__label">Successful Postings</div><div class="aid-kpi__val">—</div></div>
+    <div class="aid-kpi aid-kpi--err" data-kpi="failed_postings" data-kpi-drill="failed" title="Click for failed posting details"><div class="aid-kpi__label">Failed Postings</div><div class="aid-kpi__val">—</div></div>
+    <div class="aid-kpi aid-kpi--warn" data-kpi="inventory_variance" data-kpi-drill="inventory" title="Click for inventory variance details"><div class="aid-kpi__label">Inventory Variance</div><div class="aid-kpi__val">—</div></div>
+    <div class="aid-kpi aid-kpi--warn" data-kpi="ar_variance" data-kpi-drill="ar" title="Click for AR variance details"><div class="aid-kpi__label">AR Variance</div><div class="aid-kpi__val">—</div></div>
+    <div class="aid-kpi aid-kpi--warn" data-kpi="ap_variance" data-kpi-drill="ap" title="Click for AP variance details"><div class="aid-kpi__label">AP Variance</div><div class="aid-kpi__val">—</div></div>
+    <div class="aid-kpi aid-kpi--err" data-kpi="unbalanced_journals" data-kpi-drill="unbalanced" title="Click for unbalanced journal details"><div class="aid-kpi__label">Unbalanced Journals</div><div class="aid-kpi__val">—</div></div>
+    <div class="aid-kpi aid-kpi--warn" data-kpi="missing_account_mappings" data-kpi-drill="mappings" title="Click for missing mapping details"><div class="aid-kpi__label">Missing Mappings</div><div class="aid-kpi__val">—</div></div>
+    <div class="aid-kpi aid-kpi--err" data-kpi="negative_stock_count" data-kpi-drill="negative" title="Click for negative stock details"><div class="aid-kpi__label">Negative Stock</div><div class="aid-kpi__val">—</div></div>
+    <div class="aid-kpi aid-kpi--err" data-kpi="critical_errors" data-kpi-drill="critical" title="Click for critical error breakdown"><div class="aid-kpi__label">Critical Errors</div><div class="aid-kpi__val">—</div></div>
+  </section>
+
+  <div class="aid-layout">
+    <aside class="aid-panel aid-filters-col">
+      <div class="aid-panel__head">Audit Filters</div>
+      <div class="aid-panel__body aid-filter">
+        <form id="aidFilterForm">
+          <label>Company</label>
+          <select name="company" id="aidCompany">
+            {% for c in options.companies or [] %}
+            <option value="{{ c.code }}" {% if filters.company == c.code %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+          <label>Branch</label>
+          <select name="branch" id="aidBranch">
+            {% for b in options.branches or [] %}
+            <option value="{{ b.code }}" {% if filters.branch|string == b.code|string %}selected{% endif %}>{{ b.code }} {{ b.name }}</option>
+            {% endfor %}
+          </select>
+          <label>Warehouse</label>
+          <select name="warehouse_id" id="aidWarehouse">
+            <option value="">All</option>
+            {% for w in options.warehouses or [] %}
+            <option value="{{ w.warehouse_id or w.WAREHOUSE_ID }}" {% if filters.warehouse_id|string == (w.warehouse_id or '')|string %}selected{% endif %}>
+              {{ w.warehouse_code or w.WAREHOUSE_CODE }} {{ w.warehouse_name or '' }}
+            </option>
+            {% endfor %}
+          </select>
+          <label>Financial Year</label>
+          <select name="financial_year" id="aidFy">
+            {% for y in options.financial_years or [] %}
+            <option value="{{ y.id }}" {% if filters.financial_year == y.id %}selected{% endif %}>{{ y.label }}</option>
+            {% endfor %}
+          </select>
+          <label>From Date</label>
+          <input type="date" name="date_from" value="{{ filters.date_from or '' }}" />
+          <label>To Date</label>
+          <input type="date" name="date_to" value="{{ filters.date_to or '' }}" />
+          <label>Module</label>
+          <select name="module" id="aidModule">
+            {% for m in options.modules or [] %}
+            <option value="{{ m.id }}" {% if filters.module == m.id %}selected{% endif %}>{{ m.label }}</option>
+            {% endfor %}
+          </select>
+          <label>Account Code</label>
+          <input type="text" name="account_code" value="{{ filters.account_code or '' }}" placeholder="GL account" />
+          <label>Item Code</label>
+          <input type="text" name="item_code" value="{{ filters.item_code or '' }}" />
+          <label>Customer Code</label>
+          <input type="text" name="customer_code" value="{{ filters.customer_code or '' }}" />
+          <label>Supplier Code</label>
+          <input type="text" name="supplier_code" value="{{ filters.supplier_code or '' }}" />
+        </form>
+      </div>
+    </aside>
+
+    <main class="aid-panel">
+      <div class="aid-panel__head">Audit Results &amp; Reconciliation</div>
+      <div class="aid-section-tabs" id="aidSectionTabs" role="tablist"></div>
+      <div id="aidSectionsHost">
+        <div id="aidLoading" class="aid-loading">Run full audit to load results…</div>
+      </div>
+    </main>
+
+    <aside class="aid-panel aid-insights-col">
+      <div class="aid-panel__head">AI Audit Insights &amp; Alerts</div>
+      <div class="aid-panel__body" id="aidInsights">
+        <p class="aid-loading">Insights appear after audit run.</p>
+      </div>
+    </aside>
+  </div>
+
+  <section class="aid-panel aid-detail-panel">
+    <div class="aid-panel__head">Detailed Transaction Analysis</div>
+    <div class="aid-panel__body" id="aidDetailPanel">
+      <p class="aid-muted" style="font-size:0.75rem;color:#6c757d;">Click any KPI card above for details, or use section tabs below. Click journal/item rows for drill-down.</p>
+    </div>
+  </section>
+</div>
+
+<div class="aid-modal hidden" id="aidDrillModal" role="dialog" aria-modal="true">
+  <div class="aid-modal__backdrop" data-close="aidDrillModal"></div>
+  <div class="aid-modal__dialog">
+    <div class="aid-modal__head">
+      <h3 id="aidDrillTitle" style="margin:0;font-size:1rem;">Details</h3>
+      <button type="button" class="aid-btn" data-close="aidDrillModal">×</button>
+    </div>
+    <div class="aid-modal__body" id="aidDrillBody"></div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/integrity_dashboard.js') }}?v=10"></script>
+{% endblock %}

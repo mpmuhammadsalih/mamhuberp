@@ -1,0 +1,2857 @@
+{% extends "base.html" %}
+{% block content %}
+{% set accounts_locked = (item_request_mode | default(false)) or not (is_admin_user | default(false)) %}
+<style>
+  .itemmaster-container.im-accounts-locked #tab-accounts .search-picker,
+  .itemmaster-container.im-accounts-locked #tab-accounts .search-clear { display: none !important; }
+  .itemmaster-container.im-accounts-locked #tab-accounts input[type="text"] { cursor: not-allowed; }
+  body { overflow-x: auto; min-height: 100vh; color: #212529; }
+  .im-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px 16px;
+    --im-toolbar-bg: linear-gradient(180deg, #f0f7fb 0%, #e3eef8 100%);
+    --im-toolbar-border: rgba(13, 110, 253, 0.14);
+    --im-field-fill: rgba(255, 255, 255, 0.52);
+    --im-field-fill-strong: #eaf2fa;
+    --im-field-readonly: rgba(226, 236, 247, 0.92);
+    --im-table-surface: rgba(255, 255, 255, 0.55);
+  }
+  .im-topbar { display: flex; flex-direction: column; align-items: stretch; gap: 16px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #dee2e6; }
+  .im-topbar-main { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; }
+  .im-topbar h1 { margin: 0; font-size: 17px; font-weight: 400; color: #212529; line-height: 1.3; }
+  .im-topbar h1 .im-ref { font-weight: 600; }
+  .im-topbar .im-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .im-btn-save { background: #28a745 !important; border: none; color: #fff !important; padding: 8px 20px; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .im-ai-toggle { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid rgba(13, 110, 253, 0.18); border-radius: 16px; background: var(--im-field-fill-strong); color: #495057; font-size: 12px; font-weight: 600; }
+  .im-ai-toggle .switch { position: relative; display: inline-block; width: 36px; height: 20px; }
+  .im-ai-toggle .switch input { opacity: 0; width: 0; height: 0; }
+  .im-ai-toggle .slider { position: absolute; inset: 0; cursor: pointer; background: #ced4da; transition: .2s; border-radius: 20px; }
+  .im-ai-toggle .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background: #fff; transition: .2s; border-radius: 50%; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+  .im-ai-toggle .switch input:checked + .slider { background: #28a745; }
+  .im-ai-toggle .switch input:checked + .slider:before { transform: translateX(16px); }
+  .im-link { color: #007bff; text-decoration: none; font-size: 13px; cursor: pointer; background: none; border: none; padding: 0; }
+  .im-link:hover { text-decoration: underline; }
+  .im-btn-secondary { background: var(--im-field-fill-strong); border: 1px solid rgba(13, 110, 253, 0.16); color: #495057; padding: 8px 16px; border-radius: 4px; font-size: 13px; cursor: pointer; }
+  .im-btn-secondary:hover { background: #dfe8f3; }
+  .status-badge { padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 10px; }
+  .status-badge--active { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+  .status-badge--locked { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+  .status-badge--new { background: #cce5ff; color: #004085; border: 1px solid #b8daff; }
+  .itemmaster-container .form-section { background: transparent; padding: 16px 0; margin-bottom: 0; border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; }
+  .itemmaster-container .form-group { display: flex; align-items: center; gap: 10px; }
+  .itemmaster-container .form-group label { color: #495057; font-weight: 400; font-size: 13px; margin-bottom: 0; display: block; min-width: 150px; }
+  .itemmaster-container .form-group > input,
+  .itemmaster-container .form-group > textarea,
+  .itemmaster-container .form-group > .search-field { flex: 1; min-width: 0; }
+  .itemmaster-container .field-hint { margin-top: 2px; color: #6c757d; font-size: 11px; line-height: 1.25; }
+  .itemmaster-container #tab-accounts .form-group { align-items: flex-start; flex-wrap: wrap; }
+  .itemmaster-container #tab-accounts .form-group .field-hint { flex: 0 0 100%; margin-left: 160px; }
+  .itemmaster-container .form-group.form-group--full { align-items: flex-start; }
+  .itemmaster-container .form-group.form-group--full > textarea { min-height: 3em; }
+  .im-general-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 200px;
+    column-gap: 20px;
+    align-items: start;
+  }
+  .im-general-layout__main {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+  }
+  .im-general-layout__aside {
+    grid-column: 2;
+    grid-row: 1;
+    position: sticky;
+    top: 8px;
+    align-self: start;
+    justify-self: stretch;
+    width: 100%;
+  }
+  .im-general-top-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 18px;
+    row-gap: 4px;
+    align-items: start;
+  }
+  .im-top-left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+  .im-col-right {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+  .im-general-top-grid .im-field-arabic {
+    max-width: none;
+  }
+  .im-field-arabic label {
+    font-size: 11px;
+  }
+  .im-field-arabic input {
+    font-size: 12px;
+    line-height: 1.2;
+  }
+  .im-general-body {
+    display: block;
+  }
+  .im-general-body__fields {
+    min-width: 0;
+  }
+  .im-general-body__fields > .form-group.im-desc-field {
+    grid-column: 1 / -1;
+  }
+  .im-item-image-aside {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-sizing: border-box;
+  }
+  .im-item-image-preview {
+    width: 100%;
+    height: 176px;
+    flex: 0 0 176px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+  .im-item-image-aside .im-item-image-preview {
+    width: 100%;
+    height: 176px;
+    flex: 0 0 176px;
+    min-height: 176px;
+    max-height: 176px;
+    aspect-ratio: auto;
+  }
+  .im-item-image-preview img {
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  .im-item-image-preview #itemImagePlaceholder {
+    font-size: 11px;
+    color: #94a3b8;
+    text-align: center;
+    padding: 8px;
+  }
+  .im-item-image-file {
+    width: 100%;
+    font-size: 11px;
+  }
+  .im-item-image-hint {
+    margin: 0;
+    font-size: 10px;
+    color: #64748b;
+    line-height: 1.35;
+  }
+  .im-item-image-remove-btn {
+    align-self: flex-start;
+    margin: 0;
+    padding: 5px 10px;
+    border: 1px solid #fca5a5;
+    border-radius: 4px;
+    background: #fff;
+    color: #b91c1c;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .im-item-image-remove-btn:hover {
+    background: #fef2f2;
+  }
+  .im-item-image-remove-btn[hidden] {
+    display: none !important;
+  }
+  @media (max-width: 900px) {
+    .im-general-layout {
+      grid-template-columns: 1fr;
+    }
+    .im-general-layout__main {
+      grid-column: 1;
+    }
+    .im-general-layout__aside {
+      position: static;
+      grid-column: 1;
+      order: -1;
+      max-width: 220px;
+      margin-left: auto;
+      margin-bottom: 8px;
+    }
+    .im-general-top-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  .itemmaster-container .form-group .checkbox-label { min-width: auto; display: inline-flex; align-items: center; gap: 8px; }
+  .itemmaster-container .input, .itemmaster-container input[type="text"], .itemmaster-container input[type="number"], .itemmaster-container textarea { border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; padding: 2px 0; font-size: 13px; line-height: 1.25; background: var(--im-field-fill); }
+  .itemmaster-container .input:focus, .itemmaster-container input:focus, .itemmaster-container textarea:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .itemmaster-container .input-readonly { background: var(--im-field-readonly); color: #6c757d; }
+  .itemmaster-tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid #dee2e6; }
+  .itemmaster-tabs .tab { padding: 10px 16px; font-size: 13px; font-weight: 500; color: #495057; background: transparent; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
+  .itemmaster-tabs .tab:hover { color: #007bff; }
+  .itemmaster-tabs .tab.tab--active { color: #007bff; border-bottom-color: #007bff; }
+  .search-field { border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; display: inline-flex; align-items: center; background: var(--im-field-fill); }
+  .search-field:focus-within { border-bottom-color: var(--nexa-focus-color); }
+  .search-field .search-picker { background: transparent; border: none; color: #007bff; cursor: pointer; padding: 4px 8px; }
+  .scroll-table { border: 1px solid #dee2e6; border-radius: 4px; background: var(--im-table-surface); }
+  .itemmaster-container .table thead { background: var(--im-field-fill-strong) !important; }
+  .itemmaster-container .table thead th { background: var(--im-field-fill-strong) !important; color: #495057 !important; padding: 4px 10px; border-bottom: 1px solid #dee2e6; font-weight: 600; font-size: 12px; line-height: 1.25; }
+  .itemmaster-container .table td { padding: 4px 10px; font-size: 13px; border-bottom: 1px solid #dee2e6; line-height: 1.25; }
+  .itemmaster-container .table tbody tr:hover { background: #f8f9fa !important; }
+  .im-ai-explain { margin-top: 8px; border: 1px solid #dbe6ff; background: #f7faff; border-radius: 6px; padding: 6px 10px; }
+  /* Shown only when AI Mode is ON (see itemmaster.js: .im-ai-explain--active) */
+  #aiExplainSection.im-ai-explain { display: none !important; }
+  #aiExplainSection.im-ai-explain.im-ai-explain--active { display: block !important; }
+  .im-ai-explain__title { font-size: 12px; font-weight: 700; color: #2b4c7e; margin-bottom: 4px; }
+  .im-ai-explain__body { font-size: 12px; color: #4b5563; line-height: 1.4; }
+  .im-ai-explain__arabic { margin-top: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+  .im-ai-explain__arabic b { color: #1f2937; }
+  .im-ai-explain__arabic span { color: #0f5132; direction: rtl; unicode-bidi: plaintext; }
+  .im-ai-explain__actions { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .im-ai-explain__table-wrap { margin-top: 8px; border: 1px solid #e2e8f0; border-radius: 4px; overflow: hidden; display: none; }
+  .im-ai-explain__table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+  .im-ai-explain__table td { border-bottom: 1px solid #eef2f7; border-right: 1px solid #eef2f7; padding: 6px 8px; text-align: left; vertical-align: top; width: 10%; }
+  .im-ai-explain__table td:last-child { border-right: none; }
+  .im-ai-explain__table tr:last-child td { border-bottom: none; }
+  .im-ai-cell__label { display: block; font-weight: 600; color: #334155; margin-bottom: 2px; }
+  .im-ai-cell__value { display: block; color: #334155; word-break: break-word; }
+  .im-ai-explain--error { border-color: #f1c0c7; background: #fff5f6; }
+  .im-ai-explain--error .im-ai-explain__title { color: #842029; }
+  .im-ai-explain--error .im-ai-explain__body { color: #842029; }
+  #imCostingSection .form-group.im-costing-trigger { cursor: pointer; }
+  #imCostingSection .form-group.im-costing-trigger .input-readonly { cursor: pointer; }
+  #imCostingSection .im-costing-detail-btn {
+    flex-shrink: 0;
+    margin-left: 6px;
+    padding: 2px 0;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  #itemCostingModal .modal__body.im-costing-modal-body {
+    display: grid !important;
+    grid-template-columns: minmax(300px, 1fr) minmax(340px, 1.15fr);
+    gap: 14px;
+    align-items: stretch;
+    padding: 14px 16px 16px;
+    max-height: min(72vh, 520px);
+    overflow: hidden;
+  }
+  #itemCostingModal.im-costing-modal--single .im-costing-modal-body {
+    grid-template-columns: 1fr !important;
+    max-height: none;
+    overflow: visible;
+  }
+  @media (max-width: 800px) {
+    #itemCostingModal .modal__body.im-costing-modal-body {
+      grid-template-columns: 1fr !important;
+      max-height: none;
+      overflow: visible;
+    }
+  }
+  .im-costing-modal-col {
+    min-width: 0;
+    min-height: 200px;
+    border: 1px solid #94a3b8;
+    border-radius: 6px;
+    padding: 12px 14px;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .im-costing-modal-col__title {
+    margin: 0 0 8px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #64748b;
+  }
+  .im-costing-detail-formula {
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #334155;
+    font-family: ui-monospace, monospace;
+    line-height: 1.5;
+    word-break: break-word;
+  }
+  .im-costing-detail-steps {
+    margin: 0;
+    padding: 0 0 0 1.25rem;
+    font-size: 12px;
+    color: #334155;
+    line-height: 1.55;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 10px;
+  }
+  .im-costing-detail-steps li {
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .im-costing-detail-steps li:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+  .im-costing-detail-meta {
+    font-size: 12px;
+    color: #475569;
+    margin: 0 0 10px;
+    line-height: 1.45;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .im-costing-kv-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 12px;
+    font-size: 12px;
+    table-layout: fixed;
+  }
+  .im-costing-kv-table th,
+  .im-costing-kv-table td {
+    border: 1px solid #cbd5e1 !important;
+    padding: 8px 10px !important;
+    vertical-align: top;
+    line-height: 1.4;
+  }
+  .im-costing-kv-table th {
+    width: 42%;
+    background: #f1f5f9 !important;
+    font-weight: 600;
+    color: #334155 !important;
+    text-align: left;
+  }
+  .im-costing-kv-table td {
+    background: #fff !important;
+    color: #1e293b;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  #itemCostingModal .im-costing-modal-col--scroll {
+    flex: 1;
+    overflow: auto;
+    min-height: 0;
+  }
+  #itemCostingReceiptsWrap {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background: #fff;
+  }
+  #itemCostingReceiptsWrap .table {
+    border-collapse: collapse !important;
+    width: 100%;
+    margin: 0;
+    border: none;
+  }
+  #itemCostingReceiptsWrap .table th,
+  #itemCostingReceiptsWrap .table td {
+    border: 1px solid #94a3b8 !important;
+    padding: 8px 10px !important;
+    font-size: 12px;
+    line-height: 1.35;
+    background: #fff !important;
+    color: #1e293b !important;
+    white-space: nowrap;
+  }
+  #itemCostingReceiptsWrap .table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #e2e8f0 !important;
+    font-weight: 700;
+    color: #0f172a !important;
+    border-bottom: 2px solid #94a3b8 !important;
+  }
+  #itemCostingReceiptsWrap .table tbody tr:nth-child(even) td {
+    background: #f8fafc !important;
+  }
+  #itemCostingReceiptsWrap .table tbody tr:hover td {
+    background: #eff6ff !important;
+  }
+  #itemCostingReceiptsWrap .table tfoot td {
+    background: #e2e8f0 !important;
+    font-weight: 700 !important;
+    color: #0f172a !important;
+    border-top: 2px solid #64748b !important;
+  }
+  .itemmaster-view-only .search-picker,
+  .itemmaster-view-only .search-clear { display: none !important; }
+  .modal .table thead { background: #f8f9fa !important; }
+  .modal .table thead th { background: #f8f9fa !important; color: #495057 !important; padding: 8px 12px; border-bottom: 1px solid #dee2e6; font-weight: 600; }
+  .im-target-db-panel {
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    background: linear-gradient(180deg, var(--im-field-fill-strong) 0%, #e2ecf6 100%);
+    box-sizing: border-box;
+  }
+  .im-target-db-panel__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e9ecef;
+  }
+  .im-target-db-panel__title { display: block; font-size: 14px; font-weight: 600; color: #212529; }
+  .im-target-db-panel__actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .im-target-db-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 10px 14px;
+  }
+  .im-target-db-cell {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: var(--im-field-fill-strong);
+    font-size: 12px;
+    color: #495057;
+    cursor: pointer;
+    line-height: 1.35;
+    transition: border-color .12s ease, box-shadow .12s ease;
+  }
+  .im-target-db-cell:hover { border-color: #94a3b8; box-shadow: 0 1px 4px rgba(15, 23, 42, .07); }
+  .im-target-db-cell--linked { border-color: #badbcc; background: #eaf8ee; color: #0a3622; }
+  .im-target-db-cell input[type="checkbox"] { margin-top: 3px; flex-shrink: 0; }
+  .im-target-db-cell .im-target-db-cell__text { flex: 1; min-width: 0; word-break: break-word; }
+  .im-ledger-modal__content { max-width: min(1180px, 98vw); width: 100%; }
+  .im-ledger-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .im-ledger-tab { padding: 8px 14px; font-size: 13px; border: 1px solid rgba(13, 110, 253, 0.15); background: var(--im-field-fill-strong); border-radius: 4px; cursor: pointer; color: #495057; }
+  .im-ledger-tab:hover { background: #f8f9fa; }
+  .im-ledger-tab--active { background: #0d6efd; border-color: #0d6efd; color: #fff; }
+  .im-ledger-status { font-size: 12px; margin: 0 0 8px; min-height: 1.2em; color: #6c757d; }
+  .im-ledger-search {
+    display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px;
+    margin-bottom: 12px; padding: 10px 12px; background: var(--im-field-fill-strong, #f8f9fa);
+    border: 1px solid rgba(13, 110, 253, 0.12); border-radius: 6px;
+  }
+  .im-ledger-search__field { display: flex; flex-direction: column; gap: 4px; min-width: 120px; }
+  .im-ledger-search__field--grow { flex: 1; min-width: 180px; }
+  .im-ledger-search__field label { font-size: 11px; font-weight: 600; color: #6c757d; text-transform: uppercase; letter-spacing: .03em; }
+  .im-ledger-search__field input {
+    padding: 7px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 13px; min-height: 34px;
+  }
+  .im-ledger-search__field input:focus { outline: none; border-color: #0d6efd; box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15); }
+  .im-ledger-search #itemLedgerLoadBtn { min-height: 34px; align-self: flex-end; }
+  #itemLedgerModal .im-ledger-table-wrap {
+    border: 1px solid #adb5bd;
+    border-radius: 4px;
+    overflow: auto;
+    background: var(--im-table-surface);
+  }
+  #itemLedgerTable {
+    table-layout: fixed;
+    width: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+    font-size: 13px;
+    background: var(--im-table-surface);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #e9ecef !important;
+    color: #212529 !important;
+    font-weight: 600;
+    border: 1px solid #adb5bd !important;
+    padding: 9px 10px !important;
+    vertical-align: middle;
+    box-shadow: inset 0 -1px 0 #adb5bd;
+  }
+  #itemLedgerTable tbody td {
+    border: 1px solid #adb5bd;
+    padding: 8px 10px;
+    background: var(--im-table-surface);
+    background: #f8f9fa;
+  }
+  #itemLedgerTable th.im-ledger-party,
+  #itemLedgerTable td.im-ledger-party {
+    min-width: 12.5rem;
+    width: 34%;
+    text-align: left;
+    word-break: break-word;
+    hyphens: auto;
+  }
+  #itemLedgerTable th:nth-child(1),
+  #itemLedgerTable td:nth-child(1) { width: 10%; }
+  #itemLedgerTable th:nth-child(2),
+  #itemLedgerTable td:nth-child(2) { width: 11%; white-space: nowrap; }
+  #itemLedgerTable th:nth-child(5),
+  #itemLedgerTable td:nth-child(5) { width: 8%; text-align: center; }
+  #itemLedgerTable th.im-ledger-metric,
+  #itemLedgerTable td.im-ledger-metric {
+    text-align: center;
+    vertical-align: middle;
+    font-variant-numeric: tabular-nums;
+    width: 10%;
+    min-width: 5.5rem;
+    padding-left: 8px;
+    padding-right: 8px;
+    box-sizing: border-box;
+  }
+  body { background: #f5f6f8; }
+  .im-page { max-width: 1680px; padding: 10px 10px 20px; }
+  .im-topbar {
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 0;
+    border-bottom: 0;
+  }
+  .im-topbar-main { width: 100%; justify-content: flex-end; align-items: center; }
+  .im-topbar h1 { display: none; }
+  .im-topbar .im-actions { gap: 8px; justify-content: flex-end; }
+  .im-btn-save,
+  .im-btn-secondary,
+  .im-action-primary,
+  .im-action-ghost {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 36px;
+    padding: 8px 14px !important;
+    border-radius: 6px !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    text-decoration: none !important;
+    box-sizing: border-box;
+    white-space: nowrap;
+  }
+  .im-action-ghost,
+  .im-btn-secondary {
+    background: var(--im-field-fill-strong) !important;
+    box-shadow: 0 3px 8px rgba(15, 23, 42, .04);
+  }
+  .im-btn-save,
+  .im-action-primary {
+    background: #0d6efd !important;
+    border: 1px solid #0d6efd !important;
+    color: #fff !important;
+    box-shadow: 0 8px 18px rgba(13, 110, 253, .22);
+  }
+  .im-ai-toggle { min-height: 36px; border-radius: 6px; background: var(--im-field-fill-strong); }
+  .itemmaster-container {
+    background: var(--im-field-fill-strong);
+    border: 1px solid #e5eaf2;
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, .06);
+    overflow: hidden;
+  }
+  .itemmaster-tabs {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(120px, 1fr));
+    margin: 0;
+    padding: 0;
+    gap: 0;
+    background: var(--im-field-fill-strong);
+  }
+  .itemmaster-tabs .tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 42px;
+    padding: 10px 16px !important;
+    color: #1e293b;
+    border-right: 1px solid #e5eaf2;
+    border-bottom: 2px solid transparent;
+    font-size: 12px;
+    font-weight: 800;
+    background: transparent;
+  }
+  .itemmaster-tabs .tab:first-child { border-left: 0; }
+  .itemmaster-tabs .tab.tab--active { color: #0d6efd; border-bottom-color: #0d6efd; }
+  .itemmaster-tabs .tab .im-tab-step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    background: #eef2f7;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 800;
+  }
+  .itemmaster-tabs .tab.tab--active .im-tab-step { background: #0d6efd; color: #fff; }
+  .tab-content:not(.im-form-panel) { display: none; padding: 10px; background: var(--im-field-fill-strong); }
+  .tab-content.tab-content--active:not(.im-form-panel) { display: block; }
+  .itemmaster-container .form-section {
+    position: relative;
+    margin: 0 0 8px;
+    padding: 36px 12px 12px;
+    border: 1px solid #e5eaf2;
+    background: var(--im-field-fill-strong);
+  }
+  .itemmaster-container .form-section::before {
+    content: "";
+    position: absolute;
+    top: 10px;
+    left: 12px;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 850;
+  }
+  #tab-general .form-section::before { content: "Basic Information"; }
+  #tab-pricing .form-section:nth-of-type(1)::before { content: "Quick Pricing"; }
+  #tab-pricing .form-section:nth-of-type(2)::before { content: "Inventory costing"; }
+  #tab-pricing .form-section:nth-of-type(3)::before { content: "Pricing Options"; }
+  #tab-accounts .form-section::before { content: "Tax & Accounting"; }
+  #tab-inventory .form-section:nth-of-type(1)::before { content: "Inventory Details"; }
+  #tab-inventory .form-section:nth-of-type(2)::before { content: "Store Inventory"; }
+  #tab-inventory .form-section:nth-of-type(3)::before { content: "Warehouse Bins"; }
+  #tab-variant .form-section:nth-of-type(1)::before { content: "Units"; }
+  #tab-variant .form-section:nth-of-type(2)::before { content: "Alternate Units"; }
+  #tab-additional .form-section::before { content: "Additional Information"; }
+  .itemmaster-container .form-grid,
+  .itemmaster-container .form-grid--2cols {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(180px, 1fr));
+    gap: 10px 14px;
+  }
+  .itemmaster-container .form-group {
+    display: block;
+    min-width: 0;
+  }
+  .itemmaster-container .form-group.form-group--full { grid-column: 1 / -1; }
+  .itemmaster-container .form-group label {
+    display: block;
+    min-width: 0;
+    margin: 0 0 5px;
+    color: #0f172a;
+    font-size: 11px;
+    font-weight: 750;
+  }
+  .itemmaster-container .required { color: #ef4444; }
+  .itemmaster-container .input,
+  .itemmaster-container input[type="text"],
+  .itemmaster-container input[type="number"],
+  .itemmaster-container textarea,
+  .itemmaster-container .search-field {
+    width: 100%;
+    min-height: 32px;
+    border: 1px solid #dbe3ef !important;
+    background: var(--im-field-fill-strong);
+    font-size: 12px;
+    box-sizing: border-box;
+  }
+  .itemmaster-container textarea { min-height: 2.75em; padding-top: 2px; padding-bottom: 2px; line-height: 1.25; }
+  .itemmaster-container .search-field {
+    display: flex;
+    align-items: center;
+    padding: 0;
+    overflow: hidden;
+  }
+  .itemmaster-container .search-field input[type="text"] {
+    border: 0 !important;
+    min-height: 30px;
+    padding: 0 10px;
+  }
+  .itemmaster-container .search-field .search-picker {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    min-height: 30px;
+    flex: 0 0 30px;
+    color: #64748b;
+    border-left: 1px solid #edf2f7;
+  }
+  .itemmaster-container .search-field .search-clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    min-height: 30px;
+    color: #64748b;
+  }
+  .itemmaster-container .input-readonly,
+  .itemmaster-container input[readonly] {
+    background: var(--im-field-readonly);
+  }
+  .itemmaster-container textarea:focus,
+  .itemmaster-container .search-field:focus-within {
+    outline: none;
+    border-color: #0d6efd !important;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, .10);
+  }
+  .itemmaster-container .checkbox-label {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 8px;
+    min-height: 34px;
+    margin-top: 18px;
+  }
+  .itemmaster-container .field-hint {
+    margin-top: 5px;
+    color: #64748b;
+    font-size: 11px;
+  }
+  .itemmaster-container #tab-accounts .form-group .field-hint { margin-left: 0; }
+  .itemmaster-container .scroll-table {
+    border: 1px solid #e5eaf2;
+    border-radius: 8px;
+    overflow: auto;
+  }
+  .itemmaster-container .table thead th {
+    background: #f8fafc !important;
+    color: #0f172a !important;
+    font-size: 11px;
+  }
+  @media (max-width: 1200px) {
+    .itemmaster-container .form-grid,
+    .itemmaster-container .form-grid--2cols { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+  }
+  @media (max-width: 700px) {
+    .im-topbar-main,
+    .im-topbar .im-actions { justify-content: stretch; }
+    .im-btn-save,
+    .im-btn-secondary,
+    .im-action-primary,
+    .im-action-ghost { flex: 1 1 auto; }
+    .itemmaster-container .form-grid,
+    .itemmaster-container .form-grid--2cols { grid-template-columns: 1fr; }
+    .itemmaster-tabs .tab { flex: 0 0 auto; padding-left: 14px !important; padding-right: 14px !important; }
+  }
+  /* Restore "last pos" Item Master design while keeping current backend/lazy-load behavior. */
+  body { overflow-x: auto; min-height: 100vh; background: #f5f6f8; color: #212529; }
+  .im-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px 16px;
+    --im-toolbar-bg: linear-gradient(180deg, #f0f7fb 0%, #e3eef8 100%);
+    --im-toolbar-border: rgba(13, 110, 253, 0.14);
+    --im-field-fill: rgba(255, 255, 255, 0.52);
+    --im-field-fill-strong: #eaf2fa;
+    --im-field-readonly: rgba(226, 236, 247, 0.92);
+    --im-table-surface: rgba(255, 255, 255, 0.55);
+  }
+  .im-topbar { display: flex; flex-direction: column; align-items: stretch; gap: 16px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #dee2e6; }
+  .im-topbar-main { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; width: auto; }
+  .im-topbar h1 { display: block; margin: 0; font-size: 17px; font-weight: 400; color: #212529; line-height: 1.3; }
+  .im-topbar h1 .im-ref { font-weight: 600; }
+  .im-topbar .im-actions { display: flex; gap: 12px; align-items: center; justify-content: flex-start; flex-wrap: wrap; }
+  .im-btn-save { background: #28a745 !important; border: none !important; color: #fff !important; padding: 8px 20px !important; border-radius: 4px !important; font-size: 13px !important; font-weight: 500 !important; cursor: pointer; box-shadow: none !important; min-height: auto; }
+  /* View-only Edit — distinct from Save/Update (green) and compact-toolbar primary styling */
+  .im-page .im-actions a#btnEdit.im-btn-save {
+    background: linear-gradient(180deg, #7e57c2 0%, #5e35b1 100%) !important;
+    border: 1px solid #4527a0 !important;
+    color: #fff !important;
+  }
+  .im-btn-secondary { background: var(--im-field-fill-strong) !important; border: 1px solid rgba(13, 110, 253, 0.16) !important; color: #495057 !important; padding: 8px 16px !important; border-radius: 4px !important; font-size: 13px !important; font-weight: 400 !important; cursor: pointer; box-shadow: none !important; min-height: auto; }
+  .im-btn-secondary:hover { background: #dfe8f3 !important; }
+  .im-ai-toggle { min-height: auto; border-radius: 16px; background: var(--im-field-fill-strong); }
+  .itemmaster-container { background: transparent; border: none; border-radius: 0; box-shadow: none; overflow: visible; }
+  .itemmaster-tabs { display: none !important; }
+  .itemmaster-tabs .tab .im-tab-step { display: none; }
+  .im-form-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 0;
+  }
+  .im-form-stack .tab-content.im-form-panel {
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent;
+    flex-shrink: 0;
+    order: 10;
+  }
+  .im-form-stack #tab-general { order: 1; }
+  .im-form-stack #tab-pricing { order: 2; }
+  .im-form-stack #tab-variant { order: 3; }
+  .im-form-stack #tab-inventory { order: 4; }
+  .im-form-stack #tab-additional { order: 5; }
+  .im-form-stack #tab-accounts { order: 6; }
+  /* Section headings: match POS Settlement « General » NAV bar */
+  .im-form-stack .tab-content.im-form-panel > .im-section-title {
+    margin: 0;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #14324a;
+    background: linear-gradient(180deg, #e4ecf4 0%, #d5e1ec 100%);
+    border: 1px solid #b8c8d4;
+    border-bottom: 1px solid #a9bac9;
+    border-radius: 2px 2px 0 0;
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    letter-spacing: normal;
+    text-transform: none;
+    line-height: 1.35;
+  }
+  .im-form-stack .tab-content.im-form-panel:not(:first-child) > .im-section-title {
+    margin-top: 14px;
+  }
+  .im-form-stack .tab-content.im-form-panel > .form-section:first-of-type {
+    margin-top: 0 !important;
+    margin-bottom: 10px !important;
+    padding: 12px 14px !important;
+    border: 1px solid #b8c8d4 !important;
+    border-top: none !important;
+    border-radius: 0 0 2px 2px !important;
+    background: #fff !important;
+    box-shadow: 0 1px 3px rgba(15, 35, 55, 0.08);
+  }
+  .im-form-stack .tab-content.im-form-panel > .form-section:not(:first-of-type) {
+    margin-top: 0 !important;
+    margin-bottom: 10px !important;
+    padding: 12px 14px !important;
+    border: 1px solid #b8c8d4 !important;
+    border-radius: 2px !important;
+    background: #fff !important;
+    box-shadow: 0 1px 3px rgba(15, 35, 55, 0.08);
+  }
+  .im-page { padding: 8px 12px 10px !important; }
+  .im-topbar { margin-bottom: 6px !important; padding-bottom: 8px !important; gap: 8px !important; }
+  .tab-content:not(.im-form-panel) { display: none; padding: 0; background: transparent; }
+  .tab-content.tab-content--active:not(.im-form-panel) { display: block; }
+  .itemmaster-container .form-section { background: transparent; position: static; padding: 4px 0 6px !important; margin-bottom: 0 !important; border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; }
+  .itemmaster-container .form-section::before { content: none !important; display: none; }
+  .itemmaster-container .form-grid,
+  .itemmaster-container .form-grid--2cols { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 4px !important; column-gap: 18px !important; }
+  .itemmaster-container .form-group { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .itemmaster-container .form-group.form-group--full { align-items: flex-start; grid-column: 1 / -1; }
+  .itemmaster-container .form-group label { color: #495057; font-weight: 400; font-size: 13px; margin-bottom: 0; display: block; min-width: 150px; }
+  .itemmaster-container .form-group > input,
+  .itemmaster-container .form-group > textarea,
+  .itemmaster-container .form-group > .search-field { flex: 1; min-width: 0; }
+  .itemmaster-container .input,
+  .itemmaster-container input[type="text"],
+  .itemmaster-container input[type="number"],
+  .itemmaster-container textarea { width: auto; min-height: auto; border: none !important; border-bottom: 1px solid #dee2e6 !important; border-radius: 0 !important; padding: 2px 0; font-size: 13px; line-height: 1.25; background: var(--im-field-fill); box-shadow: none !important; }
+  .itemmaster-container .input:focus,
+  .itemmaster-container input:focus,
+  .itemmaster-container textarea:focus { outline: none; border-bottom-color: var(--nexa-focus-color) !important; box-shadow: none !important; }
+  .itemmaster-container .input-readonly,
+  .itemmaster-container input[readonly] { background: var(--im-field-readonly); color: #6c757d; }
+  .search-field { min-height: auto; border: none !important; border-bottom: 1px solid #dee2e6 !important; border-radius: 0 !important; display: inline-flex; align-items: center; padding: 0; background: var(--im-field-fill); box-shadow: none !important; overflow: visible; }
+  .search-field:focus-within { border-bottom-color: var(--nexa-focus-color) !important; box-shadow: none !important; }
+  /* Popup pickers (category, brand, supplier, UOM, …): same pattern as Sales Invoice customer row (.po-details .search-field) */
+  .itemmaster-container .search-field:focus-within { outline: none; box-shadow: none !important; }
+  .itemmaster-container .search-field--popup {
+    flex: 1;
+    min-width: 0;
+    border-bottom: 1px solid #dee2e6 !important;
+  }
+  .itemmaster-container .search-field--popup:focus-within {
+    border-bottom-color: #1a56a4 !important;
+  }
+  .itemmaster-container .search-field--popup input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    min-height: auto;
+    border: none !important;
+    padding: 2px 0;
+    font-size: 13px;
+    background: var(--im-field-fill);
+    cursor: pointer;
+  }
+  .itemmaster-container .search-field--popup input[type="text"]:not([readonly]) {
+    cursor: text;
+  }
+  .itemmaster-container .search-field--popup .search-picker {
+    background: transparent;
+    border: none;
+    color: #007bff;
+    cursor: pointer;
+    padding: 2px 6px;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+  .itemmaster-container .search-field--popup .search-clear {
+    background: transparent;
+    border: none;
+    color: #6c757d;
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .itemmaster-container .search-field:not(.search-field--popup) input[type="text"] {
+    min-height: auto;
+    border: none !important;
+    padding: 2px 0;
+    line-height: 1.25;
+    cursor: text;
+  }
+  .itemmaster-container .checkbox-label { display: inline-flex !important; align-items: center; gap: 8px; min-height: auto; margin-top: 0; }
+  .itemmaster-container .field-hint { margin-top: 2px; color: #6c757d; font-size: 11px; line-height: 1.25; }
+  .itemmaster-container #tab-accounts .form-group { align-items: flex-start; flex-wrap: wrap; }
+  .itemmaster-container #tab-accounts .form-group .field-hint { flex: 0 0 100%; margin-left: 160px; }
+  .scroll-table { border: 1px solid #dee2e6; border-radius: 4px; background: var(--im-table-surface); }
+  .itemmaster-container .table thead th { background: var(--im-field-fill-strong) !important; color: #495057 !important; padding: 4px 10px; border-bottom: 1px solid #dee2e6; font-weight: 600; font-size: 12px; line-height: 1.25; }
+  .itemmaster-container .table td { padding: 4px 10px; font-size: 13px; border-bottom: 1px solid #dee2e6; line-height: 1.25; }
+  @media (max-width: 900px) {
+    .itemmaster-container .form-grid,
+    .itemmaster-container .form-grid--2cols { grid-template-columns: 1fr; }
+    .itemmaster-container .form-group { align-items: flex-start; flex-direction: column; gap: 4px; }
+    .itemmaster-container .form-group label { min-width: 0; }
+  }
+
+  /* Black body copy; popup rows match Sales Invoice header customer row (.po-details .search-field) */
+  .im-page { color: #000; }
+  .im-topbar h1,
+  .im-topbar h1 .im-ref { color: #000 !important; }
+  .im-ai-toggle { color: #000 !important; }
+  .im-page .im-btn-secondary { color: #000 !important; }
+  #btnDeleteItem.im-btn-secondary { color: #dc3545 !important; }
+  .im-page .im-link { color: #000 !important; }
+  .itemmaster-container,
+  .itemmaster-container .form-group label,
+  .itemmaster-container .field-hint,
+  .itemmaster-container .table thead th,
+  .itemmaster-container .table td,
+  .itemmaster-container .muted {
+    color: #000 !important;
+  }
+  .itemmaster-container input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]),
+  .itemmaster-container textarea,
+  .itemmaster-container select {
+    color: #000 !important;
+  }
+  .itemmaster-container .input-readonly,
+  .itemmaster-container input[readonly] {
+    color: #000 !important;
+  }
+  .itemmaster-container input:focus,
+  .itemmaster-container textarea:focus,
+  .itemmaster-container select:focus {
+    border-bottom-color: #1a56a4 !important;
+  }
+  .itemmaster-container .search-field {
+    display: inline-flex !important;
+    align-items: center !important;
+    border: none !important;
+    border-bottom: 1px solid #dee2e6 !important;
+    border-radius: 0 !important;
+    flex: 1;
+    min-width: 0;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+  .itemmaster-container .search-field:focus-within {
+    border-bottom-color: #1a56a4 !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+  .itemmaster-container .search-field--popup {
+    border-bottom: 1px solid #dee2e6 !important;
+  }
+  .itemmaster-container .search-field--popup:focus-within {
+    border-bottom-color: #1a56a4 !important;
+  }
+  .itemmaster-container .search-field--popup input[type="text"] {
+    color: #000 !important;
+  }
+  .im-ai-explain__title,
+  .im-ai-explain__body,
+  .im-ai-explain__arabic,
+  .im-ai-explain__arabic b,
+  .im-ai-explain__arabic span,
+  .im-ai-cell__label,
+  .im-ai-cell__value {
+    color: #000 !important;
+  }
+  .im-ai-explain--error .im-ai-explain__title,
+  .im-ai-explain--error .im-ai-explain__body {
+    color: #842029 !important;
+  }
+  .im-target-db-panel__title,
+  .im-target-db-cell,
+  .im-target-db-cell .im-target-db-cell__text {
+    color: #000 !important;
+  }
+  .im-target-db-cell.im-target-db-cell--linked {
+    color: #000 !important;
+  }
+  .im-ledger-tab:not(.im-ledger-tab--active) {
+    color: #000 !important;
+  }
+  .im-ledger-status {
+    color: #000 !important;
+  }
+
+  /* Item Master: one vertical rhythm for all form rows (labels, inputs, popup pickers, textarea) */
+  .itemmaster-container {
+    --im-field-py: 3px;
+    --im-field-lh: 1.35;
+    --im-field-fs: 13px;
+  }
+  .itemmaster-container textarea {
+    min-height: 2.75em !important;
+    padding: var(--im-field-py) 0 !important;
+    line-height: var(--im-field-lh) !important;
+    font-size: var(--im-field-fs) !important;
+  }
+  .itemmaster-container .form-grid + .form-grid {
+    margin-top: 4px;
+  }
+  .itemmaster-container .form-group {
+    padding: 2px 0 !important;
+    margin: 0 !important;
+  }
+  @media (min-width: 901px) {
+    .itemmaster-container .form-group {
+      align-items: center;
+    }
+  }
+  .itemmaster-container .form-group.form-group--full,
+  .itemmaster-container #tab-accounts .form-group {
+    align-items: flex-start !important;
+  }
+  .itemmaster-container #tab-accounts .form-group > .search-field.search-field--popup {
+    align-self: flex-start !important;
+  }
+  .itemmaster-container .form-group label:not(.checkbox-label) {
+    display: flex !important;
+    align-items: center !important;
+    align-self: center !important;
+    margin: 0 !important;
+    padding: var(--im-field-py) 0 !important;
+    line-height: var(--im-field-lh) !important;
+    font-size: var(--im-field-fs) !important;
+    box-sizing: border-box !important;
+    min-height: 0 !important;
+  }
+  .itemmaster-container #tab-accounts .form-group label:not(.checkbox-label),
+  .itemmaster-container .form-group.form-group--full label:not(.checkbox-label) {
+    align-self: flex-start !important;
+  }
+  .itemmaster-container .form-group > input:not([type="hidden"]) {
+    padding: var(--im-field-py) 0 !important;
+    line-height: var(--im-field-lh) !important;
+    font-size: var(--im-field-fs) !important;
+    box-sizing: border-box !important;
+    min-height: 0 !important;
+  }
+  .itemmaster-container .form-group > textarea {
+    padding: var(--im-field-py) 0 !important;
+    line-height: var(--im-field-lh) !important;
+    font-size: var(--im-field-fs) !important;
+    box-sizing: border-box !important;
+  }
+  .itemmaster-container .form-group > .search-field.search-field--popup {
+    align-items: center !important;
+    align-self: center !important;
+    padding: 0 !important;
+    min-height: 0 !important;
+  }
+  .itemmaster-container .search-field--popup input[type="text"] {
+    padding: var(--im-field-py) 0 !important;
+    line-height: var(--im-field-lh) !important;
+    font-size: var(--im-field-fs) !important;
+    min-height: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .itemmaster-container .search-field--popup .search-picker,
+  .itemmaster-container .search-field--popup .search-clear {
+    padding-top: var(--im-field-py) !important;
+    padding-bottom: var(--im-field-py) !important;
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+    line-height: var(--im-field-lh) !important;
+    font-size: var(--im-field-fs) !important;
+    box-sizing: border-box !important;
+    min-height: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  .itemmaster-container .itemmaster-view-only .search-field .search-picker,
+  .itemmaster-container .itemmaster-view-only .search-field .search-clear,
+  .itemmaster-container .itemmaster-view-only .search-field--popup .search-picker,
+  .itemmaster-container .itemmaster-view-only .search-field--popup .search-clear {
+    display: none !important;
+    pointer-events: none !important;
+  }
+  @media (max-width: 900px) {
+    .itemmaster-container .form-group label:not(.checkbox-label) {
+      align-self: flex-start !important;
+    }
+    .itemmaster-container .form-group > .search-field.search-field--popup {
+      align-self: stretch !important;
+    }
+  }
+
+  /* Toolbar fixed below location header — spans content column only (sidebar grid 260px / 56px) */
+  .im-page:has(.itemmaster-container) {
+    padding-top: 50px !important;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main {
+    position: fixed !important;
+    top: 46px;
+    left: 260px;
+    right: var(--nexa-scrollbar-width, 0px);
+    z-index: 105;
+    margin: 0 !important;
+    padding: 6px 16px 8px 16px;
+    border-bottom: 1px solid var(--im-toolbar-border);
+    box-shadow:
+      0 1px 0 rgba(15, 23, 42, 0.04),
+      0 6px 18px rgba(15, 23, 42, 0.06);
+    background: var(--im-toolbar-bg);
+    box-sizing: border-box;
+    width: auto;
+    max-width: none;
+    display: flex !important;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    min-width: 0;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main h1 {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    font-size: 13px !important;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions {
+    flex: 0 0 auto;
+    margin-left: auto;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    gap: 3px;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions::-webkit-scrollbar {
+    display: none;
+    height: 0;
+  }
+  /* Uniform compact width for toolbar buttons & AI toggle — single row (Save first, no stray scrollbar gap) */
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions > .im-btn-save,
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions > button.im-btn-secondary,
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions > a.im-btn-save,
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions > a.im-btn-secondary {
+    box-sizing: border-box !important;
+    width: 5.25rem;
+    min-width: 5.25rem;
+    max-width: 5.25rem;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-decoration: none !important;
+    flex-shrink: 0;
+    background: var(--im-field-fill-strong) !important;
+    border: 1px solid rgba(13, 110, 253, 0.18) !important;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions > .im-btn-save {
+    background: #28a745 !important;
+    border: none !important;
+    color: #fff !important;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions > label.im-ai-toggle {
+    box-sizing: border-box;
+    width: 5.25rem;
+    min-width: 5.25rem;
+    max-width: 5.25rem;
+    margin: 0 !important;
+    padding: 4px 4px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px;
+    flex-shrink: 0;
+    font-size: 11px;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main .im-actions > label.im-ai-toggle > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .im-page:has(.itemmaster-container) .im-topbar-main h1 .status-badge {
+    margin-left: 5px;
+    padding: 1px 6px;
+    font-size: 9px;
+    vertical-align: middle;
+  }
+  .layout.sidebar-collapsed:not(.layout--auth) .im-page:has(.itemmaster-container) .im-topbar-main {
+    left: 56px;
+    padding: 6px 16px 8px 16px;
+  }
+  .layout--auth .im-page:has(.itemmaster-container) .im-topbar-main {
+    top: 0;
+    left: 0;
+    right: var(--nexa-scrollbar-width, 0px);
+    padding: 6px 16px 8px 16px;
+  }
+  .im-status-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .im-status-switch input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .im-status-switch__track {
+    position: relative;
+    width: 46px;
+    height: 24px;
+    border-radius: 999px;
+    background: #ef4444;
+    transition: background .16s ease;
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, .08);
+  }
+  .im-status-switch__track::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform .16s ease;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, .22);
+  }
+  .im-status-switch input:checked + .im-status-switch__track {
+    background: #16a34a;
+  }
+  .im-status-switch input:checked + .im-status-switch__track::after {
+    transform: translateX(22px);
+  }
+  .im-status-switch__text {
+    font-weight: 700;
+    color: #334155;
+  }
+</style>
+  <div class="im-page">
+    <div class="im-topbar">
+      <div class="im-topbar-main">
+      <h1>{{ itemmaster_page_title or 'Item Master' }} / <span class="im-ref" id="imTitleRef">{% if item_data and not itemmaster_force_is_new %}{{ item_data.itemcode }}{% else %}New{% endif %}</span> <span class="item-status" id="itemStatus">{% if itemmaster_force_is_new %}<span class="status-badge status-badge--new">New</span>{% elif item_data %}{% if item_data.itemflag == 'N' %}<span class="status-badge status-badge--locked">Locked</span>{% else %}<span class="status-badge status-badge--active">Active</span>{% endif %}{% else %}<span class="status-badge status-badge--new">New</span>{% endif %}</span></h1>
+      <div class="im-actions">
+        {% if itemmaster_view_only and item_data and not itemmaster_force_is_new %}
+        <a href="{{ url_for('itemmaster.itemmaster', item_code=item_data.itemcode, edit=1) }}" class="im-btn-save" id="btnEdit">Edit</a>
+        {% else %}
+        <button type="submit" form="itemMasterForm" class="im-btn-save" id="btnSave">{% if item_data and not itemmaster_force_is_new %}Update{% else %}Save{% endif %}</button>
+        {% endif %}
+        {% if not itemmaster_view_only %}
+        <label class="im-ai-toggle" for="ai_mode_toggle" title="AI Mode">
+          <span>AI</span>
+          <span class="switch">
+            <input type="checkbox" id="ai_mode_toggle" />
+            <span class="slider"></span>
+          </span>
+        </label>
+        {% endif %}
+        {% if ho_mode and item_data and not itemmaster_force_is_new and not itemmaster_view_only %}
+        <button type="button" class="im-btn-secondary" id="btnRemap">Remap</button>
+        <button type="button" class="im-btn-secondary" id="btnDeleteItem" style="border-color:#dc3545; color:#dc3545;" title="Delete item">Delete</button>
+        {% endif %}
+        <button type="button" class="im-btn-secondary" id="btnCancel">Cancel</button>
+        <a href="{{ itemmaster_list_url or url_for('itemmaster.productlist') }}" class="im-btn-secondary" {% if is_admin_user %}title="List and Excel import"{% endif %}>List</a>
+        {% if not ho_mode %}
+        <a href="{{ url_for('itemmaster.itemmaster_activity_log') }}" class="im-btn-secondary" title="Activity report">Activity</a>
+        {% endif %}
+        {% if is_admin_user %}
+        <a href="{{ url_for('itemmaster.itemmaster_data_config') }}" class="im-btn-secondary" title="Data configuration">Config</a>
+        {% endif %}
+        <button type="button" class="im-btn-secondary" id="btnNew">New</button>
+        {% if not itemmaster_view_only %}
+        <button type="button" class="im-btn-secondary" id="btnQuery">Query</button>
+        {% endif %}
+        {% if not itemmaster_force_is_new %}
+        <button type="button" class="im-btn-secondary" id="btnItemLedger" title="Item ledger">Ledger</button>
+        {% endif %}
+      </div>
+      </div>
+      {% if ho_mode %}
+      <div id="hoTargetTenantChecks" class="im-target-db-panel" role="group" aria-label="Target databases">
+        <div class="im-target-db-panel__head">
+          <div>
+            <span class="im-target-db-panel__title">Target databases</span>
+          </div>
+          <div class="im-target-db-panel__actions">
+            <button type="button" class="im-link" id="btnHoTargetAll" style="font-size:13px;font-weight:600;">All</button>
+            <span style="color:#ced4da;" aria-hidden="true">|</span>
+            <button type="button" class="im-link" id="btnHoTargetNone" style="font-size:13px;font-weight:600;">None</button>
+          </div>
+        </div>
+        <div class="im-target-db-grid">
+          {% for t in target_dbs %}
+          <label class="im-target-db-cell{% if existing_rawabi_tenants and t.tenant_id in existing_rawabi_tenants %} im-target-db-cell--linked{% endif %}">
+            <input type="checkbox" class="ho-target-tenant-check" value="{{ t.tenant_id }}" {% if selected_target_tenants and t.tenant_id in selected_target_tenants %}checked{% endif %} {% if existing_rawabi_tenants and t.tenant_id in existing_rawabi_tenants %}disabled{% endif %} />
+            <span class="im-target-db-cell__text"><strong>{{ t.display_name or t.tenant_id }}</strong><br /><span style="opacity:.92;">{{ t.tenant_id }}{% if t.network_link %} · {{ t.network_link }}{% endif %}</span></span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  <section class="itemmaster-container{% if accounts_locked %} im-accounts-locked{% endif %}">
+
+    <form
+      id="itemMasterForm"
+      class="{% if itemmaster_view_only %}itemmaster-view-only{% endif %}"
+      method="post"
+      enctype="multipart/form-data"
+      action="{{ itemmaster_save_url or url_for('itemmaster.itemmaster_save') }}"
+      data-view-only="{{ '1' if itemmaster_view_only else '0' }}"
+      data-view-url="{{ itemmaster_view_url or url_for('itemmaster.itemmaster') }}"
+      data-list-url="{{ itemmaster_list_url or '' }}"
+      data-next-code-url="{{ itemmaster_next_code_url or url_for('itemmaster.itemmaster_next_code') }}"
+      data-suggest-barcode-url="{{ url_for('itemmaster.itemmaster_api_suggest_barcode') }}"
+      data-require-target-db="{{ '1' if ho_mode else '0' }}"
+      data-item-request-mode="{{ '1' if item_request_mode else '0' }}"
+      data-default-dbocode="{{ item_request_default_dbocode or '' }}"
+      data-default-branch="{{ ir_tenant_id | default('') }}"
+      data-ho-remap-url="{% if ho_mode %}{{ url_for('ho.itemmaster_central_remap') }}{% endif %}"
+      data-ho-delete-item-url="{% if ho_mode %}{{ url_for('ho.itemmaster_central_delete_item') }}{% endif %}"
+      data-ho-source-location="{{ ho_source_location_code if ho_mode else '' }}"
+      data-existing-targets="{{ (existing_rawabi_tenants or [])|join(',') }}"
+      data-arabic-suggest-url="{{ itemmaster_ai_arabic_url or url_for('itemmaster.itemmaster_ai_arabic_name') }}"
+      data-ai-general-fill-url="{{ itemmaster_ai_general_fill_url or url_for('itemmaster.itemmaster_ai_general_fill') }}"
+      data-ai-barcode-web-url="{{ itemmaster_ai_barcode_web_url or url_for('itemmaster.itemmaster_ai_barcode_web') }}"
+      data-grn-prefill-ai="{{ '1' if prefill_from_grn_ai else '0' }}"
+      data-item-accounts-api="{{ url_for('itemmaster.api_item_accounts') }}"
+      data-bootstrap-api="{{ itemmaster_bootstrap_url or url_for('itemmaster.api_itemmaster_bootstrap') }}"
+      data-category-price-pct-api="{{ url_for('itemmaster.api_category_price_percentage') }}"
+      data-item-ledger-url="{{ url_for('itemmaster.api_item_ledger') }}"
+      data-item-costing-url="{{ url_for('itemmaster.api_item_costing') }}"
+      data-variants-url="{{ url_for('itemmaster.api_itemmaster_variants') }}"
+      data-inventory-details-url="{{ url_for('itemmaster.api_itemmaster_inventory_details') }}"
+      data-code-labels-url="{{ url_for('itemmaster.api_itemmaster_code_labels') }}"
+      data-code-labels-ready="{{ '1' if im_view_labels_ready else '0' }}"
+      autocomplete="off"
+    >
+      <input type="hidden" name="is_new" id="isNew" value="{% if itemmaster_force_is_new %}true{% elif item_data %}false{% else %}true{% endif %}" />
+      <input type="hidden" name="location_code" value="{{ location_code }}" />
+      <input
+        type="hidden"
+        id="temp_item_code_hidden"
+        name="temp_item_code"
+        value="{% if temp_item_code %}{{ temp_item_code }}{% elif item_data and item_data.tempitemcode %}{{ item_data.tempitemcode }}{% else %}{% endif %}"
+      />
+      <input type="hidden" id="existing_target_tenant_ids" name="existing_target_tenant_ids" value="{{ (existing_rawabi_tenants or [])|join(',') }}" />
+
+      <!-- Branch (Item Request only) -->
+      {% if item_request_mode %}
+      <div class="form-group" style="margin-bottom:12px;max-width:400px;">
+        <label for="branch_display">Branch</label>
+        <input
+          type="text"
+          id="branch_display"
+          name="branch_display"
+          value="{{ (ir_branch_name ~ ' (' ~ ir_tenant_id ~ ')') if ir_branch_name else (ir_tenant_id | default('')) }}"
+          readonly
+          tabindex="-1"
+          style="background:#f5f5f5;cursor:not-allowed;color:#555;"
+        />
+      </div>
+      {% endif %}
+
+      <div class="im-form-stack">
+      <!-- General -->
+      <div class="tab-content im-form-panel" id="tab-general">
+        <h2 class="im-section-title">General</h2>
+        <div class="form-section">
+          {% set _img_path = (item_data.image_path or item_data.imagepath or '') if item_data else '' %}
+          <div class="im-general-layout">
+            <aside class="im-general-layout__aside im-item-image-aside" aria-label="Item image" data-saved-image="{% if _img_path %}1{% else %}0{% endif %}">
+              <div id="itemImagePreviewWrap" class="im-item-image-preview">
+                {% if _img_path %}
+                <img id="itemImagePreview" src="{{ url_for('static', filename=_img_path) }}" alt="Item" />
+                {% else %}
+                <img id="itemImagePreview" src="" alt="" hidden />
+                <span id="itemImagePlaceholder">No image</span>
+                {% endif %}
+              </div>
+              {% if not itemmaster_view_only %}
+              <input type="file" id="item_image" name="item_image" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" class="im-item-image-file" aria-label="Upload item image" />
+              <p class="im-item-image-hint">PNG, JPG, WEBP, or GIF. Saved when you click Save / Update.</p>
+              <input type="hidden" id="remove_item_image" name="remove_item_image" value="" />
+              <button type="button" id="btnRemoveItemImage" class="im-item-image-remove-btn" {% if not _img_path %}hidden{% endif %}>Remove image</button>
+              {% else %}
+              <p class="im-item-image-hint">{% if _img_path %}Image on file{% else %}No image{% endif %}</p>
+              {% endif %}
+            </aside>
+            <div class="im-general-layout__main">
+          <div class="im-general-top-grid">
+            <div class="im-top-left">
+            <div class="form-group">
+              <label for="item_code">
+                Item Code <span class="required">*</span>
+              </label>
+              <input type="text" id="item_code" name="item_code" value="{{ item_data.itemcode if item_data else '' }}" readonly class="input-readonly" />
+            </div>
+            {% if ho_mode %}
+            <div class="form-group">
+              <label for="tempitemcode_display">TempItemCode</label>
+              <input
+                type="text"
+                id="tempitemcode_display"
+                value="{% if item_data and item_data.tempitemcode %}{{ item_data.tempitemcode }}{% elif temp_item_code %}{{ temp_item_code }}{% else %}{% endif %}"
+                readonly
+                class="input-readonly"
+              />
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+              <label for="item_name">
+                Item Name <span class="required">*</span>
+              </label>
+              <input type="text" id="item_name" name="item_name" value="{% if item_data and item_data.itemname %}{{ item_data.itemname }}{% else %}{{ prefill_itemname|default('', true) }}{% endif %}" required />
+            </div>
+            </div>
+
+            <div class="im-col-right">
+              <div class="form-group">
+                <label for="manufacturer_id">
+                  Barcode{% if not item_request_mode %} <span class="required">*</span>{% endif %}
+                </label>
+                <div class="im-barcode-row" style="display:flex;gap:8px;align-items:center;">
+                  <input type="text" id="manufacturer_id" name="manufacturer_id" style="flex:1;min-width:0;" value="{% if item_data %}{{ item_data.manufacturerid or '' }}{% elif prefill_from_grn_ai and prefill_barcode %}{{ prefill_barcode }}{% elif prefill_from_grn_ai and prefill_item_code_invoice %}{{ prefill_item_code_invoice }}{% else %}{% endif %}" {% if not item_request_mode %}required{% endif %} />
+                  {% if not itemmaster_view_only %}
+                  <button type="button" class="page-po__btn-secondary" id="btnGenerateBarcode" title="13-digit: starts with 12, ends with item code" style="white-space:nowrap;font-size:12px;padding:6px 10px;">Generate</button>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="form-group im-field-arabic">
+                <label for="item_name_ara">Arabic</label>
+                <input
+                  type="text"
+                  id="item_name_ara"
+                  name="item_name_ara"
+                  value="{{ item_data.itemnameara if item_data else '' }}"
+                  dir="rtl"
+                  maxlength="120"
+                  placeholder="الاسم"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="form-grid form-grid--2cols im-general-body__fields">
+            <div class="form-group im-desc-field">
+              <label for="description">Description</label>
+              <input type="text" id="description" name="description" value="{% if item_data %}{{ item_data.description or '' }}{% elif prefill_from_grn_ai and prefill_description %}{{ prefill_description }}{% else %}{% endif %}" />
+            </div>
+
+            <div class="form-group">
+              <label for="main_category">Main Category</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="main_category"
+                  name="main_category_display"
+                  value="{% if item_data and item_data.maincategory and im_view_labels.main_category|default('', true) %}{{ im_view_labels.main_category|default('', true) }}{% elif item_data and item_data.maincategory %}{% for mc in main_categories %}{% if mc.code == item_data.maincategory %}{{ mc.code }} - {{ mc.name }}{% endif %}{% endfor %}{% endif %}"
+                  placeholder="Click to search main category..."
+                  readonly
+                />
+                <button type="button" class="search-clear" id="mainCategoryClear" aria-label="Clear main category" style="display: {% if item_data and item_data.maincategory %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="mainCategoryPicker" aria-label="Open main category list">▾</button>
+              </span>
+              <input type="hidden" id="main_category_code" name="main_category" value="{% if item_data and item_data.maincategory %}{{ item_data.maincategory }}{% else %}0{% endif %}" />
+            </div>
+
+            <div class="form-group">
+              <label for="department_code">Category</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="department_code"
+                  name="department_code_display"
+                  value="{% if item_data and item_data.departmentcode and im_view_labels.department|default('', true) %}{{ im_view_labels.department|default('', true) }}{% elif item_data and item_data.departmentcode %}{% for dept in departments %}{% if dept.code == item_data.departmentcode %}{{ dept.code }} - {{ dept.name }}{% endif %}{% endfor %}{% endif %}"
+                  placeholder="Click to search department..."
+                  readonly
+                />
+                <button type="button" class="search-clear" id="departmentClear" aria-label="Clear department" style="display: {% if item_data and item_data.departmentcode %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="departmentPicker" aria-label="Open department list">▾</button>
+              </span>
+              <input type="hidden" id="department_code_hidden" name="department_code" value="{% if item_data and item_data.departmentcode %}{{ item_data.departmentcode }}{% endif %}" />
+            </div>
+
+            <div class="form-group">
+              <label for="category_code">
+                Micro Category <span class="required">*</span>
+              </label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="category_code"
+                  name="category_code_display"
+                  value="{% if item_data and item_data.categorycode and im_view_labels.category|default('', true) %}{{ im_view_labels.category|default('', true) }}{% elif item_data and item_data.categorycode %}{% for cat in categories %}{% if cat.code == item_data.categorycode %}{{ cat.code }} - {{ cat.name }}{% endif %}{% endfor %}{% endif %}"
+                  placeholder="Click to search category..."
+                  readonly
+                  required
+                />
+                <button type="button" class="search-clear" id="categoryClear" aria-label="Clear category" style="display: {% if item_data and item_data.categorycode %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="categoryPicker" aria-label="Open category list">▾</button>
+              </span>
+              <input type="hidden" id="category_code_hidden" name="category_code" value="{% if item_data and item_data.categorycode %}{{ item_data.categorycode }}{% else %}0{% endif %}" required />
+            </div>
+
+            <div class="form-group">
+              <label for="brand_code">Brand</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="brand_code"
+                  name="brand_code_display"
+                  value="{% if item_data and item_data.brandcode and im_view_labels.brand|default('', true) %}{{ im_view_labels.brand|default('', true) }}{% elif item_data and item_data.brandcode %}{% for brand in brands %}{% if brand.code == item_data.brandcode %}{{ brand.code }} - {{ brand.name }}{% endif %}{% endfor %}{% endif %}"
+                  placeholder="Click to search brand..."
+                  readonly
+                />
+                <button type="button" class="search-clear" id="brandClear" aria-label="Clear brand" style="display: {% if item_data and item_data.brandcode %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="brandPicker" aria-label="Open brand list">▾</button>
+              </span>
+              <input type="hidden" id="brand_code_hidden" name="brand_code" value="{% if item_data and item_data.brandcode %}{{ item_data.brandcode }}{% else %}0{% endif %}" />
+            </div>
+
+            <div class="form-group">
+              <label for="sup_code">Supplier</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="sup_code"
+                  name="sup_code_display"
+                  value="{% if item_data and item_data.supcode and im_view_labels.supplier|default('', true) %}{{ im_view_labels.supplier|default('', true) }}{% elif item_data and item_data.supcode %}{% for supplier in suppliers %}{% if supplier.code == item_data.supcode %}{{ supplier.code }} - {{ supplier.name }}{% endif %}{% endfor %}{% elif prefill_from_grn_ai and prefill_sup_display %}{{ prefill_sup_display }}{% endif %}"
+                  placeholder="Click to search supplier..."
+                  readonly
+                />
+                <button type="button" class="search-clear" id="supplierClear" aria-label="Clear supplier" style="display: {% if item_data and item_data.supcode %}block{% elif prefill_from_grn_ai and prefill_sup_code %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="supplierPicker" aria-label="Open supplier list">▾</button>
+              </span>
+              <input type="hidden" id="sup_code_hidden" name="sup_code" value="{% if item_data and item_data.supcode %}{{ item_data.supcode }}{% elif prefill_from_grn_ai and prefill_sup_code %}{{ prefill_sup_code }}{% else %}0{% endif %}" />
+            </div>
+
+            {% if item_request_mode %}
+              <input type="hidden" id="dbocode_hidden" name="dbocode" value="{% if item_data and item_data.locationcode %}{{ item_data.locationcode }}{% else %}{{ item_request_default_dbocode or '' }}{% endif %}" />
+              <input type="hidden" id="branch_hidden" name="branch" value="{{ ir_tenant_id or '' }}" />
+            {% endif %}
+
+            <div class="form-group">
+              <label for="base_uom">
+                Base Uom <span class="required">*</span>
+              </label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="base_uom"
+                  name="base_uom_display"
+                  value="{% if item_data and item_data.baseuom and im_view_labels.base_uom|default('', true) %}{{ im_view_labels.base_uom|default('', true) }}{% elif item_data and item_data.baseuom %}{% for unit in units %}{% if unit.code == item_data.baseuom %}{{ unit.code }} - {{ unit.name }}{% endif %}{% endfor %}{% elif prefill_from_grn_ai and prefill_base_uom_display %}{{ prefill_base_uom_display }}{% endif %}"
+                  placeholder="Click to search base unit..."
+                  readonly
+                  required
+                />
+                <button type="button" class="search-clear" id="baseUomClear" aria-label="Clear base unit" style="display: {% if item_data and item_data.baseuom %}block{% elif prefill_from_grn_ai and prefill_base_uom_code %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="baseUomPicker" aria-label="Open base unit list">▾</button>
+              </span>
+              <input type="hidden" id="base_uom_hidden" name="base_uom" value="{% if item_data and item_data.baseuom %}{{ item_data.baseuom }}{% elif prefill_from_grn_ai and prefill_base_uom_code is not none %}{{ prefill_base_uom_code }}{% endif %}" required />
+            </div>
+          </div>
+            </div>
+          </div>
+        </div>
+        <div class="im-ai-explain" id="aiExplainSection">
+          <div class="im-ai-explain__title">AI Explain</div>
+          <div class="im-ai-explain__body" id="aiFetchDetails">AI Mode is OFF.</div>
+          <div class="im-ai-explain__table-wrap" id="aiExplainTableWrap">
+            <table class="im-ai-explain__table" id="aiExplainTable">
+              <tbody id="aiExplainTableBody"></tbody>
+            </table>
+          </div>
+          <div class="im-ai-explain__arabic" id="aiArabicExplainRow" style="display:none;">
+            <b>Arabic from Item Name:</b>
+            <span id="aiArabicPreview"></span>
+          </div>
+          <div class="im-ai-explain__actions">
+            <button type="button" class="im-btn-secondary" id="btnCopySuggestedData" style="padding:4px 10px;font-size:12px;display:none;">Copy Data</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pricing -->
+      <div class="tab-content im-form-panel" id="tab-pricing">
+        <h2 class="im-section-title">Pricing</h2>
+        <div class="form-section">
+          <div class="form-grid form-grid--2cols">
+            <div class="form-group">
+              <label for="cost_price">Cost Price</label>
+              <input type="number" step="0.01" id="cost_price" name="cost_price" value="{% if item_data %}{{ item_data.costprice }}{% elif prefill_from_grn_ai %}{{ '%.2f'|format(prefill_cost) }}{% else %}0{% endif %}" />
+            </div>
+
+            <div class="form-group">
+              <label for="retail_price">Retail Price</label>
+              <input type="number" step="0.01" id="retail_price" name="retail_price" value="{% if item_data %}{{ item_data.retailprice }}{% elif prefill_from_grn_ai %}{{ '%.2f'|format(prefill_retail) }}{% else %}0{% endif %}" />
+            </div>
+
+            <div class="form-group">
+              <label for="wholesale_price">Wholesale Price</label>
+              <input type="number" step="0.01" id="wholesale_price" name="wholesale_price" value="{{ item_data.wholesaleprice if item_data else '0' }}" />
+            </div>
+
+            <div class="form-group">
+              <label for="third_price">Third Price</label>
+              <input type="number" step="0.01" id="third_price" name="third_price" value="{{ item_data.thirdprice if item_data else '0' }}" />
+            </div>
+
+            <div class="form-group">
+              <label for="branch_price">Branch Price</label>
+              <input type="number" step="0.01" id="branch_price" name="branch_price" value="{{ item_data.branchprice if item_data else '0' }}" />
+            </div>
+
+          </div>
+        </div>
+
+        <div class="form-section" id="imCostingSection" {% if itemmaster_force_is_new %}style="display:none;"{% endif %}>
+          <div class="form-group form-group--full">
+            <label for="imCostingMethodTitle">Costing method</label>
+            <input
+              type="text"
+              id="imCostingMethodTitle"
+              readonly
+              class="input-readonly"
+              tabindex="-1"
+              value="Weighted average (GRN posting)"
+            />
+          </div>
+          <div class="form-grid form-grid--2cols">
+            <div class="form-group im-costing-trigger" data-costing-card="last_purchase">
+              <label for="imCostValLastPurchase">Last purchase cost</label>
+              <input type="text" id="imCostValLastPurchase" readonly class="input-readonly" tabindex="-1" value="—" />
+              <button type="button" class="im-link im-costing-detail-btn" data-costing-card="last_purchase">Details</button>
+            </div>
+            <div class="form-group im-costing-trigger" data-costing-card="average_cost">
+              <label for="imCostValAverage">Average cost</label>
+              <input
+                type="text"
+                id="imCostValAverage"
+                readonly
+                class="input-readonly"
+                tabindex="-1"
+                value="{% if item_data %}{{ '%.3f'|format(item_data.averagecost|default(0, true)) }}{% else %}—{% endif %}"
+              />
+              <button type="button" class="im-link im-costing-detail-btn" data-costing-card="average_cost">Details</button>
+            </div>
+            <div class="form-group im-costing-trigger" data-costing-card="landing_cost">
+              <label for="imCostValLanding">Landing cost</label>
+              <input
+                type="text"
+                id="imCostValLanding"
+                readonly
+                class="input-readonly"
+                tabindex="-1"
+                value="{% if item_data %}{{ '%.3f'|format(item_data.landingcost|default(0, true)) }}{% else %}—{% endif %}"
+              />
+              <button type="button" class="im-link im-costing-detail-btn" data-costing-card="landing_cost">Details</button>
+            </div>
+            <div class="form-group im-costing-trigger" data-costing-card="cost_price">
+              <label for="imCostValCostPrice">Stored cost price</label>
+              <input
+                type="text"
+                id="imCostValCostPrice"
+                readonly
+                class="input-readonly"
+                tabindex="-1"
+                value="{% if item_data %}{{ '%.3f'|format(item_data.costprice|default(0, true)) }}{% else %}—{% endif %}"
+              />
+              <button type="button" class="im-link im-costing-detail-btn" data-costing-card="cost_price">Details</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="form-grid form-grid--2cols">
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="discount_flag" name="discount_flag" value="Y" {% if item_data and item_data.discountflag == 'Y' %}checked{% endif %} />
+                <span>Allow Discount</span>
+              </label>
+            </div>
+            <div class="form-group">
+              <label class="im-status-switch" title="Switch off to lock this item">
+                <input type="checkbox" id="item_active" name="item_active" value="Y" {% if not item_data or item_data.itemflag != 'N' %}checked{% endif %} />
+                <span class="im-status-switch__track" aria-hidden="true"></span>
+                <span class="im-status-switch__text" id="itemActiveSwitchText">{% if item_data and item_data.itemflag == 'N' %}Locked{% else %}Active{% endif %}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Accounts -->
+      <div class="tab-content im-form-panel" id="tab-accounts">
+        <h2 class="im-section-title">Accounts</h2>
+        {% if accounts_locked %}
+        <div style="margin-bottom:12px;padding:10px 12px;color:#084298;background:#e7f1ff;font-size:12px;line-height:1.4;">
+          {% if item_request_mode %}
+          Sales, purchase, inventory, and COGS accounts use system defaults and cannot be changed on item requests.
+          {% else %}
+          GL accounts use system defaults. Only the <strong>admin</strong> user can change account mappings on this screen.
+          {% endif %}
+        </div>
+        {% endif %}
+        <div class="form-section">
+          <div class="form-grid form-grid--2cols">
+            <div class="form-group">
+              <label for="sales_account_display">Sales Account</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="sales_account_display"
+                  value="{% if item_data and item_data.sales_account and im_view_labels.sales_account|default('', true) %}{{ im_view_labels.sales_account|default('', true) }}{% elif item_data and item_data.sales_account %}{% set ns = namespace(val='') %}{% for acc in chart_accounts %}{% if (acc.code|string) == (item_data.sales_account|string) %}{% set ns.val = (acc.code|string) ~ ' - ' ~ (acc.name|string) %}{% endif %}{% endfor %}{{ ns.val if ns.val else (item_data.sales_account|string) }}{% elif grn_new_item_default_accounts and grn_new_item_default_accounts.sales_display %}{{ grn_new_item_default_accounts.sales_display }}{% endif %}"
+                  placeholder="Press F1 to select account..."
+                  {% if accounts_locked %}readonly class="input-readonly" tabindex="-1"{% endif %}
+                />
+                <button type="button" class="search-clear" id="salesAccountClear" aria-label="Clear sales account" style="display: {% if accounts_locked %}none{% elif item_data and item_data.sales_account %}block{% elif grn_new_item_default_accounts %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="salesAccountPicker" aria-label="Open sales account list">▾</button>
+              </span>
+              <input type="hidden" id="sales_account" name="sales_account" value="{{ item_data.sales_account if item_data and item_data.sales_account else (grn_new_item_default_accounts.sales_code if grn_new_item_default_accounts else '') }}" />
+              <div class="field-hint">example: <strong>4100 - Sales Revenue</strong></div>
+            </div>
+
+            <div class="form-group">
+              <label for="purchase_account_display">Purchase Account</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="purchase_account_display"
+                  value="{% if item_data and item_data.purchase_account and im_view_labels.purchase_account|default('', true) %}{{ im_view_labels.purchase_account|default('', true) }}{% elif item_data and item_data.purchase_account %}{% set ns = namespace(val='') %}{% for acc in chart_accounts %}{% if (acc.code|string) == (item_data.purchase_account|string) %}{% set ns.val = (acc.code|string) ~ ' - ' ~ (acc.name|string) %}{% endif %}{% endfor %}{{ ns.val if ns.val else (item_data.purchase_account|string) }}{% elif grn_new_item_default_accounts and grn_new_item_default_accounts.purchase_display %}{{ grn_new_item_default_accounts.purchase_display }}{% endif %}"
+                  placeholder="Press F1 to select account..."
+                  {% if accounts_locked %}readonly class="input-readonly" tabindex="-1"{% endif %}
+                />
+                <button type="button" class="search-clear" id="purchaseAccountClear" aria-label="Clear purchase account" style="display: {% if accounts_locked %}none{% elif item_data and item_data.purchase_account %}block{% elif grn_new_item_default_accounts %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="purchaseAccountPicker" aria-label="Open purchase account list">▾</button>
+              </span>
+              <input type="hidden" id="purchase_account" name="purchase_account" value="{{ item_data.purchase_account if item_data and item_data.purchase_account else (grn_new_item_default_accounts.purchase_code if grn_new_item_default_accounts else '') }}" />
+              <div class="field-hint">example: <strong>5001 - Purchase Expense</strong></div>
+            </div>
+
+            <div class="form-group">
+              <label for="inventory_account_display">Inventory Account</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="inventory_account_display"
+                  value="{% if item_data and item_data.inventory_account and im_view_labels.inventory_account|default('', true) %}{{ im_view_labels.inventory_account|default('', true) }}{% elif item_data and item_data.inventory_account %}{% set ns = namespace(val='') %}{% for acc in chart_accounts %}{% if (acc.code|string) == (item_data.inventory_account|string) %}{% set ns.val = (acc.code|string) ~ ' - ' ~ (acc.name|string) %}{% endif %}{% endfor %}{{ ns.val if ns.val else (item_data.inventory_account|string) }}{% elif grn_new_item_default_accounts and grn_new_item_default_accounts.inventory_display %}{{ grn_new_item_default_accounts.inventory_display }}{% endif %}"
+                  placeholder="Press F1 to select account..."
+                  {% if accounts_locked %}readonly class="input-readonly" tabindex="-1"{% endif %}
+                />
+                <button type="button" class="search-clear" id="inventoryAccountClear" aria-label="Clear inventory account" style="display: {% if accounts_locked %}none{% elif item_data and item_data.inventory_account %}block{% elif grn_new_item_default_accounts %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="inventoryAccountPicker" aria-label="Open inventory account list">▾</button>
+              </span>
+              <input type="hidden" id="inventory_account" name="inventory_account" value="{{ item_data.inventory_account if item_data and item_data.inventory_account else (grn_new_item_default_accounts.inventory_code if grn_new_item_default_accounts else '') }}" />
+              <div class="field-hint">example: <strong>1300 - Inventory</strong></div>
+            </div>
+
+            <div class="form-group">
+              <label for="cogs_account_display">COGS Account</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="cogs_account_display"
+                  value="{% if item_data and item_data.cogs_account and im_view_labels.cogs_account|default('', true) %}{{ im_view_labels.cogs_account|default('', true) }}{% elif item_data and item_data.cogs_account %}{% set ns = namespace(val='') %}{% for acc in chart_accounts %}{% if (acc.code|string) == (item_data.cogs_account|string) %}{% set ns.val = (acc.code|string) ~ ' - ' ~ (acc.name|string) %}{% endif %}{% endfor %}{{ ns.val if ns.val else (item_data.cogs_account|string) }}{% elif grn_new_item_default_accounts and grn_new_item_default_accounts.cogs_display %}{{ grn_new_item_default_accounts.cogs_display }}{% endif %}"
+                  placeholder="Press F1 to select account..."
+                  {% if accounts_locked %}readonly class="input-readonly" tabindex="-1"{% endif %}
+                />
+                <button type="button" class="search-clear" id="cogsAccountClear" aria-label="Clear COGS account" style="display: {% if accounts_locked %}none{% elif item_data and item_data.cogs_account %}block{% elif grn_new_item_default_accounts %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="cogsAccountPicker" aria-label="Open COGS account list">▾</button>
+              </span>
+              <input type="hidden" id="cogs_account" name="cogs_account" value="{{ item_data.cogs_account if item_data and item_data.cogs_account else (grn_new_item_default_accounts.cogs_code if grn_new_item_default_accounts else '') }}" />
+              <div class="field-hint">example: <strong>5100 - Cost of Goods Sold</strong></div>
+            </div>
+
+            <div class="form-group">
+              <label for="vat_percent">VAT Percentage</label>
+              <input type="number" step="0.01" id="vat_percent" name="vat_percent" value="{{ item_data.vatpercent if item_data else '0' }}" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inventory -->
+      <div class="tab-content im-form-panel" id="tab-inventory">
+        <h2 class="im-section-title">Inventory</h2>
+        <div class="form-section">
+          <div class="form-grid form-grid--2cols">
+            {% if not item_request_mode %}
+            <div class="form-group">
+              <label for="default_warehouse_display">Default warehouse</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="default_warehouse_display"
+                  name="default_warehouse_display"
+                  value="{% if item_data and item_data.default_warehouse_display %}{{ item_data.default_warehouse_display }}{% elif item_data and item_data.default_warehouse_id %}{{ item_data.default_warehouse_id }}{% endif %}"
+                  placeholder="Press F1 to select warehouse..."
+                  readonly
+                />
+                <button type="button" class="search-clear" id="defaultWarehouseClear" aria-label="Clear warehouse" style="display: {% if item_data and item_data.default_warehouse_id %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="defaultWarehousePicker" aria-label="Open warehouse list">▾</button>
+              </span>
+              <input type="hidden" id="default_warehouse_id" name="default_warehouse_id" value="{% if item_data and item_data.default_warehouse_id %}{{ item_data.default_warehouse_id }}{% endif %}" />
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="batch_tracked" name="batch_tracked" value="Y"
+                  {% if item_data and ((item_data.batch_tracked)|default('N'))|upper == 'Y' %}checked{% endif %}
+                  {% if not itemmaster_bin_panel.inv_batch_tracking_enabled %}disabled{% endif %} />
+                <span>Batch / lot tracking (item)</span>
+              </label>
+            </div>
+
+            <div class="form-group">
+              {% set db_ns = namespace(label='', sid='') %}
+              {% if item_data and item_data.default_bin_storage_id is not none %}
+                {% for b in itemmaster_bin_panel.bins %}
+                  {% if item_data.default_bin_storage_id|int == b.storage_id|int %}
+                    {% set db_ns.label = b.code ~ (' — ' ~ b.name if b.name else '') %}
+                    {% set db_ns.sid = b.storage_id|string %}
+                  {% endif %}
+                {% endfor %}
+              {% endif %}
+              <label for="default_bin_display">Default bin</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="default_bin_display"
+                  placeholder="Press F1 to select bin..."
+                  readonly
+                  value="{{ db_ns.label }}"
+                  {% if not itemmaster_bin_panel.inv_default_bin_enabled %}disabled{% endif %}
+                />
+                <button type="button" class="search-clear" id="defaultBinClear" aria-label="Clear default bin" style="display: {% if db_ns.sid %}block{% else %}none{% endif %};" {% if not itemmaster_bin_panel.inv_default_bin_enabled %}disabled{% endif %}>×</button>
+                <button type="button" class="search-picker" id="defaultBinPicker" aria-label="Open bin list" {% if not itemmaster_bin_panel.inv_default_bin_enabled %}disabled{% endif %}>▾</button>
+              </span>
+              <input type="hidden" id="default_bin_storage_id" name="default_bin_storage_id" value="{{ db_ns.sid }}" />
+            </div>
+
+            <div class="form-group">
+              <label for="maximum_level">Maximum Level</label>
+              <input type="number" id="maximum_level" name="maximum_level" value="{{ item_data.maximumlevel if item_data else '0' }}" />
+            </div>
+
+            <div class="form-group">
+              <label for="reorder_level">Reorder Level</label>
+              <input type="number" id="reorder_level" name="reorder_level" value="{{ item_data.reorderlevel if item_data else '0' }}" />
+            </div>
+
+            <div class="form-group">
+              <label for="quantity_limit">Quantity Limit</label>
+              <input type="number" id="quantity_limit" name="quantity_limit" value="{{ item_data.quantitylimit if item_data else '0' }}" />
+            </div>
+
+            <div class="form-group">
+              <label>Current Stock</label>
+              <input type="text" value="{{ item_data.currentstock if item_data else '0' }}" readonly class="input-readonly" />
+            </div>
+          </div>
+        </div>
+        {% if not hide_store_inventory_panel %}
+        <div class="form-section">
+          <h4 style="margin:0 0 4px 0; font-size: 13px; color: #495057;">Store Inventory <span class="muted" style="font-weight:400;">(warehouse stock)</span></h4>
+          <div class="scroll-table">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Store</th>
+                  <th>Description</th>
+                  <th style="text-align:right;">Stock</th>
+                </tr>
+              </thead>
+              <tbody id="storeInventoryBody">
+                {% if store_inventory_rows %}
+                  {% for row in store_inventory_rows %}
+                  <tr>
+                    <td>{{ row.code or '-' }}</td>
+                    <td>{{ row.store or '-' }}</td>
+                    <td>{{ row.description or '-' }}</td>
+                    <td style="text-align:right;">{{ row.stock or 0 }}</td>
+                  </tr>
+                  {% endfor %}
+                {% else %}
+                  <tr id="storeInventoryEmptyRow">
+                    <td colspan="4" class="muted">No store inventory rows found.</td>
+                  </tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endif %}
+        {% if itemmaster_bin_panel.show %}
+        <div class="form-section">
+          <h4 style="margin:0 0 4px 0; font-size: 13px; color: #495057;">Warehouse bins (this branch)</h4>
+          {% if itemmaster_bin_panel.hint %}
+          <p class="muted" style="margin:0 0 10px 0; font-size: 13px;">{{ itemmaster_bin_panel.hint }}</p>
+          {% endif %}
+          {% if itemmaster_bin_panel.loc_key %}
+          <p style="margin:0 0 8px 0; font-size: 12px; color: #64748b;">Site key (LOC_KEY): <strong>{{ itemmaster_bin_panel.loc_key }}</strong></p>
+          {% endif %}
+          {% if not itemmaster_bin_panel.bin_stock_rows %}
+          {% if item_data %}
+          <p class="muted" style="margin:0 0 10px 0; font-size: 12px;">
+            No BIN_STOCK lines for this item at this site (informational).
+          </p>
+          {% endif %}
+          {% endif %}
+          {% if itemmaster_bin_panel.bin_stock_rows %}
+          <div class="scroll-table" style="margin-top: 6px;">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Bin</th>
+                  <th>Item</th>
+                  <th>Name</th>
+                  <th style="text-align:right;">Qty</th>
+                </tr>
+              </thead>
+              <tbody id="binStockBody">
+                {% for r in itemmaster_bin_panel.bin_stock_rows %}
+                <tr>
+                  <td>{{ r.bin_code or '-' }}</td>
+                  <td>{{ r.itemcode or '-' }}</td>
+                  <td>{{ r.itemname or '-' }}</td>
+                  <td style="text-align:right;">{{ r.qty or 0 }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="field-hint">Quantities currently in BIN_STOCK for this warehouse site (informational).</div>
+          {% elif itemmaster_bin_panel.loc_key and not itemmaster_bin_panel.bins %}
+          <p class="muted" style="font-size: 13px;">No bin definitions in Warehouse storage yet. Configure bins under Warehouse for this site.</p>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Variant -->
+      <div class="tab-content im-form-panel" id="tab-variant">
+        <h2 class="im-section-title">Variant</h2>
+        <div class="form-section">
+          <div class="form-grid form-grid--2cols">
+            <div class="form-group">
+              <label for="alternate_description">Variant Description</label>
+              <input type="text" id="alternate_description" name="alternate_description" maxlength="500" placeholder="Optional; base row uses Item Description" />
+            </div>
+            <div class="form-group">
+              <label for="alternate_barcode">Alternate Barcode</label>
+              <input type="text" id="alternate_barcode" name="alternate_barcode" value="{% if alternate_uom %}{{ alternate_uom.manufacturerid or '' }}{% else %}{% endif %}" />
+            </div>
+            <div class="form-group">
+              <label for="alternate_uom_display">Alternate UOM Code</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="alternate_uom_display"
+                  name="alternate_uom_display"
+                  value="{% if alternate_uom and alternate_uom.alternateuomcode and im_view_labels.alternate_uom|default('', true) %}{{ im_view_labels.alternate_uom|default('', true) }}{% elif alternate_uom and alternate_uom.alternateuomcode %}{% for unit in units %}{% if unit.code == alternate_uom.alternateuomcode %}{{ unit.code }} - {{ unit.name }}{% endif %}{% endfor %}{% endif %}"
+                  placeholder="Click to search alternate UOM..."
+                  readonly
+                />
+                <button type="button" class="search-clear" id="alternateUomClear" aria-label="Clear alternate UOM" style="display: {% if alternate_uom and alternate_uom.alternateuomcode %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="alternateUomPicker" aria-label="Open alternate UOM list">▾</button>
+              </span>
+              <input type="hidden" id="alternate_uom_code" name="alternate_uom_code" value="{% if alternate_uom and alternate_uom.alternateuomcode %}{{ alternate_uom.alternateuomcode }}{% endif %}" />
+              <input type="hidden" id="alternate_slno" name="alternate_slno" value="{% if alternate_uom and alternate_uom.slno %}{{ alternate_uom.slno }}{% endif %}" />
+            </div>
+            <div class="form-group">
+              <label for="alternate_conversion_factor">Conversion Factor</label>
+              <input type="number" step="0.001" id="alternate_conversion_factor" name="alternate_conversion_factor" value="{{ alternate_uom.conversionfactor if alternate_uom else '' }}" />
+            </div>
+            <div class="form-group">
+              <label for="alternate_cost_price">Alt Cost Price</label>
+              <input type="number" step="0.001" id="alternate_cost_price" name="alternate_cost_price" value="{{ alternate_uom.costprice if alternate_uom else '' }}" readonly class="input-readonly" />
+            </div>
+            <div class="form-group">
+              <label for="alternate_wholesale_price">Alt Wholesale Price</label>
+              <input type="number" step="0.01" id="alternate_wholesale_price" name="alternate_wholesale_price" value="{{ alternate_uom.wholesaleprice if alternate_uom else '' }}" />
+            </div>
+            <div class="form-group">
+              <label for="alternate_retail_price">Alt Retail Price</label>
+              <input type="number" step="0.01" id="alternate_retail_price" name="alternate_retail_price" value="{{ alternate_uom.retailprice if alternate_uom else '' }}" />
+            </div>
+            <div class="form-group">
+              <label for="alternate_third_price">Alt Third Price</label>
+              <input type="number" step="0.01" id="alternate_third_price" name="alternate_third_price" value="{{ alternate_uom.thirdprice if alternate_uom else '' }}" />
+            </div>
+            <div class="form-group">
+              <label for="alternate_branch_price">Alt Branch Price</label>
+              <input type="number" step="0.01" id="alternate_branch_price" name="alternate_branch_price" value="{{ alternate_uom.branchprice if alternate_uom else '' }}" />
+            </div>
+            <div class="form-group">
+              <label for="variantAddBtn">Add</label>
+              <button type="button" id="variantAddBtn" class="im-btn-secondary" title="Add alternate price row" aria-label="Add alternate price row">+</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="scroll-table">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Base</th>
+                  <th>Sl No</th>
+                  <th>Description</th>
+                  <th>Alt Barcode</th>
+                  <th>Alt UOM</th>
+                  <th>Factor</th>
+                  <th>Cost</th>
+                  <th>Wholesale</th>
+                  <th>Retail</th>
+                  <th>Third</th>
+                  <th>Branch</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="variantRowsBody">
+                {% for alt in alternate_uoms %}
+                  {% set alt_is_base = (alt.is_base|default('', true)|string|upper == 'Y') or (alt.alternateuomcode and item_data and alt.alternateuomcode == item_data.baseuom and (alt.conversionfactor|float) == 1) %}
+                  <tr
+                    class="alt-variant-row{% if alt_is_base %} alt-variant-row--base{% endif %}"
+                    data-slno="{{ alt.slno }}"
+                    data-description="{{ alt.description or '' }}"
+                    data-barcode="{{ alt.manufacturerid or '' }}"
+                    data-uom="{{ alt.alternateuomcode or '' }}"
+                    data-factor="{{ alt.conversionfactor or '' }}"
+                    data-cost="{{ alt.costprice or '' }}"
+                    data-wholesale="{{ alt.wholesaleprice or '' }}"
+                    data-retail="{{ alt.retailprice or '' }}"
+                    data-third="{{ alt.thirdprice or '' }}"
+                    data-branch="{{ alt.branchprice or '' }}"
+                    {% if alt_is_base %}data-mirror-base="1" data-is-base="1"{% endif %}
+                  >
+                    <td>{% if alt_is_base %}<span class="status-badge status-badge--active" title="Linked to Item Master (Base UOM)">Base</span>{% else %}-{% endif %}</td>
+                    <td>{{ alt.slno }}</td>
+                    <td>{{ alt.description or '-' }}</td>
+                    <td>{{ alt.manufacturerid or '-' }}</td>
+                    <td>{{ alt.alternateuomcode or '-' }}</td>
+                    <td>{{ alt.conversionfactor or '0' }}</td>
+                    <td>{{ alt.costprice or '0' }}</td>
+                    <td>{{ alt.wholesaleprice or '0' }}</td>
+                    <td>{{ alt.retailprice or '0' }}</td>
+                    <td>{{ alt.thirdprice or '0' }}</td>
+                    <td>{{ alt.branchprice or '0' }}</td>
+                    <td>
+                      {% if alt_is_base %}
+                      <span class="muted" style="font-size:12px;" title="Change Base UOM, barcode, or prices on General / Pricing tabs">Linked</span>
+                      {% else %}
+                      <button type="button" class="im-link alt-variant-edit">Edit</button>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+                {% if not alternate_uoms %}
+                  <tr id="variantEmptyRow">
+                    <td colspan="12" class="muted">No alternate variants added.</td>
+                  </tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Additional -->
+      <div class="tab-content im-form-panel" id="tab-additional">
+        <h2 class="im-section-title">Additional</h2>
+        <div class="form-section">
+          <div class="form-grid form-grid--2cols">
+            <div class="form-group">
+              <label for="rawabicode">Master Code</label>
+              <input type="text" id="rawabicode" name="rawabicode" value="{{ item_data.rawabicode if item_data else '' }}" readonly class="input-readonly" />
+            </div>
+
+            <div class="form-group">
+              <label for="property">Property</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="property"
+                  name="property_display"
+                  value="{% if item_data and item_data.property and im_view_labels.property|default('', true) %}{{ im_view_labels.property|default('', true) }}{% elif item_data and item_data.property %}{% for p in item_properties %}{% if (p.code|string) == (item_data.property|string) %}{{ p.code }} - {{ p.name }}{% endif %}{% endfor %}{% endif %}"
+                  placeholder="Click to search property..."
+                  readonly
+                />
+                <button type="button" class="search-clear" id="propertyClear" aria-label="Clear property" style="display: {% if item_data and item_data.property %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="propertyPicker" aria-label="Open property list">▾</button>
+              </span>
+              <input type="hidden" id="property_code" name="property_code" value="{% if item_data and item_data.property %}{{ item_data.property }}{% else %}0{% endif %}" />
+            </div>
+
+            <div class="form-group">
+              <label for="origin">Origin</label>
+              <span class="search-field search-field--popup">
+                <input
+                  type="text"
+                  id="origin"
+                  name="origin_display"
+                  value="{% if item_data and item_data.origin and im_view_labels.origin|default('', true) %}{{ im_view_labels.origin|default('', true) }}{% elif item_data and item_data.origin %}{% for o in item_origins %}{% if (o.code|string) == (item_data.origin|string) %}{{ o.code }} - {{ o.name }}{% endif %}{% endfor %}{% endif %}"
+                  placeholder="Click to search origin..."
+                  readonly
+                />
+                <button type="button" class="search-clear" id="originClear" aria-label="Clear origin" style="display: {% if item_data and item_data.origin %}block{% else %}none{% endif %};">×</button>
+                <button type="button" class="search-picker" id="originPicker" aria-label="Open origin list">▾</button>
+              </span>
+              <input type="hidden" id="origin_code" name="origin_code" value="{% if item_data and item_data.origin %}{{ item_data.origin }}{% else %}0{% endif %}" />
+            </div>
+
+            <div class="form-group">
+              <label for="packing">Packing</label>
+              <input type="text" id="packing" name="packing" value="{{ item_data.packing if item_data else '' }}" />
+            </div>
+
+            <input type="hidden" id="rebate" name="rebate" value="{{ item_data.rebate if item_data else '0' }}" />
+            <input type="hidden" id="size_code_hidden" name="size_code" value="{% if item_data and item_data.sizecode %}{{ item_data.sizecode }}{% else %}0{% endif %}" />
+
+            <input type="hidden" id="color_code_hidden" name="color_code" value="{% if item_data and item_data.colorcode %}{{ item_data.colorcode }}{% else %}0{% endif %}" />
+            <input type="hidden" id="ministry_factor" name="ministry_factor" value="{{ item_data.ministryfactor if item_data else '' }}" />
+            <input type="hidden" id="ministry_unit" name="ministry_unit" value="{% if item_data and item_data.ministryunit %}{{ item_data.ministryunit }}{% endif %}" />
+          </div>
+        </div>
+      </div>
+      </div><!-- im-form-stack -->
+    </form>
+  </section>
+    {% if ho_mode and rawabi_detail_rows %}
+      <div class="im-btn-secondary" style="margin-top: 10px; padding: 8px 10px; overflow: auto;">
+        <div style="font-size: 12px; font-weight: 600; margin-bottom: 6px;">Connected by master code</div>
+        <table class="table table-fixed" style="width: 100%; font-size: 12px; margin: 0;">
+          <thead>
+            <tr>
+              <th>DB Name</th>
+              <th>Master Code</th>
+              <th>Manufacturer ID</th>
+              <th>Item Name</th>
+              <th>BaseUOM</th>
+              <th>CostPrice</th>
+              <th>RetailPrice</th>
+              <th>CurrentStock</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rawabi_detail_rows %}
+              <tr>
+                <td>{{ r.dbname or '' }}</td>
+                <td>{{ r.rawabicode or '' }}</td>
+                <td>{{ r.manufacturerid or '' }}</td>
+                <td>{{ r.itemname or '' }}</td>
+                <td>{{ r.baseuom or '' }}</td>
+                <td>{{ '%.3f'|format(r.costprice or 0) }}</td>
+                <td>{{ '%.3f'|format(r.retailprice or 0) }}</td>
+                <td>{{ '%.3f'|format(r.currentstock or 0) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
+  <!-- Costing method detail -->
+  <div class="modal hidden" id="itemCostingModal" role="dialog" aria-modal="true" aria-labelledby="itemCostingModalTitle">
+    <div class="modal__overlay" data-close="itemCostingModal"></div>
+    <div class="modal__content im-ledger-modal__content im-costing-modal__content" style="max-width:min(1040px,96vw);width:100%;">
+      <div class="modal__header">
+        <h3 id="itemCostingModalTitle">Costing detail</h3>
+        <button type="button" class="modal__close" data-close="itemCostingModal">×</button>
+      </div>
+      <div class="modal__body im-costing-modal-body">
+        <div class="im-costing-modal-col">
+          <p class="im-costing-modal-col__title">How it is calculated</p>
+          <div class="im-costing-modal-col--scroll">
+            <table class="im-costing-kv-table" id="itemCostingModalKv" aria-label="Cost summary">
+              <tbody id="itemCostingModalKvBody"></tbody>
+            </table>
+            <p class="im-costing-detail-meta" id="itemCostingModalMeta"></p>
+            <p class="im-costing-detail-formula" id="itemCostingModalFormula"></p>
+            <ol class="im-costing-detail-steps" id="itemCostingModalSteps"></ol>
+            <div id="itemCostingModalExtra"></div>
+          </div>
+        </div>
+        <div class="im-costing-modal-col" id="itemCostingReceiptsCol">
+          <p class="im-costing-modal-col__title">Recent purchase lines</p>
+          <div class="scroll-table modal__table" id="itemCostingReceiptsWrap">
+            <table class="table im-costing-lines-table">
+              <thead>
+                <tr>
+                  <th>Receipt</th>
+                  <th>Date</th>
+                  <th>Base qty</th>
+                  <th>Rate</th>
+                  <th>Amount</th>
+                  <th>Oth. chg.</th>
+                  <th>Landing / unit</th>
+                </tr>
+              </thead>
+              <tbody id="itemCostingReceiptsBody"></tbody>
+              <tfoot id="itemCostingReceiptsFoot" style="display:none;">
+                <tr>
+                  <td colspan="2">Total</td>
+                  <td id="itemCostingTotalBaseQty"></td>
+                  <td></td>
+                  <td id="itemCostingTotalAmount"></td>
+                  <td id="itemCostingTotalOtherCharge"></td>
+                  <td id="itemCostingTotalLanding"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <p class="field-hint" id="itemCostingReceiptsEmpty" style="display:none;margin:8px 0 0;padding:12px;border:1px dashed #cbd5e1;border-radius:4px;background:#f8fafc;">No purchase receipt lines found for this item.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Item ledger (purchase / purchase return / sale / sale return / stock adjustment) -->
+  <div class="modal hidden" id="itemLedgerModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="itemLedgerModal"></div>
+    <div class="modal__content im-ledger-modal__content">
+      <div class="modal__header">
+        <h3>Item ledger</h3>
+        <button type="button" class="modal__close" data-close="itemLedgerModal">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="im-ledger-search">
+          <div class="im-ledger-search__field">
+            <label for="itemLedgerBarcode">Barcode</label>
+            <input type="text" id="itemLedgerBarcode" placeholder="Scan or enter barcode…" autocomplete="off" />
+          </div>
+          <div class="im-ledger-search__field">
+            <label for="itemLedgerItemCode">Item code</label>
+            <input type="text" id="itemLedgerItemCode" placeholder="Item code" autocomplete="off" />
+          </div>
+          <div class="im-ledger-search__field im-ledger-search__field--grow">
+            <label for="itemLedgerItemName">Item name</label>
+            <input type="text" id="itemLedgerItemName" readonly class="input-readonly" placeholder="—" tabindex="-1" />
+          </div>
+          <button type="button" class="im-btn-secondary" id="itemLedgerLoadBtn">Load</button>
+        </div>
+        <div class="im-ledger-tabs" role="tablist" aria-label="Ledger type">
+          <button type="button" class="im-ledger-tab im-ledger-tab--active" data-ledger-tab="purchase" role="tab">Purchase</button>
+          <button type="button" class="im-ledger-tab" data-ledger-tab="purchase_return" role="tab">Purchase return</button>
+          <button type="button" class="im-ledger-tab" data-ledger-tab="sale" role="tab">Sale</button>
+          <button type="button" class="im-ledger-tab" data-ledger-tab="sale_return" role="tab">Sale return</button>
+          <button type="button" class="im-ledger-tab" data-ledger-tab="stock_adjustment" role="tab">Stock adjustment</button>
+        </div>
+        <p class="im-ledger-status" id="itemLedgerStatus"></p>
+        <div class="scroll-table modal__table im-ledger-table-wrap">
+          <table class="table" id="itemLedgerTable">
+            <thead>
+              <tr>
+                <th>Doc no</th>
+                <th>Date</th>
+                <th class="im-ledger-party">Supplier / customer</th>
+                <th class="im-ledger-metric">Qty</th>
+                <th>UOM</th>
+                <th class="im-ledger-metric">Rate</th>
+                <th class="im-ledger-metric">Bonus</th>
+                <th class="im-ledger-metric">FOC</th>
+                <th class="im-ledger-metric">Discount</th>
+                <th class="im-ledger-metric">Amount</th>
+              </tr>
+            </thead>
+            <tbody id="itemLedgerBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Category Popup Modal -->
+  <div class="modal hidden" id="mainCategoryModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="mainCategoryModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Main Category</h3>
+        <button type="button" class="modal__close" data-close="mainCategoryModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="mainCategoryModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="mainCategoryModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="mainCategoryModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for mc in main_categories %}
+                <tr data-code="{{ mc.code }}" data-name="{{ mc.name }}" data-text="{{ (mc.code ~ ' ' ~ mc.name)|lower }}">
+                  <td>{{ mc.code }}</td>
+                  <td>{{ mc.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Department Popup Modal -->
+  <div class="modal hidden" id="departmentModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="departmentModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Category</h3>
+        <button type="button" class="modal__close" data-close="departmentModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="departmentModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="departmentModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="departmentModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for dept in departments %}
+                <tr data-code="{{ dept.code }}" data-name="{{ dept.name }}" data-text="{{ (dept.code ~ ' ' ~ dept.name)|lower }}">
+                  <td>{{ dept.code }}</td>
+                  <td>{{ dept.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Category Popup Modal -->
+  <div class="modal hidden" id="categoryModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="categoryModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Micro Category</h3>
+        <button type="button" class="modal__close" data-close="categoryModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="categoryModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="categoryModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="categoryModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for cat in categories %}
+                <tr data-code="{{ cat.code }}" data-name="{{ cat.name }}" data-text="{{ (cat.code ~ ' ' ~ cat.name)|lower }}">
+                  <td>{{ cat.code }}</td>
+                  <td>{{ cat.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Brand Popup Modal -->
+  <div class="modal hidden" id="brandModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="brandModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Brand</h3>
+        <button type="button" class="modal__close" data-close="brandModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="brandModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="brandModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="brandModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for brand in brands %}
+                <tr data-code="{{ brand.code }}" data-name="{{ brand.name }}" data-text="{{ (brand.code ~ ' ' ~ brand.name)|lower }}">
+                  <td>{{ brand.code }}</td>
+                  <td>{{ brand.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Base UOM Popup Modal -->
+  <div class="modal hidden" id="baseUomModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="baseUomModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Base Uom</h3>
+        <button type="button" class="modal__close" data-close="baseUomModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="baseUomModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="baseUomModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="baseUomModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for unit in units %}
+                <tr data-code="{{ unit.code }}" data-name="{{ unit.name }}" data-text="{{ (unit.code ~ ' ' ~ unit.name)|lower }}">
+                  <td>{{ unit.code }}</td>
+                  <td>{{ unit.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alternate UOM Popup Modal -->
+  <div class="modal hidden" id="alternateUomModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="alternateUomModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Alternate Uom</h3>
+        <button type="button" class="modal__close" data-close="alternateUomModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="alternateUomModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="alternateUomModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="alternateUomModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for unit in units %}
+                <tr data-code="{{ unit.code }}" data-name="{{ unit.name }}" data-text="{{ (unit.code ~ ' ' ~ unit.name)|lower }}">
+                  <td>{{ unit.code }}</td>
+                  <td>{{ unit.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supplier Popup Modal -->
+  <div class="modal hidden" id="supplierModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="supplierModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Supplier</h3>
+        <button type="button" class="modal__close" data-close="supplierModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="supplierModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="supplierModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="supplierModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for supplier in suppliers %}
+                <tr data-code="{{ supplier.code }}" data-name="{{ supplier.name }}" data-text="{{ (supplier.code ~ ' ' ~ supplier.name)|lower }}">
+                  <td>{{ supplier.code }}</td>
+                  <td>{{ supplier.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Property Popup Modal -->
+  <div class="modal hidden" id="propertyModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="propertyModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Property</h3>
+        <button type="button" class="modal__close" data-close="propertyModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="propertyModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="propertyModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="propertyModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in item_properties %}
+                <tr data-code="{{ p.code }}" data-name="{{ p.name }}" data-text="{{ (p.code ~ ' ' ~ p.name)|lower }}">
+                  <td>{{ p.code }}</td>
+                  <td>{{ p.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Origin Popup Modal -->
+  <div class="modal hidden" id="originModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="originModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Origin</h3>
+        <button type="button" class="modal__close" data-close="originModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="originModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="originModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="originModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for o in item_origins %}
+                <tr data-code="{{ o.code }}" data-name="{{ o.name }}" data-text="{{ (o.code ~ ' ' ~ o.name)|lower }}">
+                  <td>{{ o.code }}</td>
+                  <td>{{ o.name }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if itemmaster_bin_panel.inv_default_bin_enabled %}
+  <!-- Default bin picker -->
+  <div class="modal hidden" id="defaultBinModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="defaultBinModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Default bin</h3>
+        <button type="button" class="modal__close" data-close="defaultBinModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="defaultBinModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="defaultBinModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="defaultBinModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr tabindex="0" data-bin-none="1" data-text="none no bin clear empty">
+                <td colspan="2">— No bin —</td>
+              </tr>
+              {% for b in itemmaster_bin_panel.bins %}
+              <tr tabindex="0" data-code="{{ b.storage_id }}" data-bin-code="{{ b.code }}" data-name="{{ b.name or '' }}" data-loc-key="{{ b.loc_key or '' }}" data-text="{{ (b.code ~ ' ' ~ (b.name or ''))|lower }}">
+                <td>{{ b.code }}</td>
+                <td>{{ b.name or '—' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Store Popup Modal -->
+  <div class="modal hidden" id="storeModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="storeModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>{% if item_request_mode %}Locations{% else %}Warehouse{% endif %}</h3>
+        <button type="button" class="modal__close" data-close="storeModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="storeModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="storeModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="storeModalTable">
+            <thead>
+              <tr>
+                {% if item_request_mode %}
+                <th>Dbocode</th>
+                <th>Branch</th>
+                <th>Description</th>
+                {% else %}
+                <th>ID</th>
+                <th>Code</th>
+                <th>Name</th>
+                {% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for s in store_popup_rows %}
+                <tr data-code="{{ s.code }}" data-dbkey="{{ s.dbkey or '' }}" data-wh-code="{{ s.warehouse_code or '' }}" data-name="{{ s.name }}" data-text="{{ (s.code ~ ' ' ~ (s.warehouse_code or '') ~ ' ' ~ (s.dbkey or '') ~ ' ' ~ s.name)|lower }}">
+                  {% if item_request_mode %}
+                  <td>{{ s.code }}</td>
+                  <td>{{ s.dbkey or '' }}</td>
+                  <td>{{ s.name }}</td>
+                  {% else %}
+                  <td>{{ s.code }}</td>
+                  <td>{{ s.warehouse_code or '' }}</td>
+                  <td>{{ s.name }}</td>
+                  {% endif %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Item Accounts Popup Modal -->
+  <div class="modal hidden" id="itemAccountModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="itemAccountModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h3>Account</h3>
+        <button type="button" class="modal__close" data-close="itemAccountModal">×</button>
+      </div>
+      <div class="modal__body">
+        <label class="search">
+          Search
+          <span class="search-field search-field--wide">
+            <input type="text" id="itemAccountModalSearch" placeholder="Search by code or name..." />
+            <button type="button" class="search-clear" id="itemAccountModalClear" aria-label="Clear search">×</button>
+          </span>
+        </label>
+        <div class="scroll-table modal__table">
+          <table class="table table-fixed" id="itemAccountModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for acc in chart_accounts %}
+                <tr data-code="{{ acc.code }}" data-name="{{ acc.name }}" data-text="{{ (acc.code ~ ' ' ~ acc.name ~ ' ' ~ (acc.type or ''))|lower }}">
+                  <td>{{ acc.code }}</td>
+                  <td>{{ acc.name }}</td>
+                  <td>{{ acc.type or '' }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    window.IM_ITEM_ACCOUNTS_API = {{ url_for('itemmaster.api_item_accounts')|tojson }};
+    window.IM_BOOTSTRAP_API = {{ (itemmaster_bootstrap_url or url_for('itemmaster.api_itemmaster_bootstrap'))|tojson }};
+    window.IM_DEFAULT_BINS_API = {{ url_for('itemmaster.api_itemmaster_default_bins')|tojson }};
+  </script>
+  <script src="{{ url_for('static', filename='js/itemmaster.js') }}?v=22"></script>
+  <script>
+  (function () {
+    var aside = document.querySelector('.im-item-image-aside');
+    var input = document.getElementById('item_image');
+    var preview = document.getElementById('itemImagePreview');
+    var placeholder = document.getElementById('itemImagePlaceholder');
+    var removeFlag = document.getElementById('remove_item_image');
+    var removeBtn = document.getElementById('btnRemoveItemImage');
+    if (!input || !preview) return;
+
+    function hasPreviewImage() {
+      return !preview.hidden && !!(preview.getAttribute('src') || '').trim();
+    }
+
+    function syncRemoveButton() {
+      if (!removeBtn) return;
+      removeBtn.hidden = !hasPreviewImage();
+    }
+
+    function clearPreview() {
+      preview.src = '';
+      preview.hidden = true;
+      if (placeholder) placeholder.style.display = '';
+      input.value = '';
+      syncRemoveButton();
+    }
+
+    input.addEventListener('change', function () {
+      var file = input.files && input.files[0];
+      if (!file) {
+        syncRemoveButton();
+        return;
+      }
+      if (removeFlag) removeFlag.value = '';
+      var url = URL.createObjectURL(file);
+      preview.src = url;
+      preview.hidden = false;
+      if (placeholder) placeholder.style.display = 'none';
+      syncRemoveButton();
+    });
+
+    if (removeBtn) {
+      removeBtn.addEventListener('click', function () {
+        if (!hasPreviewImage() && !(aside && aside.getAttribute('data-saved-image') === '1')) return;
+        if (!window.confirm('Remove this item image?')) return;
+        clearPreview();
+        if (removeFlag) removeFlag.value = '1';
+        if (aside) aside.setAttribute('data-saved-image', '0');
+      });
+    }
+
+    syncRemoveButton();
+  })();
+  </script>
+{% endblock %}

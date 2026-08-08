@@ -1,0 +1,963 @@
+{% extends "base.html" %}
+{% block title %}POS Tender Types{% endblock %}
+
+{% block content %}
+<div class="page-po nexa-list-page pos-tt-page im-productlist-page" style="max-width:1300px;">
+  <style>
+    .page-po.nexa-list-page.pos-tt-page.im-productlist-page {
+      max-width: 1300px !important;
+      margin: 0 auto !important;
+      padding: 8px 0 20px !important;
+    }
+    .pos-tt-page .pos-tt-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(140px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    @media (max-width: 720px) {
+      .pos-tt-page .pos-tt-stat-grid { grid-template-columns: 1fr; }
+    }
+    .pos-tt-page .pos-tt-stat-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      padding: 11px;
+      border: 1px solid #e5eaf2;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, .06);
+    }
+    .pos-tt-page .pos-tt-stat-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      flex: 0 0 36px;
+      border-radius: 9px;
+      color: #fff;
+      font-size: 17px;
+    }
+    .pos-tt-page .pos-tt-stat-icon--blue { background: linear-gradient(135deg, #2563eb, #38bdf8); }
+    .pos-tt-page .pos-tt-stat-icon--green { background: linear-gradient(135deg, #16a34a, #22c55e); }
+    .pos-tt-page .pos-tt-stat-icon--slate { background: linear-gradient(135deg, #475569, #94a3b8); }
+    .pos-tt-page .pos-tt-stat-label { margin: 0 0 4px; color: #475569; font-size: 11px; font-weight: 700; }
+    .pos-tt-page .pos-tt-stat-value { margin: 0; color: #0f172a; font-size: clamp(16px, 1.45vw, 21px); font-weight: 850; line-height: 1.1; }
+    .pos-tt-page .pos-tt-stat-sub { margin: 3px 0 0; color: #64748b; font-size: 11px; }
+    .pos-tt-page .pos-tt-icon-cell { text-align: center; font-size: 1.15rem; width: 52px; }
+    .pos-tt-page .pos-tt-code { font-family: ui-monospace, monospace; font-weight: 600; color: #0f172a; }
+    .pos-tt-page #posTtStatusLine { font-size: 13px; margin-top: 10px; min-height: 1.2em; color: #64748b; }
+    .pos-tt-page #posTtStatusLine.pos-tt--warn { color: #b45309; }
+    .pos-tt-page #posTtStatusLine.pos-tt--ok { color: #047857; }
+    .pos-tt-page .pos-tt-del { color: #b91c1c !important; border-color: rgba(185, 28, 28, 0.35) !important; }
+    .pos-tt-page .pos-tt-del:hover { background: #fef2f2 !important; }
+    .pos-tt-page .co-status {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      background: #dcfce7;
+      color: #166534;
+    }
+    .pos-tt-page .co-status--inactive {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    .pos-tt-page.im-productlist-page .im-pagination-controls button.pagination-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      border: 1px solid #cfd4da !important;
+      background: #fff;
+      color: #374151 !important;
+      cursor: pointer;
+      box-sizing: border-box;
+      font-family: inherit;
+    }
+    .pos-tt-page.im-productlist-page .im-pagination-controls button.pagination-btn:hover:not(.pagination-btn--disabled):not(.pagination-btn--active) {
+      background: #eef2f7;
+    }
+    .pos-tt-page.im-productlist-page .im-pagination-controls .pagination-btn.pagination-btn--active {
+      background: #1a56a4 !important;
+      border-color: #1a56a4 !important;
+      color: #fff !important;
+      font-weight: 600;
+      cursor: default;
+    }
+    .pos-tt-page.im-productlist-page .im-pagination-controls button.pagination-btn.pagination-btn--disabled {
+      color: #adb5bd !important;
+      cursor: default;
+      border-color: #e9ecef !important;
+      background: #fff !important;
+    }
+
+    .pos-tt-page #posTtTable tbody tr.pos-tt-row { cursor: pointer; }
+    .pos-tt-page #posTtTable tbody tr.pos-tt-row:active { background: #f0f5ff !important; }
+    .nexa-list-page.pos-tt-page .co-table tbody tr.pos-tt-row.is-selected {
+      background: #dcfce7 !important;
+      box-shadow: inset 3px 0 0 #16a34a;
+    }
+    .nexa-list-page.pos-tt-page .co-table tbody tr.pos-tt-row.is-selected:nth-child(even) {
+      background: #d1fae5 !important;
+    }
+
+    #posTtModal .modal__content.pos-tt-modal__content {
+      width: min(820px, 94vw);
+      max-width: 820px;
+      max-height: 90vh;
+      padding: 0;
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    #posTtModal .pos-tt-modal__header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px 22px 14px;
+      border-bottom: 1px solid #e5eaf2;
+      background: #fff;
+    }
+    #posTtModal .pos-tt-modal__title { margin: 0; color: #0f172a; font-size: 18px; font-weight: 800; line-height: 1.25; }
+    #posTtModal .pos-tt-modal__subtitle { margin-top: 5px; color: #64748b; font-size: 13px; }
+    #posTtModal .pos-tt-modal__close {
+      border: 0;
+      background: #f1f5f9;
+      color: #334155;
+      border-radius: 999px;
+      width: 32px;
+      height: 32px;
+      cursor: pointer;
+      font-size: 20px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    #posTtModal .pos-tt-modal__body {
+      padding: 18px 22px;
+      overflow-y: auto;
+      max-height: calc(90vh - 140px);
+    }
+    #posTtModal .im-preview-code {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      background: #f0f9ff;
+      color: #1d4ed8;
+      font-weight: 800;
+      font-size: 13px;
+    }
+    #posTtModal .im-status-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      background: #dcfce7;
+      color: #166534;
+    }
+    #posTtModal .im-status-pill--inactive { background: #fee2e2; color: #991b1b; }
+    #posTtModal .pos-tt-modal__view-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 4px;
+    }
+    @media (max-width: 640px) {
+      #posTtModal .pos-tt-modal__view-grid { grid-template-columns: 1fr; }
+    }
+    #posTtModal .im-preview-metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    #posTtModal .im-preview-metric {
+      padding: 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      background: #f8fafc;
+    }
+    #posTtModal .im-preview-metric b {
+      display: block;
+      color: #0f172a;
+      font-size: 15px;
+      word-break: break-word;
+    }
+    #posTtModal .im-preview-metric span {
+      display: block;
+      margin-top: 3px;
+      color: #64748b;
+      font-size: 11px;
+    }
+    #posTtModal .im-preview-fields { display: grid; gap: 8px; }
+    #posTtModal .im-preview-field {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #edf2f7;
+      font-size: 12px;
+    }
+    #posTtModal .im-preview-field span:first-child { color: #64748b; }
+    #posTtModal .im-preview-field span:last-child {
+      color: #0f172a;
+      font-weight: 600;
+      text-align: right;
+      word-break: break-word;
+    }
+    #posTtModal .im-preview-edit-form {
+      display: none;
+      gap: 10px;
+      padding: 16px;
+      border: 1px solid #dbe3ef;
+      border-radius: 10px;
+      background: #f8fbff;
+    }
+    #posTtModal.is-editing .im-preview-edit-form,
+    #posTtModal.is-adding .im-preview-edit-form { display: grid; }
+    #posTtModal.is-editing .pos-tt-modal__view,
+    #posTtModal.is-adding .pos-tt-modal__view { display: none !important; }
+    #posTtModal.is-editing .pos-tt-modal__code,
+    #posTtModal.is-adding .pos-tt-modal__code { display: none !important; }
+    #posTtModal .im-preview-edit-form label {
+      display: grid;
+      gap: 4px;
+      color: #475569;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    #posTtModal .im-preview-edit-form input,
+    #posTtModal .im-preview-edit-form select {
+      width: 100%;
+      min-height: 36px;
+      border: 1px solid #dbe3ef;
+      border-radius: 6px;
+      padding: 8px 10px;
+      background: #fff;
+      color: #0f172a;
+      font-size: 13px;
+      box-sizing: border-box;
+    }
+    #posTtModal .im-preview-edit-form input:focus,
+    #posTtModal .im-preview-edit-form select:focus {
+      outline: none;
+      border-color: #0d6efd;
+      box-shadow: 0 0 0 3px rgba(13, 110, 253, .10);
+    }
+    #posTtModal .im-preview-edit-form .im-preview-edit-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    #posTtModal .im-preview-edit-form .im-preview-edit-grid--3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    @media (max-width: 720px) {
+      #posTtModal .im-preview-edit-form .im-preview-edit-grid,
+      #posTtModal .im-preview-edit-form .im-preview-edit-grid--3 { grid-template-columns: 1fr; }
+    }
+    #posTtModal .im-preview-edit-status { min-height: 18px; color: #64748b; font-size: 12px; }
+    #posTtModal .pos-tt-modal__footer {
+      display: flex;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 14px 22px;
+      border-top: 1px solid #e5eaf2;
+      background: #fff;
+    }
+    #posTtModal.is-editing #posTtModalEdit,
+    #posTtModal.is-editing #posTtModalDelete,
+    #posTtModal.is-adding #posTtModalEdit,
+    #posTtModal.is-adding #posTtModalDelete { display: none !important; }
+    #posTtModal:not(.is-editing):not(.is-adding) .pos-tt-modal__edit-only { display: none !important; }
+    #posTtModal.is-saving .im-preview-edit-form { opacity: .72; pointer-events: none; }
+    #posTtModal .pos-tt-modal-del { color: #b91c1c !important; border-color: rgba(185, 28, 28, 0.35) !important; }
+    #posTtModal .pos-tt-modal-del:hover { background: #fef2f2 !important; }
+
+    #posTtModal .ti-toolbar-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 18px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid transparent;
+      line-height: 1.3;
+      box-sizing: border-box;
+      font-family: inherit;
+      white-space: nowrap;
+      min-height: 38px;
+    }
+    #posTtModal .ti-toolbar-btn--primary {
+      background: #28a745 !important;
+      border-color: #28a745 !important;
+      color: #fff !important;
+    }
+    #posTtModal .ti-toolbar-btn--primary:hover { filter: brightness(0.92); }
+    #posTtModal .ti-toolbar-btn--outline {
+      background: #fff;
+      border-color: #cbd5e1 !important;
+      color: #334155 !important;
+    }
+    #posTtModal .ti-toolbar-btn--outline:hover {
+      background: #f8fafc;
+      border-color: #94a3b8 !important;
+      color: #0f172a !important;
+    }
+  </style>
+
+  <section class="pos-tt-stat-grid" aria-label="Tender summary">
+    <div class="pos-tt-stat-card">
+      <span class="pos-tt-stat-icon pos-tt-stat-icon--blue" aria-hidden="true"><i class="bi bi-wallet2"></i></span>
+      <div>
+        <p class="pos-tt-stat-label">Total tender types</p>
+        <p class="pos-tt-stat-value" id="posTtStatTotal">0</p>
+        <p class="pos-tt-stat-sub">Mapped paymodes</p>
+      </div>
+    </div>
+    <div class="pos-tt-stat-card">
+      <span class="pos-tt-stat-icon pos-tt-stat-icon--green" aria-hidden="true"><i class="bi bi-check-circle"></i></span>
+      <div>
+        <p class="pos-tt-stat-label">Active</p>
+        <p class="pos-tt-stat-value" id="posTtStatActive">0</p>
+        <p class="pos-tt-stat-sub">Used in settlement</p>
+      </div>
+    </div>
+    <div class="pos-tt-stat-card">
+      <span class="pos-tt-stat-icon pos-tt-stat-icon--slate" aria-hidden="true"><i class="bi bi-pause-circle"></i></span>
+      <div>
+        <p class="pos-tt-stat-label">Inactive</p>
+        <p class="pos-tt-stat-value" id="posTtStatInactive">0</p>
+        <p class="pos-tt-stat-sub">Hidden from GL resolve</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Tender type mapping</h1>
+      <p class="page-po__muted">Define POS paymode codes (CASH, CARD, VISA, …) and map each to a postable GL account. Settlement uses these rows when bills include <code>POS_BILL_PAYMODE</code> detail.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <button type="button" class="page-po__btn-primary" id="posTtAdd">+ Add tender</button>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div class="nexa-list-toolbar">
+    <input type="search" id="posTtSearch" class="input" placeholder="Search tender code, name, category, GL…"
+           autocomplete="off" style="min-width:220px; max-width:360px;" aria-label="Search tenders" />
+    <span id="posTtMeta" class="nexa-num" style="margin-left:4px;">0 rows</span>
+  </div>
+
+  <div class="co-table-wrap">
+    <table class="co-table" id="posTtTable" aria-label="Tender types">
+      <thead>
+        <tr>
+          <th style="text-align:center; width:52px;">Icon</th>
+          <th>Tender code<span class="sort-arrow"></span></th>
+          <th>Tender name<span class="sort-arrow"></span></th>
+          <th>Category<span class="sort-arrow"></span></th>
+          <th>GL account<span class="sort-arrow"></span></th>
+          <th>Status<span class="sort-arrow"></span></th>
+          <th style="text-align:center; width:148px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="posTtTbody"></tbody>
+    </table>
+  </div>
+
+  <div class="im-pagination">
+    <div class="im-pagination-info" id="posTtPageInfo">Showing —</div>
+    <div class="im-pagination-controls">
+      <button type="button" class="pagination-btn" id="posTtPrev">« Previous</button>
+      <span class="pagination-btn pagination-btn--active" id="posTtPageNum">1</span>
+      <button type="button" class="pagination-btn" id="posTtNext">Next »</button>
+    </div>
+  </div>
+  <p id="posTtStatusLine" role="status"></p>
+</div>
+
+<div class="modal hidden" id="posTtModal" role="dialog" aria-modal="true" aria-labelledby="posTtModalTitle">
+  <div class="modal__overlay" id="posTtModalOverlay"></div>
+  <div class="modal__content pos-tt-modal__content">
+    <div class="pos-tt-modal__header">
+      <div>
+        <h2 class="pos-tt-modal__title" id="posTtModalTitle">Tender name</h2>
+        <div class="pos-tt-modal__subtitle" id="posTtModalSubtitle">Category</div>
+      </div>
+      <button type="button" class="pos-tt-modal__close" id="posTtModalClose" aria-label="Close">×</button>
+    </div>
+    <div class="pos-tt-modal__body">
+      <div class="im-preview-code pos-tt-modal__code">
+        <span>Code</span>
+        <strong id="posTtModalCode">-</strong>
+        <span class="im-status-pill" id="posTtModalStatus">Active</span>
+      </div>
+      <div class="im-preview-edit-form" id="posTtEditForm">
+        <div class="im-preview-edit-grid im-preview-edit-grid--3">
+          <label for="posTtCode">Tender code *
+            <input type="text" id="posTtCode" maxlength="30" placeholder="e.g. VISA" autocomplete="off" style="text-transform:uppercase;" />
+          </label>
+          <label for="posTtName">Tender name
+            <input type="text" id="posTtName" maxlength="120" placeholder="Display name" autocomplete="off" />
+          </label>
+          <label for="posTtCategory">Category
+            <select id="posTtCategory">
+              <option value="Cash">Cash</option>
+              <option value="Card">Card</option>
+              <option value="Voucher">Voucher</option>
+              <option value="Wallet">Wallet</option>
+              <option value="Credit">Credit</option>
+            </select>
+          </label>
+        </div>
+        <label for="posTtGl">GL account *
+          <select id="posTtGl"></select>
+        </label>
+        <div class="im-preview-edit-grid im-preview-edit-grid--3">
+          <label for="posTtSort">Sort order
+            <input type="number" id="posTtSort" value="0" step="1" />
+          </label>
+          <label for="posTtIcon">Icon
+            <select id="posTtIcon">
+              <option value="cash">Cash</option>
+              <option value="card">Card</option>
+              <option value="visa">Visa</option>
+              <option value="mc">Mastercard</option>
+              <option value="voucher">Voucher</option>
+              <option value="wallet">Wallet</option>
+              <option value="credit">Credit</option>
+              <option value="loyalty">Loyalty</option>
+              <option value="points">Points</option>
+              <option value="generic">Generic</option>
+            </select>
+          </label>
+          <label for="posTtStatusSel">Status
+            <select id="posTtStatusSel">
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
+            </select>
+          </label>
+        </div>
+        <div class="im-preview-edit-status" id="posTtModalEditStatus"></div>
+      </div>
+      <div class="pos-tt-modal__view">
+        <div class="pos-tt-modal__view-grid">
+          <div class="im-preview-metrics">
+            <div class="im-preview-metric"><b id="posTtModalMetricCat">-</b><span>Category</span></div>
+            <div class="im-preview-metric"><b id="posTtModalMetricSort">0</b><span>Sort order</span></div>
+            <div class="im-preview-metric"><b id="posTtModalMetricIcon">◆</b><span>Checkout icon</span></div>
+            <div class="im-preview-metric"><b id="posTtModalMetricGl">-</b><span>GL account</span></div>
+          </div>
+          <div class="im-preview-fields">
+            <div class="im-preview-field"><span>GL account</span><span id="posTtModalGl">-</span></div>
+            <div class="im-preview-field"><span>Category</span><span id="posTtModalCategory">-</span></div>
+            <div class="im-preview-field"><span>Sort order</span><span id="posTtModalSort">0</span></div>
+            <div class="im-preview-field"><span>Icon</span><span id="posTtModalIcon">-</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="pos-tt-modal__footer">
+      <button type="button" class="ti-toolbar-btn ti-toolbar-btn--primary" id="posTtModalEdit">Edit</button>
+      <button type="button" class="ti-toolbar-btn ti-toolbar-btn--outline pos-tt-modal-del" id="posTtModalDelete">Delete</button>
+      <button type="button" class="ti-toolbar-btn ti-toolbar-btn--primary pos-tt-modal__edit-only" id="posTtModalSave">Save</button>
+      <button type="button" class="ti-toolbar-btn ti-toolbar-btn--outline pos-tt-modal__edit-only" id="posTtModalCancelEdit">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var apiBootstrap = {{ api_bootstrap_url|tojson }};
+  var apiSave = {{ api_save_url|tojson }};
+  var apiDelete = {{ api_delete_url|tojson }};
+  var tenders = [];
+  var accounts = [];
+  var filter = '';
+  var pageSize = 15;
+  var page = 1;
+  var currentRow = null;
+  var currentTender = null;
+
+  var tbody = document.getElementById('posTtTbody');
+  var meta = document.getElementById('posTtMeta');
+  var searchEl = document.getElementById('posTtSearch');
+  var statusLine = document.getElementById('posTtStatusLine');
+  var pageInfo = document.getElementById('posTtPageInfo');
+  var btnPrev = document.getElementById('posTtPrev');
+  var btnNext = document.getElementById('posTtNext');
+  var btnPageNum = document.getElementById('posTtPageNum');
+  var modal = document.getElementById('posTtModal');
+  var inpCode = document.getElementById('posTtCode');
+  var inpName = document.getElementById('posTtName');
+  var selCategory = document.getElementById('posTtCategory');
+  var selGl = document.getElementById('posTtGl');
+  var inpSort = document.getElementById('posTtSort');
+  var selIcon = document.getElementById('posTtIcon');
+  var selStatus = document.getElementById('posTtStatusSel');
+  var modalEditStatus = document.getElementById('posTtModalEditStatus');
+
+  var ICON_EMOJI = { cash: '💵', card: '💳', visa: '💳', mc: '💳', voucher: '🎟', wallet: '📱', credit: '📝', loyalty: '⭐', points: '✦', generic: '◆' };
+  var ICON_LABEL = { cash: 'Cash', card: 'Card', visa: 'Visa', mc: 'Mastercard', voucher: 'Voucher', wallet: 'Wallet', credit: 'Credit', loyalty: 'Loyalty', points: 'Points', generic: 'Generic' };
+
+  function setStatus(msg, kind) {
+    statusLine.textContent = msg || '';
+    statusLine.className = kind === 'warn' ? 'pos-tt--warn' : kind === 'ok' ? 'pos-tt--ok' : '';
+  }
+
+  function setModalEditStatus(msg) {
+    if (modalEditStatus) modalEditStatus.textContent = msg || '';
+  }
+
+  function setText(id, value) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = value == null ? '' : String(value);
+  }
+
+  function escapeHtml(s) {
+    var d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+
+  function iconEmoji(row) {
+    var ik = String(row.icon_key || '').toLowerCase();
+    return ICON_EMOJI[ik] || ICON_EMOJI.generic;
+  }
+
+  function iconLabel(key) {
+    var ik = String(key || '').toLowerCase();
+    return ICON_LABEL[ik] || ICON_LABEL.generic;
+  }
+
+  function accountLabel(code) {
+    code = String(code || '').trim();
+    if (!code) return '—';
+    for (var i = 0; i < accounts.length; i++) {
+      if (accounts[i].code === code) {
+        return code + ' — ' + (accounts[i].name || '');
+      }
+    }
+    return code;
+  }
+
+  function accountLabelHtml(code) {
+    var label = accountLabel(code);
+    return label === '—' ? '<span class="page-po__muted">—</span>' : escapeHtml(label);
+  }
+
+  function filteredRows() {
+    var q = filter.trim().toLowerCase();
+    if (!q) return tenders.slice();
+    return tenders.filter(function (r) {
+      var blob = [r.tender_code, r.tender_name, r.category, r.gl_account_code, r.status].join(' ').toLowerCase();
+      return blob.indexOf(q) !== -1;
+    });
+  }
+
+  function updateSummaryCards() {
+    var total = tenders.length;
+    var active = 0;
+    tenders.forEach(function (r) {
+      if (String(r.status || '').toUpperCase() === 'ACTIVE') active++;
+    });
+    document.getElementById('posTtStatTotal').textContent = String(total);
+    document.getElementById('posTtStatActive').textContent = String(active);
+    document.getElementById('posTtStatInactive').textContent = String(total - active);
+  }
+
+  function renderGlSelect() {
+    selGl.innerHTML = '';
+    var o0 = document.createElement('option');
+    o0.value = '';
+    o0.textContent = 'Select account…';
+    selGl.appendChild(o0);
+    accounts.forEach(function (a) {
+      var o = document.createElement('option');
+      o.value = a.code;
+      o.textContent = a.code + ' — ' + (a.name || '');
+      selGl.appendChild(o);
+    });
+  }
+
+  function syncPaginationButtons(pages) {
+    btnPrev.classList.toggle('pagination-btn--disabled', page <= 1);
+    btnNext.classList.toggle('pagination-btn--disabled', page >= pages);
+    btnPrev.disabled = page <= 1;
+    btnNext.disabled = page >= pages;
+    btnPageNum.textContent = String(page);
+  }
+
+  function clearRowSelection() {
+    tbody.querySelectorAll('tr.pos-tt-row.is-selected').forEach(function (r) {
+      r.classList.remove('is-selected');
+    });
+  }
+
+  function fillEditForm(row) {
+    var r = row || {};
+    inpCode.value = r.tender_code || '';
+    inpName.value = r.tender_name || '';
+    selCategory.value = r.category || 'Cash';
+    selGl.value = r.gl_account_code || '';
+    inpSort.value = String(r.sort_order != null ? r.sort_order : 0);
+    selIcon.value = r.icon_key || 'generic';
+    selStatus.value = String(r.status || 'ACTIVE').toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    setModalEditStatus('');
+  }
+
+  function openModal() {
+    if (modal) modal.classList.remove('hidden');
+  }
+
+  function showTenderPreview(row, tr) {
+    if (!row || !modal) return;
+    currentTender = row;
+    currentRow = tr || null;
+    clearRowSelection();
+    if (tr) tr.classList.add('is-selected');
+    modal.classList.remove('is-editing', 'is-adding', 'is-saving');
+    openModal();
+
+    var active = String(row.status || '').toUpperCase() === 'ACTIVE';
+    setText('posTtModalTitle', row.tender_name || row.tender_code || 'Tender');
+    setText('posTtModalSubtitle', row.category || 'Uncategorized');
+    setText('posTtModalCode', row.tender_code || '-');
+    setText('posTtModalMetricCat', row.category || '-');
+    setText('posTtModalMetricSort', String(row.sort_order != null ? row.sort_order : 0));
+    setText('posTtModalMetricIcon', iconEmoji(row));
+    setText('posTtModalMetricGl', row.gl_account_code || '-');
+    setText('posTtModalGl', accountLabel(row.gl_account_code));
+    setText('posTtModalCategory', row.category || '-');
+    setText('posTtModalSort', String(row.sort_order != null ? row.sort_order : 0));
+    setText('posTtModalIcon', iconLabel(row.icon_key));
+    var statusEl = document.getElementById('posTtModalStatus');
+    if (statusEl) {
+      statusEl.textContent = active ? 'Active' : 'Inactive';
+      statusEl.classList.toggle('im-status-pill--inactive', !active);
+    }
+    fillEditForm(row);
+  }
+
+  function closeModal() {
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('is-editing', 'is-adding', 'is-saving');
+    currentTender = null;
+    currentRow = null;
+    clearRowSelection();
+    setModalEditStatus('');
+  }
+
+  function enterEditMode() {
+    if (!modal || !currentTender) return;
+    fillEditForm(currentTender);
+    inpCode.disabled = true;
+    modal.classList.add('is-editing');
+    modal.classList.remove('is-adding');
+    inpName.focus();
+  }
+
+  function enterAddMode() {
+    if (!modal) return;
+    currentTender = null;
+    currentRow = null;
+    clearRowSelection();
+    modal.classList.remove('is-saving');
+    modal.classList.add('is-editing', 'is-adding');
+    openModal();
+    setText('posTtModalTitle', 'New tender');
+    setText('posTtModalSubtitle', 'Map a paymode to a GL account');
+    setText('posTtModalCode', '—');
+    var statusEl = document.getElementById('posTtModalStatus');
+    if (statusEl) {
+      statusEl.textContent = 'Draft';
+      statusEl.classList.remove('im-status-pill--inactive');
+    }
+    inpCode.disabled = false;
+    inpCode.value = '';
+    inpName.value = '';
+    selCategory.value = 'Cash';
+    selGl.value = '';
+    inpSort.value = '0';
+    selIcon.value = 'generic';
+    selStatus.value = 'ACTIVE';
+    setModalEditStatus('');
+    inpCode.focus();
+  }
+
+  function exitEditMode() {
+    if (!modal) return;
+    if (modal.classList.contains('is-adding')) {
+      closeModal();
+      return;
+    }
+    modal.classList.remove('is-editing', 'is-saving');
+    setModalEditStatus('');
+    if (currentTender) showTenderPreview(currentTender, currentRow);
+  }
+
+  function escCode(code) {
+    if (window.CSS && typeof CSS.escape === 'function') return CSS.escape(String(code || ''));
+    return String(code || '').replace(/"/g, '\\"');
+  }
+
+  function renderTable() {
+    updateSummaryCards();
+    var rows = filteredRows();
+    var total = rows.length;
+    var pages = Math.max(1, Math.ceil(total / pageSize));
+    if (page > pages) page = pages;
+    var start = (page - 1) * pageSize;
+    var slice = rows.slice(start, start + pageSize);
+    tbody.innerHTML = '';
+    slice.forEach(function (r) {
+      var tr = document.createElement('tr');
+      tr.className = 'pos-tt-row';
+      tr.setAttribute('role', 'button');
+      tr.setAttribute('tabindex', '0');
+      tr.setAttribute('title', 'Preview tender');
+      tr.setAttribute('data-code', r.tender_code || '');
+      var st = String(r.status || '').toUpperCase() === 'ACTIVE';
+      tr.innerHTML =
+        '<td class="pos-tt-icon-cell">' + iconEmoji(r) + '</td>' +
+        '<td class="pos-tt-code">' + escapeHtml(r.tender_code) + '</td>' +
+        '<td>' + escapeHtml(r.tender_name || '') + '</td>' +
+        '<td>' + escapeHtml(r.category || '') + '</td>' +
+        '<td>' + accountLabelHtml(r.gl_account_code) + '</td>' +
+        '<td>' +
+          (st
+            ? '<span class="co-status">Active</span>'
+            : '<span class="co-status co-status--inactive">Inactive</span>') +
+        '</td>' +
+        '<td style="text-align:center;">' +
+          '<span style="display:inline-flex;gap:6px;flex-wrap:wrap;justify-content:center;">' +
+          '<button type="button" class="btn-view pos-tt-edit" data-code="' + escapeHtml(r.tender_code) + '">Edit</button>' +
+          '<button type="button" class="btn-view pos-tt-del pos-tt-delete" data-code="' + escapeHtml(r.tender_code) + '">Delete</button>' +
+          '</span>' +
+        '</td>';
+      tbody.appendChild(tr);
+    });
+    if (!slice.length) {
+      var trE = document.createElement('tr');
+      trE.innerHTML = '<td colspan="7" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">No tender types match your search.</td>';
+      tbody.appendChild(trE);
+    }
+    if (currentTender) {
+      var code = currentTender.tender_code;
+      var wasEditing = modal && modal.classList.contains('is-editing') && !modal.classList.contains('is-adding');
+      var match = tenders.find(function (x) { return x.tender_code === code; });
+      if (match) {
+        currentTender = match;
+        var selTr = tbody.querySelector('tr.pos-tt-row[data-code="' + escCode(code) + '"]');
+        showTenderPreview(match, selTr);
+        if (wasEditing) {
+          modal.classList.add('is-editing');
+          inpCode.disabled = true;
+        }
+      } else if (!modal.classList.contains('is-adding')) {
+        closeModal();
+      }
+    }
+    meta.textContent = total + ' row' + (total !== 1 ? 's' : '');
+    var hi = total === 0 ? 0 : start + slice.length;
+    pageInfo.textContent = total ? 'Showing ' + (start + 1) + ' to ' + hi + ' of ' + total + ' records' : 'No records';
+    syncPaginationButtons(pages);
+  }
+
+  function loadBootstrap() {
+    setStatus('Loading…', '');
+    fetch(apiBootstrap, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) {
+          setStatus(data.error || 'Load failed', 'warn');
+          return;
+        }
+        tenders = data.tenders || [];
+        accounts = data.accounts || [];
+        renderGlSelect();
+        page = 1;
+        renderTable();
+        setStatus('', '');
+      })
+      .catch(function (e) {
+        setStatus(e.message || 'Network error', 'warn');
+      });
+  }
+
+  function saveTender() {
+    var isAdd = modal && modal.classList.contains('is-adding');
+    var code = (inpCode.value || '').trim().toUpperCase();
+    var payload = {
+      tender_code: code,
+      tender_name: (inpName.value || '').trim(),
+      category: selCategory.value,
+      gl_account_code: (selGl.value || '').trim(),
+      sort_order: parseInt(inpSort.value, 10) || 0,
+      icon_key: selIcon.value,
+      status: selStatus.value,
+    };
+    if (!payload.tender_code) {
+      setModalEditStatus('Tender code is required.');
+      inpCode.focus();
+      return;
+    }
+    if (!payload.gl_account_code) {
+      setModalEditStatus('Select a GL account.');
+      selGl.focus();
+      return;
+    }
+    modal.classList.add('is-saving');
+    setModalEditStatus('Saving…');
+    fetch(apiSave, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        modal.classList.remove('is-saving');
+        if (!data.success) {
+          setModalEditStatus(data.error || 'Save failed');
+          return;
+        }
+        tenders = data.tenders || [];
+        closeModal();
+        renderTable();
+        var saved = tenders.find(function (x) { return x.tender_code === payload.tender_code; });
+        if (saved) {
+          var selTr = tbody.querySelector('tr.pos-tt-row[data-code="' + escCode(saved.tender_code) + '"]');
+          if (selTr) selTr.classList.add('is-selected');
+        }
+        setStatus(isAdd ? 'Tender created.' : 'Tender updated.', 'ok');
+      })
+      .catch(function (e) {
+        modal.classList.remove('is-saving');
+        setModalEditStatus(e.message || 'Network error');
+      });
+  }
+
+  function deleteTender(code) {
+    if (!code || !confirm('Delete tender "' + code + '"?')) return;
+    fetch(apiDelete, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ tender_code: code }),
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) {
+          setStatus(data.error || 'Delete failed', 'warn');
+          return;
+        }
+        tenders = data.tenders || [];
+        closeModal();
+        renderTable();
+        setStatus('Deleted.', 'ok');
+      })
+      .catch(function (e) {
+        setStatus(e.message || 'Network error', 'warn');
+      });
+  }
+
+  document.getElementById('posTtAdd').addEventListener('click', enterAddMode);
+  document.getElementById('posTtModalClose').addEventListener('click', closeModal);
+  document.getElementById('posTtModalOverlay').addEventListener('click', closeModal);
+  document.getElementById('posTtModalEdit').addEventListener('click', enterEditMode);
+  document.getElementById('posTtModalCancelEdit').addEventListener('click', exitEditMode);
+  document.getElementById('posTtModalSave').addEventListener('click', saveTender);
+  document.getElementById('posTtModalDelete').addEventListener('click', function () {
+    if (currentTender && currentTender.tender_code) deleteTender(currentTender.tender_code);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) {
+      if (modal.classList.contains('is-editing') || modal.classList.contains('is-adding')) {
+        exitEditMode();
+      } else {
+        closeModal();
+      }
+    }
+  });
+
+  searchEl.addEventListener('input', function () {
+    filter = searchEl.value || '';
+    page = 1;
+    renderTable();
+  });
+
+  btnPrev.addEventListener('click', function () {
+    if (page > 1) {
+      page--;
+      renderTable();
+    }
+  });
+  btnNext.addEventListener('click', function () {
+    var rows = filteredRows();
+    var pages = Math.max(1, Math.ceil(rows.length / pageSize));
+    if (page < pages) {
+      page++;
+      renderTable();
+    }
+  });
+
+  tbody.addEventListener('click', function (e) {
+    var ed = e.target.closest('.pos-tt-edit');
+    var del = e.target.closest('.pos-tt-delete');
+    if (ed) {
+      e.stopPropagation();
+      var codeEd = ed.getAttribute('data-code');
+      var rowEd = tenders.find(function (x) { return x.tender_code === codeEd; });
+      var trEd = ed.closest('tr.pos-tt-row');
+      if (rowEd) {
+        showTenderPreview(rowEd, trEd);
+        enterEditMode();
+      }
+      return;
+    }
+    if (del) {
+      e.stopPropagation();
+      deleteTender(del.getAttribute('data-code'));
+      return;
+    }
+    var tr = e.target.closest('tr.pos-tt-row');
+    if (!tr) return;
+    var code = tr.getAttribute('data-code');
+    var row = tenders.find(function (x) { return x.tender_code === code; });
+    if (row) showTenderPreview(row, tr);
+  });
+
+  tbody.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var tr = e.target.closest('tr.pos-tt-row');
+    if (!tr) return;
+    e.preventDefault();
+    var code = tr.getAttribute('data-code');
+    var row = tenders.find(function (x) { return x.tender_code === code; });
+    if (row) showTenderPreview(row, tr);
+  });
+
+  loadBootstrap();
+})();
+</script>
+{% endblock %}
+

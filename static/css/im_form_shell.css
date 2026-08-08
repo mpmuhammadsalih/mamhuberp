@@ -1,0 +1,447 @@
+/**
+ * Shared Item Master–style form shell (toolbar + card body + underline fields).
+ * Used by Item Master, Purchase Order, Goods Receipt Note, Purchase Return, Sales Invoice, and similar setup screens.
+ */
+body:has(.im-page.im-form-shell-page) {
+  overflow-x: auto;
+  min-height: 100vh;
+  background: #f5f6f8;
+  color: #212529;
+}
+
+.im-page.im-form-shell-page {
+  max-width: 1680px;
+  margin: 0 auto;
+  padding: 8px 12px 20px;
+  --im-toolbar-bg: linear-gradient(180deg, #f0f7fb 0%, #e3eef8 100%);
+  --im-toolbar-border: rgba(13, 110, 253, 0.14);
+  --im-field-fill: rgba(255, 255, 255, 0.52);
+  --im-field-fill-strong: #eaf2fa;
+  --im-field-readonly: rgba(226, 236, 247, 0.92);
+  --im-table-surface: rgba(255, 255, 255, 0.55);
+}
+
+.im-form-shell-page .im-topbar {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.im-form-shell-page .im-topbar-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: 100%;
+}
+
+.im-form-shell-page .im-topbar h1 {
+  display: block;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 400;
+  color: #212529;
+  line-height: 1.3;
+}
+
+.im-form-shell-page .im-topbar h1 .im-ref {
+  font-weight: 600;
+}
+
+.im-form-shell-page .im-topbar .im-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.im-form-shell-page .im-btn-save {
+  background: #28a745 !important;
+  border: none !important;
+  color: #fff !important;
+  padding: 8px 20px !important;
+  border-radius: 4px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  cursor: pointer;
+  text-decoration: none !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.im-form-shell-page .im-btn-save:disabled {
+  background: #adb5bd !important;
+  cursor: not-allowed;
+}
+
+.im-form-shell-page .im-btn-secondary,
+.im-form-shell-page button.im-link.po-toolbar-btn {
+  background: var(--im-field-fill-strong) !important;
+  border: 1px solid rgba(13, 110, 253, 0.16) !important;
+  color: #495057 !important;
+  padding: 8px 16px !important;
+  border-radius: 4px !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  cursor: pointer;
+  text-decoration: none !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.im-form-shell-page .im-btn-secondary:hover,
+.im-form-shell-page button.im-link.po-toolbar-btn:hover {
+  background: #dfe8f3 !important;
+}
+
+.im-form-shell-page .im-link {
+  color: #007bff;
+  text-decoration: none;
+  font-size: 13px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.im-form-shell-page .im-link:hover {
+  text-decoration: underline;
+}
+
+.im-form-shell-page .status-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+/* Fixed toolbar below app header */
+.im-form-shell-page.im-page:has(.itemmaster-container) {
+  padding-top: 50px !important;
+}
+
+.im-form-shell-page.im-page:has(.itemmaster-container) .im-topbar-main {
+  position: fixed !important;
+  top: 46px;
+  left: 260px;
+  right: var(--nexa-scrollbar-width, 0px);
+  z-index: 105;
+  margin: 0 !important;
+  padding: 6px 16px 8px 16px;
+  border-bottom: 1px solid var(--im-toolbar-border);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04), 0 6px 18px rgba(15, 23, 42, 0.06);
+  background: var(--im-toolbar-bg);
+  box-sizing: border-box;
+  width: auto;
+  max-width: none;
+  display: flex !important;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.im-form-shell-page.im-page:has(.itemmaster-container) .im-topbar-main h1 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  font-size: 13px !important;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.im-form-shell-page.im-page:has(.itemmaster-container) .im-topbar-main .im-actions {
+  flex: 0 0 auto;
+  margin-left: auto;
+  justify-content: flex-start;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.im-form-shell-page.im-page:has(.itemmaster-container) .im-topbar-main .im-actions::-webkit-scrollbar {
+  display: none;
+  height: 0;
+}
+
+.im-form-shell-page.im-page:has(.itemmaster-container) .im-topbar-main .im-actions > .im-btn-save,
+.im-form-shell-page.im-page:has(.itemmaster-container) .im-topbar-main .im-actions > button.im-btn-secondary,
+.im-form-shell-page.im-page:has(.itemmaster-container) .im-topbar-main .im-actions > a.im-btn-secondary,
+.im-form-shell-page.im-page:has(.itemmaster-container) .im-topbar-main .im-actions > button.po-toolbar-btn {
+  box-sizing: border-box !important;
+  width: 5.25rem;
+  min-width: 5.25rem;
+  max-width: 5.25rem;
+  padding-left: 6px !important;
+  padding-right: 6px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* Longer action labels (e.g. Change posting date) need room + same vertical align. */
+.im-form-shell-page.im-page:has(.itemmaster-container) .im-topbar-main .im-actions > #btnChangePostingDate,
+.im-form-shell-page.im-page:has(.itemmaster-container) .im-topbar-main .im-actions > #btnPostInventory {
+  width: auto;
+  min-width: 5.25rem;
+  max-width: none;
+  padding-left: 10px !important;
+  padding-right: 10px !important;
+}
+
+.im-form-shell-page.im-page:has(.itemmaster-container) .im-topbar-main .im-actions > .po-save-as-opts,
+.im-form-shell-page.im-page:has(.itemmaster-container) .im-topbar-main .im-actions > .pro-save-as-opts,
+.im-form-shell-page.im-page:has(.itemmaster-container) .im-topbar-main .im-actions > .grn-save-as-opts {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  flex-shrink: 0;
+  border-right: 1px solid #dee2e6;
+  margin-right: 4px;
+  padding-right: 8px;
+}
+
+.im-form-shell-page.im-page:has(.itemmaster-container) .im-topbar-main .im-actions > label.im-ai-toggle,
+.im-form-shell-page.im-page:has(.itemmaster-container) .im-topbar-main .im-actions > .cr-ai-toggle {
+  width: 5.25rem;
+  min-width: 5.25rem;
+  max-width: 5.25rem;
+  margin: 0 !important;
+  padding: 4px 4px !important;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.im-form-shell-page.im-page:has(.itemmaster-container) .im-topbar-main .im-actions > .cr-ai-toggle {
+  width: auto;
+  min-width: 5.5rem;
+  max-width: none;
+  padding: 4px 10px 4px 8px !important;
+}
+
+.layout.sidebar-collapsed:not(.layout--auth) .im-form-shell-page.im-page:has(.itemmaster-container) .im-topbar-main {
+  left: 56px;
+}
+
+.layout--auth .im-form-shell-page.im-page:has(.itemmaster-container) .im-topbar-main {
+  top: 0;
+  left: 0;
+}
+
+/* Section NAV bars (POS settlement style) */
+.im-form-shell-page .im-section-title {
+  margin: 14px 0 0;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #14324a;
+  background: linear-gradient(180deg, #e4ecf4 0%, #d5e1ec 100%);
+  border: 1px solid #b8c8d4;
+  border-bottom: 1px solid #a9bac9;
+  border-radius: 2px 2px 0 0;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  line-height: 1.35;
+}
+
+.im-form-shell-page .im-section-title:first-child {
+  margin-top: 0;
+}
+
+.im-form-shell-page .itemmaster-container .form-section.im-panel-body {
+  margin: 0 0 10px !important;
+  padding: 12px 14px !important;
+  border: 1px solid #b8c8d4 !important;
+  border-top: none !important;
+  border-radius: 0 0 2px 2px !important;
+  background: #fff !important;
+  box-shadow: 0 1px 3px rgba(15, 35, 55, 0.08);
+}
+
+.im-form-shell-page .itemmaster-container {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.im-form-shell-page .itemmaster-container .form-grid--2cols {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  row-gap: 4px !important;
+  column-gap: 18px !important;
+}
+
+.im-form-shell-page .itemmaster-container .form-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.im-form-shell-page .itemmaster-container .form-group.form-group--full,
+.im-form-shell-page .itemmaster-container .form-group.span-2 {
+  align-items: flex-start;
+  grid-column: 1 / -1;
+}
+
+.im-form-shell-page .itemmaster-container .form-group label {
+  color: #495057;
+  font-weight: 400;
+  font-size: 13px;
+  margin-bottom: 0;
+  display: block;
+  min-width: 140px;
+  flex-shrink: 0;
+}
+
+.im-form-shell-page .itemmaster-container .form-group > input,
+.im-form-shell-page .itemmaster-container .form-group > textarea,
+.im-form-shell-page .itemmaster-container .form-group > .search-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.im-form-shell-page .itemmaster-container .input,
+.im-form-shell-page .itemmaster-container input[type="text"],
+.im-form-shell-page .itemmaster-container input[type="number"],
+.im-form-shell-page .itemmaster-container input[type="date"],
+.im-form-shell-page .itemmaster-container textarea {
+  border: none !important;
+  border-bottom: 1px solid #dee2e6 !important;
+  border-radius: 0 !important;
+  padding: 2px 0;
+  font-size: 13px;
+  line-height: 1.25;
+  background: var(--im-field-fill);
+  box-shadow: none !important;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.im-form-shell-page .itemmaster-container .input:focus,
+.im-form-shell-page .itemmaster-container input:focus,
+.im-form-shell-page .itemmaster-container textarea:focus {
+  outline: none;
+  border-bottom-color: var(--nexa-focus-color) !important;
+}
+
+.im-form-shell-page .itemmaster-container .input-readonly,
+.im-form-shell-page .itemmaster-container input[readonly] {
+  background: var(--im-field-readonly);
+  color: #6c757d;
+}
+
+.im-form-shell-page .search-field {
+  border: none !important;
+  border-bottom: 1px solid #dee2e6 !important;
+  border-radius: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  background: var(--im-field-fill);
+  flex: 1;
+  min-width: 0;
+}
+
+.im-form-shell-page .search-field:focus-within {
+  border-bottom-color: var(--nexa-focus-color) !important;
+}
+
+.im-form-shell-page .itemmaster-container .scroll-table {
+  border: 1px solid #e5eaf2;
+  border-radius: 8px;
+  overflow: auto;
+  background: var(--im-table-surface);
+}
+
+.im-form-shell-page .itemmaster-container .table thead {
+  background: var(--im-field-fill-strong) !important;
+}
+
+.im-form-shell-page .itemmaster-container .table thead th {
+  background: var(--im-field-fill-strong) !important;
+  color: #000 !important;
+  padding: 6px 10px;
+  border-bottom: 1px solid #dee2e6;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.im-form-shell-page .itemmaster-container .table td {
+  padding: 4px 10px;
+  font-size: 13px;
+  color: #000;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.im-form-shell-page .itemmaster-container .table tbody tr:hover {
+  background: #f8f9fa !important;
+}
+
+/* Sales / purchase transaction forms: black text on line grids and fields */
+.im-form-shell-page.si-form-page,
+.im-form-shell-page.po-page,
+.im-form-shell-page.grn-form-page,
+.im-form-shell-page.pr-form-page,
+.im-form-shell-page.pr-order-page {
+  color: #000;
+}
+
+.im-form-shell-page.si-form-page label,
+.im-form-shell-page.po-page label,
+.im-form-shell-page.grn-form-page label,
+.im-form-shell-page.pr-form-page label,
+.im-form-shell-page.pr-order-page label,
+.im-form-shell-page.si-form-page .input:not([type="checkbox"]):not([type="radio"]),
+.im-form-shell-page.po-page .input:not([type="checkbox"]):not([type="radio"]),
+.im-form-shell-page.grn-form-page .input:not([type="checkbox"]):not([type="radio"]),
+.im-form-shell-page.pr-form-page .input:not([type="checkbox"]):not([type="radio"]),
+.im-form-shell-page.pr-order-page .input:not([type="checkbox"]):not([type="radio"]),
+.im-form-shell-page.si-form-page #salesTable th,
+.im-form-shell-page.si-form-page #salesTable td,
+.im-form-shell-page.po-page #linesTable th,
+.im-form-shell-page.po-page #linesTable td,
+.im-form-shell-page.grn-form-page #linesTable th,
+.im-form-shell-page.grn-form-page #linesTable td,
+.im-form-shell-page.pr-form-page #linesTable th,
+.im-form-shell-page.pr-form-page #linesTable td,
+.im-form-shell-page.pr-order-page #linesTable th,
+.im-form-shell-page.pr-order-page #linesTable td,
+.im-form-shell-page.si-form-page .po-line-form-cell,
+.im-form-shell-page.si-form-page .muted,
+.im-form-shell-page.po-page .muted,
+.im-form-shell-page.grn-form-page .muted,
+.im-form-shell-page.pr-form-page .muted,
+.im-form-shell-page.pr-order-page .muted {
+  color: #000;
+}
+
+@media (max-width: 900px) {
+  .im-form-shell-page .itemmaster-container .form-grid--2cols {
+    grid-template-columns: 1fr;
+  }
+}

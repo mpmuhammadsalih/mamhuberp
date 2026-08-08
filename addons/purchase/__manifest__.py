@@ -1,0 +1,2 @@
+"""Addon manifest — PO, GRN, invoices, stock adjustments/transfers."""
+MANIFEST = {'technical_name': 'purchase', 'name': 'Purchasing & stock flows', 'version': '1.0.0', 'category': 'Purchase', 'summary': 'PO, GRN, invoices, stock adjustments/transfers', 'depends': [], 'application': True, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/purchase'}, 'flask': {'blueprint': 'purchase', 'blueprint_ref': 'addons.purchase:bp', 'models_package': 'addons.purchase.models', 'routes_module': 'addons.purchase.controllers.routes'}}

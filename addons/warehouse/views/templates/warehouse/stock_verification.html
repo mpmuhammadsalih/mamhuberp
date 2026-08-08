@@ -1,0 +1,381 @@
+{% extends "base.html" %}
+{% block title %}Stock Verification{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page sv-list-page" id="svPage"
+  data-api-url="{{ url_for('warehouse.warehouse_stock_verification_api') }}"
+  data-export-url="{{ url_for('warehouse.warehouse_stock_verification_export_csv') }}"
+  data-location="{{ session_location_code }}">
+<style>
+  .sv-list-page .sv-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .sv-list-page .sv-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 11px;
+    border: 1px solid #e5eaf2;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, .06);
+  }
+  .sv-list-page .sv-stat-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    border-radius: 9px;
+    color: #fff;
+    font-size: 17px;
+  }
+  .sv-list-page .sv-stat-icon--blue { background: linear-gradient(135deg, #2563eb, #38bdf8); }
+  .sv-list-page .sv-stat-icon--green { background: linear-gradient(135deg, #16a34a, #22c55e); }
+  .sv-list-page .sv-stat-icon--amber { background: linear-gradient(135deg, #f59e0b, #facc15); }
+  .sv-list-page .sv-stat-icon--red { background: linear-gradient(135deg, #dc2626, #f87171); }
+  .sv-list-page .sv-stat-label { margin: 0 0 4px; color: #475569; font-size: 11px; font-weight: 700; }
+  .sv-list-page .sv-stat-value { margin: 0; color: #0f172a; font-size: clamp(16px, 1.45vw, 21px); font-weight: 850; line-height: 1.1; }
+  .sv-list-page .sv-stat-sub { margin: 3px 0 0; color: #64748b; font-size: 11px; }
+
+  .sv-list-page:not(.sv-bin-enabled) #svTable .sv-col-bin { display: none !important; }
+  .sv-list-page:not(.sv-lot-enabled) #svTable .sv-col-lot { display: none !important; }
+  .sv-list-page .sv-list-shell { display: block; position: relative; }
+  .sv-list-page #svTable tbody tr.sv-row { cursor: pointer; }
+  .nexa-list-page.sv-list-page .co-table tbody tr.sv-row.is-selected {
+    background: #dcfce7 !important;
+    box-shadow: inset 3px 0 0 #16a34a;
+  }
+  .nexa-list-page.sv-list-page .co-table tbody tr.sv-row.is-selected:nth-child(even) {
+    background: #d1fae5 !important;
+  }
+  .sv-list-page .co-table tbody tr.sv-row--err { background: #fef2f2 !important; }
+  .sv-list-page .co-table tbody tr.sv-row--err:nth-child(even) { background: #fee2e2 !important; }
+  .sv-list-page .co-table tbody tr.sv-row--warn { background: #fffbeb !important; }
+  .sv-list-page .co-table tbody tr.sv-row--warn:nth-child(even) { background: #fef3c7 !important; }
+  .sv-list-page .co-table tbody a.sv-item-link { color: #2563eb; text-decoration: underline; cursor: pointer; }
+  .sv-list-page .co-table tbody a.sv-item-link:hover { color: #1d4ed8; }
+
+  .sv-list-page .co-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  .sv-list-page .co-status--ok { background: #dcfce7; color: #166534; }
+  .sv-list-page .co-status--warn { background: #ffedd5; color: #c2410c; }
+  .sv-list-page .co-status--err { background: #fee2e2; color: #991b1b; }
+
+  .sv-list-page .sv-delta-ok { color: #16a34a !important; }
+  .sv-list-page .sv-delta-warn { color: #d97706 !important; }
+  .sv-list-page .sv-delta-err { color: #dc2626 !important; font-weight: 600; }
+  .sv-list-page .sv-issues { font-size: 11px; color: #b91c1c; max-width: 260px; white-space: normal; line-height: 1.35; }
+
+  .sv-list-page .sv-preview-drawer {
+    border: 1px solid #dbe3ef;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, .16);
+    position: fixed;
+    top: 50%;
+    right: 14px;
+    z-index: 1040;
+    width: min(400px, calc(100vw - 28px));
+    height: min(720px, calc(100vh - 28px));
+    min-height: min(420px, calc(100vh - 28px));
+    transform: translate(120%, -50%);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform .18s ease, opacity .18s ease;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sv-list-page .sv-preview-drawer.has-row {
+    transform: translate(0, -50%);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .sv-list-page .sv-preview-drawer__empty,
+  .sv-list-page .sv-preview-drawer__body { padding: 18px; flex: 1 1 auto; overflow-y: auto; }
+  .sv-list-page .sv-preview-drawer__empty { color: #64748b; font-size: 13px; line-height: 1.45; }
+  .sv-list-page .sv-preview-drawer__body { display: none; }
+  .sv-list-page .sv-preview-drawer.has-row .sv-preview-drawer__empty { display: none; }
+  .sv-list-page .sv-preview-drawer.has-row .sv-preview-drawer__body { display: block; }
+  .sv-list-page .sv-preview-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+  .sv-list-page .sv-preview-title { margin: 0; color: #0f172a; font-size: 14px; font-weight: 800; line-height: 1.25; }
+  .sv-list-page .sv-preview-subtitle { margin-top: 5px; color: #64748b; font-size: 12px; }
+  .sv-list-page .sv-preview-close { border: 0; background: #f1f5f9; color: #334155; border-radius: 999px; width: 30px; height: 30px; cursor: pointer; font-size: 18px; line-height: 1; }
+  .sv-list-page .sv-preview-code {
+    display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px;
+    padding: 8px 10px; border-radius: 10px; background: #f0f9ff; color: #1d4ed8; font-weight: 800; font-size: 13px;
+  }
+  .sv-list-page .sv-preview-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+  .sv-list-page .sv-preview-metric { padding: 10px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
+  .sv-list-page .sv-preview-metric b { display: block; color: #0f172a; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .sv-list-page .sv-preview-metric span { display: block; margin-top: 3px; color: #64748b; font-size: 11px; }
+  .sv-list-page .sv-preview-fields { display: grid; gap: 8px; margin: 12px 0; }
+  .sv-list-page .sv-preview-field {
+    display: flex; justify-content: space-between; gap: 12px;
+    padding-bottom: 8px; border-bottom: 1px solid #edf2f7; font-size: 12px;
+  }
+  .sv-list-page .sv-preview-field span:first-child { color: #64748b; }
+  .sv-list-page .sv-preview-field span:last-child { color: #0f172a; font-weight: 600; text-align: right; }
+  .sv-list-page .sv-preview-issues { margin-top: 12px; padding: 10px; border-radius: 8px; background: #fef2f2; color: #991b1b; font-size: 12px; line-height: 1.4; }
+  .sv-list-page .sv-preview-issues:empty { display: none; }
+
+  .sv-list-page .sv-scroll-status {
+    margin: 10px 0 2px;
+    padding: 9px 12px;
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 12px;
+    text-align: center;
+  }
+  .sv-list-page .sv-scroll-status.is-error {
+    border-color: #fecaca;
+    background: #fff1f2;
+    color: #b91c1c;
+  }
+  .sv-list-page .sv-rules-hint {
+    font-size: 12px;
+    color: #64748b;
+    margin: 0 0 8px;
+    line-height: 1.4;
+  }
+  .sv-list-page .sv-filter-extra { display: none; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e2e8f0; }
+  .sv-list-page .sv-filter-extra.is-open { display: flex; }
+  .sv-list-page .sv-filter-extra label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #475569; font-weight: 600; }
+  .sv-list-page .sv-warehouse-popup { min-width: 220px; max-width: 320px; }
+  .sv-list-page .sv-warehouse-popup .input { min-width: 0; }
+  .sv-list-page .sv-warehouse-popup .search-picker { flex: 0 0 auto; padding: 4px 10px; font-size: 12px; }
+  body.sv-wh-modal-open { overflow: hidden; }
+
+  .page-po.nexa-list-page.sv-list-page {
+    max-width: 1300px !important;
+    margin: 0 auto !important;
+    padding: 8px 0 20px !important;
+  }
+  @media (max-width: 980px) {
+    .sv-list-page .sv-stat-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+  }
+  @media (max-width: 560px) {
+    .sv-list-page .sv-stat-grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+  <section class="sv-stat-grid" aria-label="Verification summary">
+    <div class="sv-stat-card">
+      <span class="sv-stat-icon sv-stat-icon--blue"><i class="bi bi-list-check" aria-hidden="true"></i></span>
+      <div>
+        <p class="sv-stat-label">Rows shown</p>
+        <p class="sv-stat-value" id="svKpiRows">—</p>
+        <p class="sv-stat-sub" id="svKpiRowsSub">Run verification</p>
+      </div>
+    </div>
+    <div class="sv-stat-card">
+      <span class="sv-stat-icon sv-stat-icon--red"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i></span>
+      <div>
+        <p class="sv-stat-label">Mismatches</p>
+        <p class="sv-stat-value" id="svKpiMismatch">—</p>
+        <p class="sv-stat-sub">Qty / stock breaks</p>
+      </div>
+    </div>
+    <div class="sv-stat-card">
+      <span class="sv-stat-icon sv-stat-icon--green"><i class="bi bi-box-seam" aria-hidden="true"></i></span>
+      <div>
+        <p class="sv-stat-label">Items scanned</p>
+        <p class="sv-stat-value" id="svKpiScanned">—</p>
+        <p class="sv-stat-sub">In comparison set</p>
+      </div>
+    </div>
+    <div class="sv-stat-card">
+      <span class="sv-stat-icon sv-stat-icon--amber"><i class="bi bi-building" aria-hidden="true"></i></span>
+      <div>
+        <p class="sv-stat-label">Branch</p>
+        <p class="sv-stat-value">{{ session_location_code }}</p>
+        <p class="sv-stat-sub" id="svKpiScope">All warehouses</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title page-po__title--with-icon">
+        <span class="page-po__title-icon" aria-hidden="true"><i class="bi bi-clipboard2-check"></i></span>
+        Stock verification
+      </h1>
+      <p class="page-po__muted" id="svPageSubtitle">
+        Compare item master, warehouse, bin, and lot quantities for branch {{ session_location_code }}.
+        Use filters below, then <strong>Run verification</strong>.
+      </p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a class="page-po__btn-secondary" id="svBtnExport" href="#">Export CSV</a>
+      <button type="button" class="page-po__btn-primary" id="svBtnRunTop">Run verification</button>
+      {% set list_refresh_skip_bootstrap = true %}
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div id="svMessage" class="sv-scroll-status" role="alert" style="display:none;"></div>
+
+  <form id="svFilterForm" class="nexa-list-toolbar" action="#" method="get" autocomplete="off">
+    <span class="search-field search-field--popup sv-warehouse-popup" title="F1 or click to choose warehouse">
+      <input type="text" id="svWarehouseDisplay" class="input" placeholder="All warehouses (branch Σ)" readonly autocomplete="off" tabindex="0" />
+      <button type="button" class="search-picker" id="svWarehousePicker" aria-label="Choose warehouse">▾</button>
+      <button type="button" class="search-clear" id="svWarehouseClear" aria-label="Clear warehouse" style="display:none;">×</button>
+    </span>
+    <input type="hidden" name="warehouse_id" id="svWarehouse" value="{{ opts.warehouse_id or '' }}" />
+    <input type="text" id="svItem" name="item" class="input" placeholder="Item code…"
+           value="{{ opts.item_code or '' }}" style="min-width:100px; max-width:120px;" />
+    <input type="text" id="svSearch" name="q" class="input" placeholder="Search item name…"
+           value="{{ opts.search or '' }}" style="min-width:200px; max-width:320px;" />
+    <button type="button" class="page-po__btn-secondary" id="svToggleFilters" style="padding:4px 10px; font-size:11px;">More filters</button>
+    <button type="submit" class="page-po__btn-primary" id="svBtnRun" style="padding:4px 12px; font-size:11px;">Run</button>
+    <button type="button" class="page-po__btn-secondary" id="svBtnClear" style="padding:4px 10px; font-size:11px;">Clear</button>
+    <span id="svListMeta" class="nexa-num">—</span>
+    <div class="sv-filter-extra" id="svFilterExtra">
+      <label><input type="checkbox" name="mismatch" id="svMismatch" value="1" {% if opts.mismatches_only %}checked{% endif %} /> Mismatches only</label>
+      <label><input type="checkbox" name="include_zero" id="svIncludeZero" value="1" {% if opts.include_zero %}checked{% endif %} /> Include zero qty</label>
+    </div>
+  </form>
+
+  <p class="sv-rules-hint" id="svRulesHint">
+    Run verification to see which rules apply (branch WAREHOUSE_ENABLE / BIN_TRACKING / BATCH_TRACKING).
+  </p>
+
+  <div class="sv-list-shell">
+    <div class="co-table-wrap">
+      <table class="co-table" id="svTable">
+        <thead>
+          <tr>
+            <th style="text-align:center; width:48px;">#</th>
+            <th>Status</th>
+            <th>Item</th>
+            <th>Item name</th>
+            <th class="num" title="ITEMMASTER.CURRENTSTOCK">Item master</th>
+            <th class="num" title="Sum WAREHOUSE_STOCK at branch">Σ WH</th>
+            <th class="num" title="WAREHOUSE_STOCK">WH qty</th>
+            <th class="num sv-col-bin" title="BIN_STOCK (only when BIN_TRACKING is on)">Bin</th>
+            <th class="num sv-col-lot" title="Lot balance (BATCH_TRACKING)">Lot bal</th>
+            <th class="num sv-col-lot" title="Lot in bin (BATCH_TRACKING)">Lot bin</th>
+            <th class="num" title="SUM(ITEMJOURNAL.QTY) at branch or warehouse">Journal Σ</th>
+            <th class="num">Δ IM−ΣWH</th>
+            <th class="num">Δ IM−Jnl</th>
+            <th class="num sv-col-bin">Δ WH−Bin</th>
+            <th>Issues</th>
+          </tr>
+        </thead>
+        <tbody id="svTableBody">
+          <tr id="svNoData">
+            <td colspan="15" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">
+              Choose filters and click <strong>Run verification</strong>.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="svScrollStatus" class="sv-scroll-status">
+      No report loaded. Click <strong>Run verification</strong> to compare stock sources.
+    </div>
+    <div id="svScrollSentinel" style="height:1px;"></div>
+  </div>
+
+  <aside class="sv-preview-drawer" id="svPreviewDrawer" aria-label="Row preview">
+    <div class="sv-preview-drawer__empty">
+      Select a row to preview quantities, deltas, and mismatch details without leaving the list.
+    </div>
+    <div class="sv-preview-drawer__body">
+      <div class="sv-preview-head">
+        <div>
+          <h2 class="sv-preview-title" id="svPreviewName">—</h2>
+          <div class="sv-preview-subtitle" id="svPreviewSubtitle">Stock verification</div>
+        </div>
+        <button type="button" class="sv-preview-close" id="svPreviewClose" aria-label="Close preview">×</button>
+      </div>
+      <div class="sv-preview-code">
+        <span>Item</span>
+        <strong id="svPreviewCode">—</strong>
+        <span class="co-status" id="svPreviewStatus">OK</span>
+      </div>
+      <div class="sv-preview-metrics">
+        <div class="sv-preview-metric"><b id="svPvIm">0</b><span>Item master</span></div>
+        <div class="sv-preview-metric"><b id="svPvWhBranch">0</b><span>Σ WH (branch)</span></div>
+        <div class="sv-preview-metric"><b id="svPvWh">0</b><span>WH qty</span></div>
+        <div class="sv-preview-metric"><b id="svPvBin">0</b><span>Bin qty</span></div>
+        <div class="sv-preview-metric"><b id="svPvLot">0</b><span>Lot balance</span></div>
+        <div class="sv-preview-metric"><b id="svPvLotWh">0</b><span>Lot @ WH</span></div>
+        <div class="sv-preview-metric"><b id="svPvJournal">0</b><span>Journal Σ QTY</span></div>
+        <div class="sv-preview-metric"><b id="svPvJournalBranch">0</b><span>Journal Σ (branch)</span></div>
+      </div>
+      <div class="sv-preview-fields">
+        <div class="sv-preview-field"><span>Δ IM − ΣWH</span><span id="svPvD1">0</span></div>
+        <div class="sv-preview-field"><span>Δ IM − Journal</span><span id="svPvD4">0</span></div>
+        <div class="sv-preview-field"><span>Δ WH − Bin</span><span id="svPvD2">0</span></div>
+        <div class="sv-preview-field"><span>Δ WH − Lot</span><span id="svPvD3">0</span></div>
+        <div class="sv-preview-field"><span>Δ WH − Journal</span><span id="svPvD5">0</span></div>
+        <div class="sv-preview-field"><span>Lot in bin</span><span id="svPvLotBin">0</span></div>
+        <div class="sv-preview-field"><span>Lot unallocated</span><span id="svPvLotUn">0</span></div>
+      </div>
+      <div class="sv-preview-issues" id="svPreviewIssues"></div>
+    </div>
+  </aside>
+</div>
+
+<div class="modal hidden" id="svWarehouseModal" role="dialog" aria-modal="true" aria-labelledby="svWarehouseModalTitle" aria-hidden="true">
+  <div class="modal__overlay" data-close="svWarehouseModal"></div>
+  <div class="modal__content" style="max-width: 620px; width: 96vw;">
+    <div class="modal__header" style="display:flex; justify-content:space-between; align-items:center;">
+      <h3 id="svWarehouseModalTitle" style="margin:0;">Select warehouse</h3>
+      <button type="button" class="modal__close" data-close="svWarehouseModal" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal__body">
+      <p class="page-po__muted" style="margin:0 0 10px; font-size:12px;">Choose a warehouse for scoped verification, or pick <strong>All warehouses</strong> for branch totals.</p>
+      <div class="modal__search mb-2">
+        <div class="search-field search-field--wide">
+          <input type="text" id="svWarehouseModalSearch" placeholder="Search code or name…" autocomplete="off" />
+          <button type="button" class="search-clear" id="svWarehouseModalSearchClear" style="display:none;">×</button>
+        </div>
+      </div>
+      <div class="scroll-table modal__table" style="max-height:52vh;">
+        <table class="table" id="svWarehouseModalTable" style="width:100%; font-size:13px;">
+          <thead>
+            <tr><th>Code</th><th>Name</th><th style="width:90px;"></th></tr>
+          </thead>
+          <tbody id="svWarehouseModalBody">
+            <tr class="sv-wh-pick-row" data-id="" data-code="" data-name="All warehouses (branch Σ)">
+              <td colspan="2"><strong>All warehouses (branch Σ)</strong></td>
+              <td><button type="button" class="page-po__btn-secondary" style="padding:4px 10px; font-size:11px;">Select</button></td>
+            </tr>
+            {% for w in warehouses %}
+            <tr class="sv-wh-pick-row" data-id="{{ w.warehouse_id }}" data-code="{{ w.warehouse_code }}" data-name="{{ w.warehouse_name }}">
+              <td style="font-family:monospace; font-weight:600;">{{ w.warehouse_code }}</td>
+              <td>{{ w.warehouse_name }}</td>
+              <td><button type="button" class="page-po__btn-secondary" style="padding:4px 10px; font-size:11px;">Select</button></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:8px; padding:12px 20px; border-top:1px solid #e2e8f0;">
+      <button type="button" class="page-po__btn-secondary" data-close="svWarehouseModal">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script type="application/json" id="svWarehousesJson">{{ warehouses|tojson }}</script>
+<script src="{{ url_for('static', filename='js/stock_verification.js') }}?v=7"></script>
+{% endblock %}

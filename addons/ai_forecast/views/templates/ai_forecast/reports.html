@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% from "ai_forecast/_nav.html" import ai_nav %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('ai_forecast.static', filename='css/ai_forecast.css') }}?v=4" />
+{% endblock %}
+{% block content %}
+<div class="ai-fc-page" id="aiFcReportsPage">
+  <div class="ai-fc-topbar">
+    <div class="ai-fc-topbar__intro">
+      <h1 class="ai-fc-title">AI Reports</h1>
+      <p class="ai-fc-sub">
+        Branch {{ location_code }}{% if location_name %} · {{ location_name }}{% endif %}
+        — export-ready forecast and analysis reports
+      </p>
+    </div>
+    {{ ai_nav('reports') }}
+  </div>
+
+  <div class="ai-fc-reports-tabs" id="aiFcReportTabs" role="tablist">
+    {% for t in report_types %}
+    <a href="{{ url_for('ai_forecast.reports_page', type=t.id) }}"
+       class="ai-fc-reports-tab{% if report_type == t.id %} is-active{% endif %}"
+       data-report="{{ t.id }}">{{ t.label }}</a>
+    {% endfor %}
+  </div>
+
+  <div class="ai-fc-toolbar ai-fc-toolbar--reports">
+    <button type="button" class="ai-fc-btn" id="aiFcReportRefresh">Refresh</button>
+    <button type="button" class="ai-fc-btn ai-fc-btn--secondary" id="aiFcReportPrint">Print</button>
+    <a class="ai-fc-btn ai-fc-btn--secondary" id="aiFcReportExport" href="#">Export CSV</a>
+    <span class="ai-fc-status" id="aiFcReportStatus"></span>
+  </div>
+
+  <div id="aiFcReportError" class="ai-fc-alert ai-fc-alert--error hidden"></div>
+
+  <div id="aiFcReportInsights" class="ai-fc-report-insights hidden" aria-live="polite"></div>
+
+  <section class="ai-fc-kpi-grid ai-fc-kpi-grid--compact hidden" id="aiFcReportKpis" aria-label="Report summary"></section>
+
+  <div class="ai-fc-card ai-fc-card--report">
+    <div class="ai-fc-card__head">
+      <span id="aiFcReportTitle">Report</span>
+      <span class="ai-fc-muted" id="aiFcReportMeta"></span>
+    </div>
+    <div class="ai-fc-card__body">
+      <div id="aiFcReportLoading" class="ai-fc-loading">Loading report…</div>
+      <div id="aiFcReportCharts" class="ai-fc-reports-charts hidden"></div>
+      <div id="aiFcReportContent" class="ai-fc-report-content hidden"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+window.__AI_FORECAST_REPORTS__ = {
+  reportType: {{ report_type|tojson }},
+  locationCode: {{ location_code|tojson }},
+  apiReport: {{ api_report_url|tojson }},
+  exportUrl: {{ export_url|tojson }},
+  reportLabels: {
+    {% for t in report_types %}{{ t.id|tojson }}: {{ t.label|tojson }}{% if not loop.last %}, {% endif %}
+    {% endfor %}
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('ai_forecast.static', filename='js/ai_reports.js') }}?v=2"></script>
+{% endblock %}

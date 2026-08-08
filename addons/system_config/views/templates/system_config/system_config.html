@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="user-create-container">
+    <div class="user-create-card">
+      <div class="user-create-header">
+        <h1>System Configuration</h1>
+        <p class="muted">Counter code, counter name, system name, IP, DB location, and redirect URL.</p>
+      </div>
+      <form method="post" class="user-create-form">
+        <div class="form-group">
+          <label>
+            <span>Counter Code</span>
+            <input type="text" name="countercode" value="{{ config.countercode or '' }}" readonly />
+          </label>
+        </div>
+        <div class="form-group">
+          <label>
+            <span>Counter Name</span>
+            <input type="text" name="countername" value="{{ config.countername or '' }}" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label>
+            <span>System Name</span>
+            <input type="text" name="systemname" value="{{ config.systemname or '' }}" readonly />
+          </label>
+        </div>
+        <div class="form-group">
+          <label>
+            <span>System IP</span>
+            <input type="text" name="systemip" value="{{ config.systemip or '' }}" readonly />
+          </label>
+        </div>
+        <div class="form-group">
+          <label>
+            <span>DB Location</span>
+            <span class="search-field search-field--popup">
+              <input
+                type="text"
+                id="dblocationDisplay"
+                name="dblocation_display"
+                value="{{ config.dblocation or '' }}"
+                placeholder="Select location..."
+                readonly
+              />
+              <button type="button" class="search-clear" id="dblocationClear" aria-label="Clear location" style="display: none;">×</button>
+              <button type="button" class="search-picker" id="dblocationPicker" aria-label="Open location list">▾</button>
+            </span>
+            <input type="hidden" id="dblocationSelect" name="dblocation" value="{{ config.dblocation or '' }}" />
+          </label>
+        </div>
+        <div class="form-group">
+          <label>
+            <span>Redirect URL</span>
+            <input type="text" name="redirecturl" value="{{ config.redirecturl or '' }}" readonly />
+          </label>
+        </div>
+        <div class="form-group">
+          <label>
+            <span>Approved</span>
+            <select name="approved" class="input">
+              <option value="">-- Select --</option>
+              <option value="Y" {% if config.approved == 'Y' %}selected{% endif %}>Yes</option>
+              <option value="N" {% if config.approved == 'N' %}selected{% endif %}>No</option>
+            </select>
+          </label>
+        </div>
+        <input type="hidden" name="rowid" value="{{ config.rowid or '' }}" />
+        <div class="form-actions">
+          <button type="submit" class="button button--primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <div class="modal hidden" id="dblocationModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="dblocationModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h4>Select DB Location</h4>
+        <button type="button" class="modal__close" data-close="dblocationModal">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="modal__search">
+          <span class="search-field search-field--wide">
+            <input type="text" id="dblocationModalSearch" placeholder="Search location..." />
+            <button type="button" class="search-clear" id="dblocationModalClear">×</button>
+          </span>
+        </div>
+        <div class="scroll-table modal__table">
+          <table class="table" id="dblocationModalTable">
+            <thead>
+              <tr>
+                <th>Code</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for code in branch_codes %}
+                <tr data-code="{{ code }}">
+                  <td>{{ code }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/system_config.js') }}"></script>
+{% endblock %}

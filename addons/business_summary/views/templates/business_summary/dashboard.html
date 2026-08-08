@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/business_summary.css') }}?v=3" />
+{% endblock %}
+{% block content %}
+<div class="dbs-page" id="dbsApp" data-api="{{ api_data_url }}">
+  <header class="dbs-header glass">
+    <div>
+      <h1 class="dbs-title">Daily Business Summary</h1>
+      <p class="dbs-sub">Executive overview — sales, purchases, inventory, profitability &amp; cash flow
+        {% if location_name %} · {{ location_name }}{% endif %}</p>
+    </div>
+    <div class="dbs-header__actions">
+      <button type="button" class="dbs-btn dbs-btn--primary" id="dbsRefresh">Refresh</button>
+      <span class="dbs-status" id="dbsStatus"></span>
+    </div>
+  </header>
+
+  <aside class="dbs-filters glass">
+    <div class="dbs-filters__head">Filters</div>
+    <form id="dbsFilterForm" class="dbs-filters__body">
+      <label>From Date</label>
+      <input type="date" name="date_from" value="{{ filters.date_from or '' }}" />
+      <label>To Date</label>
+      <input type="date" name="date_to" value="{{ filters.date_to or '' }}" />
+      <label>Branch</label>
+      <select name="branch">
+        {% for b in options.branches or [] %}
+        <option value="{{ b.locationcode or b.code }}" {% if filters.branch|string == (b.locationcode or b.code)|string %}selected{% endif %}>
+          {{ b.locationcode or b.code }} {{ b.locationname or b.name or '' }}
+        </option>
+        {% endfor %}
+      </select>
+      <label>Warehouse</label>
+      <select name="warehouse">
+        <option value="">All</option>
+        {% for w in options.warehouses or [] %}
+        <option value="{{ w.warehouse_code or w.code }}">{{ w.warehouse_code or w.code }} {{ w.warehouse_name or '' }}</option>
+        {% endfor %}
+      </select>
+      <label>Category</label>
+      <select name="category_code">
+        <option value="">All</option>
+        {% for c in options.categories or [] %}
+        <option value="{{ c.code }}">{{ c.code }} {{ c.name or '' }}</option>
+        {% endfor %}
+      </select>
+      <label>Brand</label>
+      <select name="brand_code">
+        <option value="">All</option>
+        {% for b in options.brands or [] %}
+        <option value="{{ b.code }}">{{ b.code }} {{ b.name or '' }}</option>
+        {% endfor %}
+      </select>
+      <label>Customer</label>
+      <input type="text" name="customer_code" placeholder="All" list="dbsCustomerList" />
+      <datalist id="dbsCustomerList">
+        {% for c in options.customers or [] %}
+        <option value="{{ c.code }}">{{ c.name or '' }}</option>
+        {% endfor %}
+      </datalist>
+      <label>Supplier</label>
+      <select name="supplier_code">
+        <option value="">All</option>
+        {% for s in options.suppliers or [] %}
+        <option value="{{ s.code }}">{{ s.code }} {{ s.name or '' }}</option>
+        {% endfor %}
+      </select>
+      <label>Salesman</label>
+      <select name="salesman_code">
+        <option value="">All</option>
+        {% for s in options.salesmen or [] %}
+        <option value="{{ s.code }}">{{ s.code }} {{ s.name or '' }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="dbs-btn dbs-btn--primary dbs-btn--block">Apply</button>
+    </form>
+  </aside>
+
+  <main class="dbs-main">
+    <div id="dbsError" class="dbs-alert hidden"></div>
+    <section class="dbs-kpi-grid" id="dbsKpiGrid">
+      <div class="dbs-kpi glass dbs-kpi--loading"><div class="dbs-kpi__label">Loading…</div><div class="dbs-kpi__value">—</div></div>
+    </section>
+
+    <section class="dbs-charts">
+      <div class="dbs-card glass"><div class="dbs-card__head">Sales vs Purchase Trend</div><div class="dbs-chart-wrap" data-chart="dbsChartSalesPurchase"><canvas id="dbsChartSalesPurchase"></canvas><div class="dbs-chart-empty hidden">No data for selected period</div></div></div>
+      <div class="dbs-card glass"><div class="dbs-card__head">Sales vs Gross Profit</div><div class="dbs-chart-wrap" data-chart="dbsChartSalesProfit"><canvas id="dbsChartSalesProfit"></canvas><div class="dbs-chart-empty hidden">No data for selected period</div></div></div>
+      <div class="dbs-card glass"><div class="dbs-card__head">Daily Sales Trend</div><div class="dbs-chart-wrap" data-chart="dbsChartDailySales"><canvas id="dbsChartDailySales"></canvas><div class="dbs-chart-empty hidden">No data for selected period</div></div></div>
+      <div class="dbs-card glass"><div class="dbs-card__head">Category-wise Sales</div><div class="dbs-chart-wrap" data-chart="dbsChartCategory"><canvas id="dbsChartCategory"></canvas><div class="dbs-chart-empty hidden">No data for selected period</div></div></div>
+      <div class="dbs-card glass"><div class="dbs-card__head">Brand-wise Sales</div><div class="dbs-chart-wrap" data-chart="dbsChartBrand"><canvas id="dbsChartBrand"></canvas><div class="dbs-chart-empty hidden">No data for selected period</div></div></div>
+      <div class="dbs-card glass"><div class="dbs-card__head">Top 10 Selling Items</div><div class="dbs-chart-wrap" data-chart="dbsChartTopItems"><canvas id="dbsChartTopItems"></canvas><div class="dbs-chart-empty hidden">No data for selected period</div></div></div>
+      <div class="dbs-card glass"><div class="dbs-card__head">Top 10 Customers</div><div class="dbs-chart-wrap" data-chart="dbsChartTopCustomers"><canvas id="dbsChartTopCustomers"></canvas><div class="dbs-chart-empty hidden">No data for selected period</div></div></div>
+      <div class="dbs-card glass"><div class="dbs-card__head">Top 10 Suppliers</div><div class="dbs-chart-wrap" data-chart="dbsChartTopSuppliers"><canvas id="dbsChartTopSuppliers"></canvas><div class="dbs-chart-empty hidden">No data for selected period</div></div></div>
+      <div class="dbs-card glass"><div class="dbs-card__head">Payment Method Distribution</div><div class="dbs-chart-wrap" data-chart="dbsChartPayment"><canvas id="dbsChartPayment"></canvas><div class="dbs-chart-empty hidden">No data for selected period</div></div></div>
+      <div class="dbs-card glass dbs-card--wide"><div class="dbs-card__head">Stock Movement (In vs Out)</div><div class="dbs-chart-wrap" data-chart="dbsChartStock"><canvas id="dbsChartStock"></canvas><div class="dbs-chart-empty hidden">No data for selected period</div></div></div>
+    </section>
+
+    <section class="dbs-row-2">
+      <div class="dbs-card glass">
+        <div class="dbs-card__head">Transaction Summary</div>
+        <div class="dbs-table-wrap">
+          <table class="dbs-table" id="dbsTxTable">
+            <thead><tr><th>Transaction</th><th>Count</th><th>Amount</th><th>%</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="dbs-card glass">
+        <div class="dbs-card__head">Financial Summary</div>
+        <div class="dbs-financial" id="dbsFinancial"></div>
+      </div>
+    </section>
+
+    <section class="dbs-card glass">
+      <div class="dbs-card__head">Inventory Overview</div>
+      <div class="dbs-inv-grid" id="dbsInventory"></div>
+    </section>
+  </main>
+</div>
+
+<div class="dbs-modal hidden" id="dbsDrillModal" role="dialog" aria-modal="true" aria-labelledby="dbsDrillTitle">
+  <div class="dbs-modal__backdrop" data-close="dbsDrillModal"></div>
+  <div class="dbs-modal__dialog">
+    <div class="dbs-modal__head">
+      <h3 id="dbsDrillTitle">Details</h3>
+      <button type="button" class="dbs-btn" data-close="dbsDrillModal" aria-label="Close">&times;</button>
+    </div>
+    <div class="dbs-modal__body" id="dbsDrillBody"></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/chart.umd.min.js') }}?v=4.4.1"></script>
+<script src="{{ url_for('static', filename='js/business_summary.js') }}?v=6"></script>
+{% endblock %}

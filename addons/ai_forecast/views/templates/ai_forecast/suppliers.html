@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "ai_forecast/_nav.html" import ai_nav %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('ai_forecast.static', filename='css/ai_forecast.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="ai-fc-page">
+  <div class="ai-fc-topbar">
+    <div><h1 class="ai-fc-title">Supplier Performance</h1><p class="ai-fc-sub">Delivery · cost · price stability · rating</p></div>
+    {{ ai_nav('suppliers') }}
+  </div>
+  <div class="ai-fc-card"><div class="ai-fc-card__body" style="overflow:auto;">
+    <table class="ai-fc-table"><thead><tr><th>Rating</th><th>Supplier</th><th>Receipts</th><th>Avg cost</th><th>Price fluct %</th><th>Lead days</th><th>Preferred</th></tr></thead><tbody id="aiFcTb"></tbody></table>
+  </div></div>
+</div>
+<script>
+fetch({{ url_for('ai_forecast.api_suppliers')|tojson }}).then(r=>r.json()).then(d=>{
+  document.getElementById('aiFcTb').innerHTML = (d.rows||[]).map(r=>`<tr>
+    <td class="num"><strong>${r.rating}</strong></td><td>${r.supplier_code} ${r.supplier_name||''}</td><td class="num">${r.receipt_count}</td>
+    <td class="num">${Number(r.avg_purchase_cost||0).toFixed(4)}</td><td class="num">${r.price_fluctuation_pct}%</td><td class="num">${r.avg_lead_days}</td><td>${r.preferred?'Yes':''}</td></tr>`).join('');
+});
+</script>
+{% endblock %}

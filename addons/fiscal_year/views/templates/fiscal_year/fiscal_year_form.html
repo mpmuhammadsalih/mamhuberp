@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}{% if is_new %}New{% else %}Edit{% endif %} Fiscal Year{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+
+<div class="im-page setup-im-page">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>
+        Fiscal year /
+        <span class="im-ref">{% if is_new %}New{% else %}{{ (row.year_code or '')|e }}{% endif %}</span>
+        <span class="status-badge {% if is_new %}status-badge--new{% else %}status-badge--edit{% endif %}">
+          {% if is_new %}New{% else %}Edit{% endif %}
+        </span>
+      </h1>
+      <div class="im-actions">
+        <button type="submit" form="fy-form" class="im-btn-save">Save</button>
+        <a href="{{ url_for('fiscal_year.fiscal_year_list') }}" class="im-btn-secondary">Cancel</a>
+        <a href="{{ url_for('fiscal_year.fiscal_year_list') }}" class="im-btn-secondary">List</a>
+      </div>
+    </div>
+  </div>
+
+  <section class="setup-im-shell customer-form-shell itemmaster-container">
+    <form method="post" id="fy-form">
+      <div class="cf-form-stack">
+        <div class="cf-form-panel">
+          <h2 class="cf-section-title">Period details</h2>
+          <div class="customer-details">
+            <div class="form-group">
+              <label for="year_code">
+                <span>Year code</span>
+                <input id="year_code" name="year_code" type="text" maxlength="20" required class="input"
+                  value="{{ (row.year_code or '')|e }}" placeholder="e.g. FY2025 or 2025" autocomplete="off" />
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="year_name">
+                <span>Display name</span>
+                <input id="year_name" name="year_name" type="text" maxlength="100" class="input"
+                  value="{{ (row.year_name or '')|e }}" placeholder="e.g. Financial Year 2025" autocomplete="off" />
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="date_from">
+                <span>Start date</span>
+                <input id="date_from" name="date_from" type="date" required class="input"
+                  value="{{ (row.date_from or '')|e }}" />
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="date_to">
+                <span>End date</span>
+                <input id="date_to" name="date_to" type="date" required class="input"
+                  value="{{ (row.date_to or '')|e }}" />
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="locationcode">
+                <span>Branch scope</span>
+                <select id="locationcode" name="locationcode" class="input">
+                  {% for loc in locations %}
+                  <option value="{{ loc.code }}"
+                    {% if (row.locationcode|string if row.locationcode is not none else '') == loc.code %}selected{% endif %}>
+                    {{ loc.label }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </label>
+            </div>
+            <div class="form-group">
+              <label>
+                <span>Current fiscal year</span>
+                <span style="display:inline-flex;align-items:center;gap:8px;">
+                  <input type="checkbox" name="is_current" value="1"
+                    {% if (row.is_current or 'N')|upper == 'Y' %}checked{% endif %}
+                    {% if (row.is_closed or 'N')|upper == 'Y' %}disabled{% endif %} />
+                  <span style="font-size:13px;color:#495057;">Use for posting &amp; reports</span>
+                </span>
+              </label>
+            </div>
+            <div class="form-group">
+              <label>
+                <span>Closed</span>
+                <span style="display:inline-flex;align-items:center;gap:8px;">
+                  <input type="checkbox" name="is_closed" value="1"
+                    {% if (row.is_closed or 'N')|upper == 'Y' %}checked{% endif %} />
+                  <span style="font-size:13px;color:#495057;">No further changes (cannot be current)</span>
+                </span>
+              </label>
+            </div>
+          </div>
+          <p class="field-hint-inline">
+            Year code is stored uppercase. Company-wide rows use empty branch scope; branch-specific rows apply to that location only.
+            Overlapping date ranges are not allowed within the same scope.
+          </p>
+        </div>
+      </div>
+    </form>
+  </section>
+</div>
+<script>
+(function () {
+  var closed = document.querySelector('input[name="is_closed"]');
+  var current = document.querySelector('input[name="is_current"]');
+  if (!closed || !current) return;
+  function sync() {
+    if (closed.checked) {
+      current.checked = false;
+      current.disabled = true;
+    } else {
+      current.disabled = false;
+    }
+  }
+  closed.addEventListener('change', sync);
+  sync();
+})();
+</script>
+{% endblock %}

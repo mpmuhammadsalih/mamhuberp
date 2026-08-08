@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+{% block title %}Brand &amp; look-ups{% endblock %}
+{% block content %}
+<style>
+  .flag-B { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 700; background: #ede9fe; color: #5b21b6; }
+  .flag-Z { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 700; background: #e0f2fe; color: #0369a1; }
+  .flag-L { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 700; background: #ffedd5; color: #c2410c; }
+  .bm-panel { display: none; }
+  .bm-panel.is-active { display: block; }
+</style>
+
+<div class="page-po nexa-list-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Brand &amp; look-ups</h1>
+      <p class="page-po__muted">All rows live in <code>CATEGORY</code>: Brand <code>FLAG='B'</code>, Shelf <code>FLAG='Z'</code>, Color <code>FLAG='L'</code>.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div class="nexa-list-toolbar" style="align-items:center;">
+    <div class="po-tabs" id="bmTabs" role="tablist" aria-label="Look-up type">
+      <button type="button" role="tab" class="po-tab active" id="tabBrand" aria-selected="true" data-bm-panel="panelBrand" data-bm-flag="B">Brand</button>
+      <button type="button" role="tab" class="po-tab" id="tabShelf" aria-selected="false" data-bm-panel="panelShelf" data-bm-flag="Z">Shelf</button>
+      <button type="button" role="tab" class="po-tab" id="tabColor" aria-selected="false" data-bm-panel="panelColor" data-bm-flag="L">Color</button>
+    </div>
+    <button type="button" class="page-po__btn-primary" id="btnNewLookup" style="margin-left:auto;">+ New brand</button>
+  </div>
+
+  <div id="panelBrand" class="bm-panel is-active" role="tabpanel" aria-labelledby="tabBrand">
+    <div class="co-table-wrap">
+      <table class="co-table" id="tableBrand">
+        <thead>
+          <tr>
+            <th data-col="0" style="width:90px;">Flag<span class="sort-arrow"></span></th>
+            <th data-col="1" style="width:120px;">Code<span class="sort-arrow"></span></th>
+            <th data-col="2">Name<span class="sort-arrow"></span></th>
+            <th style="text-align:center; width:120px;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows_brand %}
+          <tr>
+            <td><span class="flag-B">B</span></td>
+            <td style="font-family:monospace;">{{ r.code }}</td>
+            <td>{{ r.name }}</td>
+            <td style="text-align:center;">
+              <button type="button" class="btn-view" data-bm-action="edit" data-flag="B" data-code="{{ r.code }}" data-name="{{ r.name|e }}">Edit</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">No brands found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="panelShelf" class="bm-panel" role="tabpanel" aria-labelledby="tabShelf">
+    <div class="co-table-wrap">
+      <table class="co-table" id="tableShelf">
+        <thead>
+          <tr>
+            <th data-col="0" style="width:90px;">Flag<span class="sort-arrow"></span></th>
+            <th data-col="1" style="width:120px;">Code<span class="sort-arrow"></span></th>
+            <th data-col="2">Name<span class="sort-arrow"></span></th>
+            <th style="text-align:center; width:120px;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows_shelf %}
+          <tr>
+            <td><span class="flag-Z">Z</span></td>
+            <td style="font-family:monospace;">{{ r.code }}</td>
+            <td>{{ r.name }}</td>
+            <td style="text-align:center;">
+              <button type="button" class="btn-view" data-bm-action="edit" data-flag="Z" data-code="{{ r.code }}" data-name="{{ r.name|e }}">Edit</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">No shelf rows found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="panelColor" class="bm-panel" role="tabpanel" aria-labelledby="tabColor">
+    <div class="co-table-wrap">
+      <table class="co-table" id="tableColor">
+        <thead>
+          <tr>
+            <th data-col="0" style="width:90px;">Flag<span class="sort-arrow"></span></th>
+            <th data-col="1" style="width:120px;">Code<span class="sort-arrow"></span></th>
+            <th data-col="2">Name<span class="sort-arrow"></span></th>
+            <th style="text-align:center; width:120px;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows_color %}
+          <tr>
+            <td><span class="flag-L">L</span></td>
+            <td style="font-family:monospace;">{{ r.code }}</td>
+            <td>{{ r.name }}</td>
+            <td style="text-align:center;">
+              <button type="button" class="btn-view" data-bm-action="edit" data-flag="L" data-code="{{ r.code }}" data-name="{{ r.name|e }}">Edit</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">No colors found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="brandModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-close="brandModal"></div>
+  <div class="modal__content" style="max-width: 420px;">
+    <div class="modal__header">
+      <h3 id="brandModalTitle">Brand</h3>
+      <button type="button" class="modal__close" data-close="brandModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <p class="page-po__muted" id="brandModalHint" style="margin-bottom:12px;"></p>
+      <input type="hidden" id="bm-mode" />
+      <input type="hidden" id="bm-flag" value="B" />
+      <div class="mb-3" id="bm-code-row" style="display:none;">
+        <label class="form-label" for="bm-code-readonly">Code</label>
+        <input type="text" class="form-control" id="bm-code-readonly" readonly tabindex="-1" style="background:#f8fafc;" />
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="bm-name">Name *</label>
+        <input type="text" class="form-control" id="bm-name" maxlength="200" autocomplete="off" />
+      </div>
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:8px; padding:12px 20px; border-top:1px solid #e2e8f0;">
+      <button type="button" class="btn btn-secondary" data-close="brandModal">Cancel</button>
+      <button type="button" class="btn btn-primary" id="bm-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var BM_SAVE_URL = {{ url_for('itemmaster.brand_master_save')|tojson }};
+
+var BM_TITLES = { B: 'Brand', Z: 'Shelf', L: 'Color' };
+
+function brandModalClose() {
+  var m = document.getElementById('brandModal');
+  if (m) m.classList.add('hidden');
+}
+function brandModalOpen() {
+  var m = document.getElementById('brandModal');
+  if (m) { m.classList.remove('hidden'); document.getElementById('bm-name').focus(); }
+}
+function brandReset() {
+  document.getElementById('bm-mode').value = '';
+  document.getElementById('bm-name').value = '';
+  document.getElementById('bm-code-row').style.display = 'none';
+  document.getElementById('brandModalHint').textContent = '';
+}
+
+function getActiveFlag() {
+  var b = document.querySelector('#bmTabs button.po-tab.active');
+  return b ? (b.getAttribute('data-bm-flag') || 'B') : 'B';
+}
+
+function syncNewButton() {
+  var f = getActiveFlag();
+  var t = BM_TITLES[f] || 'Item';
+  var btn = document.getElementById('btnNewLookup');
+  if (btn) btn.textContent = '+ New ' + t.toLowerCase();
+}
+
+document.getElementById('bmTabs').addEventListener('click', function(e) {
+  var tab = e.target.closest('button.po-tab');
+  if (!tab) return;
+  var panelId = tab.getAttribute('data-bm-panel');
+  if (!panelId) return;
+  document.querySelectorAll('#bmTabs button.po-tab').forEach(function(b) {
+    b.classList.remove('active');
+    b.setAttribute('aria-selected', 'false');
+  });
+  tab.classList.add('active');
+  tab.setAttribute('aria-selected', 'true');
+  document.querySelectorAll('.bm-panel').forEach(function(p) {
+    p.classList.remove('is-active');
+  });
+  var p = document.getElementById(panelId);
+  if (p) {
+    p.classList.add('is-active');
+  }
+  syncNewButton();
+});
+
+document.getElementById('brandModal').addEventListener('click', function(e) {
+  if (e.target.getAttribute('data-close') === 'brandModal' || e.target.classList.contains('modal__overlay') || e.target.classList.contains('modal__close')) {
+    brandModalClose();
+  }
+});
+
+document.getElementById('btnNewLookup').addEventListener('click', function() {
+  brandReset();
+  var f = getActiveFlag();
+  document.getElementById('bm-mode').value = 'create';
+  document.getElementById('bm-flag').value = f;
+  var title = BM_TITLES[f] || 'Item';
+  document.getElementById('brandModalTitle').textContent = 'New ' + title.toLowerCase();
+  document.getElementById('brandModalHint').textContent = 'Code is assigned automatically (FLAG = ' + f + ').';
+  brandModalOpen();
+});
+
+document.getElementById('panelBrand').addEventListener('click', bmEditHandler);
+document.getElementById('panelShelf').addEventListener('click', bmEditHandler);
+document.getElementById('panelColor').addEventListener('click', bmEditHandler);
+
+function bmEditHandler(e) {
+  var t = e.target.closest('[data-bm-action="edit"]');
+  if (!t) return;
+  brandReset();
+  var f = t.getAttribute('data-flag') || 'B';
+  document.getElementById('bm-mode').value = 'update';
+  document.getElementById('bm-flag').value = f;
+  document.getElementById('bm-name').value = t.getAttribute('data-name') || '';
+  document.getElementById('bm-code-readonly').value = t.getAttribute('data-code') || '';
+  document.getElementById('bm-code-row').style.display = '';
+  var title = BM_TITLES[f] || 'Item';
+  document.getElementById('brandModalTitle').textContent = 'Edit ' + title.toLowerCase();
+  document.getElementById('brandModalHint').textContent = 'Change the display name (code is fixed).';
+  brandModalOpen();
+}
+
+document.getElementById('bm-save').addEventListener('click', function() {
+  var mode = document.getElementById('bm-mode').value;
+  var name = (document.getElementById('bm-name').value || '').trim();
+  if (!name) { alert('Name is required'); return; }
+  var f = (document.getElementById('bm-flag').value || 'B').toUpperCase().slice(0, 1);
+  var payload = { mode: mode, name: name, flag: f };
+  if (mode === 'update') {
+    payload.code = parseInt(document.getElementById('bm-code-readonly').value, 10);
+  }
+  var btn = document.getElementById('bm-save');
+  btn.disabled = true;
+  fetch(BM_SAVE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).then(function(r) { return r.json().then(function(j) { return { ok: r.ok, data: j }; }); })
+    .then(function(res) {
+      btn.disabled = false;
+      if (res.ok && res.data && res.data.ok) {
+        brandModalClose();
+        window.location.reload();
+        return;
+      }
+      alert((res.data && res.data.error) ? res.data.error : 'Save failed');
+    })
+    .catch(function() {
+      btn.disabled = false;
+      alert('Network error');
+    });
+});
+
+syncNewButton();
+
+(function() {
+  try {
+    var p = new URLSearchParams(window.location.search);
+    var pn = (p.get('prefill_name') || p.get('prefill_brand') || '').trim();
+    if (!pn) return;
+    var tabB = document.getElementById('tabBrand');
+    if (tabB) tabB.click();
+    syncNewButton();
+    brandReset();
+    document.getElementById('bm-mode').value = 'create';
+    document.getElementById('bm-flag').value = 'B';
+    document.getElementById('bm-name').value = pn.slice(0, 200);
+    document.getElementById('brandModalTitle').textContent = 'New brand';
+    document.getElementById('brandModalHint').textContent = "Suggested from a supplier invoice (GRN import). Adjust the name if needed, then save.";
+    brandModalOpen();
+  } catch (e) {}
+})();
+</script>
+{% endblock %}

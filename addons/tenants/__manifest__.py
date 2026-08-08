@@ -1,0 +1,2 @@
+"""Addon manifest — Tenants."""
+MANIFEST = {'technical_name': 'tenants', 'name': 'Tenants', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Migrated from blueprints/tenants.py', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/tenants'}, 'flask': {'blueprint': 'tenants', 'blueprint_ref': 'addons.tenants:bp', 'models_package': 'addons.tenants.models', 'routes_module': 'addons.tenants.controllers.routes'}}

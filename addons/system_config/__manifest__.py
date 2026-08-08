@@ -1,0 +1,2 @@
+"""Addon manifest — System Config."""
+MANIFEST = {'technical_name': 'system_config', 'name': 'System Config', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Migrated from blueprints/system_config.py', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/system-config'}, 'flask': {'blueprint': 'system_config', 'blueprint_ref': 'addons.system_config:bp', 'models_package': 'addons.system_config.models', 'routes_module': 'addons.system_config.controllers.routes'}}

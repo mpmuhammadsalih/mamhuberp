@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/transaction_recording_audit.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="tra-page tra-dashboard-page" id="traDashboardApp" data-api="{{ api_url }}">
+
+  <header class="tra-header">
+    <div>
+      <h1 class="tra-title"><i class="bi bi-graph-up"></i> Transaction Audit Dashboard</h1>
+      <p class="tra-subtitle">Overview of recorded ERP transactions, audit coverage, and recent stock adjustments.</p>
+    </div>
+    <div class="tra-header-actions">
+      <a href="{{ viewer_url }}" class="tra-btn tra-btn--primary"><i class="bi bi-table"></i> Audit Viewer</a>
+    </div>
+  </header>
+
+  <section class="tra-kpi-grid tra-kpi-grid--dash" aria-label="Dashboard KPIs">
+    <div class="tra-kpi-card">
+      <span class="tra-kpi-icon tra-kpi-icon--blue"><i class="bi bi-calendar-day"></i></span>
+      <div>
+        <p class="tra-kpi-label">Transactions Today</p>
+        <p class="tra-kpi-value" id="traDashToday">—</p>
+      </div>
+    </div>
+    <div class="tra-kpi-card">
+      <span class="tra-kpi-icon tra-kpi-icon--green"><i class="bi bi-camera-video"></i></span>
+      <div>
+        <p class="tra-kpi-label">Total Audited (Saved)</p>
+        <p class="tra-kpi-value" id="traDashAudited">—</p>
+      </div>
+    </div>
+    <div class="tra-kpi-card">
+      <span class="tra-kpi-icon tra-kpi-icon--red"><i class="bi bi-exclamation-octagon"></i></span>
+      <div>
+        <p class="tra-kpi-label">Failed Saves</p>
+        <p class="tra-kpi-value" id="traDashFailed">—</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="tra-dash-grid">
+    <section class="tra-panel">
+      <h2 class="tra-panel__title"><i class="bi bi-people"></i> Most Active Users (30 days)</h2>
+      <ul class="tra-user-list" id="traDashUsers">
+        <li class="tra-empty">Loading…</li>
+      </ul>
+    </section>
+
+    <section class="tra-panel">
+      <h2 class="tra-panel__title"><i class="bi bi-boxes"></i> Recent Stock Adjustments</h2>
+      <div class="tra-table-wrap">
+        <table class="co-table tra-table tra-table--compact">
+          <thead>
+            <tr>
+              <th>Adj No</th>
+              <th>User</th>
+              <th>Time</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="traDashAdjustments">
+            <tr><td colspan="4" class="tra-empty">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/transaction_recording_audit_dashboard.js') }}?v=1"></script>
+{% endblock %}

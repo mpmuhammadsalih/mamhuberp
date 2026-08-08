@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% block title %}Branch / Location Master{% endblock %}
+{% block content %}
+<style>
+  .page-po.nexa-list-page.blm-list-page {
+    max-width: 1300px !important;
+    margin: 0 auto !important;
+    padding: 8px 0 20px !important;
+  }
+
+  .blm-list-page .blm-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .blm-list-page .blm-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 11px;
+    border: 1px solid #e5eaf2;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, .06);
+  }
+  .blm-list-page .blm-stat-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    border-radius: 9px;
+    color: #fff;
+    font-size: 17px;
+  }
+  .blm-list-page .blm-stat-icon--blue { background: linear-gradient(135deg, #2563eb, #38bdf8); }
+  .blm-list-page .blm-stat-icon--green { background: linear-gradient(135deg, #16a34a, #22c55e); }
+  .blm-list-page .blm-stat-icon--amber { background: linear-gradient(135deg, #f59e0b, #facc15); }
+  .blm-list-page .blm-stat-icon--purple { background: linear-gradient(135deg, #7c3aed, #a78bfa); }
+  .blm-list-page .blm-stat-icon--cyan { background: linear-gradient(135deg, #0891b2, #06b6d4); }
+  .blm-list-page .blm-stat-label { margin: 0 0 4px; color: #475569; font-size: 11px; font-weight: 700; }
+  .blm-list-page .blm-stat-value { margin: 0; color: #0f172a; font-size: clamp(16px, 1.45vw, 21px); font-weight: 850; line-height: 1.1; }
+  .blm-list-page .blm-stat-sub { margin: 3px 0 0; color: #64748b; font-size: 11px; }
+
+  .blm-list-page .co-table td.blm-sw-cell {
+    text-align: center !important;
+    vertical-align: middle !important;
+  }
+  .blm-list-page .blm-sw {
+    display: inline-block;
+    position: relative;
+    width: 40px;
+    height: 22px;
+    border-radius: 11px;
+    background: #dee2e6;
+    vertical-align: middle;
+    transition: background 0.12s ease;
+  }
+  .blm-list-page .blm-sw.blm-sw--on { background: #28a745; }
+  .blm-list-page .blm-sw-k {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    left: 2px;
+    top: 2px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.12);
+    transition: left 0.12s ease;
+  }
+  .blm-list-page .blm-sw.blm-sw--on .blm-sw-k { left: 20px; }
+
+  .page-po__title-wrap .page-po__muted { max-width: 720px; line-height: 1.45; }
+
+  @media (max-width: 980px) {
+    .blm-list-page .blm-stat-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+  }
+  @media (max-width: 560px) {
+    .blm-list-page .blm-stat-grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+{% set ns = namespace(total=0, base_ho=0, warehouse=0, batch=0, bin=0) %}
+{% for r in rows %}
+  {% set ns.total = ns.total + 1 %}
+  {% if (r.get('baselocationflag')|default('', true))|string|trim|upper == 'Y' %}
+    {% set ns.base_ho = ns.base_ho + 1 %}
+  {% endif %}
+  {% if (r.get('warehouse_enable')|default('', true))|string|trim|upper == 'Y' %}
+    {% set ns.warehouse = ns.warehouse + 1 %}
+  {% endif %}
+  {% if (r.get('batch_tracking')|default('', true))|string|trim|upper == 'Y' %}
+    {% set ns.batch = ns.batch + 1 %}
+  {% endif %}
+  {% if (r.get('bin_tracking')|default('', true))|string|trim|upper == 'Y' %}
+    {% set ns.bin = ns.bin + 1 %}
+  {% endif %}
+{% endfor %}
+
+<div class="page-po nexa-list-page blm-list-page">
+  <section class="blm-stat-grid" aria-label="Branch summary">
+    <div class="blm-stat-card">
+      <span class="blm-stat-icon blm-stat-icon--blue"><i class="bi bi-geo-alt" aria-hidden="true"></i></span>
+      <div>
+        <p class="blm-stat-label">Total locations</p>
+        <p class="blm-stat-value">{{ "{:,}".format(ns.total) }}</p>
+        <p class="blm-stat-sub">{{ loc_table }} · this tenant</p>
+      </div>
+    </div>
+    <div class="blm-stat-card">
+      <span class="blm-stat-icon blm-stat-icon--green"><i class="bi bi-building" aria-hidden="true"></i></span>
+      <div>
+        <p class="blm-stat-label">Base (HO)</p>
+        <p class="blm-stat-value">{{ "{:,}".format(ns.base_ho) }}</p>
+        <p class="blm-stat-sub">BASELOCATIONFLAG = Y</p>
+      </div>
+    </div>
+    <div class="blm-stat-card">
+      <span class="blm-stat-icon blm-stat-icon--amber"><i class="bi bi-box-seam" aria-hidden="true"></i></span>
+      <div>
+        <p class="blm-stat-label">Warehouse on</p>
+        <p class="blm-stat-value">{{ "{:,}".format(ns.warehouse) }}</p>
+        <p class="blm-stat-sub">WAREHOUSE_ENABLE</p>
+      </div>
+    </div>
+    <div class="blm-stat-card">
+      <span class="blm-stat-icon blm-stat-icon--cyan"><i class="bi bi-grid-3x3-gap" aria-hidden="true"></i></span>
+      <div>
+        <p class="blm-stat-label">Bin tracking</p>
+        <p class="blm-stat-value">{{ "{:,}".format(ns.bin) }}</p>
+        <p class="blm-stat-sub">BIN_TRACKING</p>
+      </div>
+    </div>
+    <div class="blm-stat-card">
+      <span class="blm-stat-icon blm-stat-icon--purple"><i class="bi bi-collection" aria-hidden="true"></i></span>
+      <div>
+        <p class="blm-stat-label">Batch tracking</p>
+        <p class="blm-stat-value">{{ "{:,}".format(ns.batch) }}</p>
+        <p class="blm-stat-sub">BATCH_TRACKING</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div class="page-po__title-wrap">
+      <h1 class="page-po__title">Branch / Location Master</h1>
+      <p class="page-po__muted">
+        Data from <strong>{{ loc_table }}</strong> on the current tenant. Set <code>LOCATIONS_TABLE</code> if the physical table differs from <code>LOCATIONMASTER</code>.
+        Toggle columns match the branch setup form (<strong>Y</strong>/<strong>N</strong> or <strong>1</strong>/<strong>0</strong> for coupons).
+      </p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('branch_location.branch_location_new') }}" class="page-po__btn-primary">+ Add location</a>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  {% if not rows %}
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <tbody>
+        <tr>
+          <td style="text-align:center; padding:10px; color:#6b7280; font-style:italic;">
+            No locations yet. <a href="{{ url_for('branch_location.branch_location_new') }}" class="pi-link">Add location</a>, or ensure <code>{{ loc_table }}</code> exists.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="nexa-list-toolbar">
+    <input
+      type="text"
+      id="branchLocationListSearch"
+      class="input"
+      style="min-width:220px; max-width:320px;"
+      placeholder="Search any column…"
+      autocomplete="off"
+      oninput="filterBranchLocationRows()"
+    />
+    <span class="nexa-num"><strong id="blmVisibleCount">{{ rows|length }}</strong> showing</span>
+  </div>
+
+  <div class="co-table-wrap">
+    <table class="co-table" id="branchLocationTable">
+      <thead>
+        <tr>
+          <th style="text-align:center; width:60px; cursor:default;">Sl.No</th>
+          {% if branch_show_logo_col %}
+          <th style="text-align:center; width:72px; cursor:default;">Logo</th>
+          {% endif %}
+          {% for c in display_cols %}
+          <th>{{ c|replace('_', ' ') }}</th>
+          {% endfor %}
+          <th style="text-align:center; cursor:default;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr class="blm-data-row">
+          <td class="sl-no">{{ loop.index }}</td>
+          {% if branch_show_logo_col %}
+          <td style="text-align:center;">
+            {% set logo_rel = (r.get('logo_path') or r.get('LOGO_PATH') or '')|string|trim %}
+            {% if logo_rel %}
+              <img src="{{ url_for('static', filename=logo_rel) }}" alt="Logo" style="height:32px;width:auto;max-width:64px;object-fit:contain;border:1px solid #dee2e6;padding:2px;background:#fff;border-radius:4px;" />
+            {% endif %}
+          </td>
+          {% endif %}
+          {% for c in display_cols %}
+          {% set cell = r.get(c) %}
+          {% if c in branch_list_switch_set %}
+          {% set on = False %}
+          {% if c == 'coupons' %}
+          {% set _cv = cell %}
+          {% set on = (_cv is not none and (_cv|string|trim) != '' and ((_cv|string|trim|upper == 'Y') or ((_cv|string|trim|float(default=0)) != 0))) %}
+          {% else %}
+          {% set on = ((cell|default('', true))|string|trim|upper == 'Y') %}
+          {% endif %}
+          <td class="blm-sw-cell">
+            <span class="blm-sw {% if on %}blm-sw--on{% else %}blm-sw--off{% endif %}" role="img" aria-label="{% if on %}On{% else %}Off{% endif %}"{% if cell is not none and (cell|string|trim != '') %} title="{{ cell }}"{% endif %}>
+              <span class="blm-sw-k"></span>
+            </span>
+          </td>
+          {% else %}
+          <td>{{ cell|default('', true)|e }}</td>
+          {% endif %}
+          {% endfor %}
+          <td style="text-align:center; white-space:normal;">
+            <a
+              href="{{ url_for('branch_location.branch_location_edit', location_code=(r.get('locationcode')|string)) }}"
+              class="btn-view"
+              aria-label="Edit location {{ r.get('locationcode') }}"
+            >Edit</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+(function() {
+  function filterBranchLocationRows() {
+    var inp = document.getElementById("branchLocationListSearch");
+    var tbody = document.querySelector("#branchLocationTable tbody");
+    var meta = document.getElementById("blmVisibleCount");
+    if (!inp || !tbody) return;
+    var q = (inp.value || "").trim().toLowerCase();
+    var visible = 0;
+    tbody.querySelectorAll("tr.blm-data-row").forEach(function(tr) {
+      var text = (tr.textContent || "").toLowerCase();
+      var show = !q || text.indexOf(q) !== -1;
+      tr.style.display = show ? "" : "none";
+      if (show) visible++;
+    });
+    var n = 1;
+    tbody.querySelectorAll("tr.blm-data-row").forEach(function(tr) {
+      if (tr.style.display === "none") return;
+      var sl = tr.querySelector(".sl-no");
+      if (sl) sl.textContent = String(n++);
+    });
+    if (meta) meta.textContent = String(visible);
+  }
+  window.filterBranchLocationRows = filterBranchLocationRows;
+})();
+</script>
+{% endblock %}

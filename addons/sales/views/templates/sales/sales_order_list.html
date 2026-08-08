@@ -1,0 +1,656 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% set tab = active_tab|default('order') %}
+{% set is_all = tab == 'all' %}
+{% set is_invoiced = tab == 'invoiced' %}
+{% set is_cancelled = tab == 'cancelled' %}
+{% set is_order = tab == 'order' %}
+
+<div class="list-refresh-slot" style="display:flex;justify-content:flex-end;flex-wrap:wrap;align-items:center;margin:6px 0 12px;">{% include 'includes/list_refresh_bar.html' %}</div>
+
+<div class="page-po nexa-list-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Sales Order List</h1>
+      <p class="page-po__muted">
+        {% if is_invoiced %}Invoiced sales orders.{% elif is_cancelled %}Cancelled sales orders.{% elif is_all %}All sales orders.{% else %}Open sales orders ready to invoice or edit.{% endif %}
+      </p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('sales.sales_order') }}" class="page-po__btn-primary">+ New Sales Order</a>
+      <a href="{{ url_for('sales.sales_invoice_list', tab='invoice') }}" class="po-nav-link">Sales Invoice</a>
+      <a href="{{ url_for('sales.sales_order_export', tab=tab, search=search or none, date_from=date_from or none, date_to=date_to or none) }}" class="po-nav-link">Export CSV</a>
+    </div>
+  </div>
+
+  <div class="po-tabs">
+    <a href="{{ url_for('sales.sales_order_list', tab='order', search=search or none, date_from=date_from or none, date_to=date_to or none) }}"
+       class="po-tab{% if is_order %} active{% endif %}">Sales Order</a>
+    <a href="{{ url_for('sales.sales_order_list', tab='invoiced', search=search or none, date_from=date_from or none, date_to=date_to or none) }}"
+       class="po-tab{% if is_invoiced %} active{% endif %}">Invoiced</a>
+    <a href="{{ url_for('sales.sales_order_list', tab='cancelled', search=search or none, date_from=date_from or none, date_to=date_to or none) }}"
+       class="po-tab{% if is_cancelled %} active{% endif %}">Cancelled</a>
+    <a href="{{ url_for('sales.sales_order_list', tab='all', search=search or none, date_from=date_from or none, date_to=date_to or none) }}"
+       class="po-tab{% if is_all %} active{% endif %}">All</a>
+  </div>
+
+  <div class="nexa-list-toolbar">
+    <input type="text" id="soSearch" class="input" placeholder="Search bill no, order no, customer, name, remarks..."
+           style="min-width:220px; max-width:320px;" value="{{ search or '' }}">
+    <label style="font-size:12px; color:#6b7280; white-space:nowrap;">From</label>
+    <input type="date" id="soDateFrom" class="input" style="width:150px;" value="{{ date_from or '' }}">
+    <label style="font-size:12px; color:#6b7280; white-space:nowrap;">To</label>
+    <input type="date" id="soDateTo" class="input" style="width:150px;" value="{{ date_to or '' }}">
+    <button type="button" class="page-po__btn-primary" id="soSearchBtn" onclick="runSalesOrderList()" style="padding:4px 12px; font-size:11px;">Search</button>
+    <button type="button" class="page-po__btn-secondary" onclick="clearFilters()" style="padding:4px 10px; font-size:11px;">Clear</button>
+    <button type="button" class="page-po__btn-secondary" onclick="openCsvExport()" style="padding:4px 10px; font-size:11px;">Export CSV</button>
+    {% if is_order %}
+    <button type="button" class="page-po__btn-primary" id="soInvoiceEachBtn" onclick="invoiceEachSelected()" style="padding:4px 12px; font-size:11px;" disabled title="One sales invoice per selected order">Invoice Each</button>
+    {% endif %}
+    <span id="soSelectedCount" class="nexa-num" style="margin-left:4px;"></span>
+    <span id="soCount" class="nexa-num" style="margin-left:4px;"></span>
+  </div>
+
+  <div class="co-table-wrap">
+    <table class="co-table" id="soTable">
+      <thead>
+        <tr>
+          {% if is_order or is_all %}
+          <th style="text-align:center; width:34px; cursor:default;">
+            <input type="checkbox" id="soSelectAll" title="Select all pending orders on this page" aria-label="Select all pending sales orders">
+          </th>
+          {% endif %}
+          <th data-col="0" style="text-align:center; width:60px;">Sl.No<span class="sort-arrow"></span></th>
+          <th data-col="1">Bill No<span class="sort-arrow"></span></th>
+          <th data-col="2">Bill Date<span class="sort-arrow"></span></th>
+          <th data-col="3">Customer Code<span class="sort-arrow"></span></th>
+          <th data-col="4">Customer Name<span class="sort-arrow"></span></th>
+          <th data-col="5">Order No<span class="sort-arrow"></span></th>
+          <th data-col="6" style="text-align:right;">Net Amount<span class="sort-arrow"></span></th>
+          <th data-col="7">Status<span class="sort-arrow"></span></th>
+          <th data-col="8">Remarks<span class="sort-arrow"></span></th>
+          <th style="text-align:center; cursor:default;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="soBody">
+        {% for row in orders %}
+        {% set so_st = (row.billstatus or 'P')|string|upper %}
+        <tr
+          data-billno="{{ row.billno or '' }}"
+          data-date="{{ (row.billdate|string)[:10] if row.billdate else '' }}"
+          data-customer="{{ row.customercode or '' }}"
+          data-customername="{{ row.customername or '' }}"
+          data-orderno="{{ row.orderno or '' }}"
+          data-status="{{ row.billstatus or '' }}"
+          data-remarks="{{ row.remarks or '' }}"
+          data-amount="{{ row.netbillamount or 0 }}"
+        >
+          {% if is_order or is_all %}
+          <td style="text-align:center;">
+            {% if so_st not in ('V', 'I') %}
+            <input type="checkbox" class="so-select-cb" value="{{ row.billno }}" aria-label="Select sales order {{ row.billno }}">
+            {% endif %}
+          </td>
+          {% endif %}
+          <td class="sl-no">{{ loop.index }}</td>
+          <td><a class="so-link" href="{{ url_for('sales.sales_order', billno=row.billno) }}">{{ row.billno or '-' }}</a></td>
+          <td>{{ (row.billdate|string)[:10] if row.billdate else '-' }}</td>
+          <td>{{ row.customercode or '-' }}</td>
+          <td>{{ row.customername or '-' }}</td>
+          <td>{{ row.orderno or '' }}</td>
+          <td class="num">{{ "%.2f"|format((row.netbillamount or 0)|float) }}</td>
+          <td>
+            {% if so_st == 'V' %}Cancelled{% elif so_st == 'I' %}Invoiced{% elif so_st == 'P' %}Pending{% else %}{{ row.billstatus or 'P' }}{% endif %}
+          </td>
+          <td>{{ row.remarks or '' }}</td>
+          <td style="text-align:center; white-space:nowrap;">
+            <a class="btn-view" href="/sales-order/pdf/{{ (row.billno or '')|urlencode }}" target="_blank" rel="noopener">PDF</a>
+            {% if so_st not in ('V', 'I') %}
+            <a class="btn-view" href="{{ url_for('sales.sales_invoice') }}?from_order={{ (row.billno or '')|urlencode }}">Invoice</a>
+            <a class="btn-view" href="{{ url_for('sales.sales_order', billno=row.billno) }}">Edit</a>
+            <button type="button" class="btn-view so-cancel-btn" data-billno="{{ row.billno }}">Cancel</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr id="soNoData"><td colspan="{{ 11 if (is_order or is_all) else 10 }}" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">
+          {% if is_invoiced %}No invoiced sales orders found.{% elif is_cancelled %}No cancelled sales orders found.{% elif is_all %}No sales orders found.{% else %}No open sales orders found.{% endif %}
+        </td></tr>
+        {% endfor %}
+      </tbody>
+      {% if orders %}
+      <tfoot>
+        <tr>
+          <td colspan="{{ 7 if (is_order or is_all) else 6 }}" style="text-align:right; padding-right:12px; font-weight:700;">Total</td>
+          <td class="num" id="soTotalAmt">
+            {% set ns = namespace(total=0) %}
+            {% for r in orders %}{% set ns.total = ns.total + (r.netbillamount|float if r.netbillamount is not none and r.netbillamount != '' else 0) %}{% endfor %}
+            {{ '{:,.2f}'.format(ns.total) }}
+          </td>
+          <td colspan="3"></td>
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div>
+
+<div id="soBatchProgress" class="so-batch-progress hidden" aria-live="polite" aria-busy="true">
+  <div class="so-batch-progress__panel">
+    <div class="so-batch-progress__title">Creating sales invoices</div>
+    <div id="soBatchProgressText" class="so-batch-progress__text">Starting…</div>
+    <div class="so-batch-progress__track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div id="soBatchProgressBar" class="so-batch-progress__bar" style="width:0%"></div>
+    </div>
+    <div id="soBatchProgressPct" class="so-batch-progress__pct">0%</div>
+    <button type="button" id="soBatchProgressCancel" class="page-po__btn-secondary" style="margin-top:12px;">Cancel</button>
+  </div>
+</div>
+
+<style>
+.so-batch-progress {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.so-batch-progress.hidden { display: none; }
+.so-batch-progress__panel {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px 24px;
+  min-width: 320px;
+  max-width: 420px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+.so-batch-progress__title { font-weight: 700; font-size: 15px; color: #0f172a; margin-bottom: 6px; }
+.so-batch-progress__text { font-size: 13px; color: #475569; min-height: 18px; }
+.so-batch-progress__track {
+  height: 10px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 14px 0 6px;
+}
+.so-batch-progress__bar {
+  height: 100%;
+  background: #2563eb;
+  transition: width 0.25s ease;
+  border-radius: 999px;
+}
+.so-batch-progress__pct { font-size: 12px; color: #64748b; text-align: right; }
+</style>
+
+<script>
+const SALES_ORDER_LIST_URL = {{ url_for('sales.sales_order_list') | tojson }};
+const SALES_ORDER_LIST_TAB = {{ tab | tojson }};
+const SALES_ORDER_EXPORT_URL = {{ url_for('sales.sales_order_export') | tojson }};
+const SALES_ORDER_BATCH_INVOICE_URL = {{ url_for('sales.sales_order_batch_invoice') | tojson }};
+const SALES_ORDER_BATCH_INVOICE_STEP_URL = {{ url_for('sales.sales_order_batch_invoice_step') | tojson }};
+const SALES_ORDER_BATCH_INVOICE_CANCEL_URL = {{ url_for('sales.sales_order_batch_invoice_cancel') | tojson }};
+
+function salesOrderCancelUrl(billno) {
+  return '/sales-order/' + encodeURIComponent(billno) + '/cancel';
+}
+const SALES_ORDER_DEFAULT_FROM = {{ (date_from or '') | tojson }};
+const SALES_ORDER_DEFAULT_TO = {{ (date_to or '') | tojson }};
+
+function buildSalesOrderQueryParams() {
+  const search = (document.getElementById('soSearch').value || '').trim();
+  const dateFrom = (document.getElementById('soDateFrom').value || '').trim();
+  const dateTo = (document.getElementById('soDateTo').value || '').trim();
+  const params = new URLSearchParams();
+  params.set('tab', SALES_ORDER_LIST_TAB || 'order');
+  if (search) params.set('search', search);
+  if (dateFrom) params.set('date_from', dateFrom);
+  if (dateTo) params.set('date_to', dateTo);
+  return params;
+}
+
+function runSalesOrderList() {
+  const params = buildSalesOrderQueryParams();
+  window.location.href = SALES_ORDER_LIST_URL + (params.toString() ? '?' + params.toString() : '');
+}
+
+function openCsvExport() {
+  const params = buildSalesOrderQueryParams();
+  const url = SALES_ORDER_EXPORT_URL + (params.toString() ? '?' + params.toString() : '');
+  window.open(url, '_blank');
+}
+
+function getSelectedPendingSalesOrders() {
+  return Array.from(document.querySelectorAll('.so-select-cb:checked')).map((cb) => {
+    const row = cb.closest('tr');
+    return {
+      billno: String(cb.value || '').trim(),
+      customer: String(row?.getAttribute('data-customer') || '').trim(),
+    };
+  }).filter((item) => item.billno);
+}
+
+function updateSalesOrderSelectionUi() {
+  const selected = getSelectedPendingSalesOrders();
+  const eachBtn = document.getElementById('soInvoiceEachBtn');
+  const countEl = document.getElementById('soSelectedCount');
+  if (eachBtn) eachBtn.disabled = selected.length === 0;
+  if (countEl) countEl.textContent = selected.length ? (selected.length + ' selected') : '';
+  const selectAll = document.getElementById('soSelectAll');
+  if (selectAll) {
+    const visible = Array.from(document.querySelectorAll('#soBody tr:not(#soNoData)')).filter((row) => row.style.display !== 'none');
+    const selectable = visible.filter((row) => row.querySelector('.so-select-cb'));
+    const checked = selectable.filter((row) => row.querySelector('.so-select-cb')?.checked);
+    selectAll.indeterminate = checked.length > 0 && checked.length < selectable.length;
+    selectAll.checked = selectable.length > 0 && checked.length === selectable.length;
+  }
+}
+
+function showSoBatchProgress(done, total, message) {
+  const wrap = document.getElementById('soBatchProgress');
+  const textEl = document.getElementById('soBatchProgressText');
+  const barEl = document.getElementById('soBatchProgressBar');
+  const pctEl = document.getElementById('soBatchProgressPct');
+  const trackEl = wrap ? wrap.querySelector('[role="progressbar"]') : null;
+  if (!wrap) return;
+  const safeTotal = Math.max(1, Number(total) || 1);
+  const safeDone = Math.max(0, Math.min(Number(done) || 0, safeTotal));
+  const pct = Math.round((safeDone / safeTotal) * 100);
+  wrap.classList.remove('hidden');
+  wrap.setAttribute('aria-busy', 'true');
+  if (textEl) textEl.textContent = message || '';
+  if (barEl) barEl.style.width = pct + '%';
+  if (pctEl) pctEl.textContent = pct + '%';
+  if (trackEl) trackEl.setAttribute('aria-valuenow', String(pct));
+}
+
+function hideSoBatchProgress() {
+  const wrap = document.getElementById('soBatchProgress');
+  if (!wrap) return;
+  wrap.classList.add('hidden');
+  wrap.setAttribute('aria-busy', 'false');
+}
+
+function setSoBatchUiBusy(busy) {
+  const ids = ['soInvoiceEachBtn', 'soSearchBtn', 'soSelectAll'];
+  ids.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !!busy;
+  });
+  document.querySelectorAll('.so-select-cb, .so-cancel-btn').forEach((el) => {
+    el.disabled = !!busy;
+  });
+}
+
+function applySaveNonceFromResponse(data) {
+  if (data && typeof data.save_nonce === 'string' && data.save_nonce) {
+    window.__GLOBAL_SAVE_NONCE = data.save_nonce;
+  }
+}
+
+async function releaseSoBatchInvoiceLock(runId, force) {
+  try {
+    await fetch(SALES_ORDER_BATCH_INVOICE_CANCEL_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batch_run_id: runId || undefined, force: !!force }),
+    });
+  } catch (ignore) {}
+}
+
+async function parseSoBatchStepResponse(res) {
+  const raw = await res.text();
+  let data = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch (ignore) {
+      data = {};
+    }
+  }
+  if (!data || typeof data !== 'object') data = {};
+  if (!res.ok && !data.error && raw && raw.indexOf('{') !== 0) {
+    data.error = 'Server error (HTTP ' + res.status + '). Try again in a moment.';
+  }
+  return data;
+}
+
+function isSoBillnoBusyError(msg) {
+  const t = String(msg || '').toLowerCase();
+  return t.indexOf('bill number allocation is busy') >= 0
+    || t.indexOf('could not allocate bill number') >= 0;
+}
+
+function soBatchStepErrorText(data) {
+  if (!data || typeof data !== 'object') return '';
+  const r = data.result;
+  if (r && r.error) return String(r.error);
+  if (data.error) return String(data.error);
+  return '';
+}
+
+async function postSoBatchInvoiceStep(payload, progressLabel) {
+  const maxTries = 4;
+  let body = Object.assign({}, payload);
+  for (let t = 0; t < maxTries; t++) {
+    if (t > 0) {
+      showSoBatchProgress(
+        Number(body.batch_index) || 0,
+        Number(body.batch_total) || 1,
+        progressLabel + ' — waiting for bill number (retry ' + t + '/' + (maxTries - 1) + ')…'
+      );
+      await releaseSoBatchInvoiceLock(body.batch_run_id, true);
+      if (Number(body.batch_index) === 0) {
+        delete body.batch_run_id;
+      }
+      await new Promise(function (resolve) { setTimeout(resolve, 1500 * t); });
+    }
+    if (Number(body.batch_index) === 0 && window.__GLOBAL_SAVE_NONCE) {
+      body.save_nonce = window.__GLOBAL_SAVE_NONCE;
+    }
+    const res = await fetch(SALES_ORDER_BATCH_INVOICE_STEP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await parseSoBatchStepResponse(res);
+    applySaveNonceFromResponse(data);
+    if (data.batch_run_id) body.batch_run_id = data.batch_run_id;
+    const errText = soBatchStepErrorText(data);
+    if (isSoBillnoBusyError(errText) && t < maxTries - 1) continue;
+    return { res: res, data: data };
+  }
+  return { res: null, data: { success: false, error: 'Bill number allocation is busy; please try again.' } };
+}
+
+let soBatchInvoiceInFlight = false;
+
+async function invoiceEachSelected() {
+  if (soBatchInvoiceInFlight) return;
+  const selected = getSelectedPendingSalesOrders();
+  if (!selected.length) {
+    alert('Select at least one pending sales order.');
+    return;
+  }
+  const count = selected.length;
+  if (!window.confirm('Create one sales invoice for each of ' + count + ' selected order(s)?')) return;
+
+  soBatchInvoiceInFlight = true;
+  const eachBtn = document.getElementById('soInvoiceEachBtn');
+  const cancelBtn = document.getElementById('soBatchProgressCancel');
+  const eachLabel = eachBtn ? eachBtn.textContent : 'Invoice Each';
+  setSoBatchUiBusy(true);
+  if (eachBtn) eachBtn.textContent = 'Invoicing…';
+  showSoBatchProgress(0, count, 'Preparing batch…');
+  await releaseSoBatchInvoiceLock('', true);
+
+  let runId = '';
+  const results = [];
+  let aborted = false;
+  let userCancelled = false;
+
+  const onCancelClick = () => {
+    userCancelled = true;
+    aborted = true;
+    if (cancelBtn) cancelBtn.disabled = true;
+    showSoBatchProgress(0, count, 'Cancelling…');
+  };
+  if (cancelBtn) {
+    cancelBtn.disabled = false;
+    cancelBtn.addEventListener('click', onCancelClick, { once: true });
+  }
+
+  try {
+    for (let i = 0; i < selected.length; i++) {
+      if (userCancelled) break;
+      const billno = selected[i].billno;
+      const progressLabel = 'Invoicing SO ' + billno + ' (' + (i + 1) + ' of ' + count + ')';
+      showSoBatchProgress(i, count, progressLabel + '…');
+      const step = await postSoBatchInvoiceStep({
+        order_billno: billno,
+        batch_index: i,
+        batch_total: count,
+        batch_finalize: i === count - 1,
+        batch_run_id: runId || undefined,
+      }, progressLabel);
+      const res = step.res;
+      const data = step.data || {};
+
+      if (userCancelled) break;
+
+      if (data.save_session_locked) {
+        alert(data.error || 'Another save is in progress. Please wait and try again.');
+        aborted = true;
+        break;
+      }
+      if (data.replay_blocked) {
+        alert(data.error || 'Duplicate save blocked. Refresh the page and try again.');
+        aborted = true;
+        break;
+      }
+      if (data.transaction_date_blocked) {
+        alert(data.error || 'No open transaction date.');
+        aborted = true;
+        break;
+      }
+      if (data.batch_run_expired) {
+        alert(data.error || 'Batch session expired. Please try again.');
+        aborted = true;
+        break;
+      }
+      if (!res || !res.ok && !data.result) {
+        alert(data.error || ('Invoice failed' + (res ? ' (HTTP ' + res.status + ')' : '') + '.'));
+        aborted = true;
+        break;
+      }
+      if (data.batch_run_id) runId = data.batch_run_id;
+      if (data.result) results.push(data.result);
+      showSoBatchProgress(i + 1, count, data.result && data.result.success
+        ? ('SO ' + billno + ' → Invoice ' + data.result.invoice_billno)
+        : ('SO ' + billno + ': ' + (data.result && data.result.error ? data.result.error : 'Failed')));
+      if (data.result && data.result.success === false) {
+        alert(data.result.error || data.error || ('SO ' + billno + ' invoice failed.'));
+        aborted = true;
+        break;
+      }
+    }
+
+    if (userCancelled) {
+      alert('Batch invoice cancelled.');
+      return;
+    }
+    if (aborted) return;
+
+    showSoBatchProgress(count, count, 'Complete');
+    const okRows = results.filter((row) => row.success);
+    const failed = results.filter((row) => !row.success);
+    if (!okRows.length) {
+      let errMsg = 'Batch invoice failed.';
+      if (failed.length) {
+        errMsg += '\n\n' + failed.map((row) => 'SO ' + row.order_billno + ': ' + (row.error || 'Failed')).join('\n');
+      }
+      alert(errMsg);
+      return;
+    }
+    let msg = 'Invoiced ' + okRows.length + ' of ' + count + ' order(s).';
+    msg += '\n\n' + okRows.map((row) => 'SO ' + row.order_billno + ' → Invoice ' + row.invoice_billno).join('\n');
+    if (failed.length) {
+      msg += '\n\nFailed:\n' + failed.map((row) => 'SO ' + row.order_billno + ': ' + (row.error || 'Failed')).join('\n');
+    }
+    alert(msg);
+    runSalesOrderList();
+  } catch (e) {
+    alert((e && e.message) ? e.message : 'Batch invoice failed.');
+    aborted = true;
+  } finally {
+    await releaseSoBatchInvoiceLock(runId, aborted || userCancelled);
+    hideSoBatchProgress();
+    setSoBatchUiBusy(false);
+    soBatchInvoiceInFlight = false;
+    if (eachBtn) eachBtn.textContent = eachLabel;
+    if (cancelBtn) cancelBtn.disabled = false;
+    updateSalesOrderSelectionUi();
+  }
+}
+
+(function wireSalesOrderSelection() {
+  const selectAll = document.getElementById('soSelectAll');
+  if (selectAll) {
+    selectAll.addEventListener('change', function () {
+      const checked = !!this.checked;
+      document.querySelectorAll('#soBody tr:not(#soNoData)').forEach((row) => {
+        if (row.style.display === 'none') return;
+        const cb = row.querySelector('.so-select-cb');
+        if (cb) cb.checked = checked;
+      });
+      updateSalesOrderSelectionUi();
+    });
+  }
+  document.querySelectorAll('.so-select-cb').forEach((cb) => {
+    cb.addEventListener('change', updateSalesOrderSelectionUi);
+  });
+  updateSalesOrderSelectionUi();
+})();
+
+(function () {
+  const table = document.getElementById('soTable');
+  const tbody = document.getElementById('soBody');
+  const countEl = document.getElementById('soCount');
+  const totalEl = document.getElementById('soTotalAmt');
+  let sortCol = -1, sortAsc = true;
+
+  table.querySelectorAll('thead th[data-col]').forEach(th => {
+    th.addEventListener('click', function () {
+      const col = parseInt(this.getAttribute('data-col'));
+      if (sortCol === col) sortAsc = !sortAsc;
+      else { sortCol = col; sortAsc = true; }
+      table.querySelectorAll('thead th').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+      this.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
+      sortTable();
+    });
+  });
+
+  function checkboxColOffset() {
+    return document.getElementById('soSelectAll') ? 1 : 0;
+  }
+
+  function cellVal(row, col) {
+    const cells = row.querySelectorAll('td');
+    const idx = col + checkboxColOffset();
+    return cells[idx] ? cells[idx].textContent.trim() : '';
+  }
+
+  function sortTable() {
+    const rows = Array.from(tbody.querySelectorAll('tr:not(#soNoData)'));
+    rows.sort((a, b) => {
+      let av = cellVal(a, sortCol), bv = cellVal(b, sortCol);
+      const an = parseFloat(av.replace(/,/g, '')), bn = parseFloat(bv.replace(/,/g, ''));
+      let cmp = isNaN(an) || isNaN(bn) ? av.localeCompare(bv) : an - bn;
+      return sortAsc ? cmp : -cmp;
+    });
+    rows.forEach(r => tbody.appendChild(r));
+    reindex();
+  }
+
+  function filterRows() {
+    const q = (document.getElementById('soSearch').value || '').trim().toLowerCase();
+    const dateFrom = document.getElementById('soDateFrom').value;
+    const dateTo = document.getElementById('soDateTo').value;
+    const rows = tbody.querySelectorAll('tr:not(#soNoData)');
+    let vis = 0, total = 0;
+    rows.forEach(row => {
+      const text = (
+        (row.getAttribute('data-billno') || '') + ' ' +
+        (row.getAttribute('data-customer') || '') + ' ' +
+        (row.getAttribute('data-customername') || '') + ' ' +
+        (row.getAttribute('data-orderno') || '') + ' ' +
+        (row.getAttribute('data-status') || '') + ' ' +
+        (row.getAttribute('data-remarks') || '')
+      ).toLowerCase();
+      const rowDate = row.getAttribute('data-date') || '';
+      const matchQ = !q || text.includes(q);
+      const matchFrom = !dateFrom || rowDate >= dateFrom;
+      const matchTo = !dateTo || rowDate <= dateTo;
+      const show = matchQ && matchFrom && matchTo;
+      row.style.display = show ? '' : 'none';
+      if (show) { vis++; total += parseFloat(row.getAttribute('data-amount') || 0); }
+    });
+    reindex();
+    const totalRows = rows.length;
+    if (countEl) countEl.textContent = totalRows ? (vis + ' of ' + totalRows + ' shown') : '0 records';
+    if (totalEl) totalEl.textContent = total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    updateSalesOrderSelectionUi();
+  }
+
+  function reindex() {
+    let i = 1;
+    tbody.querySelectorAll('tr:not(#soNoData)').forEach(row => {
+      if (row.style.display !== 'none') {
+        const sl = row.querySelector('.sl-no');
+        if (sl) sl.textContent = i++;
+      }
+    });
+  }
+
+  filterRows();
+  window.filterRows = filterRows;
+})();
+
+function clearFilters() {
+  document.getElementById('soSearch').value = '';
+  document.getElementById('soDateFrom').value = SALES_ORDER_DEFAULT_FROM || '';
+  document.getElementById('soDateTo').value = SALES_ORDER_DEFAULT_TO || '';
+  runSalesOrderList();
+}
+
+(function wireSalesOrderListSearch() {
+  const searchInput = document.getElementById('soSearch');
+  if (searchInput) {
+    searchInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        runSalesOrderList();
+      }
+    });
+  }
+  function hookRefresh() {
+    const btn = document.getElementById('listRefreshNow');
+    if (!btn || btn.dataset.soRunHooked === '1') return;
+    btn.dataset.soRunHooked = '1';
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      runSalesOrderList();
+    }, true);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', hookRefresh);
+  } else {
+    hookRefresh();
+  }
+})();
+
+(function wireSalesOrderCancel() {
+  document.querySelectorAll('.so-cancel-btn').forEach((btn) => {
+    btn.addEventListener('click', async function () {
+      const billno = (this.getAttribute('data-billno') || '').trim();
+      if (!billno) return;
+      if (!window.confirm('Cancel sales order ' + billno + '? This cannot be undone.')) return;
+      try {
+        const res = await fetch(salesOrderCancelUrl(billno), { method: 'POST' });
+        const data = await res.json();
+        if (!data.success) {
+          alert(data.error || 'Cancel failed.');
+          return;
+        }
+        runSalesOrderList();
+      } catch (e) {
+        alert('Cancel failed.');
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

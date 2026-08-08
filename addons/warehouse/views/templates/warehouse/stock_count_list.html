@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% block title %}Stock Counting{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/stock_count_desktop.css') }}?v=7" />
+<style>
+  .sc-mode-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .sc-mode-badge--opening {
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #86efac;
+  }
+</style>
+{% endblock %}
+{% block content %}
+{% set kpi = list_kpis or {} %}
+<div class="page-po nexa-list-page sc-desktop-page sc-list-page" id="scListPage">
+  <div id="scListFlash" class="stk-adj-flash" hidden role="status" style="margin-bottom:12px;padding:12px 14px;border-radius:6px;background:#ecfdf5;border:1px solid #6ee7b7;color:#065f46;font-size:14px;font-weight:600;"></div>
+  <section class="sc-stat-grid sc-stat-grid--4" aria-label="Stock count summary">
+    <div class="sc-stat-card">
+      <span class="sc-stat-icon sc-stat-icon--blue"><i class="bi bi-clipboard-data" aria-hidden="true"></i></span>
+      <div>
+        <p class="sc-stat-label">Total counts</p>
+        <p class="sc-stat-value">{{ kpi.total or 0 }}</p>
+        <p class="sc-stat-sub">In current view</p>
+      </div>
+    </div>
+    <div class="sc-stat-card">
+      <span class="sc-stat-icon sc-stat-icon--amber"><i class="bi bi-hourglass-split" aria-hidden="true"></i></span>
+      <div>
+        <p class="sc-stat-label">Open</p>
+        <p class="sc-stat-value">{{ kpi.open or 0 }}</p>
+        <p class="sc-stat-sub">Draft / pending</p>
+      </div>
+    </div>
+    <div class="sc-stat-card">
+      <span class="sc-stat-icon sc-stat-icon--green"><i class="bi bi-check2-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="sc-stat-label">Posted</p>
+        <p class="sc-stat-value">{{ kpi.posted or 0 }}</p>
+        <p class="sc-stat-sub">Applied to stock</p>
+      </div>
+    </div>
+    <div class="sc-stat-card">
+      <span class="sc-stat-icon sc-stat-icon--cyan"><i class="bi bi-list-check" aria-hidden="true"></i></span>
+      <div>
+        <p class="sc-stat-label">Lines</p>
+        <p class="sc-stat-value">{{ kpi.total_lines or 0 }}</p>
+        <p class="sc-stat-sub">Counted items</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar sc-detail-topbar">
+    <div class="sc-detail-heading">
+      <div class="sc-detail-title-row">
+        <h1 class="page-po__title page-po__title--with-icon">
+          <span class="page-po__title-icon" aria-hidden="true"><i class="bi bi-upc-scan"></i></span>
+          Stock Counting
+        </h1>
+        <span class="sc-platform-badge">Desktop</span>
+        <span class="sc-mode-badge{% if opening_stock_mode %} sc-mode-badge--opening{% endif %}">
+          <i class="bi {% if opening_stock_mode %}bi-box-seam{% else %}bi-sliders{% endif %}" aria-hidden="true"></i>
+          {% if opening_stock_mode %}Opening Stock Import{% else %}Stock Count Mode{% endif %}
+        </span>
+      </div>
+      <p class="page-po__muted sc-detail-meta">
+        <span><i class="bi bi-geo-alt" aria-hidden="true"></i> Location {{ location_code }}</span>
+        <span><i class="bi bi-info-circle" aria-hidden="true"></i> Scan lines, import batch JSON, post variances to stock</span>
+      </p>
+    </div>
+    <div class="page-po__topbar-actions sc-detail-actions">
+      <a href="{{ accounts_config_url }}" class="page-po__btn-secondary sc-btn-icon">
+        <i class="bi bi-gear" aria-hidden="true"></i> Accounts Configuration
+      </a>
+      <a href="{{ url_for('warehouse.warehouse_stock_counting_new') }}" class="page-po__btn-primary sc-btn-icon">
+        <i class="bi bi-plus-lg" aria-hidden="true"></i> New count
+      </a>
+    </div>
+  </div>
+
+  <nav class="sc-filter-bar" aria-label="Filter by status">
+    <span class="sc-filter-bar__label">Status</span>
+    <a href="{{ url_for('warehouse.warehouse_stock_counting_list') }}"
+       class="sc-filter-pill{% if not status_filter %} sc-filter-pill--active{% endif %}">All</a>
+    {% for s in statuses %}
+    <a href="{{ url_for('warehouse.warehouse_stock_counting_list', status=s) }}"
+       class="sc-filter-pill sc-filter-pill--{{ s|lower }}{% if status_filter == s %} sc-filter-pill--active{% endif %}">{{ s|title }}</a>
+    {% endfor %}
+  </nav>
+
+  <section class="sc-lines-section sc-list-table-section">
+    <div class="sc-lines-head">
+      <h2 class="sc-panel-title"><i class="bi bi-table" aria-hidden="true"></i> Stock counts</h2>
+      <div class="sc-lines-head__tools">
+        <label class="sc-list-search" for="scListSearch">
+          <i class="bi bi-search" aria-hidden="true"></i>
+          <input type="search" id="scListSearch" class="input sc-list-search__input" placeholder="Search count #, warehouse, user…" autocomplete="off" />
+        </label>
+      </div>
+    </div>
+    <div class="co-table-wrap sc-list-table-wrap">
+      <table class="co-table sc-list-table" id="scListTable">
+        <thead>
+          <tr>
+            <th>Count #</th>
+            <th>Date</th>
+            <th>Warehouse</th>
+            <th>Status</th>
+            <th class="sc-col-num">Lines</th>
+            <th>Created by</th>
+            <th class="sc-col-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          {% set st = (r.status or 'PENDING')|upper %}
+          {% set count_date = r.count_date.strftime('%Y-%m-%d') if r.count_date and r.count_date.strftime else r.count_date %}
+          {% set search_blob = (r.count_no|string ~ ' ' ~ (count_date or '') ~ ' ' ~ (r.warehouse_id or '') ~ ' ' ~ (r.storage_id or '') ~ ' ' ~ st ~ ' ' ~ (r.created_by or ''))|lower %}
+          <tr class="sc-list-row" data-search="{{ search_blob }}">
+            <td><strong class="sc-list-count-no">#{{ r.count_no }}</strong></td>
+            <td>{{ count_date or '—' }}</td>
+            <td>
+              {% if r.warehouse_id %}
+              <span class="sc-list-wh"><i class="bi bi-building" aria-hidden="true"></i> WH {{ r.warehouse_id }}</span>
+              {% if r.storage_id %}<span class="sc-list-bin"><i class="bi bi-grid-3x3-gap" aria-hidden="true"></i> Bin {{ r.storage_id }}</span>{% endif %}
+              {% else %}
+              <span class="sc-list-muted">—</span>
+              {% endif %}
+            </td>
+            <td><span class="sc-status-badge sc-status-badge--{{ st|lower }}">{{ st }}</span></td>
+            <td class="sc-col-num">{{ r.line_count or 0 }}</td>
+            <td>{{ r.created_by or '—' }}</td>
+            <td class="sc-col-actions">
+              <a href="{{ url_for('warehouse.warehouse_stock_counting_detail', count_no=r.count_no) }}"
+                 class="page-po__btn-secondary sc-btn-icon sc-btn-open">
+                <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i> Open
+              </a>
+              {% if st == 'POSTED' and not r.is_reversal and not r.reversal_no %}
+              <button type="button"
+                      class="page-po__btn-secondary sc-btn-icon sc-btn-reverse"
+                      data-count-no="{{ r.count_no }}"
+                      data-api="{{ url_for('warehouse.api_stock_count_reverse') }}">
+                <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Reverse
+              </button>
+              {% elif r.reversal_no %}
+              <span class="sc-list-muted">Reversed by #{{ r.reversal_no }}</span>
+              {% elif r.is_reversal %}
+              <span class="sc-list-muted">Reversal</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr class="sc-list-empty">
+            <td colspan="7">
+              <div class="sc-list-empty-state">
+                <i class="bi bi-inbox" aria-hidden="true"></i>
+                <p>No stock counts yet.</p>
+                <a href="{{ url_for('warehouse.warehouse_stock_counting_new') }}" class="page-po__btn-primary sc-btn-icon">
+                  <i class="bi bi-plus-lg" aria-hidden="true"></i> Create first count
+                </a>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="sc-list-no-match" id="scListNoMatch" hidden>No counts match your search.</p>
+  </section>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  var input = document.getElementById('scListSearch');
+  var table = document.getElementById('scListTable');
+  var noMatch = document.getElementById('scListNoMatch');
+  if (!input || !table) return;
+  var rows = table.querySelectorAll('tbody tr.sc-list-row');
+  function filterRows() {
+    var q = (input.value || '').trim().toLowerCase();
+    var visible = 0;
+    rows.forEach(function (row) {
+      var blob = row.getAttribute('data-search') || '';
+      var show = !q || blob.indexOf(q) !== -1;
+      row.style.display = show ? '' : 'none';
+      if (show) visible += 1;
+    });
+    if (noMatch) noMatch.hidden = !q || visible > 0;
+  }
+  input.addEventListener('input', filterRows);
+})();
+(function () {
+  var msg = '';
+  try { msg = sessionStorage.getItem('stock_count_flash') || ''; } catch (_) { msg = ''; }
+  if (!msg) return;
+  try { sessionStorage.removeItem('stock_count_flash'); } catch (_) {}
+  var el = document.getElementById('scListFlash');
+  if (!el) return;
+  el.textContent = msg;
+  el.hidden = false;
+})();
+(function () {
+  function showProgress(current, total, phase) {
+    if (typeof window.updateLoadingOverlayProgress === 'function') {
+      window.updateLoadingOverlayProgress(current || 0, total || 1, (phase || 'Processing') + ' stock count…', phase || 'Processing');
+    } else if (typeof window.showLoadingOverlay === 'function') {
+      window.showLoadingOverlay((phase || 'Processing') + ' stock count…');
+    }
+  }
+  function hideProgress() {
+    if (typeof window.hideLoadingOverlay === 'function') window.hideLoadingOverlay();
+  }
+  function postJson(url, body) {
+    return fetch(url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body || {}),
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (!res.ok || !data.success) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+        return data;
+      });
+    });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.sc-btn-reverse'), function (btn) {
+    btn.addEventListener('click', function () {
+      var countNo = btn.getAttribute('data-count-no') || '';
+      var api = btn.getAttribute('data-api') || '';
+      if (!api || !countNo) return;
+      if (!confirm('Reverse stock count #' + countNo + '? This will post opposite stock, item journal, and GL.')) return;
+      btn.disabled = true;
+      showProgress(0, 3, 'Starting reversal');
+      postJson(api, { count_no: Number(countNo) })
+        .then(function (data) {
+          showProgress(3, 3, 'Complete');
+          try { sessionStorage.setItem('stock_count_flash', data.message || 'Stock count reversed.'); } catch (_) {}
+          window.location.href = data.list_url || "{{ url_for('warehouse.warehouse_stock_counting_list') }}";
+        })
+        .catch(function (err) {
+          hideProgress();
+          btn.disabled = false;
+          alert(err.message || 'Reverse failed');
+        });
+    });
+  });
+})();
+</script>
+{% endblock %}

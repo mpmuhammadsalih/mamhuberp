@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+{% block title %}Accounts Payable{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  #apTable.co-table {
+    width: 100%;
+    table-layout: auto;
+  }
+  #apTable.co-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  #apTable tr.ap-total-row th {
+    font-weight: 700;
+  }
+  #apTable .ap-sort {
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+  #apTable tr.ap-row {
+    cursor: pointer;
+  }
+  .ap-export-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px;
+  }
+  .ap-exp-lbl {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 4px;
+    width: 100%;
+  }
+  .ap-exp {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #334155;
+  }
+  .ap-exp:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+  }
+  .ap-exp--pdf {
+    background: #1a56a4;
+    color: #fff;
+    border-color: #1a56a4;
+  }
+  .ap-exp--pdf:hover {
+    background: #144a8a;
+    color: #fff;
+  }
+  .ap-exp--xls {
+    background: #047857;
+    color: #fff;
+    border-color: #047857;
+  }
+  .ap-exp--xls:hover {
+    background: #065f46;
+    color: #fff;
+  }
+  .nexa-setup-list-page .page-po__topbar-actions .ap-exp { margin-left: 6px; }
+  .nexa-setup-list-page .page-po__topbar-actions .ap-exp:first-child { margin-left: 0; }
+</style>
+
+{% set ns = namespace(total_outstanding=0, party_y=0, pos_bal=0) %}
+{% for row in rows %}
+  {% set ns.total_outstanding = ns.total_outstanding + (row.payable_balance or 0) %}
+  {% if (row.party_code_in_gl_dtl or '')|string|trim|upper == 'Y' %}{% set ns.party_y = ns.party_y + 1 %}{% endif %}
+  {% if (row.payable_balance or 0)|float > 0 %}{% set ns.pos_bal = ns.pos_bal + 1 %}{% endif %}
+{% endfor %}
+{% set loc_n = (rows | map(attribute='locationcode') | unique | list | length) if rows else 0 %}
+
+<div class="page-po nexa-list-page nexa-setup-list-page">
+  <section class="nexa-stat-grid" aria-label="AP summary">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-building" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Suppliers</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(rows|length) }}</p>
+        <p class="nexa-stat-sub">Payable rows</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-currency-dollar" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Total outstanding</p>
+        <p class="nexa-stat-value">{{ '%.2f'|format(ns.total_outstanding or 0) }}</p>
+        <p class="nexa-stat-sub">Sum of balances</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-check2-circle" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">With balance &gt; 0</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.pos_bal) }}</p>
+        <p class="nexa-stat-sub">Owed amounts</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-diagram-3" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Party in GL</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(ns.party_y) }}</p>
+        <p class="nexa-stat-sub">Tagged Y</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--cyan"><i class="bi bi-geo-alt" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Locations</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(loc_n) }}</p>
+        <p class="nexa-stat-sub">Distinct branch codes</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Accounts Payable (AP)</h1>
+      <p class="page-po__muted">Supplier-wise payable balances. Click a row to open supplier payment in a new tab.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('accounts.accounts_payable_payment_summary_voucher_pdf', q=search_term or '', balance=balance_filter or 'all', date_from=date_from or none, date_to=date_to or none) }}" target="_blank" rel="noopener" class="ap-exp ap-exp--pdf">Payable Summary (PDF)</a>
+      <a href="{{ url_for('accounts.accounts_payable_payment_summary_excel', q=search_term or '', balance=balance_filter or 'all', date_from=date_from or none, date_to=date_to or none) }}" class="ap-exp ap-exp--xls">Excel (.xlsx)</a>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <form class="nexa-list-filter-panel" id="apFilterForm" method="get" action="{{ url_for('accounts.accounts_payable') }}" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 14px;margin:10px 0 14px;padding:14px;border:2px solid #0f766e;border-radius:10px;background:#ecfdf5;">
+    <div style="flex-basis:100%;font-size:13px;font-weight:800;color:#0f766e;">Search / Filter AP List</div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label for="apSearch" style="font-size:11px;font-weight:700;color:#64748b;">Search supplier</label>
+      <input id="apSearch" type="text" name="q" class="input" placeholder="Supplier code, name, location..." value="{{ search_term or '' }}" style="min-width:260px;" />
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label for="apDateFrom" style="font-size:11px;font-weight:700;color:#64748b;">From</label>
+      <input id="apDateFrom" type="date" name="date_from" class="input" value="{{ date_from or '' }}" style="width:150px;" />
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label for="apDateTo" style="font-size:11px;font-weight:700;color:#64748b;">To</label>
+      <input id="apDateTo" type="date" name="date_to" class="input" value="{{ date_to or '' }}" style="width:150px;" />
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label for="apBalance" style="font-size:11px;font-weight:700;color:#64748b;">Balance</label>
+      <select id="apBalance" name="balance" class="input" style="min-width:150px;">
+        <option value="all" {% if (balance_filter or 'all') == 'all' %}selected{% endif %}>All</option>
+        <option value="positive" {% if balance_filter == 'positive' %}selected{% endif %}>Positive only</option>
+        <option value="nonzero" {% if balance_filter == 'nonzero' %}selected{% endif %}>Non-zero</option>
+        <option value="zero" {% if balance_filter == 'zero' %}selected{% endif %}>Zero</option>
+        <option value="negative" {% if balance_filter == 'negative' %}selected{% endif %}>Negative</option>
+      </select>
+    </div>
+    <button type="submit" id="apFilterBtn" class="page-po__btn-primary">Filter</button>
+    <button type="button" id="apClearBtn" class="page-po__btn-secondary">Clear</button>
+    <div id="apFilterCount" style="font-size:12px;color:#0f766e;font-weight:700;"></div>
+    <div style="flex-basis:100%;font-size:11px;color:#64748b;">Balances use GL vouchers between From and To (leave blank for all dates).</div>
+  </form>
+
+  <div class="co-table-wrap">
+    <table class="co-table" id="apTable">
+      <thead>
+        <tr>
+          <th style="text-align:center;width:52px;">Sl.No</th>
+          <th><button type="button" class="po-link ap-sort" data-sort-key="location">Location</button></th>
+          <th><button type="button" class="po-link ap-sort" data-sort-key="supplier_code">Supplier Code</button></th>
+          <th><button type="button" class="po-link ap-sort" data-sort-key="supplier_name">Supplier Name</button></th>
+          <th><button type="button" class="po-link ap-sort" data-sort-key="party_code_in_gl">PartyCode</button></th>
+          <th class="num"><button type="button" class="po-link ap-sort" data-sort-key="balance">Balance</button></th>
+        </tr>
+      </thead>
+      <tbody id="apBody">
+        {% for row in rows %}
+        <tr class="ap-row"
+            data-location="{{ row.locationcode or '' }}"
+            data-supplier-code="{{ row.suppliercode or '' }}"
+            data-supplier-name="{{ (row.suppliername or '')|lower }}"
+            data-party-code-in-gl="{{ row.party_code_in_gl_dtl or 'N' }}"
+            data-balance="{{ row.payable_balance or 0 }}">
+          <td style="text-align:center;">{{ loop.index }}</td>
+          <td>{{ row.locationcode or '' }}</td>
+          <td>{{ row.suppliercode }}</td>
+          <td>{{ row.suppliername }}</td>
+          <td>{{ row.party_code_in_gl_dtl or '' }}</td>
+          <td class="num">{{ '%.2f'|format(row.payable_balance or 0) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="muted">No supplier payable data found.</td></tr>
+        {% endfor %}
+        {% if rows %}
+        <tr class="ap-total-row">
+          <th colspan="5" style="text-align: right;">Total Outstanding</th>
+          <th class="num">{{ '%.2f'|format(ns.total_outstanding or 0) }}</th>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<script>
+  (function () {
+    const params = new URLSearchParams(window.location.search);
+    const v = params.get("open_payment_voucher_pdf");
+    if (v) {
+      const pdfBase = "{{ url_for('accounts.accounts_payable_supplier_payment_voucher_pdf') }}?voucher_no=";
+      window.open(pdfBase + encodeURIComponent(v), "_blank", "noopener");
+      params.delete("open_payment_voucher_pdf");
+      const next = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (next ? "?" + next : "") + window.location.hash);
+    }
+  })();
+
+  (function () {
+    const body = document.getElementById("apBody");
+    const sortButtons = document.querySelectorAll(".ap-sort");
+    const filterForm = document.getElementById("apFilterForm");
+    const searchInput = document.getElementById("apSearch");
+    const balanceSelect = document.getElementById("apBalance");
+    const filterBtn = document.getElementById("apFilterBtn");
+    const clearBtn = document.getElementById("apClearBtn");
+    const filterCount = document.getElementById("apFilterCount");
+    if (!body || !sortButtons.length) return;
+
+    const sortState = { key: "", direction: "asc" };
+
+    function getValue(row, key) {
+      if (key === "location") return Number(row.dataset.location || 0);
+      if (key === "supplier_code") return Number(row.dataset.supplierCode || 0);
+      if (key === "supplier_name") return String(row.dataset.supplierName || "");
+      if (key === "party_code_in_gl") return String(row.dataset.partyCodeInGl || "");
+      if (key === "payable_account") return String(row.dataset.payableAccount || "");
+      if (key === "balance") return Number(row.dataset.balance || 0);
+      return "";
+    }
+
+    function rowMatchesFilter(row) {
+      const q = String(searchInput && searchInput.value || "").trim().toLowerCase();
+      const balanceMode = String(balanceSelect && balanceSelect.value || "all").toLowerCase();
+      const bal = Number(row.dataset.balance || 0);
+      if (balanceMode === "positive" && !(bal > 0)) return false;
+      if (balanceMode === "negative" && !(bal < 0)) return false;
+      if (balanceMode === "zero" && Math.abs(bal) > 0.00001) return false;
+      if (balanceMode === "nonzero" && Math.abs(bal) <= 0.00001) return false;
+      if (!q) return true;
+      const text = [
+        row.dataset.location || "",
+        row.dataset.supplierCode || "",
+        row.dataset.supplierName || "",
+        row.dataset.partyCodeInGl || "",
+      ].join(" ").toLowerCase();
+      return text.indexOf(q) !== -1;
+    }
+
+    function applyFilter() {
+      const rows = Array.from(body.querySelectorAll("tr.ap-row"));
+      let shown = 0;
+      let total = 0;
+      rows.forEach((row) => {
+        const ok = rowMatchesFilter(row);
+        row.style.display = ok ? "" : "none";
+        if (ok) {
+          shown += 1;
+          total += Number(row.dataset.balance || 0);
+          const sl = row.children && row.children[0];
+          if (sl) sl.textContent = String(shown);
+        }
+      });
+      const totalRow = body.querySelector("tr.ap-total-row");
+      if (totalRow) {
+        const totalCell = totalRow.querySelector("th.num");
+        if (totalCell) totalCell.textContent = total.toFixed(2);
+      }
+      if (filterCount) filterCount.textContent = "Showing " + shown + " of " + rows.length;
+    }
+
+    function applySort(key) {
+      const rows = Array.from(body.querySelectorAll("tr.ap-row"));
+      if (!rows.length) return;
+      sortState.direction = (sortState.key === key && sortState.direction === "asc") ? "desc" : "asc";
+      sortState.key = key;
+      const dir = sortState.direction === "asc" ? 1 : -1;
+
+      rows.sort((a, b) => {
+        const va = getValue(a, key);
+        const vb = getValue(b, key);
+        if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
+        return String(va).localeCompare(String(vb)) * dir;
+      });
+
+      const totalRow = body.querySelector("tr.ap-total-row");
+      rows.forEach((r) => body.appendChild(r));
+      if (totalRow) body.appendChild(totalRow);
+    }
+
+    function openReceipt(row) {
+      const location = row.dataset.location || "";
+      const supplierCode = row.dataset.supplierCode || "";
+      if (!location || !supplierCode) return;
+      const url = "{{ url_for('accounts.accounts_payable_receipt_new') }}" +
+        "?locationcode=" + encodeURIComponent(location) +
+        "&suppliercode=" + encodeURIComponent(supplierCode);
+      window.open(url, "_blank");
+    }
+
+    sortButtons.forEach((btn) => {
+      btn.addEventListener("click", () => applySort(btn.dataset.sortKey || ""));
+    });
+
+    // Date range requires server reload (Filter submit). Search/balance still filter client-side after load.
+    if (searchInput) searchInput.addEventListener("input", applyFilter);
+    if (balanceSelect) balanceSelect.addEventListener("change", applyFilter);
+    if (clearBtn) {
+      clearBtn.addEventListener("click", () => {
+        window.location.href = {{ url_for('accounts.accounts_payable')|tojson }};
+      });
+    }
+
+    body.querySelectorAll("tr.ap-row").forEach((row) => {
+      row.addEventListener("click", () => openReceipt(row));
+    });
+    applyFilter();
+  })();
+</script>
+{% endblock %}

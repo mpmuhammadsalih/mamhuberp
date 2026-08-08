@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexus ERP — Client Proposal</title>
+  <style>
+    :root {
+      --primary: #1e3a5f;
+      --primary-light: #2d5a8a;
+      --accent: #0ea5e9;
+      --ai: #6d28d9;
+      --ai-bg: #ede9fe;
+      --success: #047857;
+      --text: #0f172a;
+      --text-muted: #475569;
+      --border: #cbd5e1;
+      --white: #ffffff;
+    }
+
+    @page {
+      size: A4 portrait;
+      margin: 14mm 16mm;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    body {
+      font-family: Arial, Helvetica, "Segoe UI", sans-serif;
+      font-size: 10pt;
+      color: var(--text);
+      line-height: 1.45;
+      background: #fff;
+    }
+
+    /* ---- Cover (exactly one A4 page) ---- */
+    .cover {
+      width: 100%;
+      min-height: 269mm;
+      height: 269mm;
+      background: #1e3a5f;
+      color: #ffffff;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 18mm 16mm;
+      page-break-after: always;
+      break-after: page;
+    }
+    .cover-badge {
+      display: inline-block;
+      background: #2d5a8a;
+      border: 1px solid #4a7ab5;
+      padding: 4pt 10pt;
+      border-radius: 20pt;
+      font-size: 7.5pt;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 14mm;
+      width: fit-content;
+    }
+    .cover h1 {
+      font-size: 36pt;
+      font-weight: 700;
+      line-height: 1.1;
+      margin-bottom: 8mm;
+      color: #ffffff;
+    }
+    .cover .subtitle {
+      font-size: 13pt;
+      color: #dbeafe;
+      max-width: 130mm;
+      margin-bottom: 20mm;
+      line-height: 1.5;
+    }
+    .cover-meta {
+      display: table;
+      width: 100%;
+      margin-top: auto;
+      padding-top: 10mm;
+      border-top: 1pt solid #4a7ab5;
+    }
+    .cover-meta-row {
+      display: table-row;
+    }
+    .cover-meta-cell {
+      display: table-cell;
+      width: 33%;
+      vertical-align: top;
+      padding-right: 8mm;
+    }
+    .cover-meta dt {
+      font-size: 7pt;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #93c5fd;
+      margin-bottom: 2pt;
+      font-weight: 600;
+    }
+    .cover-meta dd {
+      font-size: 11pt;
+      font-weight: 600;
+      color: #ffffff;
+    }
+
+    /* ---- Content ---- */
+    .container {
+      width: 100%;
+      max-width: 178mm;
+      margin: 0 auto;
+      padding: 0;
+    }
+
+    section {
+      margin-bottom: 10mm;
+    }
+
+    section.allow-break {
+      page-break-inside: auto;
+      break-inside: auto;
+    }
+
+    .keep-together {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    h2 {
+      font-size: 14pt;
+      color: var(--primary);
+      margin-bottom: 4mm;
+      padding-bottom: 2mm;
+      border-bottom: 2pt solid var(--accent);
+      page-break-after: avoid;
+    }
+    h3 {
+      font-size: 10.5pt;
+      color: var(--primary-light);
+      margin: 5mm 0 2mm;
+      page-break-after: avoid;
+    }
+    p {
+      margin-bottom: 3mm;
+      color: var(--text);
+      font-size: 9.5pt;
+    }
+    .lead {
+      font-size: 10pt;
+      color: var(--text-muted);
+    }
+
+    /* Stats */
+    .stats {
+      display: flex;
+      gap: 3mm;
+      margin: 5mm 0;
+    }
+    .stat {
+      flex: 1;
+      background: #f1f5f9;
+      border: 1pt solid var(--border);
+      border-radius: 4pt;
+      padding: 4mm 2mm;
+      text-align: center;
+    }
+    .stat-value {
+      font-size: 14pt;
+      font-weight: 700;
+      color: var(--primary);
+      line-height: 1.2;
+    }
+    .stat-label {
+      font-size: 7pt;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-top: 1mm;
+      font-weight: 600;
+    }
+
+    /* Cards */
+    .card-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3mm;
+      margin: 4mm 0;
+    }
+    .card {
+      flex: 1 1 calc(50% - 2mm);
+      min-width: calc(50% - 2mm);
+      background: #f8fafc;
+      border: 1pt solid var(--border);
+      border-radius: 4pt;
+      padding: 4mm;
+    }
+    .card h4 {
+      font-size: 9.5pt;
+      color: var(--primary);
+      margin-bottom: 2mm;
+      font-weight: 700;
+    }
+    .card p {
+      font-size: 8.5pt;
+      color: var(--text-muted);
+      margin: 0;
+      line-height: 1.4;
+    }
+    .card.ai-card { border-left: 3pt solid var(--ai); }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 8.5pt;
+      margin: 3mm 0;
+      page-break-inside: avoid;
+    }
+    th {
+      background: var(--primary);
+      color: #ffffff;
+      text-align: left;
+      padding: 3mm 3mm;
+      font-weight: 700;
+      font-size: 8.5pt;
+    }
+    td {
+      padding: 2.5mm 3mm;
+      border-bottom: 1pt solid var(--border);
+      color: var(--text);
+      vertical-align: top;
+    }
+    tr:nth-child(even) td { background: #f1f5f9; }
+
+    /* Pricing */
+    .pricing-block {
+      border: 1pt solid var(--border);
+      border-radius: 4pt;
+      margin: 4mm 0;
+    }
+    .pricing-header {
+      padding: 3mm 4mm;
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 10pt;
+    }
+    .pricing-header.core { background: var(--primary); }
+    .pricing-header.ai { background: var(--ai); }
+    .pricing-body { background: #ffffff; padding: 3mm 4mm; }
+    .price-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 2mm 0;
+      border-bottom: 1pt solid #e2e8f0;
+      font-size: 9pt;
+    }
+    .price-row span:first-child { flex: 1; padding-right: 4mm; color: var(--text); }
+    .price-row span:last-child { flex-shrink: 0; font-weight: 600; color: var(--text); }
+    .price-row.total {
+      font-weight: 700;
+      font-size: 10pt;
+      border-top: 2pt solid var(--primary);
+      margin-top: 2mm;
+      padding-top: 3mm;
+      border-bottom: none;
+    }
+    .price-row.total span { color: var(--primary); }
+    .price-row.ai-total { border-top-color: var(--ai); }
+    .price-row.ai-total span { color: var(--ai); }
+    .price-row.muted span { color: var(--text-muted); font-size: 8.5pt; font-weight: 400; }
+
+    /* Packages - flex, never split mid-row */
+    .packages-section {
+      page-break-before: always;
+      break-before: page;
+      margin: 6mm 0;
+    }
+    .packages-section h3 {
+      margin-top: 0;
+    }
+    .package-cards {
+      display: flex;
+      gap: 3mm;
+      margin: 4mm 0 6mm;
+    }
+    .package {
+      flex: 1;
+      background: #f8fafc;
+      border: 1.5pt solid var(--border);
+      border-radius: 4pt;
+      padding: 4mm 3mm;
+      text-align: center;
+    }
+    .package.featured {
+      border-color: var(--accent);
+      background: var(--nexa-focus-row-bg);
+    }
+    .package-tag {
+      font-size: 6.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #ffffff;
+      background: var(--accent);
+      padding: 1pt 6pt;
+      border-radius: 10pt;
+      display: inline-block;
+      margin-bottom: 2mm;
+    }
+    .package-name { font-size: 9.5pt; font-weight: 700; color: var(--primary); margin-bottom: 2mm; }
+    .package-price { font-size: 16pt; font-weight: 700; color: var(--primary); line-height: 1.2; }
+    .package-price small { font-size: 8pt; font-weight: 400; color: var(--text-muted); display: block; }
+    .package-desc { font-size: 7.5pt; color: var(--text-muted); margin: 3mm 0; min-height: 10mm; line-height: 1.35; }
+    .package ul { list-style: none; text-align: left; font-size: 7.5pt; padding: 0; }
+    .package li {
+      padding: 1mm 0 1mm 4mm;
+      color: var(--text);
+      position: relative;
+      line-height: 1.35;
+    }
+    .package li::before {
+      content: "-";
+      position: absolute;
+      left: 0;
+      color: var(--success);
+      font-weight: 700;
+    }
+
+    .ai-badge {
+      display: inline-block;
+      background: var(--ai-bg);
+      color: var(--ai);
+      font-size: 7pt;
+      font-weight: 700;
+      padding: 1pt 5pt;
+      border-radius: 10pt;
+      margin-left: 3pt;
+      vertical-align: middle;
+    }
+
+    /* Architecture - simple blocks, no unicode box chars */
+    .arch {
+      border: 1pt solid var(--border);
+      border-radius: 4pt;
+      overflow: hidden;
+      margin: 4mm 0;
+      page-break-inside: avoid;
+    }
+    .arch-title {
+      background: var(--primary);
+      color: #ffffff;
+      text-align: center;
+      padding: 2mm;
+      font-size: 8.5pt;
+      font-weight: 700;
+    }
+    .arch-row {
+      display: flex;
+      border-bottom: 1pt solid var(--border);
+    }
+    .arch-row:last-child { border-bottom: none; }
+    .arch-cell {
+      flex: 1;
+      padding: 2.5mm 1mm;
+      text-align: center;
+      font-size: 7.5pt;
+      font-weight: 600;
+      color: var(--primary);
+      border-right: 1pt solid var(--border);
+      background: #f8fafc;
+    }
+    .arch-cell:last-child { border-right: none; }
+    .arch-row-wide .arch-cell { flex: 1 1 100%; }
+    .arch-row-ai .arch-cell { background: #f5f3ff; color: var(--ai); }
+    .arch-row-db .arch-cell { background: #e2e8f0; font-weight: 700; }
+
+    /* Timeline */
+    .timeline { margin: 3mm 0; }
+    .timeline-item {
+      display: flex;
+      gap: 4mm;
+      margin-bottom: 3mm;
+    }
+    .timeline-marker {
+      flex-shrink: 0;
+      width: 10mm;
+      height: 10mm;
+      line-height: 10mm;
+      background: var(--primary);
+      color: #ffffff;
+      border-radius: 50%;
+      text-align: center;
+      font-weight: 700;
+      font-size: 7.5pt;
+    }
+    .timeline-marker.ai { background: var(--ai); }
+    .timeline-content { flex: 1; }
+    .timeline-content h4 {
+      margin: 0 0 1mm;
+      color: var(--primary);
+      font-size: 9.5pt;
+    }
+    .timeline-content p {
+      margin: 0;
+      font-size: 8.5pt;
+      color: var(--text-muted);
+    }
+
+    /* Footer & contact */
+    .doc-footer {
+      margin-top: 8mm;
+      padding-top: 4mm;
+      border-top: 1pt solid var(--border);
+      text-align: center;
+      font-size: 8pt;
+      color: var(--text-muted);
+      page-break-inside: avoid;
+    }
+    .contact-box {
+      background: var(--primary);
+      color: #ffffff;
+      border-radius: 4pt;
+      padding: 5mm;
+      text-align: center;
+      margin: 5mm 0;
+      page-break-inside: avoid;
+    }
+    .contact-box h3 { color: #ffffff; margin: 0 0 2mm; font-size: 11pt; }
+    .contact-box p { color: #dbeafe; margin: 0; font-size: 9pt; }
+
+    ol.steps {
+      padding-left: 5mm;
+      font-size: 9.5pt;
+      color: var(--text);
+    }
+    ol.steps li { margin-bottom: 2mm; }
+
+    .page-break { page-break-before: always; break-before: page; }
+
+    strong { color: var(--text); font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-badge">Confidential Proposal</div>
+  <h1>Nexus ERP</h1>
+  <p class="subtitle">Modern web-based ERP for distribution, wholesale, and multi-branch retail. Optional AI intelligence modules priced separately.</p>
+  <dl class="cover-meta">
+    <div class="cover-meta-row">
+      <div class="cover-meta-cell"><dt>Prepared for</dt><dd>[Client Name]</dd></div>
+      <div class="cover-meta-cell"><dt>Prepared by</dt><dd>[Your Company]</dd></div>
+      <div class="cover-meta-cell"><dt>Date</dt><dd>May 2026</dd></div>
+    </div>
+  </dl>
+</div>
+
+<div class="container">
+
+  <section>
+    <h2>1. Executive Summary</h2>
+    <p class="lead">Nexus ERP unifies sales, POS, purchasing, warehouse, finance, and head-office control in a single browser-accessible platform built on Oracle. AI modules are optional and priced separately.</p>
+
+    <div class="stats">
+      <div class="stat"><div class="stat-value">47</div><div class="stat-label">Business Modules</div></div>
+      <div class="stat"><div class="stat-value">16-20</div><div class="stat-label">Weeks to Go-Live</div></div>
+      <div class="stat"><div class="stat-value">Multi-DB</div><div class="stat-label">HO + Tenants</div></div>
+      <div class="stat"><div class="stat-value">8</div><div class="stat-label">AI Features</div></div>
+    </div>
+
+    <div class="card-grid">
+      <div class="card"><h4>Single platform</h4><p>Eliminate fragmented POS, finance, and warehouse tools with one integrated system.</p></div>
+      <div class="card"><h4>Multi-branch ready</h4><p>Head-office central masters, tenant isolation, and cross-location reporting.</p></div>
+      <div class="card"><h4>Modular AI</h4><p>Adopt forecasting, Smart List, and document AI independently of core ERP.</p></div>
+      <div class="card"><h4>Regional fit</h4><p>Arabic support, Qatar SMS/WhatsApp, Gulf distribution workflows.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Business Challenges Addressed</h2>
+    <table>
+      <thead><tr><th>Challenge</th><th>Nexus ERP Response</th></tr></thead>
+      <tbody>
+        <tr><td>Fragmented operations</td><td>Single platform: sales, POS, purchase, warehouse, GL</td></tr>
+        <tr><td>Branch silos</td><td>Multi-DB tenant model with HO central masters</td></tr>
+        <tr><td>Slow reporting</td><td>Real-time dashboards and 20+ standard reports</td></tr>
+        <tr><td>Manual AP/GRN</td><td>Digital LPO, GRN, posting; optional AI extract</td></tr>
+        <tr><td>Analytics bottleneck</td><td>Dashboard KPIs plus Smart List NL assistant</td></tr>
+        <tr><td>Collections</td><td>Automated SMS/WhatsApp outstanding alerts</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>3. Core Platform Modules</h2>
+    <p>Included in the <strong>Core ERP Platform</strong> license. Scope can be trimmed for Phase 1.</p>
+    <h3>Setup and Administration</h3>
+    <p>Users, roles, tenants, branch/location, GL dimensions, fiscal year, database wizard, activity log.</p>
+    <h3>Master Data</h3>
+    <p>Customer, supplier, item master, brands/UOM/barcodes, salesman, route, employee, session.</p>
+    <h3>Sales and Point of Sale</h3>
+    <p>Cash/credit invoicing, returns, sales orders, POS billing, multi-tender settlement, QZ Tray printing.</p>
+    <h3>Inventory and Warehouse</h3>
+    <p>Stock by location, store transfers, bins, stock moves, visual stock, verification, cycle counting.</p>
+    <h3>Purchasing and Finance</h3>
+    <p>LPO, GRN, batch/lot, returns, AP posting, COA, journals, AR/AP, VAT, bank recon, P&amp;L, balance sheet.</p>
+    <h3>Head Office and Reports</h3>
+    <p>Central masters, branch requests, cross-tenant stock, sales/purchase/stock/collection reports, dashboard KPIs.</p>
+    <h3>Collaboration</h3>
+    <p>Internal chat, outstanding notifications, PDT handheld setup, Tasveek online sync (optional).</p>
+  </section>
+
+  <section class="page-break">
+    <h2>4. AI Intelligence Suite <span class="ai-badge">Optional Add-on</span></h2>
+    <p class="lead">AI modules are priced and implemented <strong>separately</strong> from core ERP. Adopt incrementally after operations stabilize.</p>
+
+    <div class="card-grid">
+      <div class="card ai-card"><h4>AI Forecast Cockpit</h4><p>Sales/purchase forecasting, reorder suggestions, product/supplier/customer analytics.</p></div>
+      <div class="card ai-card"><h4>Smart List Assistant</h4><p>Ask business questions in plain language. Live Oracle SELECT with role-aware guardrails.</p></div>
+      <div class="card ai-card"><h4>Document Intelligence</h4><p>GRN invoice extract (PDF/image), natural-language PO creation, temp invoice analysis.</p></div>
+      <div class="card ai-card"><h4>Operational AI</h4><p>POS verify insights, Arabic item name assist, HO customer onboarding automation.</p></div>
+    </div>
+
+    <h3>Recommended AI adoption path</h3>
+    <table>
+      <thead><tr><th>Phase</th><th>Modules</th><th>Rationale</th></tr></thead>
+      <tbody>
+        <tr><td>Phase 2a</td><td>Forecast + Smart List</td><td>Immediate visibility ROI; low change management</td></tr>
+        <tr><td>Phase 2b</td><td>Document Intelligence</td><td>Reduces AP/GRN data entry after purchase is stable</td></tr>
+        <tr><td>Phase 3</td><td>Operational AI Pack</td><td>POS and HO workflows once baseline metrics exist</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>5. Technical Architecture</h2>
+    <table>
+      <thead><tr><th>Layer</th><th>Technology</th></tr></thead>
+      <tbody>
+        <tr><td>Application</td><td>FastAPI + Uvicorn (Python 3.10+)</td></tr>
+        <tr><td>Database</td><td>Oracle Database (cx_Oracle 8.3)</td></tr>
+        <tr><td>UI</td><td>Server-rendered responsive web (Bootstrap)</td></tr>
+        <tr><td>Auth</td><td>Session-based login, role/menu RBAC</td></tr>
+        <tr><td>Multi-tenant</td><td>Auth DB + per-tenant Oracle connections</td></tr>
+        <tr><td>AI (optional)</td><td>OpenAI API (gpt-4o-mini default)</td></tr>
+        <tr><td>Export</td><td>PDF (ReportLab), Excel (openpyxl)</td></tr>
+      </tbody>
+    </table>
+
+    <div class="arch">
+      <div class="arch-title">Nexus ERP Web Application</div>
+      <div class="arch-row">
+        <div class="arch-cell">Dashboard</div>
+        <div class="arch-cell">Setup</div>
+        <div class="arch-cell">Master</div>
+        <div class="arch-cell">Sales &amp; POS</div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-cell">Inventory</div>
+        <div class="arch-cell">Warehouse</div>
+        <div class="arch-cell">Purchase</div>
+        <div class="arch-cell">Accounts/GL</div>
+      </div>
+      <div class="arch-row arch-row-wide">
+        <div class="arch-cell">Reports</div>
+        <div class="arch-cell">HO Control</div>
+        <div class="arch-cell">Chat</div>
+        <div class="arch-cell">SMS/WhatsApp</div>
+      </div>
+      <div class="arch-row arch-row-wide arch-row-ai">
+        <div class="arch-cell">AI Intelligence Suite (Optional Add-on)</div>
+      </div>
+      <div class="arch-row arch-row-wide arch-row-db">
+        <div class="arch-cell">Oracle Database (Single-DB or Multi-DB / Tenants)</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>6. Implementation Roadmap</h2>
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="timeline-marker">P1</div>
+        <div class="timeline-content"><h4>Foundation - Weeks 1 to 4</h4><p>Discovery, server setup, Oracle connectivity, roles, users, GL dimensions, fiscal year.</p></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-marker">P2</div>
+        <div class="timeline-content"><h4>Operations - Weeks 5 to 10</h4><p>Master data migration, sales/POS, purchase/GRN, warehouse, opening balances.</p></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-marker">P3</div>
+        <div class="timeline-content"><h4>Finance and HO - Weeks 11 to 14</h4><p>Accounts posting, VAT, HO workflows, SMS/WhatsApp, training.</p></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-marker">P4</div>
+        <div class="timeline-content"><h4>Go-Live - Weeks 15 to 18</h4><p>UAT, parallel run, cutover, 2-week hypercare.</p></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-marker ai">P5</div>
+        <div class="timeline-content"><h4>AI (Optional) - Weeks 19 to 22</h4><p>Forecast calibration, Smart List guardrails, document AI tuning, AI training.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="page-break allow-break">
+    <h2>7. Investment Summary</h2>
+    <p class="lead">Core ERP and AI are priced separately. See PRICING.md for full detail.</p>
+
+    <div class="pricing-block keep-together">
+      <div class="pricing-header core">Core ERP Platform - Year 1</div>
+      <div class="pricing-body">
+        <div class="price-row"><span>Growth license (10 branches, 3 tenants)</span><span>$32,000</span></div>
+        <div class="price-row"><span>Implementation bundle</span><span>$52,000</span></div>
+        <div class="price-row"><span>Standard support (Year 1)</span><span>$12,000</span></div>
+        <div class="price-row"><span>Remote training</span><span>$5,000</span></div>
+        <div class="price-row total"><span>Core ERP - Year 1 Total</span><span>$101,000</span></div>
+        <div class="price-row muted"><span>Year 2+ recurring (support only)</span><span>$12,000 / year</span></div>
+      </div>
+    </div>
+
+    <div class="pricing-block keep-together">
+      <div class="pricing-header ai">AI Intelligence Suite - Year 1 Add-on</div>
+      <div class="pricing-body">
+        <div class="price-row"><span>Full AI Suite license (all 4 packs)</span><span>$14,000</span></div>
+        <div class="price-row"><span>AI implementation and tuning</span><span>$10,000</span></div>
+        <div class="price-row"><span>AI annual support</span><span>$3,600</span></div>
+        <div class="price-row"><span>OpenAI API (capped tier, 12 months)</span><span>$4,200</span></div>
+        <div class="price-row total ai-total"><span>AI Add-on - Year 1 Total</span><span>$31,800</span></div>
+        <div class="price-row muted"><span>AI Year 2+ recurring</span><span>$7,800 / year</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="packages-section allow-break">
+    <h3>Recommended packages</h3>
+    <div class="package-cards">
+      <div class="package">
+        <div class="package-name">Package A</div>
+        <div class="package-price">$101K<small>Year 1</small></div>
+        <div class="package-desc">Core ERP only. Growth tier, full implementation.</div>
+        <ul>
+          <li>10 branches, 3 tenants</li>
+          <li>All core modules</li>
+          <li>Standard support</li>
+          <li>Remote training</li>
+        </ul>
+      </div>
+      <div class="package featured">
+        <div class="package-tag">Recommended</div>
+        <div class="package-name">Package B</div>
+        <div class="package-price">$129K<small>Year 1</small></div>
+        <div class="package-desc">Core ERP + Full AI Suite.</div>
+        <ul>
+          <li>Everything in Package A</li>
+          <li>Full AI Suite (4 packs)</li>
+          <li>AI implementation</li>
+          <li>OpenAI capped tier</li>
+        </ul>
+      </div>
+      <div class="package">
+        <div class="package-name">Package C</div>
+        <div class="package-price">Phased<small>Lowest start</small></div>
+        <div class="package-desc">Core now, AI in Phase 2.</div>
+        <ul>
+          <li>Phase 1: Core go-live</li>
+          <li>Phase 2: Forecast + Smart List</li>
+          <li>Phase 3: Document and ops AI</li>
+          <li>Pay as you adopt</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h3>AI module pricing (a la carte)</h3>
+    <table>
+      <thead><tr><th>Module</th><th>One-time License</th><th>Annual Support</th></tr></thead>
+      <tbody>
+        <tr><td>AI Forecast Cockpit</td><td>$4,500</td><td>$990</td></tr>
+        <tr><td>Smart List Assistant</td><td>$5,500</td><td>$1,210</td></tr>
+        <tr><td>Document Intelligence Pack</td><td>$4,000</td><td>$880</td></tr>
+        <tr><td>Operational AI Pack</td><td>$3,500</td><td>$770</td></tr>
+        <tr><td><strong>Full AI Suite (bundle)</strong></td><td><strong>$14,000</strong></td><td><strong>$3,600</strong></td></tr>
+      </tbody>
+    </table>
+
+    <h3>Payment terms</h3>
+    <table>
+      <thead><tr><th>Milestone</th><th>%</th><th>Trigger</th></tr></thead>
+      <tbody>
+        <tr><td>Contract signing</td><td>30%</td><td>Upon agreement</td></tr>
+        <tr><td>Blueprint complete</td><td>20%</td><td>Week 4</td></tr>
+        <tr><td>UAT sign-off</td><td>30%</td><td>Pre go-live</td></tr>
+        <tr><td>Go-live + hypercare</td><td>20%</td><td>Post cutover</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>8. Why Nexus ERP</h2>
+    <div class="card-grid">
+      <div class="card"><h4>Oracle-native</h4><p>Built on proven RFIM/RGC schema, not a generic SaaS retrofit.</p></div>
+      <div class="card"><h4>No per-user tax</h4><p>Perpetual license with predictable annual support fees.</p></div>
+      <div class="card"><h4>Your infrastructure</h4><p>Deployed on-premise; your data stays under your control.</p></div>
+      <div class="card"><h4>Practical AI</h4><p>Intelligence tied to real business data, not generic chatbots.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>9. Next Steps</h2>
+    <ol class="steps">
+      <li><strong>Discovery call</strong> - Confirm branch count, tenant structure, legacy system</li>
+      <li><strong>Module scoping</strong> - Finalize Phase 1 list and migration scope</li>
+      <li><strong>Proposal refinement</strong> - Adjust tier and pricing based on scope</li>
+      <li><strong>Contract and kickoff</strong> - Target start within 2 weeks of signing</li>
+    </ol>
+
+    <div class="contact-box">
+      <h3>Let's discuss your deployment</h3>
+      <p>[Your Name] | [Title] | [Email] | [Phone]<br>[Company Website]</p>
+    </div>
+  </section>
+
+  <div class="doc-footer">
+    <p>This document is confidential and intended solely for <strong>[Client Name]</strong>.</p>
+    <p>Pricing valid for 90 days from date of issue | May 2026 | Version 1.0</p>
+  </div>
+
+</div>
+</body>
+</html>

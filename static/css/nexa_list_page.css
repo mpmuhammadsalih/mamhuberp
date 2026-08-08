@@ -1,0 +1,457 @@
+/*
+ * Standard list page shell + data grid.
+ * Add class "nexa-list-page" on the root list wrapper (typically with .page-po).
+ * Workspace canvas + header are global in style.css (.layout .content).
+ * Tables using client-side ::after sort hints need class "co-table--th-hint" on the table.
+ */
+main.container:has(.nexa-list-page) {
+  padding-top: 8px;
+}
+body:has(.nexa-list-page) {
+  overflow-x: auto;
+}
+.page-po.nexa-list-page {
+  padding: 0 12px 12px !important;
+}
+
+/* Data grids — same blue-grey family as dashboard canvas (#f5f8fd), not flat white */
+.nexa-list-page {
+  --nexa-grid-wrap-bg: rgba(255, 255, 255, 0.42);
+  --nexa-grid-wrap-border: rgba(13, 110, 253, 0.14);
+  --nexa-grid-head: linear-gradient(180deg, #eaf2fa 0%, #dfeaf5 100%);
+  --nexa-grid-row: #f3f7fc;
+  --nexa-grid-row-alt: #e8f1fa;
+  --nexa-grid-hover: #dceaf8;
+  --nexa-grid-foot: #e6eef8;
+}
+.nexa-list-page .page-po__topbar {
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  padding-top: 0;
+  align-items: center;
+}
+.nexa-list-page .page-po__title {
+  margin: 0;
+  padding: 0;
+  line-height: 1.2;
+}
+.nexa-list-page .page-po__muted {
+  margin: 2px 0 0;
+  line-height: 1.35;
+}
+.nexa-list-page .page-po__topbar-actions,
+.nexa-list-page .page-po__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.nexa-list-page .page-po__btn-primary {
+  padding: 6px 14px;
+  font-size: 12px;
+}
+.nexa-list-page .page-po__topbar-actions .list-refresh-toolbar,
+.nexa-list-page .page-po__actions .list-refresh-toolbar {
+  margin-left: 0 !important; /* beats inline margin on includes/list_refresh_bar.html */
+}
+.nexa-list-page .page-po__filters {
+  margin-bottom: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #dee2e6;
+}
+.nexa-list-page .gdm-filters label {
+  font-size: 12px;
+  color: #495057;
+  display: block;
+  margin-bottom: 4px;
+}
+.nexa-list-page .gdm-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+  margin-bottom: 8px;
+}
+.nexa-list-page .po-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.nexa-list-page .po-tab {
+  border: 1px solid rgba(13, 110, 253, 0.14);
+  background: rgba(255, 255, 255, 0.55);
+  color: #374151;
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+  line-height: 1.35;
+}
+.nexa-list-page .po-tab.active {
+  background: #1a56a4;
+  color: #fff;
+  border-color: #1a56a4;
+}
+.nexa-list-page .po-nav-link {
+  color: #1a56a4;
+  text-decoration: none;
+  font-size: 13px;
+}
+.nexa-list-page .po-nav-link:hover {
+  text-decoration: underline;
+}
+.nexa-list-page .grn-link,
+.nexa-list-page .pi-link,
+.nexa-list-page .so-link {
+  color: #1a56a4;
+  text-decoration: none;
+  font-weight: 500;
+}
+.nexa-list-page .grn-link:hover,
+.nexa-list-page .pi-link:hover,
+.nexa-list-page .so-link:hover {
+  text-decoration: underline;
+}
+.nexa-list-page .btn-view {
+  border: 1px solid rgba(13, 110, 253, 0.14);
+  background: rgba(255, 255, 255, 0.65);
+  color: #374151;
+  border-radius: 3px;
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  line-height: 1.35;
+}
+.nexa-list-page .btn-view:hover {
+  background: var(--nexa-grid-hover);
+}
+.nexa-list-page .nexa-list-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.nexa-list-page .co-table-wrap,
+.nexa-list-page .table-wrap {
+  overflow: auto;
+  border-radius: 4px;
+  max-height: 76vh;
+  background: var(--nexa-grid-wrap-bg);
+  border: 1px solid var(--nexa-grid-wrap-border);
+  box-sizing: border-box;
+}
+.nexa-list-page .scroll-table {
+  overflow: auto;
+  border-radius: 4px;
+  max-height: 76vh;
+  background: var(--nexa-grid-wrap-bg);
+  border: 1px solid var(--nexa-grid-wrap-border);
+  box-sizing: border-box;
+}
+.nexa-list-page .co-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  background: transparent;
+}
+.nexa-list-page .co-table th,
+.nexa-list-page .co-table td {
+  border: 1px solid #cfd4da !important;
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+.nexa-list-page .co-table thead th {
+  background: var(--nexa-grid-head) !important;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  font-weight: 600;
+  color: #374151;
+  user-select: none;
+  cursor: default;
+}
+.nexa-list-page .co-table thead th[data-col],
+.nexa-list-page .co-table thead th[data-sort],
+.nexa-list-page .co-table.co-table--th-hint thead th {
+  cursor: pointer;
+}
+.nexa-list-page .co-table thead th .sort-arrow {
+  font-size: 10px;
+  color: #9ca3af;
+  margin-left: 4px;
+}
+.nexa-list-page .co-table thead th.sort-asc .sort-arrow::after {
+  content: " ▲";
+  color: #1a56a4;
+}
+.nexa-list-page .co-table thead th.sort-desc .sort-arrow::after {
+  content: " ▼";
+  color: #1a56a4;
+}
+.nexa-list-page .co-table thead th:not(.sort-asc):not(.sort-desc) .sort-arrow::after {
+  content: " ⇅";
+}
+.nexa-list-page .co-table thead th:has(.sort-arrow)::after {
+  content: none !important;
+}
+.nexa-list-page .co-table.co-table--th-hint thead th::after {
+  content: " ⇅";
+  opacity: 0.35;
+  font-size: 10px;
+}
+.nexa-list-page .co-table.co-table--th-hint thead th[data-order="asc"]::after {
+  content: " ▲";
+  opacity: 1;
+  color: #1a56a4;
+}
+.nexa-list-page .co-table.co-table--th-hint thead th[data-order="desc"]::after {
+  content: " ▼";
+  opacity: 1;
+  color: #1a56a4;
+}
+.nexa-list-page .co-table tbody tr {
+  background: var(--nexa-grid-row);
+}
+.nexa-list-page .co-table tbody tr:nth-child(even) {
+  background: var(--nexa-grid-row-alt);
+}
+.nexa-list-page .co-table tbody tr:hover {
+  background: var(--nexa-grid-hover) !important;
+}
+.nexa-list-page .co-table tbody tr.row-selected,
+.nexa-list-page .co-table tbody tr.row-selected:nth-child(even),
+.nexa-list-page .co-table tbody tr.row-selected:hover {
+  background: #dcfce7 !important;
+}
+.nexa-list-page .co-table tfoot td,
+.nexa-list-page .co-table tfoot th {
+  position: sticky;
+  bottom: 0;
+  background: var(--nexa-grid-foot) !important;
+  font-weight: 700;
+  border-top: 2px solid #94a3b8 !important;
+  font-size: 12px;
+}
+.nexa-list-page .co-table td.sl-no {
+  text-align: center;
+  color: #6b7280;
+}
+.nexa-list-page .co-table td.num {
+  text-align: right;
+}
+.nexa-list-page .cr-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.nexa-list-page .cr-tab {
+  text-decoration: none;
+  border: 1px solid rgba(13, 110, 253, 0.14);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: #374151;
+  background: rgba(255, 255, 255, 0.55);
+}
+.nexa-list-page .cr-tab.active {
+  background: #1a56a4;
+  border-color: #1a56a4;
+  color: #fff;
+  font-weight: 600;
+}
+.nexa-list-page .cr-table-wrap {
+  max-height: 76vh;
+  background: var(--nexa-grid-wrap-bg);
+  border: 1px solid var(--nexa-grid-wrap-border);
+  border-radius: 4px;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+.nexa-list-page .tab-pane { display: none; }
+.nexa-list-page .tab-pane.active { display: block; }
+.nexa-list-page .mini-muted {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.35;
+}
+.nexa-list-page .nexa-num {
+  font-size: 12px;
+  color: #6b7280;
+}
+/* Chart of Accounts list grid (scoped id) */
+.nexa-list-page #coaListTable {
+  width: 100%;
+  border-collapse: collapse !important;
+}
+.nexa-list-page #coaListTable th,
+.nexa-list-page #coaListTable td {
+  border: 1px solid #cfd4da !important;
+  padding: 4px 6px !important;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.nexa-list-page #coaListTable thead th {
+  background: var(--nexa-grid-head) !important;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  font-weight: 600;
+  color: #374151;
+}
+.nexa-list-page #coaListTable tbody tr {
+  background: var(--nexa-grid-row);
+}
+.nexa-list-page #coaListTable tbody tr:nth-child(even) {
+  background: var(--nexa-grid-row-alt);
+}
+.nexa-list-page #coaListTable tbody tr:hover {
+  background: var(--nexa-grid-hover) !important;
+}
+
+/* Bootstrap `.table` in scroll-table / table-responsive (no .co-table) — match dashboard grid */
+.nexa-list-page .table-responsive {
+  overflow: auto;
+  border-radius: 4px;
+  max-height: 76vh;
+  background: var(--nexa-grid-wrap-bg);
+  border: 1px solid var(--nexa-grid-wrap-border);
+  box-sizing: border-box;
+}
+.nexa-list-page .table-responsive .table {
+  margin-bottom: 0;
+  background: transparent;
+}
+.nexa-list-page .scroll-table .table {
+  background: transparent;
+}
+.nexa-list-page .scroll-table thead th,
+.nexa-list-page .scroll-table .table thead th,
+.nexa-list-page .table-responsive .table thead th {
+  background: var(--nexa-grid-head) !important;
+  color: #374151 !important;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  box-shadow: 0 1px 0 0 rgba(0, 0, 0, 0.06);
+}
+.nexa-list-page .scroll-table .table thead th.sortable:hover,
+.nexa-list-page .table-responsive .table thead th.sortable:hover {
+  background: var(--nexa-grid-hover) !important;
+}
+.nexa-list-page .scroll-table .table tbody tr,
+.nexa-list-page .table-responsive .table tbody tr {
+  background: var(--nexa-grid-row);
+}
+.nexa-list-page .scroll-table .table tbody tr:nth-child(even),
+.nexa-list-page .table-responsive .table tbody tr:nth-child(even) {
+  background: var(--nexa-grid-row-alt);
+}
+.nexa-list-page .scroll-table .table tbody tr:hover,
+.nexa-list-page .table-responsive .table tbody tr:hover {
+  background: var(--nexa-grid-hover) !important;
+}
+.nexa-list-page .scroll-table table tfoot td,
+.nexa-list-page .scroll-table table tfoot th,
+.nexa-list-page .table-responsive .table tfoot td,
+.nexa-list-page .table-responsive .table tfoot th {
+  background: var(--nexa-grid-foot) !important;
+}
+/* If a modal lives inside .nexa-list-page, keep picker tables on white */
+.nexa-list-page .modal .scroll-table {
+  background: #fff !important;
+}
+.nexa-list-page .modal .scroll-table .table thead th,
+.nexa-list-page .modal .scroll-table thead th {
+  background: #f8f9fa !important;
+  color: #495057 !important;
+  box-shadow: none;
+}
+.nexa-list-page .modal .scroll-table .table tbody tr,
+.nexa-list-page .modal .scroll-table .table tbody tr:nth-child(even) {
+  background: #fff;
+}
+.nexa-list-page .modal .scroll-table .table tbody tr:hover {
+  background: #f8f9fa !important;
+}
+
+/* Warehouse locations: tighten shell; grid keeps .wl-table */
+.page-po.nexa-list-page.wl-page,
+.wl-page.page-po.nexa-list-page {
+  padding: 0 12px 12px !important;
+  max-width: 1180px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.nexa-list-page.wl-page .wl-bar {
+  margin-bottom: 8px;
+}
+.nexa-list-page.wl-page .wl-muted {
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.nexa-list-page.wl-page .wl-table-wrap {
+  max-height: 76vh;
+  background: var(--nexa-grid-wrap-bg);
+  border: 1px solid var(--nexa-grid-wrap-border);
+  border-radius: 4px;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+/*
+ * Item master product list uses id=itemTable; style.css also targets #itemTable with a fixed
+ * row height (40px) and wide horizontal padding — taller/denser than Purchase Order (#lpoTable).
+ * Override here so the nexa item list matches .nexa-list-page .co-table / PO list rows.
+ */
+.nexa-list-page.im-productlist-page #itemTable tbody tr {
+  height: auto !important;
+  min-height: 0 !important;
+  background: var(--nexa-grid-row) !important;
+}
+.nexa-list-page.im-productlist-page #itemTable th,
+.nexa-list-page.im-productlist-page #itemTable td {
+  padding: 4px 6px !important;
+  border: 1px solid #cfd4da !important;
+}
+.nexa-list-page.im-productlist-page #itemTable tbody tr:nth-child(even) {
+  background: var(--nexa-grid-row-alt) !important;
+}
+.nexa-list-page.im-productlist-page #itemTable tbody tr:hover {
+  background: var(--nexa-grid-hover) !important;
+}
+/* Tighter columns vs legacy style.css #itemTable min-widths (barcode, name, UOM, cost) */
+.nexa-list-page.im-productlist-page #itemTable th.col-manufacturerid,
+.nexa-list-page.im-productlist-page #itemTable td.col-manufacturerid {
+  min-width: 0 !important;
+  width: 7%;
+  max-width: 104px;
+}
+.nexa-list-page.im-productlist-page #itemTable th.col-itemname,
+.nexa-list-page.im-productlist-page #itemTable td.col-itemname {
+  min-width: 0 !important;
+  width: 22%;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nexa-list-page.im-productlist-page #itemTable th.col-uom,
+.nexa-list-page.im-productlist-page #itemTable td.col-uom {
+  min-width: 0 !important;
+  width: 4%;
+  max-width: 52px;
+}
+.nexa-list-page.im-productlist-page #itemTable th.col-costprice,
+.nexa-list-page.im-productlist-page #itemTable td.col-costprice {
+  min-width: 0 !important;
+  width: 5%;
+  max-width: 72px;
+}
+.nexa-list-page.im-productlist-page #itemTable {
+  min-width: 0 !important;
+}

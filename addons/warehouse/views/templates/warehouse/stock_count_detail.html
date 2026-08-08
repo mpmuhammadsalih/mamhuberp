@@ -1,0 +1,610 @@
+{% extends "base.html" %}
+
+{% block title %}Stock Count #{{ count_no }}{% endblock %}
+
+{% block extra_css %}
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/stock_count_desktop.css') }}?v=24" />
+<style>
+  .sc-mode-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .sc-mode-badge--opening {
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #86efac;
+  }
+</style>
+
+{% endblock %}
+
+{% block content %}
+
+{% set kpi = sc_kpis or {} %}
+
+{% set st = (hdr.status or 'PENDING')|upper %}
+
+{% set count_date = hdr.count_date.strftime('%Y-%m-%d') if hdr.count_date and hdr.count_date.strftime else hdr.count_date %}
+
+<div class="page-po nexa-list-page sc-detail-page sc-desktop-page" id="scDetailPage"
+
+  data-count-no="{{ count_no }}"
+
+  data-location="{{ location_code }}"
+
+  data-status="{{ hdr.status or '' }}"
+
+  data-api-line="{{ url_for('warehouse.api_stock_count_add_line') }}"
+
+  data-api-line-edit="{{ url_for('warehouse.api_stock_count_edit_line') }}"
+
+  data-api-line-delete="{{ url_for('warehouse.api_stock_count_delete_line') }}"
+
+  data-editable="{{ '1' if st not in ('POSTED', 'CANCELLED') else '0' }}"
+
+  data-api-pdt="{{ url_for('warehouse.api_stock_count_pdt_upload') }}"
+
+  data-api-post="{{ url_for('warehouse.api_stock_count_post') }}"
+
+  data-api-cancel="{{ url_for('warehouse.api_stock_count_cancel') }}"
+
+  data-api-delete="{{ url_for('warehouse.api_stock_count_delete') }}"
+
+  data-api-get="{{ url_for('warehouse.api_stock_count_get', count_no=count_no) }}"
+
+  data-export-excel="{{ export_excel_url }}"
+
+  data-export-pdf="{{ export_pdf_url }}"
+
+  data-list-url="{{ url_for('warehouse.warehouse_stock_counting_list') }}">
+
+
+
+  <section class="sc-stat-grid" aria-label="Count summary">
+
+    <div class="sc-stat-card">
+
+      <span class="sc-stat-icon sc-stat-icon--blue"><i class="bi bi-hash" aria-hidden="true"></i></span>
+
+      <div>
+
+        <p class="sc-stat-label">Count #</p>
+
+        <p class="sc-stat-value">{{ count_no }}</p>
+
+        <p class="sc-stat-sub">Desktop session</p>
+
+      </div>
+
+    </div>
+
+    <div class="sc-stat-card">
+
+      <span class="sc-stat-icon sc-stat-icon--green"><i class="bi bi-list-check" aria-hidden="true"></i></span>
+
+      <div>
+
+        <p class="sc-stat-label">Lines</p>
+
+        <p class="sc-stat-value" id="scKpiLines">{{ kpi.line_count or 0 }}</p>
+
+        <p class="sc-stat-sub">Scanned items</p>
+
+      </div>
+
+    </div>
+
+    <div class="sc-stat-card">
+
+      <span class="sc-stat-icon sc-stat-icon--amber"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i></span>
+
+      <div>
+
+        <p class="sc-stat-label">Variances</p>
+
+        <p class="sc-stat-value" id="scKpiVariances">{{ kpi.variance_count or 0 }}</p>
+
+        <p class="sc-stat-sub" id="scKpiVarianceAmount">Amount {{ '%.2f'|format(kpi.total_variance_amount|float) if kpi.total_variance_amount else '0.00' }}</p>
+
+      </div>
+
+    </div>
+
+    <div class="sc-stat-card">
+
+      <span class="sc-stat-icon sc-stat-icon--cyan"><i class="bi bi-box-seam" aria-hidden="true"></i></span>
+
+      <div>
+
+        <p class="sc-stat-label">Counted qty</p>
+
+        <p class="sc-stat-value" id="scKpiCounted">{{ '%.0f'|format(kpi.total_counted|float) if kpi.total_counted else 0 }}</p>
+
+        <p class="sc-stat-sub">System {{ '%.0f'|format(kpi.total_system|float) if kpi.total_system else 0 }}</p>
+
+      </div>
+
+    </div>
+
+    <div class="sc-stat-card">
+
+      <span class="sc-stat-icon sc-stat-icon--violet"><i class="bi bi-currency-dollar" aria-hidden="true"></i></span>
+
+      <div>
+
+        <p class="sc-stat-label">Stock value</p>
+
+        <p class="sc-stat-value" id="scKpiStockValue">{{ '%.2f'|format(kpi.total_stock_value|float) if kpi.total_stock_value else '0.00' }}</p>
+
+        <p class="sc-stat-sub" id="scKpiStockValueSub">Current stock {{ '%.2f'|format(kpi.total_system_value|float) if kpi.total_system_value else '0.00' }}</p>
+
+      </div>
+
+    </div>
+
+  </section>
+
+
+
+  <div class="page-po__topbar sc-detail-topbar">
+
+    <div class="sc-detail-heading">
+
+      <div class="sc-detail-title-row">
+
+        <h1 class="page-po__title">Stock count #{{ count_no }}</h1>
+
+        <span class="sc-status-badge sc-status-badge--{{ st|lower }}" id="scStatusBadge">{{ st }}</span>
+
+        <span class="sc-platform-badge">Desktop</span>
+
+        <span class="sc-mode-badge{% if opening_stock_mode %} sc-mode-badge--opening{% endif %}">
+          <i class="bi {% if opening_stock_mode %}bi-box-seam{% else %}bi-sliders{% endif %}" aria-hidden="true"></i>
+          {% if opening_stock_mode %}Opening Stock Import{% else %}Stock Count Mode{% endif %}
+        </span>
+
+      </div>
+
+      <p class="page-po__muted sc-detail-meta">
+
+        <span><i class="bi bi-calendar3" aria-hidden="true"></i> {{ count_date or '—' }}</span>
+
+        {% if hdr_wh_label %}<span><i class="bi bi-building" aria-hidden="true"></i> {{ hdr_wh_label }}</span>{% elif hdr.warehouse_id %}<span><i class="bi bi-building" aria-hidden="true"></i> WH {{ hdr.warehouse_id }}</span>{% endif %}
+
+        {% if hdr.storage_id %}<span><i class="bi bi-grid-3x3-gap" aria-hidden="true"></i> Bin {{ hdr.storage_id }}</span>{% endif %}
+
+      </p>
+
+    </div>
+
+    <div class="page-po__topbar-actions sc-detail-actions">
+
+      <a href="{{ url_for('warehouse.warehouse_stock_counting_list') }}" class="page-po__btn-secondary sc-btn-icon"><i class="bi bi-arrow-left" aria-hidden="true"></i> List</a>
+
+      <a href="{{ accounts_config_url }}" class="page-po__btn-secondary sc-btn-icon"><i class="bi bi-gear" aria-hidden="true"></i> Accounts Configuration</a>
+
+      {% if st != 'POSTED' and st != 'CANCELLED' %}
+
+      <div class="sc-action-group sc-action-group--primary">
+
+        <button type="button" class="page-po__btn-primary sc-btn-icon" id="scBtnPost"><i class="bi bi-check2-circle" aria-hidden="true"></i> Accept &amp; update stock</button>
+
+        <button type="button" class="page-po__btn-secondary sc-btn-icon" id="scBtnPostVariance"><i class="bi bi-filter-circle" aria-hidden="true"></i> Variances only</button>
+
+      </div>
+
+      <div class="sc-action-group sc-action-group--danger">
+
+        <button type="button" class="sc-btn-danger-outline sc-btn-icon" id="scBtnCancel"><i class="bi bi-x-circle" aria-hidden="true"></i> Cancel</button>
+
+        <button type="button" class="sc-btn-danger-outline sc-btn-icon" id="scBtnDelete"><i class="bi bi-trash3" aria-hidden="true"></i> Delete</button>
+
+      </div>
+
+      {% endif %}
+
+    </div>
+
+  </div>
+
+
+
+  {% if st != 'POSTED' and st != 'CANCELLED' %}
+
+  <section class="sc-scan-panel">
+
+    <div class="sc-scan-panel__head">
+
+      <h2 class="sc-panel-title"><i class="bi bi-upc-scan" aria-hidden="true"></i> Scan / add line</h2>
+
+      <p class="sc-panel-hint">Scan barcode and press Enter, or click Add line.</p>
+
+    </div>
+
+    <div class="sc-scan-form">
+
+      <div class="sc-scan-field sc-scan-field--grow">
+
+        <label for="scScanInput">Barcode / item</label>
+
+        <input type="text" id="scScanInput" class="input sc-scan-input" placeholder="Scan or type barcode…" autocomplete="off" />
+
+      </div>
+
+      <div class="sc-scan-field sc-scan-field--qty">
+
+        <label for="scQtyInput">Counted qty</label>
+
+        <input type="number" id="scQtyInput" class="input" step="0.001" min="0" value="1" />
+
+      </div>
+
+      <div class="sc-scan-field">
+
+        <label for="scWhInput">Warehouse</label>
+
+        <select id="scWhInput" class="input">
+
+          <option value="">— From header —</option>
+
+          {% for s in sites %}
+
+          <option value="{{ s.warehouse_id or s.key }}"{% if hdr.warehouse_id and (s.warehouse_id or s.key)|string == hdr.warehouse_id|string %} selected{% endif %}>{{ s.name or s.key }}</option>
+
+          {% endfor %}
+
+        </select>
+
+      </div>
+
+      <div class="sc-scan-field sc-scan-field--bin">
+
+        <label for="scBinInput">Bin (opt)</label>
+
+        <input type="number" id="scBinInput" class="input" min="0" placeholder="{{ hdr.storage_id or '' }}" />
+
+      </div>
+
+      <div class="sc-scan-field sc-scan-field--action">
+
+        <label aria-hidden="true">&nbsp;</label>
+
+        <button type="button" class="page-po__btn-primary sc-btn-icon sc-btn-add" id="scBtnAddLine"><i class="bi bi-plus-lg" aria-hidden="true"></i> Add line</button>
+
+      </div>
+
+    </div>
+
+    <details class="sc-pdt-details">
+
+      <summary><i class="bi bi-filetype-json" aria-hidden="true"></i> Batch JSON upload</summary>
+
+      <p class="sc-panel-hint">Paste line batch JSON or POST to <code>{{ url_for('warehouse.api_stock_count_pdt_upload') }}</code></p>
+
+      <textarea id="scPdtJson" class="input sc-pdt-textarea" rows="5" placeholder='{"count_no":{{ count_no }},"lines":[{"barcode":"...","qty":1}]}'></textarea>
+
+      <button type="button" class="page-po__btn-secondary sc-btn-icon" id="scBtnPdtUpload"><i class="bi bi-cloud-upload" aria-hidden="true"></i> Upload JSON</button>
+
+    </details>
+
+  </section>
+
+  {% endif %}
+
+
+
+  <div class="sc-lines-section">
+
+    <div class="sc-lines-head">
+
+      <h2 class="sc-panel-title"><i class="bi bi-table" aria-hidden="true"></i> Count lines</h2>
+
+      <div class="sc-lines-head__tools">
+
+        <span class="sc-refresh-indicator" id="scRefreshIndicator" title="Lines refresh automatically every 5 seconds">
+
+          <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Auto-refresh
+
+        </span>
+
+        <span class="sc-filter-count" id="scFilterCount" aria-live="polite"></span>
+
+        <a class="page-po__btn-secondary sc-btn-icon sc-export-btn" id="scBtnExportExcel" href="{{ export_excel_url }}"><i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel</a>
+
+        <a class="page-po__btn-secondary sc-btn-icon sc-export-btn" id="scBtnExportPdf" href="{{ export_pdf_url }}"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF</a>
+
+      </div>
+
+    </div>
+
+    <div class="sc-lines-filter-bar">
+
+      <input type="search" id="scLineSearch" class="input sc-line-search" placeholder="Search item, barcode, name…" autocomplete="off" aria-label="Search lines" />
+
+      <select id="scFilterVariance" class="input sc-filter-select" aria-label="Variance filter">
+
+        <option value="">All lines</option>
+
+        <option value="variance">Variances only</option>
+
+        <option value="match">Matched only</option>
+
+      </select>
+
+      <select id="scFilterMainCat" class="input sc-filter-select" aria-label="Main category filter">
+
+        <option value="">All main categories</option>
+
+        {% for name in (filter_options.main_categories or []) %}
+
+        <option value="{{ name }}">{{ name }}</option>
+
+        {% endfor %}
+
+      </select>
+
+      <select id="scFilterCategory" class="input sc-filter-select" aria-label="Category filter">
+
+        <option value="">All categories</option>
+
+        {% for name in (filter_options.categories or []) %}
+
+        <option value="{{ name }}">{{ name }}</option>
+
+        {% endfor %}
+
+      </select>
+
+      <select id="scFilterMicroCat" class="input sc-filter-select" aria-label="Micro category filter">
+
+        <option value="">All micro categories</option>
+
+        {% for name in (filter_options.micro_categories or []) %}
+
+        <option value="{{ name }}">{{ name }}</option>
+
+        {% endfor %}
+
+      </select>
+
+      <button type="button" class="page-po__btn-secondary sc-btn-icon sc-filter-clear" id="scBtnClearFilters"><i class="bi bi-x-circle" aria-hidden="true"></i> Clear</button>
+
+    </div>
+
+    <div class="co-table-wrap">
+
+      <table class="co-table sc-lines-table" id="scLinesTable">
+
+        <thead>
+
+          <tr>
+
+            <th style="width:44px;text-align:center;">#</th>
+
+            <th style="width:88px;">Item</th>
+
+            <th>Name</th>
+
+            <th>Main category</th>
+
+            <th>Category</th>
+
+            <th>Micro category</th>
+
+            <th style="width:120px;">Barcode</th>
+
+            <th style="width:100px;">Warehouse</th>
+
+            <th style="width:96px;">User</th>
+            <th style="text-align:right;width:88px;">Avg cost</th>
+
+            <th style="text-align:right;width:88px;">System</th>
+
+            <th style="text-align:right;width:88px;">Counted</th>
+
+            <th style="text-align:right;width:88px;">Variance</th>
+
+            <th style="text-align:right;width:96px;">System value</th>
+
+            <th style="text-align:right;width:96px;">Stock value</th>
+            <th style="text-align:right;width:96px;">Var amount</th>
+            <th style="width:64px;">Bin</th>
+            {% if st != 'POSTED' and st != 'CANCELLED' %}
+            <th style="width:72px;text-align:center;">Actions</th>
+            {% endif %}
+
+          </tr>
+
+        </thead>
+
+        <tbody id="scLinesBody">
+
+          {% for ln in lines %}
+
+          {% set v = (ln.variance_qty or 0)|float %}
+
+          {% set var_amt = (v * (ln.average_cost|float)) if ln.average_cost is not none else 0 %}
+
+          {% set stock_val = ((ln.counted_qty|float) * (ln.average_cost|float)) if ln.average_cost is not none else 0 %}
+
+          {% set sys_val = ((ln.system_qty|float) * (ln.average_cost|float)) if ln.average_cost is not none else 0 %}
+
+          <tr class="{% if v != 0 %}sc-row--var{% endif %}" data-search="{{ (ln.itemcode or '') ~ ' ' ~ (ln.item_name or '') ~ ' ' ~ (ln.barcode or '') ~ ' ' ~ (ln.main_category_name or '') ~ ' ' ~ (ln.category_name or '') ~ ' ' ~ (ln.micro_category_name or '') }}"
+            data-line-no="{{ ln.line_no }}"
+            data-itemcode="{{ ln.itemcode or '' }}"
+            data-item-name="{{ ln.item_name or '' }}"
+            data-system-qty="{{ ln.system_qty or 0 }}"
+            data-counted-qty="{{ ln.counted_qty or 0 }}"
+            data-storage-id="{{ ln.storage_id or '' }}"
+            data-barcode="{{ ln.barcode or '' }}"
+            data-variance="{{ '1' if v != 0 else '0' }}"
+            data-variance-qty="{{ v }}"
+            data-average-cost="{{ ln.average_cost or 0 }}"
+            data-main-cat="{{ ln.main_category_name or '' }}"
+            data-cat="{{ ln.category_name or '' }}"
+            data-micro-cat="{{ ln.micro_category_name or '' }}">
+
+            <td style="text-align:center;">{{ ln.line_no }}</td>
+
+            <td><span class="sc-code">{{ ln.itemcode }}</span></td>
+
+            <td>{{ ln.item_name or '' }}</td>
+
+            <td class="sc-cat" title="{{ ln.main_category_name or '' }}">{{ ln.main_category_name or '' }}</td>
+
+            <td class="sc-cat" title="{{ ln.category_name or '' }}">{{ ln.category_name or '' }}</td>
+
+            <td class="sc-cat" title="{{ ln.micro_category_name or '' }}">{{ ln.micro_category_name or '' }}</td>
+
+            <td>{{ ln.barcode or '' }}</td>
+
+            <td>{% if ln.warehouse_code %}{{ ln.warehouse_code }}{% elif ln.warehouse_name %}{{ ln.warehouse_name }}{% elif ln.warehouse_id %}WH {{ ln.warehouse_id }}{% endif %}</td>
+
+            <td class="sc-user">{{ ln.counted_by or '—' }}</td>
+            <td class="sc-num">{{ '%.3f'|format(ln.average_cost|float) if ln.average_cost is not none else '0' }}</td>
+
+            <td class="sc-num">{{ '%.3f'|format(ln.system_qty|float) if ln.system_qty is not none else '0' }}</td>
+
+            <td class="sc-num">{{ '%.3f'|format(ln.counted_qty|float) if ln.counted_qty is not none else '0' }}</td>
+
+            <td class="sc-num sc-num--var">{{ '%.3f'|format(v) }}</td>
+
+            <td class="sc-num">{{ '%.2f'|format(sys_val) }}</td>
+
+            <td class="sc-num">{{ '%.2f'|format(stock_val) }}</td>
+            <td class="sc-num sc-num--var">{{ '%.2f'|format(var_amt) }}</td>
+            <td>{{ ln.storage_id or '' }}</td>
+            {% if st != 'POSTED' and st != 'CANCELLED' %}
+            <td class="sc-actions">
+              <button type="button" class="sc-btn-icon-only sc-btn-edit" title="Edit line" aria-label="Edit line {{ ln.line_no }}"><i class="bi bi-pencil-square" aria-hidden="true"></i></button>
+            </td>
+            {% endif %}
+
+          </tr>
+
+          {% else %}
+
+          <tr id="scEmptyRow"><td colspan="{% if st != 'POSTED' and st != 'CANCELLED' %}18{% else %}17{% endif %}" class="sc-empty-cell">No lines yet — scan items above or upload from PDT.</td></tr>
+
+          {% endfor %}
+
+        </tbody>
+
+        <tfoot id="scLinesFoot"{% if not lines %} hidden{% endif %}>
+
+          <tr class="sc-lines-total-row">
+
+            <td colspan="10" class="sc-total-label">Total</td>
+
+            <td class="sc-num sc-total-cell" id="scTotalSystem">{{ '%.3f'|format(kpi.total_system|float) if kpi.total_system else '0.000' }}</td>
+
+            <td class="sc-num sc-total-cell" id="scTotalCounted">{{ '%.3f'|format(kpi.total_counted|float) if kpi.total_counted else '0.000' }}</td>
+
+            <td class="sc-num sc-total-cell sc-num--var" id="scTotalVariance">{{ '%.3f'|format(kpi.total_variance_qty|float) if kpi.total_variance_qty is not none else '0.000' }}</td>
+
+            <td class="sc-num sc-total-cell" id="scTotalSystemValue">{{ '%.2f'|format(kpi.total_system_value|float) if kpi.total_system_value else '0.00' }}</td>
+
+            <td class="sc-num sc-total-cell" id="scTotalStockValue">{{ '%.2f'|format(kpi.total_stock_value|float) if kpi.total_stock_value else '0.00' }}</td>
+
+            <td class="sc-num sc-total-cell sc-num--var" id="scTotalVarAmount">{{ '%.2f'|format(kpi.total_variance_amount|float) if kpi.total_variance_amount else '0.00' }}</td>
+
+            <td></td>
+
+            {% if st != 'POSTED' and st != 'CANCELLED' %}
+            <td></td>
+            {% endif %}
+
+          </tr>
+
+        </tfoot>
+
+      </table>
+
+    </div>
+
+  </div>
+
+  <script type="application/json" id="scJournalData">{{ journal_rows | default([], true) | tojson }}</script>
+
+</div>
+
+<div class="sc-edit-backdrop" id="scJournalBackdrop" hidden></div>
+<div class="sc-edit-modal sc-edit-modal--journal" id="scJournalModal" role="dialog" aria-modal="true" aria-labelledby="scJournalTitle" hidden>
+  <div class="sc-edit-modal__head">
+    <h2 class="sc-edit-modal__title" id="scJournalTitle">Change journal</h2>
+    <button type="button" class="sc-edit-modal__close" id="scJournalClose" aria-label="Close"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+  </div>
+  <div class="sc-edit-modal__body">
+    <p class="sc-edit-meta" id="scJournalMeta">—</p>
+    <div class="co-table-wrap sc-journal-table-wrap">
+      <table class="co-table sc-journal-table">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Action</th>
+            <th class="sc-num">Insert qty</th>
+            <th class="sc-num">Update qty</th>
+            <th class="sc-num">Old qty</th>
+            <th class="sc-num">New qty</th>
+            <th>By</th>
+            <th>Source</th>
+          </tr>
+        </thead>
+        <tbody id="scJournalBody">
+          <tr><td colspan="8" class="sc-empty-cell">No entries.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="sc-edit-modal__foot">
+    <span class="sc-journal-foot-note" id="scJournalCount"></span>
+    <span class="sc-edit-modal__spacer"></span>
+    <button type="button" class="page-po__btn-secondary" id="scJournalDismiss">Close</button>
+  </div>
+</div>
+
+{% if st != 'POSTED' and st != 'CANCELLED' %}
+<div class="sc-edit-backdrop" id="scEditBackdrop" hidden></div>
+<div class="sc-edit-modal" id="scEditModal" role="dialog" aria-modal="true" aria-labelledby="scEditTitle" hidden>
+  <div class="sc-edit-modal__head">
+    <h2 class="sc-edit-modal__title" id="scEditTitle">Edit count line</h2>
+    <button type="button" class="sc-edit-modal__close" id="scEditClose" aria-label="Close"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+  </div>
+  <div class="sc-edit-modal__body">
+    <p class="sc-edit-meta" id="scEditMeta"></p>
+    <div class="sc-edit-grid">
+      <label class="sc-edit-field">
+        <span>System qty</span>
+        <input type="text" class="input" id="scEditSystemQty" readonly tabindex="-1" />
+      </label>
+      <label class="sc-edit-field">
+        <span>Counted qty</span>
+        <input type="number" class="input" id="scEditCountedQty" step="0.001" min="0" />
+      </label>
+      <label class="sc-edit-field">
+        <span>Bin (storage id)</span>
+        <input type="number" class="input" id="scEditStorageId" step="1" min="0" placeholder="Optional" />
+      </label>
+    </div>
+  </div>
+  <div class="sc-edit-modal__foot">
+    <button type="button" class="sc-btn-danger-outline sc-btn-icon" id="scEditDelete"><i class="bi bi-trash3" aria-hidden="true"></i> Remove line</button>
+    <span class="sc-edit-modal__spacer"></span>
+    <button type="button" class="page-po__btn-secondary" id="scEditCancel">Cancel</button>
+    <button type="button" class="page-po__btn-primary sc-btn-icon" id="scEditSave"><i class="bi bi-check2" aria-hidden="true"></i> Save</button>
+  </div>
+</div>
+{% endif %}
+
+<script src="{{ url_for('static', filename='js/stock_count.js') }}?v=25"></script>
+
+{% endblock %}
+

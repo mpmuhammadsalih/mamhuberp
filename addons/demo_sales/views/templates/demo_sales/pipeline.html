@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('demo_sales.static', filename='css/demo_sales.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="page-po addon-demo-sales" style="max-width: 720px;">
+  <h1 class="page-po__title addon-demo-sales__title">Demo Sales — Pipeline</h1>
+  <p class="page-po__muted">Kanban-style data can live here; this is a simple table sample.</p>
+  <ul class="addon-demo-sales__pipeline" style="margin-top: 12px; line-height: 1.8;">
+    {% for s in stages %}
+    <li><strong>{{ s.name }}</strong> — {{ s.count }} opportunities</li>
+    {% else %}
+    <li class="muted">No stages (demo).</li>
+    {% endfor %}
+  </ul>
+  <p class="addon-demo-sales__nav"><a href="{{ url_for('demo_sales.dashboard') }}">← Cockpit</a></p>
+</div>
+{% endblock %}

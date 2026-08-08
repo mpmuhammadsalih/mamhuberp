@@ -1,0 +1,2 @@
+"""Addon manifest — Master activity log viewer."""
+MANIFEST = {'technical_name': 'activity_log', 'name': 'Master activity log', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Read-only viewer for Master create/update/delete audit trail', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/activity-log'}, 'flask': {'blueprint': 'activity_log', 'blueprint_ref': 'addons.activity_log.controllers.routes:bp', 'routes_module': 'addons.activity_log.controllers.routes'}}

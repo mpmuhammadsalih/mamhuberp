@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .setup-im-page .roles-details .form-group.form-group--full { grid-column: span 2; }
+  .setup-im-page .roles-menu-section { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #e5eaf2; }
+  .setup-im-page .roles-menu-section:last-of-type { border-bottom: none; }
+  .setup-im-page .roles-group-heading { margin: 0 0 10px; font-size: 13px; font-weight: 700; color: #14324a; }
+  .setup-im-page .roles-menu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 8px 16px; }
+  .setup-im-page .roles-menu-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 8px 12px;
+    font-size: 13px;
+    color: #495057;
+  }
+  .setup-im-page .roles-menu-row .checkbox-label { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .setup-im-page .roles-menu-row .roles-col-flag { font-size: 11px; font-weight: 600; color: #6c757d; white-space: nowrap; text-align: center; min-width: 72px; }
+  .setup-im-page .roles-menu-grid-head {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 8px 12px;
+    padding: 0 0 6px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #e5eaf2;
+    font-size: 11px;
+    font-weight: 700;
+    color: #6c757d;
+    text-transform: uppercase;
+  }
+  .setup-im-page .pdt-hint { margin: 0 0 12px; padding: 10px 12px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; font-size: 13px; color: #0c4a6e; }
+</style>
+<div class="im-page setup-im-page setup-im-extra-wide">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>PDT Roles / <span class="im-ref">{{ role.role_id if role else 'New' }}</span>{% if not role %} <span class="status-badge status-badge--new">New</span>{% endif %}</h1>
+      <div class="im-actions">
+        <button type="submit" form="pdtRolesForm" class="im-btn-save">{{ "Update role" if role else "Create role" }}</button>
+        <a class="im-btn-secondary" href="{{ url_for('pdt.pdt_roles_list') }}">List</a>
+      </div>
+    </div>
+  </div>
+
+  <section class="setup-im-shell customer-form-shell itemmaster-container">
+    <div class="cf-form-stack">
+      <div class="cf-form-panel">
+        <p class="pdt-hint">PDT roles use IDs starting with <strong>PDT_</strong> and only grant handheld menus (mobile stock counting and change password).</p>
+        <h2 class="cf-section-title">Role details</h2>
+        <form id="pdtRolesForm" method="post">
+          <div class="customer-details roles-details">
+            <div class="form-group">
+              <label for="role_id">
+                <span>Role ID</span>
+                <input type="text" id="role_id" name="role_id" class="input" value="{{ role.role_id if role else next_role_id }}" {% if role or next_role_id %}readonly{% endif %} required />
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="role_name">
+                <span>Role Name</span>
+                <input type="text" id="role_name" name="role_name" class="input" value="{{ role.role_name if role else '' }}" required />
+              </label>
+            </div>
+            <div class="form-group form-group--full">
+              <label for="description">
+                <span>Description</span>
+                <input type="text" id="description" name="description" class="input" value="{{ role.description if role else '' }}" />
+              </label>
+            </div>
+          </div>
+
+          <h2 class="cf-section-title" style="margin-top: 10px;">PDT menu access</h2>
+          <div class="customer-details" style="margin-top: 0 !important; border-top: none !important;">
+            {% for group in menu_groups %}
+              <div class="roles-menu-section" style="grid-column: 1 / -1;">
+                <div class="roles-group-heading">{{ group.title }}</div>
+                <div class="roles-menu-grid">
+                  <div class="roles-menu-grid-head">
+                    <span>Menu</span>
+                    <span>Access</span>
+                    <span>Quick</span>
+                  </div>
+                  {% for item in group["items"] %}
+                    <div class="roles-menu-row" data-menu-path="{{ item.menu_path }}">
+                      <span class="checkbox-label"><span>{{ item.label }}</span></span>
+                      <label class="roles-col-flag checkbox-label">
+                        <input type="checkbox" class="roles-menu-access" name="menu_permissions" value="{{ item.menu_path }}" {% if item.menu_path in selected_permissions %}checked{% endif %} />
+                        <span>Allow</span>
+                      </label>
+                      <label class="roles-col-flag checkbox-label">
+                        <input type="checkbox" class="roles-menu-quick" name="quick_access_permissions" value="{{ item.menu_path }}" {% if item.menu_path in selected_quick_access %}checked{% endif %} {% if item.menu_path not in selected_permissions %}disabled{% endif %} />
+                        <span>Top bar</span>
+                      </label>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+</div>
+<script>
+(function () {
+  function syncQuickAccessRow(row) {
+    var access = row.querySelector(".roles-menu-access");
+    var quick = row.querySelector(".roles-menu-quick");
+    if (!access || !quick) return;
+    if (!access.checked) { quick.checked = false; quick.disabled = true; }
+    else { quick.disabled = false; }
+  }
+  document.querySelectorAll(".roles-menu-row").forEach(function (row) {
+    syncQuickAccessRow(row);
+    var access = row.querySelector(".roles-menu-access");
+    var quick = row.querySelector(".roles-menu-quick");
+    if (access) access.addEventListener("change", function () { syncQuickAccessRow(row); });
+    if (quick) quick.addEventListener("change", function () {
+      if (quick.checked && access && !access.checked) { access.checked = true; syncQuickAccessRow(row); }
+    });
+  });
+})();
+</script>
+{% endblock %}

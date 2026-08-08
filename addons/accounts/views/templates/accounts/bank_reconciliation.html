@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+{% block title %}Bank Reconciliation{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .br-page { max-width: 1600px; margin: 0 auto; padding-bottom: 32px; }
+  .br-toolbar {
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 14px;
+  }
+  .br-toolbar button, .br-toolbar label.br-import {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 7px 12px; border-radius: 7px; border: 1px solid #cbd5e1;
+    background: #f8fafc; font-size: 12px; font-weight: 600; color: #334155; cursor: pointer;
+  }
+  .br-toolbar button:hover, .br-toolbar label.br-import:hover { background: #e2e8f0; }
+  .br-toolbar .br-primary { background: #1a56a4; color: #fff; border-color: #1a56a4; }
+  .br-toolbar .br-primary:hover { background: #144a8a; }
+  .br-toolbar .br-danger { color: #b91c1c; border-color: #fecaca; background: #fef2f2; }
+  .br-header {
+    display: grid; grid-template-columns: 1.2fr 1fr 1fr auto; gap: 14px;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; margin-bottom: 14px;
+  }
+  @media (max-width: 1100px) { .br-header { grid-template-columns: 1fr 1fr; } }
+  .br-field label { display: block; font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .03em; }
+  .br-field input, .br-field select, .br-field textarea {
+    width: 100%; padding: 7px 9px; border: 1px solid #cbd5e1; border-radius: 7px; font-size: 13px;
+  }
+  .br-field textarea { min-height: 52px; resize: vertical; }
+  .br-bal-block h4 { margin: 0 0 8px; font-size: 12px; color: #475569; text-transform: uppercase; }
+  .br-bal-row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; }
+  .br-bal-row span:last-child { font-family: ui-monospace, monospace; font-weight: 600; }
+  .br-kpi { text-align: right; min-width: 140px; }
+  .br-kpi .br-diff { font-size: 1.25rem; font-weight: 700; color: #dc2626; font-family: ui-monospace, monospace; }
+  .br-kpi .br-status { display: inline-block; margin-top: 6px; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; background: #d1fae5; color: #065f46; }
+  .br-tabs { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
+  .br-tabs button {
+    padding: 8px 14px; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 8px 8px 0 0;
+    font-size: 13px; font-weight: 600; color: #475569; cursor: pointer;
+  }
+  .br-tabs button.active { background: #fff; border-bottom-color: #fff; color: #1a56a4; }
+  .br-split {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 0 10px 10px 10px; padding: 10px;
+    min-height: 320px;
+  }
+  @media (max-width: 900px) { .br-split { grid-template-columns: 1fr; } }
+  .br-panel h3 { margin: 0 0 8px; font-size: 13px; font-weight: 700; color: #1e293b; }
+  .br-scroll { max-height: 380px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+  table.br-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.br-tbl th, table.br-tbl td { border-bottom: 1px solid #f1f5f9; padding: 6px 8px; white-space: nowrap; }
+  table.br-tbl th { background: #f8fafc; position: sticky; top: 0; z-index: 1; text-align: left; font-size: 11px; color: #64748b; }
+  table.br-tbl td.num { text-align: right; font-family: ui-monospace, monospace; }
+  table.br-tbl tr.selected { background: #f0f9ff; }
+  table.br-tbl tr.matched-row { opacity: .72; }
+  table.br-tbl tr:hover { background: #f8fafc; }
+  .br-footer {
+    display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 12px; margin-top: 14px;
+  }
+  @media (max-width: 900px) { .br-footer { grid-template-columns: 1fr; } }
+  .br-footer .br-card {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px;
+  }
+  .br-footer h4 { margin: 0 0 8px; font-size: 12px; color: #475569; text-transform: uppercase; }
+  .br-audit { margin-top: 12px; font-size: 11px; color: #94a3b8; display: flex; flex-wrap: wrap; gap: 16px; }
+  .br-msg { padding: 8px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 10px; display: none; }
+  .br-msg.error { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+  .br-msg.ok { display: block; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+  #brReconBrowse { margin-left: 6px; padding: 4px 8px; font-size: 12px; }
+</style>
+
+<div class="page-po nexa-list-page br-page">
+  <div class="page-po__topbar" style="margin-bottom:12px;">
+    <div>
+      <h1 class="page-po__title">Bank Reconciliation</h1>
+      <p class="page-po__muted">Match GL bank/cash account transactions with imported bank statement lines.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('accounts.chart_of_accounts_list') }}" class="im-btn-secondary">Chart of accounts</a>
+    </div>
+  </div>
+
+  <div id="brMessage" class="br-msg" role="status"></div>
+
+  <div class="br-toolbar" role="toolbar" aria-label="Bank reconciliation actions">
+    <button type="button" id="brBtnNew" title="New">New</button>
+    <button type="button" id="brBtnSave" class="br-primary" title="Save">Save</button>
+    <button type="button" id="brBtnDelete" class="br-danger" title="Delete">Delete</button>
+    <label class="br-import" title="Import CSV">
+      Import statement
+      <input type="file" id="brImportFile" accept=".csv,text/csv" hidden />
+    </label>
+    <button type="button" id="brBtnAutoMatch">Auto match</button>
+    <button type="button" id="brBtnMatch">Match</button>
+    <button type="button" id="brBtnUnmatch">Unmatch</button>
+    <a href="{{ url_for('accounts.journal_entry', new=1) }}" class="br-import" style="text-decoration:none;" target="_blank" rel="noopener">Create journal</a>
+    <button type="button" id="brBtnRefresh">Refresh</button>
+    <a href="{{ url_for('dashboard.index') }}" class="br-import" style="text-decoration:none;">Close</a>
+  </div>
+
+  <section class="br-header" aria-label="Reconciliation header">
+    <div>
+      <div class="br-field" style="display:flex;gap:8px;align-items:flex-end;">
+        <div style="flex:1;">
+          <label for="brReconNo">Reconciliation no.</label>
+          <input type="number" id="brReconNo" min="0" value="{{ recon_no or suggested_recon_no }}" />
+        </div>
+        <button type="button" id="brReconBrowse" title="Browse saved">…</button>
+      </div>
+      <div class="br-field" style="margin-top:8px;">
+        <label for="brBankAccount">Bank account</label>
+        <select id="brBankAccount" required>
+          <option value="">— Select bank / cash account —</option>
+          {% for ac in bank_accounts %}
+          <option value="{{ ac.code|e }}" data-account-id="{{ ac.account_id }}">{{ ac.code|e }} — {{ ac.name|e }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+        <div class="br-field">
+          <label for="brDateFrom">Statement from</label>
+          <input type="date" id="brDateFrom" />
+        </div>
+        <div class="br-field">
+          <label for="brDateTo">Statement to</label>
+          <input type="date" id="brDateTo" />
+        </div>
+      </div>
+      <div class="br-field" style="margin-top:8px;">
+        <label for="brDescription">Description</label>
+        <textarea id="brDescription" rows="2" placeholder="Optional notes for this reconciliation"></textarea>
+      </div>
+    </div>
+    <div class="br-bal-block">
+      <h4>ERP balances</h4>
+      <div class="br-bal-row"><span>Opening</span><span id="brErpOpening">0.00</span></div>
+      <div class="br-bal-row"><span>Total receipts</span><span id="brErpReceipts">0.00</span></div>
+      <div class="br-bal-row"><span>Total payments</span><span id="brErpPayments">0.00</span></div>
+      <div class="br-bal-row"><span>Closing</span><span id="brErpClosing">0.00</span></div>
+    </div>
+    <div class="br-bal-block">
+      <h4>Bank statement</h4>
+      <div class="br-bal-row"><span>Opening</span><span><input type="number" id="brBankOpening" step="0.01" style="width:110px;text-align:right;padding:4px 6px;" value="0" /></span></div>
+      <div class="br-bal-row"><span>Total credits</span><span id="brBankCredits">0.00</span></div>
+      <div class="br-bal-row"><span>Total debits</span><span id="brBankDebits">0.00</span></div>
+      <div class="br-bal-row"><span>Closing</span><span id="brBankClosing">0.00</span></div>
+    </div>
+    <div class="br-kpi">
+      <label style="font-size:11px;color:#64748b;">Difference</label>
+      <div class="br-diff" id="brDifference">0.00</div>
+      <div class="br-status" id="brStatus">In progress</div>
+    </div>
+  </section>
+
+  <div class="br-tabs" role="tablist">
+    <button type="button" class="active" data-tab="recon">Reconciliation</button>
+    <button type="button" data-tab="unmatched-erp">Unmatched ERP (<span id="brCntErp">0</span>)</button>
+    <button type="button" data-tab="unmatched-bank">Unmatched Bank (<span id="brCntBank">0</span>)</button>
+    <button type="button" data-tab="matched">Matched (<span id="brCntMatched">0</span>)</button>
+  </div>
+
+  <section class="br-split" id="brPanelRecon" data-panel="recon">
+    <div class="br-panel">
+      <h3>ERP transactions</h3>
+      <div class="br-scroll">
+        <table class="br-tbl" id="brErpTable">
+          <thead>
+            <tr>
+              <th></th><th>Date</th><th>Reference</th><th>Description</th>
+              <th class="num">Deposit (Dr)</th><th class="num">Payment (Cr)</th><th class="num">Balance</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="br-panel">
+      <h3>Bank statement</h3>
+      <div class="br-scroll">
+        <table class="br-tbl" id="brBankTable">
+          <thead>
+            <tr>
+              <th></th><th>Date</th><th>Reference</th><th>Description</th>
+              <th class="num">Deposit (Cr)</th><th class="num">Payment (Dr)</th><th class="num">Balance</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="br-split" id="brPanelSingle" data-panel="single" hidden style="border-radius:10px;">
+    <div class="br-panel" style="grid-column:1/-1;">
+      <div class="br-scroll">
+        <table class="br-tbl" id="brSingleTable">
+          <thead><tr></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer class="br-footer">
+    <div class="br-card">
+      <h4>Selected match</h4>
+      <div id="brMatchDetail" style="font-size:13px;color:#475569;">Select ERP and bank lines, then Match.</div>
+      <p id="brMatchStatus" style="margin:8px 0 0;font-size:12px;font-weight:700;color:#059669;"></p>
+    </div>
+    <div class="br-card">
+      <h4>Summary</h4>
+      <div class="br-bal-row"><span>Total matched</span><span id="brSumMatched">0.00</span></div>
+      <div class="br-bal-row"><span>Unmatched ERP</span><span id="brSumUnErp">0.00</span></div>
+      <div class="br-bal-row"><span>Unmatched bank</span><span id="brSumUnBank">0.00</span></div>
+      <div class="br-bal-row" style="color:#dc2626;font-weight:700;"><span>Net difference</span><span id="brSumDiff">0.00</span></div>
+    </div>
+    <div class="br-card">
+      <h4>Notes</h4>
+      <textarea id="brNotes" rows="4" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;" placeholder="e.g. Bank charges not yet recorded in ERP."></textarea>
+    </div>
+  </footer>
+
+  <div class="br-audit" id="brAudit"></div>
+</div>
+
+<dialog id="brBrowseDialog" style="border:1px solid #e2e8f0;border-radius:10px;padding:16px;max-width:520px;">
+  <h3 style="margin:0 0 12px;font-size:15px;">Saved reconciliations</h3>
+  <div class="br-scroll" style="max-height:280px;">
+    <table class="br-tbl" id="brBrowseTable">
+      <thead><tr><th>No.</th><th>Account</th><th>Period</th><th>Status</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <button type="button" id="brBrowseClose" style="margin-top:12px;">Close</button>
+</dialog>
+
+<script>
+window.BANK_RECON_CONFIG = {
+  urls: {
+    load: {{ url_for('accounts.api_bank_recon_load') | tojson }},
+    save: {{ url_for('accounts.api_bank_recon_save') | tojson }},
+    list: {{ url_for('accounts.api_bank_recon_list') | tojson }},
+    import: {{ url_for('accounts.api_bank_recon_import') | tojson }},
+    autoMatch: {{ url_for('accounts.api_bank_recon_auto_match') | tojson }},
+    match: {{ url_for('accounts.api_bank_recon_match') | tojson }},
+    unmatch: {{ url_for('accounts.api_bank_recon_unmatch') | tojson }},
+    delete: {{ url_for('accounts.api_bank_recon_delete') | tojson }},
+    journal: {{ url_for('accounts.journal_entry') | tojson }},
+    ledger: {{ url_for('accounts.account_ledger_page') | tojson }},
+  },
+  initialReconNo: {{ recon_no or 0 }},
+  locationCode: {{ location_code }},
+};
+</script>
+<script src="{{ url_for('static', filename='js/bank_reconciliation.js') }}?v=1"></script>
+{% endblock %}

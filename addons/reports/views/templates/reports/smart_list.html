@@ -1,0 +1,1768 @@
+{% extends "base.html" %}
+{% block title %}Smart List Builder{% endblock %}
+
+{% block content %}
+<style>
+/* ── Page Layout ─────────────────────────────────────────────── */
+.sl-page{display:flex;flex-direction:column;height:calc(100vh - 56px);overflow:hidden;}
+.sl-top{display:flex;flex:1 1 0;min-height:0;overflow:hidden;}
+.sl-bottom{flex:0 0 auto;}
+
+/* ── Left Sidebar ────────────────────────────────────────────── */
+.sl-sidebar{
+  width:220px;min-width:160px;background:#1e1e2e;color:#cdd6f4;
+  display:flex;flex-direction:column;border-right:2px solid #313244;overflow:hidden;
+}
+.sl-sidebar-head{padding:9px 12px 7px;font-weight:700;font-size:.8rem;letter-spacing:.05em;
+  color:#89b4fa;border-bottom:1px solid #313244;flex-shrink:0;}
+.sl-search-box{margin:7px;padding:5px 8px;border-radius:5px;border:1px solid #45475a;
+  background:#2a2a3e;color:#cdd6f4;font-size:.8rem;width:calc(100% - 14px);box-sizing:border-box;outline:none;}
+.sl-search-box:focus{border-color:#89b4fa;}
+.sl-tbl-group-label{font-size:.65rem;font-weight:700;letter-spacing:.08em;color:#6c7086;
+  padding:4px 12px 2px;text-transform:uppercase;}
+.sl-tbl-item{padding:5px 10px;font-size:.77rem;cursor:pointer;display:flex;align-items:center;
+  gap:5px;border-left:3px solid transparent;transition:background .1s;}
+.sl-tbl-item:hover{background:#2a2a3e;border-left-color:#89b4fa;}
+.sl-tbl-item.active{background:#313244;border-left-color:#cba6f7;color:#cba6f7;}
+.sl-tbl-item[draggable="true"]{cursor:grab;}
+.sl-tbl-item[draggable="true"]:active{cursor:grabbing;}
+.sl-tbl-badge{font-size:.58rem;padding:1px 5px;border-radius:3px;background:#313244;
+  color:#89b4fa;margin-left:auto;flex-shrink:0;}
+/* Drop zone highlights */
+.sl-drop-active{outline:2px dashed #89b4fa !important;background:rgba(137,180,250,.08) !important;}
+.sl-join-bar.sl-drop-active{outline:2px dashed #f59e0b !important;background:rgba(245,158,11,.07) !important;}
+
+/* ── Builder Area ────────────────────────────────────────────── */
+.sl-builder{flex:1 1 0;min-width:0;display:flex;flex-direction:column;background:#f4f6fb;overflow-y:auto;}
+.sl-builder-head{background:#fff;padding:8px 14px;border-bottom:2px solid #e2e8f0;
+  display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap;}
+.sl-sel-table-label{font-weight:700;color:#1a202c;font-size:.88rem;}
+.sl-sel-table-name{color:#4a5568;font-size:.8rem;background:#edf2f7;
+  padding:2px 7px;border-radius:4px;font-family:monospace;}
+
+/* ── Mode Tabs ───────────────────────────────────────────────── */
+.sl-tabs{display:flex;background:#fff;border-bottom:2px solid #e2e8f0;flex-shrink:0;}
+.sl-tab{padding:8px 18px;font-size:.78rem;font-weight:600;cursor:pointer;
+  color:#64748b;border-bottom:3px solid transparent;margin-bottom:-2px;
+  transition:color .12s,border-color .12s;user-select:none;}
+.sl-tab:hover{color:#1e293b;}
+.sl-tab.active{color:#3b82f6;border-bottom-color:#3b82f6;}
+
+/* ── AI Knowledge Base ───────────────────────────────────────── */
+.sl-ai-kb{background:#fefce8;border-bottom:2px solid #fde68a;flex-shrink:0;}
+.sl-ai-kb-head{padding:6px 14px;display:flex;align-items:center;gap:8px;cursor:pointer;
+  font-size:.76rem;font-weight:700;color:#92400e;user-select:none;}
+.sl-ai-kb-head:hover{background:#fef9c3;}
+.sl-ai-kb-body{padding:0 14px 10px;display:none;}
+.sl-ai-kb-body.open{display:block;}
+.sl-ai-kb-textarea{width:100%;box-sizing:border-box;min-height:100px;max-height:220px;
+  padding:8px 10px;border:1px solid #fde68a;border-radius:6px;font-size:.78rem;
+  line-height:1.5;resize:vertical;outline:none;background:#fffbeb;color:#1c1917;
+  font-family:inherit;}
+.sl-ai-kb-textarea:focus{border-color:#f59e0b;}
+.sl-ai-kb-hint{font-size:.7rem;color:#78716c;margin-top:4px;}
+.sl-ai-kb-save{font-size:.75rem;background:#f59e0b;color:#fff;border:none;
+  border-radius:4px;padding:4px 12px;cursor:pointer;margin-top:6px;font-weight:600;}
+.sl-ai-kb-save:hover{background:#d97706;}
+.sl-ai-kb-saved{font-size:.72rem;color:#16a34a;margin-left:8px;display:none;}
+
+/* ── AI Chat Panel ───────────────────────────────────────────── */
+.sl-ai-panel{display:none;flex-direction:column;flex:1 1 0;min-height:0;background:#f8fafc;}
+.sl-ai-panel.visible{display:flex;}
+.sl-ai-messages{flex:1 1 0;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px;}
+.sl-ai-msg{display:flex;gap:10px;max-width:90%;}
+.sl-ai-msg.user{align-self:flex-end;flex-direction:row-reverse;}
+.sl-ai-msg.assistant{align-self:flex-start;}
+.sl-ai-avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:.75rem;font-weight:700;flex-shrink:0;margin-top:2px;}
+.sl-ai-msg.user .sl-ai-avatar{background:#3b82f6;color:#fff;}
+.sl-ai-msg.assistant .sl-ai-avatar{background:#8b5cf6;color:#fff;}
+.sl-ai-bubble{padding:9px 13px;border-radius:10px;font-size:.8rem;line-height:1.55;
+  max-width:100%;word-break:break-word;}
+.sl-ai-msg.user .sl-ai-bubble{background:#3b82f6;color:#fff;border-bottom-right-radius:3px;}
+.sl-ai-msg.assistant .sl-ai-bubble{background:#fff;color:#1e293b;border:1px solid #e2e8f0;
+  border-bottom-left-radius:3px;}
+.sl-ai-bubble pre{background:#1e1e2e;color:#cdd6f4;padding:8px 10px;border-radius:6px;
+  overflow-x:auto;font-size:.75rem;margin:6px 0 2px;}
+.sl-ai-bubble code{font-family:monospace;font-size:.78rem;}
+.sl-ai-bubble pre code{background:none;color:inherit;}
+.sl-ai-bubble p{margin:0 0 6px;}
+.sl-ai-bubble p:last-child{margin-bottom:0;}
+.sl-ai-bubble strong{font-weight:700;}
+.sl-ai-bubble .sl-ai-md-table-wrap{overflow-x:auto;margin:8px 0 4px;}
+.sl-ai-bubble .sl-ai-md-table{border-collapse:collapse;width:100%;min-width:420px;font-size:.75rem;}
+.sl-ai-bubble .sl-ai-md-table th,.sl-ai-bubble .sl-ai-md-table td{
+  border:1px solid #e2e8f0;padding:5px 8px;text-align:left;vertical-align:top;
+}
+.sl-ai-bubble .sl-ai-md-table th{background:#f8fafc;color:#334155;font-weight:700;}
+.sl-ai-bubble .sl-ai-md-table tr:nth-child(even) td{background:#fbfdff;}
+.sl-ai-copy-sql{font-size:.68rem;color:#3b82f6;background:none;border:1px solid #bfdbfe;
+  border-radius:4px;padding:2px 7px;cursor:pointer;margin-top:4px;display:block;}
+.sl-ai-copy-sql:hover{background:#eff6ff;}
+.sl-ai-bar{display:flex;align-items:flex-end;gap:8px;padding:10px 14px;
+  background:#fff;border-top:2px solid #e2e8f0;flex-shrink:0;}
+.sl-ai-input{flex:1 1 0;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;
+  font-size:.82rem;resize:none;outline:none;min-height:38px;max-height:120px;
+  line-height:1.4;font-family:inherit;color:#1e293b;}
+.sl-ai-input:focus{border-color:#8b5cf6;}
+.sl-ai-send{background:#8b5cf6;color:#fff;border:none;border-radius:8px;
+  padding:9px 16px;font-size:.82rem;font-weight:600;cursor:pointer;
+  white-space:nowrap;transition:background .15s;flex-shrink:0;}
+.sl-ai-send:hover{background:#7c3aed;}
+.sl-ai-send:disabled{background:#c4b5fd;cursor:not-allowed;}
+.sl-ai-typing{align-self:flex-start;display:none;gap:10px;}
+.sl-ai-typing.visible{display:flex;}
+.sl-ai-dots span{display:inline-block;width:7px;height:7px;border-radius:50%;
+  background:#8b5cf6;animation:aiDot 1.2s infinite ease-in-out;margin:0 2px;}
+.sl-ai-dots span:nth-child(2){animation-delay:.2s;}
+.sl-ai-dots span:nth-child(3){animation-delay:.4s;}
+@keyframes aiDot{0%,80%,100%{transform:scale(0.6);opacity:.4;}40%{transform:scale(1);opacity:1;}}
+.sl-ai-quick{display:flex;gap:6px;flex-wrap:wrap;padding:8px 14px 2px;flex-shrink:0;}
+.sl-ai-quick-btn{font-size:.72rem;padding:4px 10px;border:1px solid #e2e8f0;border-radius:14px;
+  background:#fff;color:#475569;cursor:pointer;transition:background .1s;}
+.sl-ai-quick-btn:hover{background:#f1f5f9;border-color:#cbd5e1;}
+
+/* ── SQL Editor Panel ────────────────────────────────────────── */
+.sl-sql-editor-panel{display:none;flex-direction:column;flex:1 1 0;min-height:0;background:#fff;}
+.sl-sql-editor-panel.visible{display:flex;}
+.sl-sql-textarea{
+  flex:1 1 0;min-height:160px;resize:none;
+  font-family:"Consolas","Monaco","Courier New",monospace;font-size:.82rem;
+  padding:12px 14px;border:none;border-bottom:2px solid #e2e8f0;outline:none;
+  background:#1e1e2e;color:#cdd6f4;line-height:1.6;
+  tab-size:2;
+}
+.sl-sql-textarea::placeholder{color:#6c7086;}
+.sl-sql-editor-bar{display:flex;align-items:center;gap:10px;padding:9px 14px;
+  background:#fff;flex-wrap:wrap;flex-shrink:0;}
+.sl-sql-hint{font-size:.72rem;color:#94a3b8;margin-left:auto;}
+
+/* ── JOIN Bar ────────────────────────────────────────────────── */
+.sl-join-bar{background:#fff5e6;border-bottom:2px solid #fed7aa;padding:8px 14px;flex-shrink:0;}
+.sl-join-bar-head{font-size:.72rem;font-weight:700;color:#92400e;letter-spacing:.05em;
+  text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:8px;}
+.sl-join-rows{display:flex;flex-direction:column;gap:4px;}
+.sl-join-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap;
+  background:#fff;border:1px solid #fed7aa;border-radius:6px;padding:5px 8px;}
+.sl-join-sel{font-size:.75rem;padding:3px 5px;border:1px solid #e2e8f0;border-radius:4px;
+  color:#374151;background:#fff;outline:none;min-width:70px;}
+.sl-join-sel:focus{border-color:#f59e0b;}
+.sl-join-eq{font-size:.8rem;color:#92400e;font-weight:700;padding:0 2px;}
+.sl-join-rm{background:none;border:none;color:#94a3b8;cursor:pointer;font-size:.85rem;
+  padding:0 2px;transition:color .1s;line-height:1;}
+.sl-join-rm:hover{color:#ef4444;}
+.sl-join-alias-tag{font-size:.65rem;background:#fed7aa;color:#92400e;
+  padding:1px 5px;border-radius:3px;font-weight:700;font-family:monospace;flex-shrink:0;}
+.sl-add-join-btn{font-size:.75rem;color:#d97706;background:none;border:1px dashed #f59e0b;
+  border-radius:4px;padding:3px 10px;cursor:pointer;margin-top:4px;transition:background .1s;}
+.sl-add-join-btn:hover{background:#fff3cd;}
+
+/* ── Two-column builder body ─────────────────────────────────── */
+.sl-builder-body{display:grid;grid-template-columns:240px 1fr;flex:1 1 0;min-height:0;}
+@media(max-width:860px){.sl-builder-body{grid-template-columns:1fr;}}
+
+/* ── Available Columns ───────────────────────────────────────── */
+.sl-avail{border-right:2px solid #e2e8f0;background:#fff;display:flex;flex-direction:column;min-height:0;}
+.sl-avail-head{padding:7px 12px;font-size:.72rem;font-weight:700;color:#64748b;
+  letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid #f1f5f9;
+  display:flex;align-items:center;gap:5px;flex-shrink:0;}
+.sl-col-search{margin:6px;padding:5px 8px;border-radius:5px;border:1px solid #e2e8f0;
+  font-size:.78rem;width:calc(100% - 12px);box-sizing:border-box;outline:none;}
+.sl-col-search:focus{border-color:#3b82f6;}
+.sl-avail-list{flex:1 1 0;overflow-y:auto;padding:0 0 8px;}
+.sl-tbl-group-avail{margin-bottom:4px;}
+.sl-tbl-group-avail-label{font-size:.65rem;font-weight:700;letter-spacing:.06em;
+  color:#94a3b8;padding:5px 10px 2px;text-transform:uppercase;
+  display:flex;align-items:center;gap:5px;}
+.sl-tbl-alias-badge{font-size:.6rem;background:#dbeafe;color:#1d4ed8;
+  padding:1px 5px;border-radius:3px;font-family:monospace;font-weight:700;}
+.sl-col-item{padding:5px 12px;font-size:.78rem;cursor:pointer;display:flex;
+  align-items:center;gap:5px;border-bottom:1px solid #f8fafc;transition:background .1s;}
+.sl-col-item:hover{background:#f0f9ff;}
+.sl-col-item.added{opacity:.35;pointer-events:none;}
+.sl-col-type{font-size:.6rem;padding:1px 4px;border-radius:3px;background:#e2e8f0;
+  color:#64748b;font-family:monospace;flex-shrink:0;margin-left:auto;}
+
+/* ── Fields Panel ────────────────────────────────────────────── */
+.sl-fields-panel{display:flex;flex-direction:column;min-height:0;}
+.sl-section{background:#fff;border-bottom:2px solid #e2e8f0;padding:10px 14px;}
+.sl-section-head{font-size:.72rem;font-weight:700;color:#64748b;letter-spacing:.05em;
+  text-transform:uppercase;margin-bottom:7px;display:flex;align-items:center;gap:7px;}
+.sl-section-badge{background:#3b82f6;color:#fff;font-size:.63rem;
+  padding:1px 6px;border-radius:10px;font-weight:600;}
+.sl-fields-list{display:flex;flex-direction:column;gap:3px;min-height:28px;}
+.sl-field-row{display:flex;align-items:center;gap:5px;padding:4px 7px;
+  background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;cursor:grab;transition:box-shadow .1s;}
+.sl-field-row:hover{box-shadow:0 2px 6px rgba(0,0,0,.08);}
+.sl-field-row.dragging{opacity:.4;}
+.sl-field-row.drag-over{border-color:#3b82f6;background:#eff6ff;}
+.sl-drag-handle{color:#cbd5e1;font-size:.75rem;cursor:grab;flex-shrink:0;}
+.sl-field-alias-tag{font-size:.58rem;background:#dbeafe;color:#1d4ed8;
+  padding:1px 4px;border-radius:3px;font-family:monospace;font-weight:700;flex-shrink:0;}
+.sl-field-col{font-size:.77rem;font-weight:600;color:#1e293b;flex:0 0 auto;
+  max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sl-field-alias{font-size:.73rem;padding:2px 4px;border:1px solid #e2e8f0;border-radius:4px;
+  color:#374151;background:#fff;flex:1 1 80px;min-width:60px;outline:none;}
+.sl-field-alias:focus{border-color:#3b82f6;}
+.sl-field-agg{font-size:.71rem;padding:2px 3px;border:1px solid #e2e8f0;border-radius:4px;
+  color:#374151;background:#fff;outline:none;flex-shrink:0;}
+.sl-field-agg:focus{border-color:#3b82f6;}
+.sl-field-rm{background:none;border:none;color:#94a3b8;cursor:pointer;font-size:.85rem;
+  padding:0 2px;line-height:1;flex-shrink:0;transition:color .1s;}
+.sl-field-rm:hover{color:#ef4444;}
+.sl-drop-hint{text-align:center;color:#94a3b8;font-size:.78rem;padding:10px;
+  border:2px dashed #e2e8f0;border-radius:5px;}
+
+/* ── Filters ─────────────────────────────────────────────────── */
+.sl-filter-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+.sl-filter-tbl,.sl-filter-col,.sl-filter-op{font-size:.75rem;padding:3px 5px;
+  border:1px solid #e2e8f0;border-radius:4px;background:#fff;color:#374151;outline:none;min-width:60px;}
+.sl-filter-tbl:focus,.sl-filter-col:focus,.sl-filter-op:focus{border-color:#3b82f6;}
+.sl-filter-val{font-size:.75rem;padding:3px 5px;border:1px solid #e2e8f0;border-radius:4px;
+  flex:1 1 70px;outline:none;color:#374151;}
+.sl-filter-val:focus{border-color:#3b82f6;}
+.sl-btn-icon{background:none;border:1px solid #e2e8f0;color:#64748b;border-radius:4px;
+  padding:3px 6px;cursor:pointer;font-size:.78rem;transition:background .1s;}
+.sl-btn-icon:hover{background:#f1f5f9;color:#1e293b;}
+.sl-add-filter{font-size:.75rem;color:#3b82f6;background:none;border:none;cursor:pointer;
+  padding:0;margin-top:4px;text-decoration:underline;}
+
+/* ── Options ─────────────────────────────────────────────────── */
+.sl-options{background:#fff;border-bottom:2px solid #e2e8f0;padding:8px 14px;
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.sl-opt-label{font-size:.75rem;color:#64748b;font-weight:600;}
+.sl-opt-select,.sl-opt-input{font-size:.75rem;padding:3px 6px;border:1px solid #e2e8f0;
+  border-radius:4px;color:#374151;background:#fff;outline:none;}
+.sl-opt-select:focus,.sl-opt-input:focus{border-color:#3b82f6;}
+.sl-opt-input{width:65px;}
+
+/* ── Actions ─────────────────────────────────────────────────── */
+.sl-actions{background:#fff;padding:9px 14px;display:flex;align-items:center;
+  gap:9px;flex-wrap:wrap;border-top:2px solid #e2e8f0;}
+.sl-btn{padding:6px 16px;border:none;border-radius:5px;font-size:.8rem;
+  font-weight:600;cursor:pointer;transition:all .15s;}
+.sl-btn-run{background:#3b82f6;color:#fff;}
+.sl-btn-run:hover{background:#2563eb;}
+.sl-btn-run:disabled{background:#93c5fd;cursor:not-allowed;}
+.sl-btn-export{background:#10b981;color:#fff;}
+.sl-btn-export:hover{background:#059669;}
+.sl-btn-export:disabled{background:#6ee7b7;cursor:not-allowed;}
+.sl-btn-clear{background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;}
+.sl-btn-clear:hover{background:#e2e8f0;}
+.sl-sql-toggle{font-size:.72rem;color:#64748b;text-decoration:underline;cursor:pointer;
+  background:none;border:none;margin-left:auto;}
+.sl-spinner{display:none;}
+.sl-spinner.running{display:inline-block;}
+.spin{animation:spin .8s linear infinite;display:inline-block;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── SQL Box ─────────────────────────────────────────────────── */
+.sl-sql-box{background:#1e1e2e;color:#cdd6f4;font-family:monospace;font-size:.74rem;
+  padding:9px 13px;border-top:2px solid #e2e8f0;display:none;
+  overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:110px;overflow-y:auto;}
+
+/* ── Results ─────────────────────────────────────────────────── */
+.sl-results{background:#fff;display:flex;flex-direction:column;
+  min-height:120px;height:280px;flex-shrink:0;}
+.sl-results-head{padding:7px 14px;border-bottom:1px solid #e2e8f0;
+  display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap;}
+.sl-results-title{font-weight:700;font-size:.83rem;color:#1e293b;}
+.sl-results-count{font-size:.75rem;color:#64748b;}
+.sl-results-error{font-size:.75rem;color:#ef4444;}
+.sl-results-body{flex:1 1 0;overflow:auto;}
+.sl-result-table{border-collapse:collapse;font-size:.76rem;width:100%;}
+.sl-result-table th{background:#f8fafc;color:#475569;font-weight:700;
+  padding:5px 9px;border:1px solid #e2e8f0;white-space:nowrap;position:sticky;top:0;z-index:2;}
+.sl-result-table td{padding:4px 9px;border:1px solid #f1f5f9;color:#1e293b;white-space:nowrap;}
+.sl-result-table tr:nth-child(even) td{background:#f8fafc;}
+.sl-result-table tr:hover td{background:#eff6ff;}
+.sl-no-result{display:flex;align-items:center;justify-content:center;
+  height:100%;color:#94a3b8;font-size:.88rem;flex-direction:column;gap:8px;padding:30px;}
+</style>
+<div class="list-refresh-slot" style="display:flex;justify-content:flex-end;flex-wrap:wrap;align-items:center;margin:6px 0 12px;">{% include 'includes/list_refresh_bar.html' %}</div>
+
+
+<div class="sl-page nexa-list-page">
+  <!-- ── Top Section ────────────────────────────────────────────── -->
+  <div class="sl-top">
+
+    <!-- Left Sidebar -->
+    <div class="sl-sidebar" id="slSidebar">
+      <div class="sl-sidebar-head">&#128196; Tables &amp; Views</div>
+      <input type="text" class="sl-search-box" id="slTblSearch" placeholder="Search…" autocomplete="off">
+      <div id="slTblList" style="flex:1 1 0;overflow-y:auto;">
+        <div style="padding:14px;color:#6c7086;font-size:.78rem;text-align:center;">Loading…</div>
+      </div>
+      <div style="padding:6px 10px;font-size:.65rem;color:#6c7086;border-top:1px solid #313244;text-align:center;flex-shrink:0;">
+        Click or drag a table to the builder
+      </div>
+    </div>
+
+    <!-- Builder -->
+    <div class="sl-builder">
+
+      <!-- Mode Tabs -->
+      <div class="sl-tabs">
+        <div class="sl-tab active" id="slTabVisual" onclick="slSwitchTab('visual')">&#127381; Visual Builder</div>
+        <div class="sl-tab" id="slTabSql" onclick="slSwitchTab('sql')">&#128196; SQL Editor</div>
+        <div class="sl-tab" id="slTabAi" onclick="slSwitchTab('ai')" style="color:#8b5cf6;">&#129302; AI Assistant</div>
+      </div>
+
+      <!-- AI Chat Panel -->
+      <div class="sl-ai-panel" id="slAiPanel">
+
+        <!-- Knowledge Base (collapsible) -->
+        <div class="sl-ai-kb">
+          <div class="sl-ai-kb-head" onclick="slAiKbToggle()">
+            &#128218; AI Knowledge Base
+            <span style="font-size:.68rem;font-weight:400;color:#b45309;">— teach the AI about your tables &amp; business rules</span>
+            <span id="slAiKbArrow" style="margin-left:auto;">&#9660;</span>
+          </div>
+          <div class="sl-ai-kb-body" id="slAiKbBody">
+            <textarea class="sl-ai-kb-textarea" id="slAiKbText"
+              placeholder="Describe your tables and columns here. Examples:&#10;&#10;STKTRFHDR = Store Transfer Header. Columns: TRANSFERNO (unique ID), FROMSTORE (source store code), TOSTORE (destination store code), TRANSFERDATE (date of transfer), STATUS (0=Created, 1=Transferred, 2=Approved).&#10;&#10;STKTRFDTL = Store Transfer Detail lines. Columns: TRANSFERNO (links to header), ITEMCODE, ITEMNAME, QTY (quantity transferred), RATE (unit price).&#10;&#10;LOCATIONMASTER = Store/Location master. DBCODE = store code, DESCRIPTION = store name.&#10;&#10;Add any business rules, common queries, or column explanations here."></textarea>
+            <div class="sl-ai-kb-hint">&#128161; The more context you give, the smarter the AI becomes. This is saved in your browser.</div>
+            <div style="display:flex;align-items:center;gap:0;">
+              <button class="sl-ai-kb-save" onclick="slAiKbSave()">&#10003; Save Instructions</button>
+              <span class="sl-ai-kb-saved" id="slAiKbSaved">&#10003; Saved!</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick prompts -->
+        <div class="sl-ai-quick" id="slAiQuick">
+          <span style="font-size:.7rem;color:#94a3b8;align-self:center;">Try:</span>
+          <button class="sl-ai-quick-btn" onclick="slAiQuickPrompt(this)">What tables are available?</button>
+          <button class="sl-ai-quick-btn" onclick="slAiQuickPrompt(this)">Show me store transfers for today</button>
+          <button class="sl-ai-quick-btn" onclick="slAiQuickPrompt(this)">Write a query to get total sales by salesman</button>
+          <button class="sl-ai-quick-btn" onclick="slAiQuickPrompt(this)">How do I filter by date range in Oracle?</button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;padding:6px 12px;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;background:#f8fafc;">
+          <span style="font-size:.72rem;color:#64748b;white-space:nowrap;">Saved Chats</span>
+          <select id="slAiHistorySelect" style="flex:1 1 0;min-width:120px;height:30px;border:1px solid #cbd5e1;border-radius:8px;padding:0 8px;font-size:.74rem;background:#fff;color:#0f172a;">
+            <option value="">Current chat</option>
+          </select>
+          <button type="button" class="sl-ai-quick-btn" style="margin:0;" onclick="slAiLoadSelectedChat()">Load</button>
+          <button type="button" class="sl-ai-quick-btn" style="margin:0;" onclick="slAiRenameSelectedChat()">Rename</button>
+          <button type="button" class="sl-ai-quick-btn" style="margin:0;" onclick="slAiDeleteSelectedChat()">Delete</button>
+          <button type="button" class="sl-ai-quick-btn" style="margin:0;" onclick="slAiStartNewChat()">New Chat</button>
+        </div>
+        <!-- Messages -->
+        <div class="sl-ai-messages" id="slAiMessages">
+          <div class="sl-ai-msg assistant">
+            <div class="sl-ai-avatar">AI</div>
+            <div class="sl-ai-bubble">
+              <strong>Hello! I'm your ERP AI Assistant.</strong><br><br>
+              I know your database schema and can help you:<br>
+              &#128202; Write SQL queries for any report<br>
+              &#128269; Explain what tables and columns mean<br>
+              &#128221; Answer any question about your data<br><br>
+              <em>Generated SQL can be copied directly to the SQL Editor tab.</em>
+            </div>
+          </div>
+          <!-- Typing indicator -->
+          <div class="sl-ai-typing" id="slAiTyping">
+            <div class="sl-ai-avatar" style="background:#8b5cf6;color:#fff;">AI</div>
+            <div class="sl-ai-bubble" style="background:#fff;border:1px solid #e2e8f0;">
+              <div class="sl-ai-dots"><span></span><span></span><span></span></div>
+            </div>
+          </div>
+        </div>
+        <!-- Input bar -->
+        <div class="sl-ai-bar">
+          <textarea class="sl-ai-input" id="slAiInput" rows="1"
+            placeholder="Ask anything about your data…"></textarea>
+          <button class="sl-ai-send" id="slAiSend" onclick="slAiSend()">Send &#10148;</button>
+        </div>
+      </div>
+
+      <!-- SQL Editor Panel -->
+      <div class="sl-sql-editor-panel" id="slSqlEditorPanel">
+        <textarea class="sl-sql-textarea" id="slSqlEditorArea"
+          placeholder="Write your SELECT query here…&#10;&#10;Example:&#10;  SELECT TRANSFERNO, FROMSTORE, TOSTORE, TRANSFERDATE&#10;  FROM STKTRFHDR&#10;  WHERE FROMSTORE = 'STORE01'&#10;  ORDER BY TRANSFERDATE DESC"
+          spellcheck="false"></textarea>
+        <div class="sl-sql-editor-bar">
+          <button class="sl-btn sl-btn-run" id="slSqlRunBtn" onclick="slRunSql()">&#9654; Run SQL</button>
+          <button class="sl-btn sl-btn-export" id="slSqlExportBtn" onclick="slExportSql()">&#11015; Export CSV</button>
+          <button class="sl-btn sl-btn-clear" onclick="document.getElementById('slSqlEditorArea').value=''">&#10006; Clear</button>
+          <span class="sl-opt-label" style="margin-left:8px;">Limit</span>
+          <input type="number" class="sl-opt-input" id="slSqlLimit" value="500" min="10" max="5000" step="10">
+          <div class="sl-spinner" id="slSqlSpinner"><span class="spin">&#10227;</span> Running…</div>
+          <span class="sl-sql-hint">Only SELECT / WITH queries are allowed &nbsp;·&nbsp; Ctrl+Enter to run</span>
+        </div>
+      </div>
+
+      <!-- Visual Builder Panel -->
+      <div id="slVisualPanel" style="display:flex;flex-direction:column;flex:1 1 0;min-height:0;">
+
+      <!-- Header (drop zone for primary table) -->
+      <div class="sl-builder-head" id="slPrimaryDropZone"
+          ondragover="slDragOverZone(event,'primary')"
+          ondragleave="slDragLeaveZone(event,'primary')"
+          ondrop="slDropTable(event,'primary')">
+        <span class="sl-sel-table-label">Smart List Builder</span>
+        <span id="slTableNameLabel" class="sl-sel-table-name" style="display:none"></span>
+        <button id="slRemovePrimaryBtn" onclick="slRemovePrimaryTable()"
+          style="display:none;background:none;border:1px solid #fca5a5;color:#ef4444;border-radius:4px;
+          padding:2px 8px;font-size:.72rem;cursor:pointer;margin-left:2px;" title="Remove primary table">
+          &#10005; Remove
+        </button>
+        <span id="slNoTableHint" style="font-size:.78rem;color:#94a3b8;">
+          ← Click or <strong>drag</strong> a table here to begin
+        </span>
+      </div>
+
+      <!-- JOIN Bar (shown only when primary table is selected) -->
+      <div class="sl-join-bar" id="slJoinBar" style="display:none;"
+          ondragover="slDragOverZone(event,'join')"
+          ondragleave="slDragLeaveZone(event,'join')"
+          ondrop="slDropTable(event,'join')">
+        <div class="sl-join-bar-head">
+          &#128279; Joins
+          <span style="font-size:.68rem;color:#b45309;font-weight:400;">Add tables to join — or <strong>drag</strong> a table here</span>
+        </div>
+        <div class="sl-join-rows" id="slJoinRows"></div>
+        <button class="sl-add-join-btn" onclick="slAddJoinRow()">+ Add Join Table</button>
+      </div>
+
+      <!-- Two-column body -->
+      <div class="sl-builder-body">
+
+        <!-- Available Columns -->
+        <div class="sl-avail">
+          <div class="sl-avail-head">
+            &#128279; Columns
+            <span id="slColCount" style="margin-left:auto;color:#94a3b8;font-size:.68rem;"></span>
+          </div>
+          <input type="text" class="sl-col-search" id="slColSearch" placeholder="Filter columns…" autocomplete="off">
+          <div class="sl-avail-list" id="slColList">
+            <div style="padding:14px;color:#94a3b8;font-size:.78rem;text-align:center;">No table selected</div>
+          </div>
+        </div>
+
+        <!-- Right: Fields + Filters + Options -->
+        <div class="sl-fields-panel">
+
+          <!-- Report Fields -->
+          <div class="sl-section">
+            <div class="sl-section-head">
+              &#9654; Report Fields
+              <span id="slFieldBadge" class="sl-section-badge" style="display:none">0</span>
+              <span style="font-size:.68rem;color:#94a3b8;font-weight:400;">Click column to add · drag to reorder</span>
+            </div>
+            <div class="sl-fields-list" id="slFieldList">
+              <div class="sl-drop-hint">Click columns from the left panel to add them to the report</div>
+            </div>
+          </div>
+
+          <!-- Filters -->
+          <div class="sl-section">
+            <div class="sl-section-head">
+              &#128269; Filters (WHERE)
+              <button class="sl-add-filter" onclick="slAddFilterRow()">+ Add Filter</button>
+            </div>
+            <div id="slFilterList" style="display:flex;flex-direction:column;gap:4px;"></div>
+          </div>
+
+          <!-- Options -->
+          <div class="sl-options">
+            <span class="sl-opt-label">Order By</span>
+            <select class="sl-opt-select" id="slOrderTbl" style="min-width:55px;" onchange="slSyncOrderColOptions()">
+              <option value="">t0</option>
+            </select>
+            <select class="sl-opt-select" id="slOrderCol" style="min-width:120px;">
+              <option value="">— None —</option>
+            </select>
+            <select class="sl-opt-select" id="slOrderDir">
+              <option value="ASC">ASC</option>
+              <option value="DESC">DESC</option>
+            </select>
+            <span class="sl-opt-label" style="margin-left:10px;">Limit</span>
+            <input type="number" class="sl-opt-input" id="slLimit" value="500" min="10" max="5000" step="10">
+          </div>
+
+          <!-- Actions -->
+          <div class="sl-actions">
+            <button class="sl-btn sl-btn-run" id="slRunBtn" onclick="slRun()" disabled>&#9654; Run Report</button>
+            <button class="sl-btn sl-btn-export" id="slExportBtn" onclick="slExport()" disabled>&#11015; Export CSV</button>
+            <button class="sl-btn sl-btn-clear" onclick="slClear()">&#10006; Clear Fields</button>
+            <button class="sl-sql-toggle" onclick="slToggleSql()">&#128220; SQL Preview</button>
+            <div class="sl-spinner" id="slSpinner"><span class="spin">&#10227;</span> Running…</div>
+          </div>
+
+          <!-- SQL Box -->
+          <div class="sl-sql-box" id="slSqlBox"></div>
+        </div>
+      </div>
+      </div><!-- /#slVisualPanel -->
+    </div><!-- /.sl-builder -->
+  </div><!-- /.sl-top -->
+
+  <!-- ── Resize Handle ─────────────────────────────────────────── -->
+  <div id="slResizeHandle" style="
+    flex:0 0 6px;background:#e2e8f0;cursor:ns-resize;
+    display:flex;align-items:center;justify-content:center;
+    border-top:1px solid #cbd5e1;border-bottom:1px solid #cbd5e1;
+    user-select:none;transition:background .15s;"
+    onmouseenter="this.style.background='#bfdbfe'"
+    onmouseleave="if(!slResizing)this.style.background='#e2e8f0'">
+    <span style="color:#94a3b8;font-size:.6rem;letter-spacing:2px;">&#9646;&#9646;&#9646;</span>
+  </div>
+
+  <!-- ── Results ────────────────────────────────────────────────── -->
+  <div class="sl-results sl-bottom" id="slResultsPanel">
+    <div class="sl-results-head">
+      <span class="sl-results-title">Results</span>
+      <span class="sl-results-count" id="slResultCount"></span>
+      <span class="sl-results-error" id="slResultError"></span>
+    </div>
+    <div class="sl-results-body" id="slResultBody">
+      <div class="sl-no-result">
+        <span style="font-size:2rem;">&#128202;</span>
+        Run a report to see results here
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ─── State ──────────────────────────────────────────────────── */
+const SL = {
+  allTables:       [],     // [{name, type}]
+  primaryTable:    null,   // string
+  joins:           [],     // [{id, table, join_type, left_alias, left_col, right_col}]
+  tableColumns:    {},     // {alias: [{name, type}]}   alias = t0, t1, t2 …
+  fieldRows:       [],     // [{id, table_alias, column, type, alias, aggregate}]
+  filterRows:      [],     // [{id, table_alias, column, operator, value}]
+  fieldSeq:  0,
+  filterSeq: 0,
+  joinSeq:   0,
+};
+
+/* ─── Constants ──────────────────────────────────────────────── */
+const SL_OPS = ["=","!=",">","<",">=","<=","LIKE","NOT LIKE","IN","IS NULL","IS NOT NULL"];
+const SL_JOIN_TYPES = ["INNER","LEFT","RIGHT","FULL"];
+
+/* ─── Boot ───────────────────────────────────────────────────── */
+document.addEventListener("DOMContentLoaded", () => {
+  slLoadTables();
+  document.getElementById("slTblSearch").addEventListener("input", slRenderTableList);
+  document.getElementById("slColSearch").addEventListener("input", slRenderColList);
+});
+
+/* ─── Load Tables ────────────────────────────────────────────── */
+function slLoadTables() {
+  fetch("{{ url_for('reports.smart_list_tables') }}")
+    .then(r => r.json())
+    .then(d => {
+      if (d.success) { SL.allTables = d.items || []; slRenderTableList(); }
+      else document.getElementById("slTblList").innerHTML = `<div style="padding:12px;color:#f38ba8;font-size:.78rem;">${d.error||"Failed"}</div>`;
+    })
+    .catch(() => { document.getElementById("slTblList").innerHTML = `<div style="padding:12px;color:#f38ba8;font-size:.78rem;">Network error</div>`; });
+}
+
+function slRenderTableList() {
+  const q = (document.getElementById("slTblSearch").value||"").toLowerCase();
+  const items = SL.allTables.filter(t => !q || t.name.toLowerCase().includes(q));
+  const tables = items.filter(t => t.type==="TABLE");
+  const views  = items.filter(t => t.type==="VIEW");
+  let html = "";
+  const grp = (label, arr) => {
+    if (!arr.length) return;
+    html += `<div><div class="sl-tbl-group-label">${label}</div>`;
+    arr.forEach(t => {
+      const act = SL.primaryTable===t.name ? " active" : "";
+      html += `<div class="sl-tbl-item${act}" draggable="true"
+        onclick="slSelectPrimary('${t.name}')"
+        ondragstart="slDragTableStart(event,'${t.name}')"
+        ondragend="slDragTableEnd(event)">
+        <span>&#9776; ${t.name}</span>
+        <span class="sl-tbl-badge">${t.type==="VIEW"?"VIEW":"TBL"}</span>
+      </div>`;
+    });
+    html += `</div>`;
+  };
+  grp("Tables", tables);
+  grp("Views",  views);
+  if (!tables.length && !views.length) html = `<div style="padding:12px;color:#6c7086;font-size:.78rem;text-align:center;">No matches</div>`;
+  document.getElementById("slTblList").innerHTML = html;
+}
+
+/* ─── Table Drag from Sidebar ────────────────────────────────── */
+let _dragTableName = null;
+
+function slDragTableStart(e, name) {
+  _dragTableName = name;
+  e.dataTransfer.effectAllowed = "copy";
+  e.dataTransfer.setData("text/plain", name);
+}
+function slDragTableEnd(e) { _dragTableName = null; }
+
+function slDragOverZone(e, zone) {
+  if (!_dragTableName) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "copy";
+  const el = zone === "primary"
+    ? document.getElementById("slPrimaryDropZone")
+    : document.getElementById("slJoinBar");
+  if (el) el.classList.add("sl-drop-active");
+}
+function slDragLeaveZone(e, zone) {
+  // only clear if actually leaving the zone (not just a child element)
+  const el = zone === "primary"
+    ? document.getElementById("slPrimaryDropZone")
+    : document.getElementById("slJoinBar");
+  if (el && !el.contains(e.relatedTarget)) el.classList.remove("sl-drop-active");
+}
+function slDropTable(e, zone) {
+  e.preventDefault();
+  const name = _dragTableName || e.dataTransfer.getData("text/plain");
+  _dragTableName = null;
+  const primary = document.getElementById("slPrimaryDropZone");
+  const joinBar = document.getElementById("slJoinBar");
+  if (primary) primary.classList.remove("sl-drop-active");
+  if (joinBar)  joinBar.classList.remove("sl-drop-active");
+  if (!name) return;
+  if (zone === "primary") {
+    slSelectPrimary(name);
+  } else {
+    // Add as a new join row and pre-fill the table
+    if (!SL.primaryTable) { slSelectPrimary(name); return; }
+    SL.joinSeq++;
+    SL.joins.push({id:SL.joinSeq, table:name.toUpperCase(), join_type:"INNER", left_alias:"t0", left_col:"", right_col:""});
+    const alias = `t${SL.joins.length}`;
+    slLoadColumns(alias, name.toUpperCase(), () => { slRenderColList(); slRenderJoinRows(); slSyncAllDropdowns(); });
+    slRenderJoinRows();
+  }
+}
+
+/* ─── Select / Remove Primary Table ─────────────────────────── */
+function slSelectPrimary(name) {
+  SL.primaryTable = name;
+  SL.tableColumns = {};
+  SL.joins = [];
+  slRenderTableList();
+  slRenderJoinRows();
+  document.getElementById("slTableNameLabel").textContent = name;
+  document.getElementById("slTableNameLabel").style.display = "";
+  document.getElementById("slRemovePrimaryBtn").style.display = "";
+  document.getElementById("slNoTableHint").style.display = "none";
+  document.getElementById("slJoinBar").style.display = "";
+  slLoadColumns("t0", name, () => { slRenderColList(); slSyncAllDropdowns(); });
+}
+
+function slRemovePrimaryTable() {
+  SL.primaryTable = null;
+  SL.tableColumns = {};
+  SL.joins = [];
+  SL.fieldRows = [];
+  SL.filterRows = [];
+  slRenderTableList();
+  slRenderJoinRows();
+  slRenderFieldList();
+  slRenderFilterList();
+  slSyncAllDropdowns();
+  slEnableRun();
+  document.getElementById("slTableNameLabel").style.display = "none";
+  document.getElementById("slRemovePrimaryBtn").style.display = "none";
+  document.getElementById("slNoTableHint").style.display = "";
+  document.getElementById("slJoinBar").style.display = "none";
+  document.getElementById("slColList").innerHTML = `<div style="padding:14px;color:#94a3b8;font-size:.78rem;text-align:center;">No table selected</div>`;
+  document.getElementById("slColCount").textContent = "";
+  document.getElementById("slResultBody").innerHTML = `<div class="sl-no-result"><span style="font-size:2rem;">📊</span>Run a report to see results here</div>`;
+  document.getElementById("slResultCount").textContent = "";
+  document.getElementById("slResultError").textContent = "";
+  document.getElementById("slSqlBox").textContent = "";
+  document.getElementById("slSqlBox").style.display = "none";
+}
+
+/* ─── Load Columns for an alias ─────────────────────────────── */
+function slLoadColumns(alias, tableName, cb) {
+  document.getElementById("slColList").innerHTML = `<div style="padding:12px;color:#94a3b8;font-size:.78rem;text-align:center;">Loading…</div>`;
+  fetch(`{{ url_for('reports.smart_list_columns') }}?table=${encodeURIComponent(tableName)}`)
+    .then(r => r.json())
+    .then(d => {
+      if (d.success) {
+        SL.tableColumns[alias] = d.columns || [];
+        if (cb) cb();
+      } else {
+        document.getElementById("slColList").innerHTML = `<div style="padding:12px;color:#f38ba8;font-size:.78rem;">${d.error}</div>`;
+      }
+    })
+    .catch(() => { document.getElementById("slColList").innerHTML = `<div style="padding:12px;color:#f38ba8;font-size:.78rem;">Network error</div>`; });
+}
+
+/* ─── Render Available Columns (grouped by alias) ────────────── */
+function slRenderColList() {
+  const q = (document.getElementById("slColSearch").value||"").toLowerCase();
+  const addedKeys = new Set(SL.fieldRows.map(r => `${r.table_alias}::${r.column}`));
+  const aliases = slGetAliasOrder();
+  let html = "";
+  let total = 0;
+  aliases.forEach(alias => {
+    const tname = alias==="t0" ? SL.primaryTable : (SL.joins.find((_,i)=>`t${i+1}`===alias)||{}).table||alias;
+    const cols = (SL.tableColumns[alias]||[]).filter(c => !q || c.name.toLowerCase().includes(q));
+    if (!cols.length) return;
+    total += cols.length;
+    html += `<div class="sl-tbl-group-avail">
+      <div class="sl-tbl-group-avail-label">
+        <span class="sl-tbl-alias-badge">${alias}</span> ${tname}
+      </div>`;
+    cols.forEach(c => {
+      const key = `${alias}::${c.name}`;
+      const added = addedKeys.has(key) ? " added" : "";
+      const icon  = c.type.startsWith("NUMBER")||c.type.startsWith("FLOAT") ? "🔢" : c.type.startsWith("DATE")||c.type.startsWith("TIMESTAMP") ? "📅" : "🔤";
+      html += `<div class="sl-col-item${added}" onclick="slAddField('${alias}','${c.name}','${c.type}')">
+        <span style="font-size:.7rem;">${icon}</span>
+        <span>${c.name}</span>
+        <span class="sl-col-type">${c.type}</span>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+  if (!html) html = `<div style="padding:14px;color:#94a3b8;font-size:.78rem;text-align:center;">No columns</div>`;
+  document.getElementById("slColList").innerHTML = html;
+  document.getElementById("slColCount").textContent = total ? `${total} cols` : "";
+}
+
+function slGetAliasOrder() {
+  const aliases = ["t0"];
+  SL.joins.forEach((_, i) => aliases.push(`t${i+1}`));
+  return aliases.filter(a => SL.tableColumns[a]);
+}
+
+/* ─── Add / Remove Fields ────────────────────────────────────── */
+function slAddField(tableAlias, colName, colType) {
+  const key = `${tableAlias}::${colName}`;
+  if (SL.fieldRows.find(r => r.table_alias===tableAlias && r.column===colName)) return;
+  SL.fieldSeq++;
+  SL.fieldRows.push({id:SL.fieldSeq, table_alias:tableAlias, column:colName, type:colType, alias:colName, aggregate:""});
+  slRenderFieldList();
+  slRenderColList();
+  slSyncAllDropdowns();
+  slEnableRun();
+}
+
+function slRemoveField(id) {
+  SL.fieldRows = SL.fieldRows.filter(r => r.id!==id);
+  slRenderFieldList();
+  slRenderColList();
+  slSyncAllDropdowns();
+  slEnableRun();
+}
+
+function slUpdateFieldAlias(id, val) { const r=SL.fieldRows.find(r=>r.id===id); if(r) r.alias=val; }
+function slUpdateFieldAgg(id, val)   { const r=SL.fieldRows.find(r=>r.id===id); if(r) r.aggregate=val; }
+
+function slRenderFieldList() {
+  const list  = document.getElementById("slFieldList");
+  const badge = document.getElementById("slFieldBadge");
+  if (!SL.fieldRows.length) {
+    list.innerHTML = `<div class="sl-drop-hint">Click columns from the left panel to add them</div>`;
+    badge.style.display="none"; return;
+  }
+  badge.style.display=""; badge.textContent = SL.fieldRows.length;
+  list.innerHTML = SL.fieldRows.map(r => {
+    const isNum = r.type.startsWith("NUMBER")||r.type.startsWith("FLOAT");
+    const aggOpts = isNum
+      ? `<option value="">None</option><option>SUM</option><option>AVG</option><option>MIN</option><option>MAX</option><option>COUNT</option><option value="COUNT DISTINCT">CNT DST</option>`
+      : `<option value="">None</option><option>COUNT</option><option value="COUNT DISTINCT">CNT DST</option><option>MIN</option><option>MAX</option>`;
+    return `<div class="sl-field-row" draggable="true" data-id="${r.id}"
+        ondragstart="slDragStart(event,${r.id})" ondragover="slDragOver(event)"
+        ondrop="slDrop(event,${r.id})" ondragleave="slDragLeave(event)" ondragend="slDragEnd(event)">
+      <span class="sl-drag-handle">&#9776;</span>
+      <span class="sl-field-alias-tag">${r.table_alias}</span>
+      <span class="sl-field-col" title="${r.column}">${r.column}</span>
+      <input class="sl-field-alias" type="text" value="${r.alias}" placeholder="Alias"
+        onchange="slUpdateFieldAlias(${r.id},this.value)">
+      <select class="sl-field-agg" onchange="slUpdateFieldAgg(${r.id},this.value)">${aggOpts}</select>
+      <button class="sl-field-rm" onclick="slRemoveField(${r.id})">&#10005;</button>
+    </div>`;
+  }).join("");
+  SL.fieldRows.forEach(r => {
+    const sel = list.querySelector(`[data-id="${r.id}"] .sl-field-agg`);
+    if (sel) sel.value = r.aggregate;
+  });
+}
+
+/* ─── Drag-and-Drop ──────────────────────────────────────────── */
+let _dragId = null;
+function slDragStart(e,id){ _dragId=id; e.currentTarget.classList.add("dragging"); }
+function slDragEnd(e){ e.currentTarget.classList.remove("dragging"); _dragId=null; }
+function slDragOver(e){ e.preventDefault(); e.currentTarget.classList.add("drag-over"); }
+function slDragLeave(e){ e.currentTarget.classList.remove("drag-over"); }
+function slDrop(e,targetId){
+  e.preventDefault(); e.currentTarget.classList.remove("drag-over");
+  if (_dragId===null||_dragId===targetId) return;
+  const fi=SL.fieldRows.findIndex(r=>r.id===_dragId);
+  const ti=SL.fieldRows.findIndex(r=>r.id===targetId);
+  if(fi<0||ti<0) return;
+  const [mv]=SL.fieldRows.splice(fi,1);
+  SL.fieldRows.splice(ti,0,mv);
+  slRenderFieldList();
+}
+
+/* ─── JOIN Rows ──────────────────────────────────────────────── */
+function slAddJoinRow() {
+  SL.joinSeq++;
+  SL.joins.push({id:SL.joinSeq, table:"", join_type:"INNER", left_alias:"t0", left_col:"", right_col:""});
+  slRenderJoinRows();
+}
+
+function slRemoveJoin(id) {
+  const idx = SL.joins.findIndex(j => j.id===id);
+  if (idx<0) return;
+  const alias = `t${idx+1}`;
+  SL.joins.splice(idx,1);
+  // Re-alias subsequent joins; remove any field/filter using removed alias
+  SL.fieldRows  = SL.fieldRows.filter(r  => r.table_alias !== alias);
+  SL.filterRows = SL.filterRows.filter(r => r.table_alias !== alias);
+  delete SL.tableColumns[alias];
+  // Shift aliases for joins after the removed one
+  for (let i=idx; i<SL.joins.length; i++) {
+    const oldAlias=`t${i+2}`, newAlias=`t${i+1}`;
+    if (SL.tableColumns[oldAlias]) { SL.tableColumns[newAlias]=SL.tableColumns[oldAlias]; delete SL.tableColumns[oldAlias]; }
+    SL.fieldRows.forEach(r  => { if(r.table_alias===oldAlias)  r.table_alias=newAlias; });
+    SL.filterRows.forEach(r => { if(r.table_alias===oldAlias)  r.table_alias=newAlias; });
+  }
+  slRenderJoinRows(); slRenderColList(); slRenderFieldList(); slRenderFilterList(); slSyncAllDropdowns(); slEnableRun();
+}
+
+function slUpdateJoin(id, key, val) {
+  const j = SL.joins.find(j=>j.id===id); if(!j) return;
+  j[key]=val;
+  if (key==="table" && val) {
+    const idx=SL.joins.indexOf(j);
+    const alias=`t${idx+1}`;
+    slLoadColumns(alias, val.toUpperCase(), () => { slRenderColList(); slRenderJoinRows(); slSyncAllDropdowns(); });
+  }
+}
+
+function slRenderJoinRows() {
+  const tblOptions = SL.allTables.map(t=>`<option value="${t.name}">${t.name}</option>`).join("");
+  const container  = document.getElementById("slJoinRows");
+  if (!SL.joins.length) { container.innerHTML=""; return; }
+  container.innerHTML = SL.joins.map((j,i) => {
+    const alias     = `t${i+1}`;
+    const leftAliases = ["t0",...SL.joins.slice(0,i).map((_,x)=>`t${x+1}`)];
+    const leftAliasSel = leftAliases.map(a=>`<option value="${a}" ${j.left_alias===a?"selected":""}>${a}</option>`).join("");
+    const leftCols    = (SL.tableColumns[j.left_alias]||[]).map(c=>`<option value="${c.name}" ${j.left_col===c.name?"selected":""}>${c.name}</option>`).join("");
+    const rightCols   = (SL.tableColumns[alias]||[]).map(c=>`<option value="${c.name}" ${j.right_col===c.name?"selected":""}>${c.name}</option>`).join("");
+    const jtSel = SL_JOIN_TYPES.map(t=>`<option ${j.join_type===t?"selected":""}>${t}</option>`).join("");
+    return `<div class="sl-join-row">
+      <span class="sl-join-alias-tag">${alias}</span>
+      <select class="sl-join-sel" onchange="slUpdateJoin(${j.id},'join_type',this.value)">${jtSel}</select>
+      <span style="font-size:.72rem;color:#92400e;">JOIN</span>
+      <select class="sl-join-sel" style="min-width:130px;" onchange="slUpdateJoin(${j.id},'table',this.value)">
+        <option value="">— Table —</option>${tblOptions}
+      </select>
+      <span class="sl-join-eq">ON</span>
+      <select class="sl-join-sel" onchange="slUpdateJoin(${j.id},'left_alias',this.value);slRenderJoinRows();">${leftAliasSel}</select>
+      <span style="font-size:.7rem;color:#6b7280;">.</span>
+      <select class="sl-join-sel" style="min-width:110px;" onchange="slUpdateJoin(${j.id},'left_col',this.value)">
+        <option value="">— Col —</option>${leftCols}
+      </select>
+      <span class="sl-join-eq">=</span>
+      <select class="sl-join-sel" style="min-width:110px;" onchange="slUpdateJoin(${j.id},'right_col',this.value)">
+        <option value="">— Col —</option>${rightCols}
+      </select>
+      <button class="sl-join-rm" onclick="slRemoveJoin(${j.id})" title="Remove join">&#10005;</button>
+    </div>`;
+  }).join("");
+  // Restore select values
+  SL.joins.forEach((j,i) => {
+    const row = container.querySelectorAll(".sl-join-row")[i];
+    if (!row) return;
+    const sels = row.querySelectorAll("select");
+    if (sels[1]) sels[1].value = j.table;
+  });
+}
+
+/* ─── Filters ────────────────────────────────────────────────── */
+function slAddFilterRow() {
+  SL.filterSeq++;
+  SL.filterRows.push({id:SL.filterSeq, table_alias:"t0", column:"", operator:"=", value:""});
+  slRenderFilterList();
+}
+function slRemoveFilter(id) { SL.filterRows=SL.filterRows.filter(r=>r.id!==id); slRenderFilterList(); }
+function slUpdateFilter(id, key, val) {
+  const r=SL.filterRows.find(r=>r.id===id); if(r){ r[key]=val; if(key==="operator") slRenderFilterList(); }
+}
+function slUpdateFilterTbl(id, alias) {
+  const r=SL.filterRows.find(r=>r.id===id); if(r){ r.table_alias=alias; r.column=""; slRenderFilterList(); }
+}
+
+function slRenderFilterList() {
+  const aliases = slGetAliasOrder();
+  const aliasSel = aliases.map(a=>`<option value="${a}">${a}</option>`).join("");
+  const opSel    = SL_OPS.map(o=>`<option>${o}</option>`).join("");
+  document.getElementById("slFilterList").innerHTML = SL.filterRows.map(r => {
+    const noVal = r.operator==="IS NULL"||r.operator==="IS NOT NULL";
+    const colOpts = (SL.tableColumns[r.table_alias]||[]).map(c=>`<option value="${c.name}" ${r.column===c.name?"selected":""}>${c.name}</option>`).join("");
+    return `<div class="sl-filter-row" data-fid="${r.id}">
+      <select class="sl-filter-tbl" onchange="slUpdateFilterTbl(${r.id},this.value)">${aliasSel}</select>
+      <select class="sl-filter-col" onchange="slUpdateFilter(${r.id},'column',this.value)"><option value="">— Col —</option>${colOpts}</select>
+      <select class="sl-filter-op"  onchange="slUpdateFilter(${r.id},'operator',this.value)">${opSel}</select>
+      <input class="sl-filter-val" type="text" placeholder="Value" ${noVal?"style='display:none;'":""}
+        onchange="slUpdateFilter(${r.id},'value',this.value)" value="${r.value||""}">
+      <button class="sl-btn-icon" onclick="slRemoveFilter(${r.id})">&#10005;</button>
+    </div>`;
+  }).join("") || `<div style="color:#94a3b8;font-size:.75rem;">No filters — all rows will be returned</div>`;
+  SL.filterRows.forEach(r => {
+    const row = document.querySelector(`#slFilterList [data-fid="${r.id}"]`);
+    if (!row) return;
+    const tSel = row.querySelector(".sl-filter-tbl");
+    const oSel = row.querySelector(".sl-filter-op");
+    if (tSel) tSel.value = r.table_alias;
+    if (oSel) oSel.value = r.operator;
+  });
+}
+
+/* ─── Order By dropdowns ─────────────────────────────────────── */
+function slSyncOrderTblOptions() {
+  const sel = document.getElementById("slOrderTbl");
+  const cur = sel.value;
+  sel.innerHTML = slGetAliasOrder().map(a=>`<option value="${a}">${a}</option>`).join("") || `<option value="t0">t0</option>`;
+  if (cur) sel.value = cur;
+}
+function slSyncOrderColOptions() {
+  const alias = document.getElementById("slOrderTbl").value || "t0";
+  const sel   = document.getElementById("slOrderCol");
+  const cur   = sel.value;
+  sel.innerHTML = `<option value="">— None —</option>` +
+    (SL.tableColumns[alias]||[]).map(c=>`<option value="${c.name}">${c.name}</option>`).join("");
+  if (cur) sel.value = cur;
+}
+function slSyncAllDropdowns() {
+  slSyncOrderTblOptions();
+  slSyncOrderColOptions();
+  slRenderFilterList();
+}
+
+/* ─── Enable/Disable buttons ─────────────────────────────────── */
+function slEnableRun() {
+  const ok = SL.primaryTable && SL.fieldRows.length > 0;
+  document.getElementById("slRunBtn").disabled   = !ok;
+  document.getElementById("slExportBtn").disabled = !ok;
+}
+
+/* ─── Build payload ──────────────────────────────────────────── */
+function slBuildPayload(limitOverride) {
+  const orderCol = document.getElementById("slOrderCol").value;
+  const orderTbl = document.getElementById("slOrderTbl").value || "t0";
+  const orderDir = document.getElementById("slOrderDir").value;
+
+  // Read aggregate and alias DIRECTLY from DOM to avoid stale state
+  const fieldList = document.getElementById("slFieldList");
+  const fields = SL.fieldRows.map(r => {
+    const row      = fieldList ? fieldList.querySelector(`[data-id="${r.id}"]`) : null;
+    const aggSel   = row ? row.querySelector(".sl-field-agg")   : null;
+    const aliasInp = row ? row.querySelector(".sl-field-alias") : null;
+    const aggregate = aggSel   ? (aggSel.value   || "")        : (r.aggregate || "");
+    const alias     = aliasInp ? (aliasInp.value || r.column)  : (r.alias     || r.column);
+    // Keep state in sync while we're here
+    r.aggregate = aggregate;
+    r.alias     = alias;
+    return { table_alias: r.table_alias, column: r.column, alias, aggregate };
+  });
+
+  // Read filter values from DOM too
+  const filterList = document.getElementById("slFilterList");
+  const filters = SL.filterRows.filter(r => r.column).map(r => {
+    const row    = filterList ? filterList.querySelector(`[data-fid="${r.id}"]`) : null;
+    const valInp = row ? row.querySelector(".sl-filter-val") : null;
+    const value  = valInp ? valInp.value : (r.value || "");
+    r.value = value;
+    return { table_alias: r.table_alias, column: r.column, operator: r.operator, value };
+  });
+
+  return {
+    table: SL.primaryTable,
+    joins: SL.joins.map(j => ({
+      table: j.table,
+      join_type:   j.join_type,
+      left_alias:  j.left_alias,
+      left_col:    j.left_col,
+      right_col:   j.right_col,
+    })),
+    fields,
+    filters,
+    order_by: orderCol ? [{table_alias:orderTbl, column:orderCol, direction:orderDir}] : [],
+    limit: limitOverride || parseInt(document.getElementById("slLimit").value) || 500,
+  };
+}
+
+/* ─── Run ────────────────────────────────────────────────────── */
+function slRun() {
+  if (!SL.primaryTable || !SL.fieldRows.length) return;
+  const payload = slBuildPayload();
+  document.getElementById("slSpinner").classList.add("running");
+  document.getElementById("slRunBtn").disabled = true;
+  document.getElementById("slResultCount").textContent  = "";
+  document.getElementById("slResultError").textContent  = "";
+  fetch("{{ url_for('reports.smart_list_run') }}", {
+    method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload),
+  })
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById("slSpinner").classList.remove("running");
+      document.getElementById("slRunBtn").disabled = false;
+      if (d.success) {
+        document.getElementById("slResultCount").textContent = `${d.count} row${d.count!==1?"s":""}`;
+        document.getElementById("slSqlBox").textContent = d.sql||"";
+        slRenderResults(d.columns, d.rows);
+      } else {
+        document.getElementById("slResultError").textContent = d.error||"Unknown error";
+        // Show SQL that failed so user can inspect it
+        if (d.sql) {
+          document.getElementById("slSqlBox").textContent = d.sql;
+          document.getElementById("slSqlBox").style.display = "block";
+        }
+        document.getElementById("slResultBody").innerHTML =
+          `<div class="sl-no-result"><span style="font-size:1.5rem;">⚠️</span>
+           <strong>${d.error||"Unknown error"}</strong>
+           ${d.sql ? '<br><small style="color:#64748b;">See SQL Preview above for the generated query</small>' : ""}
+           </div>`;
+      }
+    })
+    .catch(e => {
+      document.getElementById("slSpinner").classList.remove("running");
+      document.getElementById("slRunBtn").disabled = false;
+      document.getElementById("slResultError").textContent = "Network error";
+    });
+}
+
+function slRenderResults(columns, rows) {
+  if (!columns||!columns.length) {
+    document.getElementById("slResultBody").innerHTML = `<div class="sl-no-result">No data returned</div>`; return;
+  }
+  let html = `<table class="sl-result-table"><thead><tr><th style="color:#94a3b8;width:36px;">#</th>${columns.map(c=>`<th>${c}</th>`).join("")}</tr></thead><tbody>`;
+  if (rows&&rows.length) rows.forEach((row,i) => { html+=`<tr><td style="color:#94a3b8;text-align:right;font-size:.72rem;">${i+1}</td>${row.map(v=>`<td>${v??""}</td>`).join("")}</tr>`; });
+  else html+=`<tr><td colspan="${columns.length+1}" style="text-align:center;color:#94a3b8;padding:18px;">No rows</td></tr>`;
+  html+=`</tbody></table>`;
+  document.getElementById("slResultBody").innerHTML = html;
+}
+
+/* ─── Export ─────────────────────────────────────────────────── */
+function slExport() {
+  if (!SL.primaryTable || !SL.fieldRows.length) return;
+  const p = slBuildPayload(50000);
+  const params = new URLSearchParams({
+    table:    p.table,
+    joins:    JSON.stringify(p.joins),
+    fields:   JSON.stringify(p.fields),
+    filters:  JSON.stringify(p.filters),
+    order_by: JSON.stringify(p.order_by),
+    limit:    p.limit,
+  });
+  window.open(`{{ url_for('reports.smart_list_export') }}?${params}`, "_blank");
+}
+
+/* ─── SQL Toggle ─────────────────────────────────────────────── */
+function slToggleSql() {
+  const box = document.getElementById("slSqlBox");
+  box.style.display = box.style.display==="none"||!box.style.display ? "block" : "none";
+}
+
+/* ─── Tab Switching ──────────────────────────────────────────── */
+function slSwitchTab(mode) {
+  const visual = document.getElementById("slVisualPanel");
+  const sql    = document.getElementById("slSqlEditorPanel");
+  const ai     = document.getElementById("slAiPanel");
+  const side   = document.getElementById("slSidebar");
+  const res    = document.getElementById("slResultsPanel");
+  const rsz    = document.getElementById("slResizeHandle");
+  const tV     = document.getElementById("slTabVisual");
+  const tS     = document.getElementById("slTabSql");
+  const tA     = document.getElementById("slTabAi");
+
+  [tV, tS, tA].forEach(t => t.classList.remove("active"));
+  visual.style.display = "none";
+  sql.classList.remove("visible");
+  ai.classList.remove("visible");
+
+  if (mode === "sql") {
+    if (side) side.style.display = "";
+    if (res)  res.style.display = "";
+    if (rsz)  rsz.style.display = "";
+    sql.classList.add("visible");
+    tS.classList.add("active");
+    document.getElementById("slSqlEditorArea").focus();
+  } else if (mode === "ai") {
+    if (side) side.style.display = "none";
+    if (res)  res.style.display = "none";
+    if (rsz)  rsz.style.display = "none";
+    ai.classList.add("visible");
+    tA.classList.add("active");
+    document.getElementById("slAiInput").focus();
+    slAiScrollBottom();
+  } else {
+    if (side) side.style.display = "";
+    if (res)  res.style.display = "";
+    if (rsz)  rsz.style.display = "";
+    visual.style.display = "flex";
+    visual.style.flexDirection = "column";
+    visual.style.flex = "1 1 0";
+    visual.style.minHeight = "0";
+    tV.classList.add("active");
+  }
+}
+
+/* ─── AI Knowledge Base ──────────────────────────────────────── */
+const SL_AI_KB_KEY = "sl_ai_knowledge_base";
+
+function slAiKbToggle() {
+  const body  = document.getElementById("slAiKbBody");
+  const arrow = document.getElementById("slAiKbArrow");
+  const open  = body.classList.toggle("open");
+  arrow.textContent = open ? "▲" : "▼";
+}
+
+function slAiKbSave() {
+  const text = document.getElementById("slAiKbText").value;
+  localStorage.setItem(SL_AI_KB_KEY, text);
+  const saved = document.getElementById("slAiKbSaved");
+  saved.style.display = "inline";
+  setTimeout(() => { saved.style.display = "none"; }, 2000);
+}
+
+function slAiKbLoad() {
+  const saved = localStorage.getItem(SL_AI_KB_KEY);
+  if (saved) document.getElementById("slAiKbText").value = saved;
+}
+
+function slAiKbGet() {
+  return (localStorage.getItem(SL_AI_KB_KEY) || "").trim();
+}
+
+document.addEventListener("DOMContentLoaded", slAiKbLoad);
+
+/* ─── AI Chat ────────────────────────────────────────────────── */
+const SL_AI_HISTORY_LIST_URL = "{{ url_for('reports.smart_list_ai_history_list') }}";
+const SL_AI_HISTORY_GET_URL_BASE = "{{ url_for('reports.smart_list_ai_history_get', chat_id='__CHAT_ID__') }}";
+const SL_AI_HISTORY_DELETE_URL_BASE = "{{ url_for('reports.smart_list_ai_history_get', chat_id='__CHAT_ID__') }}";
+const SL_AI_HISTORY_RENAME_URL_BASE = "{{ url_for('reports.smart_list_ai_history_rename', chat_id='__CHAT_ID__') }}";
+let slAiHistory = [];   // [{role, content}]
+let slAiChatId = "";
+
+function slAiGenerateChatId() {
+  const r = Math.random().toString(36).slice(2, 10);
+  return `chat_${Date.now()}_${r}`;
+}
+
+function slAiResetMessages() {
+  const container = document.getElementById("slAiMessages");
+  if (!container) return;
+  container.innerHTML = `
+    <div class="sl-ai-msg assistant">
+      <div class="sl-ai-avatar">AI</div>
+      <div class="sl-ai-bubble">
+        <strong>Hello! I'm your ERP AI Assistant.</strong><br><br>
+        I know your database schema and can help you:<br>
+        &#128202; Write SQL queries for any report<br>
+        &#128269; Explain what tables and columns mean<br>
+        &#128221; Answer any question about your data<br><br>
+        <em>Generated SQL can be copied directly to the SQL Editor tab.</em>
+      </div>
+    </div>
+    <div class="sl-ai-typing" id="slAiTyping">
+      <div class="sl-ai-avatar" style="background:#8b5cf6;color:#fff;">AI</div>
+      <div class="sl-ai-bubble" style="background:#fff;border:1px solid #e2e8f0;">
+        <div class="sl-ai-dots"><span></span><span></span><span></span></div>
+      </div>
+    </div>
+  `;
+}
+
+function slAiRenderHistory() {
+  slAiResetMessages();
+  const quick = document.getElementById("slAiQuick");
+  if (quick) quick.style.display = slAiHistory.length ? "none" : "flex";
+  slAiHistory.forEach((m, idx) => {
+    const role = m.role === "user" ? "user" : "assistant";
+    slAiAppendBubble(role, m.content || "", idx);
+  });
+  slAiScrollBottom();
+}
+
+function slAiFormatSessionLabel(s) {
+  const manualTitle = String(s.chat_title || "").trim();
+  const first = (s.first_prompt || "Untitled chat").replace(/\s+/g, " ").trim();
+  const base = manualTitle || first;
+  const short = base.length > 55 ? `${base.slice(0, 55)}...` : base;
+  const cnt = Number(s.message_count || 0);
+  const ts = slAiFormatWhen(s.last_message_at);
+  return `${short} (${cnt} msg) - ${ts}`;
+}
+
+function slAiFormatWhen(raw) {
+  const t = String(raw || "").trim();
+  if (!t) return "unknown time";
+  const dt = new Date(t.includes("T") ? t : t.replace(" ", "T"));
+  if (Number.isNaN(dt.getTime())) return t;
+  return dt.toLocaleString([], {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+async function slAiRefreshChatSessions(selectedChatId = "") {
+  const sel = document.getElementById("slAiHistorySelect");
+  if (!sel) return;
+  try {
+    const res = await fetch(`${SL_AI_HISTORY_LIST_URL}?limit=20`);
+    const d = await res.json();
+    const rows = Array.isArray(d.sessions) ? d.sessions : [];
+    sel.innerHTML = `<option value="">Current chat</option>`;
+    rows.forEach((s) => {
+      const opt = document.createElement("option");
+      opt.value = String(s.chat_id || "");
+      opt.textContent = slAiFormatSessionLabel(s);
+      if (selectedChatId && opt.value === selectedChatId) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  } catch (_e) {
+    // Keep UI usable even if history endpoint fails.
+  }
+}
+
+async function slAiLoadChatById(chatId) {
+  const id = String(chatId || "").trim();
+  if (!id) return;
+  try {
+    const url = SL_AI_HISTORY_GET_URL_BASE.replace("__CHAT_ID__", encodeURIComponent(id));
+    const res = await fetch(url);
+    const d = await res.json();
+    if (!d.success) return;
+    slAiChatId = id;
+    slAiHistory = Array.isArray(d.messages) ? d.messages.map((m) => ({
+      role: String(m.role || ""),
+      content: String(m.content || "")
+    })) : [];
+    slAiRenderHistory();
+    await slAiRefreshChatSessions(slAiChatId);
+  } catch (_e) {
+    // Ignore; user can start new chat.
+  }
+}
+
+function slAiLoadSelectedChat() {
+  const sel = document.getElementById("slAiHistorySelect");
+  const chatId = sel ? String(sel.value || "").trim() : "";
+  if (!chatId) return;
+  slAiLoadChatById(chatId);
+}
+
+async function slAiRenameSelectedChat() {
+  const sel = document.getElementById("slAiHistorySelect");
+  const chatId = sel ? String(sel.value || "").trim() : "";
+  if (!chatId) {
+    alert("Select a saved chat to rename.");
+    return;
+  }
+  const currentText = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : "";
+  const rawTitle = prompt("Enter chat title:", currentText ? currentText.split(" (")[0] : "");
+  if (rawTitle === null) return;
+  const title = String(rawTitle || "").trim();
+  try {
+    const url = SL_AI_HISTORY_RENAME_URL_BASE.replace("__CHAT_ID__", encodeURIComponent(chatId));
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ title }),
+    });
+    const d = await res.json();
+    if (!d.success) {
+      alert(d.error || "Failed to rename chat.");
+      return;
+    }
+    await slAiRefreshChatSessions(chatId);
+  } catch (_e) {
+    alert("Failed to rename chat.");
+  }
+}
+
+async function slAiDeleteSelectedChat() {
+  const sel = document.getElementById("slAiHistorySelect");
+  const chatId = sel ? String(sel.value || "").trim() : "";
+  if (!chatId) {
+    alert("Select a saved chat to delete.");
+    return;
+  }
+  if (!confirm("Delete this saved chat permanently?")) return;
+  try {
+    const url = SL_AI_HISTORY_DELETE_URL_BASE.replace("__CHAT_ID__", encodeURIComponent(chatId));
+    const res = await fetch(url, { method: "DELETE" });
+    const d = await res.json();
+    if (!d.success) {
+      alert(d.error || "Failed to delete chat.");
+      return;
+    }
+    if (slAiChatId === chatId) {
+      slAiStartNewChat();
+    }
+    await slAiRefreshChatSessions();
+  } catch (_e) {
+    alert("Failed to delete chat.");
+  }
+}
+
+function slAiStartNewChat() {
+  slAiChatId = slAiGenerateChatId();
+  slAiHistory = [];
+  slAiRenderHistory();
+  const sel = document.getElementById("slAiHistorySelect");
+  if (sel) sel.value = "";
+}
+
+function slAiEditAsk(historyIndex) {
+  const idx = Number(historyIndex);
+  if (!Number.isInteger(idx) || idx < 0 || idx >= slAiHistory.length) return;
+  const msg = slAiHistory[idx];
+  if (!msg || msg.role !== "user") return;
+  const editedRaw = prompt("Edit your ask:", String(msg.content || ""));
+  if (editedRaw === null) return;
+  const edited = String(editedRaw || "").trim();
+  if (!edited) {
+    alert("Ask cannot be empty.");
+    return;
+  }
+  if (idx < slAiHistory.length - 1) {
+    const ok = confirm("This will start a new chat from this edited ask. Continue?");
+    if (!ok) return;
+  }
+  // Branch into a fresh chat from the point before edited message.
+  slAiHistory = slAiHistory.slice(0, idx);
+  slAiChatId = slAiGenerateChatId();
+  const sel = document.getElementById("slAiHistorySelect");
+  if (sel) sel.value = "";
+  slAiRenderHistory();
+  const input = document.getElementById("slAiInput");
+  if (!input) return;
+  input.value = edited;
+  input.style.height = "auto";
+  input.style.height = Math.min(input.scrollHeight, 120) + "px";
+  input.focus();
+  slAiSend();
+}
+
+function slAiScrollBottom() {
+  const el = document.getElementById("slAiMessages");
+  if (el) setTimeout(() => { el.scrollTop = el.scrollHeight; }, 50);
+}
+
+function slAiQuickPrompt(btn) {
+  document.getElementById("slAiInput").value = btn.textContent.trim();
+  slAiSend();
+}
+
+function slAiSend() {
+  const input = document.getElementById("slAiInput");
+  const text  = (input.value || "").trim();
+  if (!text) return;
+  input.value = "";
+  input.style.height = "";
+
+  // Hide quick prompts after first message
+  const quick = document.getElementById("slAiQuick");
+  if (quick) quick.style.display = "none";
+
+  // Add user bubble
+  slAiHistory.push({role:"user", content:text});
+  slAiAppendBubble("user", text, slAiHistory.length - 1);
+  slAiScrollBottom();
+
+  // Show typing indicator
+  document.getElementById("slAiTyping").classList.add("visible");
+  document.getElementById("slAiSend").disabled = true;
+  slAiScrollBottom();
+
+  fetch("{{ url_for('reports.smart_list_ai') }}", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      messages:       slAiHistory,
+      chat_id:        slAiChatId,
+      latest_user_message: text,
+      schema:         SL.allTables,
+      knowledge_base: slAiKbGet(),
+    }),
+  })
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById("slAiTyping").classList.remove("visible");
+      document.getElementById("slAiSend").disabled = false;
+      if (d.success) {
+        if (d.chat_id) slAiChatId = String(d.chat_id);
+        slAiHistory.push({role:"assistant", content:d.reply});
+        // Show tool calls in chat
+        if (d.tool_calls && d.tool_calls.length) {
+          d.tool_calls.forEach(tc => slAiAppendToolCall(tc));
+        }
+        slAiAppendBubble("assistant", d.reply);
+        slAiRefreshChatSessions(slAiChatId);
+      } else {
+        slAiAppendBubble("assistant", "⚠️ " + (d.error || "Unknown error"));
+      }
+      slAiScrollBottom();
+    })
+    .catch(() => {
+      document.getElementById("slAiTyping").classList.remove("visible");
+      document.getElementById("slAiSend").disabled = false;
+      slAiAppendBubble("assistant", "⚠️ Network error. Please try again.");
+      slAiScrollBottom();
+    });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  slAiChatId = slAiGenerateChatId();
+  slAiRefreshChatSessions();
+});
+
+function slSanitizeSqlForEditor(sqlText) {
+  let s = String(sqlText || "");
+  // Normalize newlines and remove markdown fences/labels if present.
+  s = s.replace(/\r\n?/g, "\n");
+  s = s.replace(/^```(?:sql)?\s*/i, "").replace(/\s*```$/i, "");
+  s = s.replace(/^\s*(sql\s+query|query)\s*:\s*/i, "");
+  // Keep only the first statement if multiple are present.
+  const semiPos = s.indexOf(";");
+  if (semiPos !== -1) {
+    s = s.slice(0, semiPos);
+  }
+  // Trim non-SQL text before first SELECT/WITH.
+  const firstSqlMatch = s.match(/\b(SELECT|WITH)\b/i);
+  if (firstSqlMatch && typeof firstSqlMatch.index === "number" && firstSqlMatch.index > 0) {
+    s = s.slice(firstSqlMatch.index);
+  }
+  // Trim trailing spaces line-by-line.
+  s = s.split("\n").map(line => line.replace(/\s+$/g, "")).join("\n");
+  // Remove semicolons used as statement terminators at line ends.
+  s = s.replace(/[ \t]*;[ \t]*(?=\n|$)/g, "");
+  // If SQL clauses got packed, enforce readable spacing and clause breaks.
+  const clauseWords = [
+    "FROM", "WHERE", "GROUP BY", "ORDER BY", "HAVING",
+    "LEFT JOIN", "RIGHT JOIN", "FULL JOIN", "INNER JOIN", "JOIN", "ON", "UNION ALL", "UNION"
+  ];
+  for (const kw of clauseWords) {
+    const escKw = kw.replace(/\s+/g, "\\s+");
+    // Ensure space before clause keyword if it was glued to previous token.
+    s = s.replace(new RegExp(`([A-Za-z0-9_\\)\\]'"])(${escKw})\\b`, "ig"), "$1 $2");
+    // Ensure space after clause keyword if it was glued to next token.
+    s = s.replace(new RegExp(`\\b(${escKw})([A-Za-z0-9_\\(])`, "ig"), "$1 $2");
+    // Put major clauses on new lines for readability/safety.
+    s = s.replace(new RegExp(`\\s*\\b(${escKw})\\b\\s+`, "ig"), "\n$1 ");
+  }
+  // Cleanup excessive internal spaces but keep line breaks.
+  s = s.split("\n").map(line => line.replace(/[ \t]{2,}/g, " ").trim()).filter(Boolean).join("\n");
+  // Keep SELECT/WITH first line without forced leading newline.
+  s = s.replace(/^\s*\n+/, "");
+  // Keep readable spacing.
+  s = s.replace(/\n{3,}/g, "\n\n");
+  return s.trim();
+}
+
+function slCopySqlToEditor(sqlText) {
+  const cleanSql = slSanitizeSqlForEditor(sqlText);
+  document.getElementById("slSqlEditorArea").value = cleanSql;
+  slSwitchTab("sql");
+}
+
+function slAiAppendBubble(role, text, historyIndex = null) {
+  const container = document.getElementById("slAiMessages");
+  const typing    = document.getElementById("slAiTyping");
+  const div       = document.createElement("div");
+  div.className   = `sl-ai-msg ${role}`;
+
+  const avatar    = document.createElement("div");
+  avatar.className = "sl-ai-avatar";
+  avatar.textContent = role === "user" ? "U" : "AI";
+
+  const bubble    = document.createElement("div");
+  bubble.className = "sl-ai-bubble";
+  bubble.innerHTML  = slAiFormatMessage(text);
+
+  div.appendChild(avatar);
+  div.appendChild(bubble);
+  container.insertBefore(div, typing);
+
+  if (role === "user" && Number.isInteger(historyIndex)) {
+    const actions = document.createElement("div");
+    actions.style.cssText = "display:flex;justify-content:flex-end;margin-top:6px;";
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "sl-ai-quick-btn";
+    editBtn.style.margin = "0";
+    editBtn.textContent = "Edit";
+    editBtn.onclick = () => slAiEditAsk(historyIndex);
+    actions.appendChild(editBtn);
+    bubble.appendChild(actions);
+  }
+
+  // "Copy to SQL Editor" buttons for any SQL code blocks
+  bubble.querySelectorAll("pre code").forEach(code => {
+    const btn = document.createElement("button");
+    btn.className = "sl-ai-copy-sql";
+    btn.textContent = "📋 Copy to SQL Editor";
+    btn.onclick = () => {
+      const sqlText = code.textContent.trim();
+      slCopySqlToEditor(sqlText);
+    };
+    code.parentElement.after(btn);
+  });
+}
+
+function slAiAppendToolCall(tc) {
+  const container = document.getElementById("slAiMessages");
+  const typing    = document.getElementById("slAiTyping");
+  const div       = document.createElement("div");
+  div.style.cssText = "align-self:flex-start;max-width:92%;margin-left:40px;";
+
+  if (tc.type === "sql") {
+    const safe  = (tc.sql||"").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const prev  = (tc.result_preview||"").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const count = tc.grid ? tc.grid.count : null;
+    const rowLabel = count !== null ? `${count} row${count!==1?"s":""}` : "";
+    const isCapped = !!tc.capped;
+    const capN = Number(tc.cap || 200) || 200;
+    div.innerHTML = `
+      <details style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:6px 10px;font-size:.74rem;color:#166534;cursor:pointer;">
+        <summary style="font-weight:600;list-style:none;outline:none;display:flex;align-items:center;gap:8px;">
+          &#128202; Queried database
+          ${rowLabel ? `<span style="background:#dcfce7;color:#15803d;padding:1px 7px;border-radius:10px;font-size:.68rem;font-weight:700;">${rowLabel}</span>` : ""}
+          <span style="font-weight:400;color:#4ade80;margin-left:auto;">(click to expand)</span>
+        </summary>
+        ${isCapped ? `<div style="margin:6px 0 4px;padding:6px 8px;border-radius:6px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;">
+          Showing first ${capN} rows only. Use SQL Editor to fetch full dataset.
+        </div>` : ""}
+        <pre style="background:#1e1e2e;color:#cdd6f4;padding:7px 9px;border-radius:5px;margin:6px 0 4px;overflow-x:auto;font-size:.72rem;">${safe}</pre>
+        <pre style="background:#f8fafc;color:#374151;padding:6px 9px;border-radius:5px;margin:0;overflow-x:auto;font-size:.71rem;max-height:100px;">${prev}</pre>
+        <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;">
+          <button class="sl-ai-copy-sql" style="margin:0;" onclick="slCopySqlToEditor(\`${tc.sql.replace(/`/g,"\\`")}\`);">&#128203; ${isCapped ? "Copy SQL to Editor (Full Data)" : "Copy SQL to Editor"}</button>
+        </div>
+      </details>`;
+  } else if (tc.type === "columns") {
+    const prev = (tc.result_preview||"").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const isAuto = !!tc.auto;
+    div.innerHTML = `
+      <details style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:6px 10px;font-size:.74rem;color:#1e40af;cursor:pointer;">
+        <summary style="font-weight:600;list-style:none;outline:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          &#128269; Checked columns of <strong>${tc.table}</strong>
+          ${isAuto ? `<span style="background:#dbeafe;color:#1d4ed8;padding:1px 7px;border-radius:10px;font-size:.68rem;font-weight:700;">Auto-checked</span>` : ""}
+        </summary>
+        <pre style="background:#f8fafc;color:#374151;padding:6px 9px;border-radius:5px;margin:6px 0 0;overflow-x:auto;font-size:.71rem;max-height:120px;">${prev}</pre>
+      </details>`;
+  }
+  if (div.innerHTML) container.insertBefore(div, typing);
+}
+
+function slAiFormatMessage(text) {
+  const esc = (s) => String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  let src = String(text || "");
+
+  // Protect fenced code blocks first.
+  const codeBlocks = [];
+  src = src.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, _lang, code) => {
+    const token = `__SL_CODE_BLOCK_${codeBlocks.length}__`;
+    codeBlocks.push(`<pre><code>${esc(code)}</code></pre>`);
+    return token;
+  });
+
+  // Convert markdown pipe tables to HTML tables.
+  const lines = src.split(/\r?\n/);
+  const out = [];
+  let i = 0;
+  const isPipeRow = (line) => /^\s*\|.*\|\s*$/.test(line || "");
+  const isSeparatorRow = (line) => /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line || "");
+  while (i < lines.length) {
+    const l0 = lines[i] || "";
+    const l1 = lines[i + 1] || "";
+    if (isPipeRow(l0) && isSeparatorRow(l1)) {
+      const block = [];
+      block.push(l0);
+      i += 2; // skip separator
+      while (i < lines.length && isPipeRow(lines[i])) {
+        block.push(lines[i]);
+        i += 1;
+      }
+      const toCells = (line) => line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+      const headers = toCells(block[0]);
+      const rows = block.slice(1).map(toCells);
+      let tableHtml = `<div class="sl-ai-md-table-wrap"><table class="sl-ai-md-table"><thead><tr>`;
+      tableHtml += headers.map((h) => `<th>${esc(h)}</th>`).join("");
+      tableHtml += `</tr></thead><tbody>`;
+      rows.forEach((r) => {
+        tableHtml += `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`;
+      });
+      tableHtml += `</tbody></table></div>`;
+      out.push(tableHtml);
+      continue;
+    }
+    out.push(esc(l0));
+    i += 1;
+  }
+  src = out.join("\n");
+
+  // Bold **text**
+  src = src.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+  // Inline code `code`
+  src = src.replace(/`([^`]+)`/g, "<code>$1</code>");
+  // Restore code blocks
+  src = src.replace(/__SL_CODE_BLOCK_(\d+)__/g, (_, n) => codeBlocks[Number(n)] || "");
+  // Line breaks
+  src = src.replace(/\n/g, "<br>");
+  return src;
+}
+
+// Auto-resize textarea
+document.addEventListener("DOMContentLoaded", () => {
+  const input = document.getElementById("slAiInput");
+  if (!input) return;
+  input.addEventListener("input", () => {
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 120) + "px";
+  });
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); slAiSend(); }
+  });
+});
+
+/* ─── Ctrl+Enter to run SQL ──────────────────────────────────── */
+document.addEventListener("DOMContentLoaded", () => {
+  const area = document.getElementById("slSqlEditorArea");
+  if (area) {
+    area.addEventListener("keydown", e => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); slRunSql(); }
+    });
+  }
+});
+
+/* ─── SQL Safety Check (client-side) ────────────────────────── */
+const SL_BLOCKED_KW = new Set(["INSERT","UPDATE","DELETE","DROP","TRUNCATE","ALTER",
+  "CREATE","RENAME","MERGE","REPLACE","EXECUTE","EXEC","CALL","GRANT","REVOKE",
+  "COMMIT","ROLLBACK","SAVEPOINT"]);
+
+function slValidateSql(sql) {
+  // Strip comments
+  let s = sql.replace(/--[^\n]*/g, " ").replace(/\/\*[\s\S]*?\*\//g, " ").trim();
+  if (s.includes(";"))  return "Semicolons are not allowed";
+  const first = (s.match(/\b\w+\b/) || [""])[0].toUpperCase();
+  if (first !== "SELECT" && first !== "WITH") return "Only SELECT / WITH queries are allowed";
+  const tokens = new Set((s.match(/\b[A-Za-z_]+\b/g) || []).map(t => t.toUpperCase()));
+  const bad = [...tokens].filter(t => SL_BLOCKED_KW.has(t));
+  if (bad.length) return `Blocked keyword(s): ${bad.join(", ")}`;
+  return null; // OK
+}
+
+/* ─── Run Raw SQL ────────────────────────────────────────────── */
+function slRunSql() {
+  const sql   = (document.getElementById("slSqlEditorArea").value || "").trim();
+  const limit = parseInt(document.getElementById("slSqlLimit").value) || 500;
+  if (!sql) return;
+  const validationError = slValidateSql(sql);
+  if (validationError) {
+    document.getElementById("slResultError").textContent = validationError;
+    document.getElementById("slResultBody").innerHTML =
+      `<div class="sl-no-result"><span style="font-size:1.5rem;">🚫</span><strong>${validationError}</strong></div>`;
+    return;
+  }
+  document.getElementById("slSqlSpinner").classList.add("running");
+  document.getElementById("slSqlRunBtn").disabled = true;
+  document.getElementById("slResultCount").textContent  = "";
+  document.getElementById("slResultError").textContent  = "";
+  fetch("{{ url_for('reports.smart_list_sql') }}", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({sql, limit}),
+  })
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById("slSqlSpinner").classList.remove("running");
+      document.getElementById("slSqlRunBtn").disabled = false;
+      if (d.success) {
+        document.getElementById("slResultCount").textContent = `${d.count} row${d.count!==1?"s":""}`;
+        slRenderResults(d.columns, d.rows);
+      } else {
+        document.getElementById("slResultError").textContent = d.error || "Unknown error";
+        if (d.sql) {
+          document.getElementById("slSqlBox").textContent = d.sql;
+          document.getElementById("slSqlBox").style.display = "block";
+        }
+        document.getElementById("slResultBody").innerHTML =
+          `<div class="sl-no-result"><span style="font-size:1.5rem;">⚠️</span><strong>${d.error||"Error"}</strong></div>`;
+      }
+    })
+    .catch(() => {
+      document.getElementById("slSqlSpinner").classList.remove("running");
+      document.getElementById("slSqlRunBtn").disabled = false;
+      document.getElementById("slResultError").textContent = "Network error";
+    });
+}
+
+/* ─── Export SQL Results ─────────────────────────────────────── */
+function slExportSql() {
+  const sql   = (document.getElementById("slSqlEditorArea").value || "").trim();
+  const limit = 50000;
+  if (!sql) return;
+  const err = slValidateSql(sql);
+  if (err) { alert(err); return; }
+  const params = new URLSearchParams({sql_query: sql, limit});
+  window.open(`{{ url_for('reports.smart_list_export') }}?${params}`, "_blank");
+}
+
+/* ─── Results Panel Resize ───────────────────────────────────── */
+let slResizing = false;
+let slResizeStartY = 0;
+let slResizeStartH = 0;
+
+(function() {
+  const handle  = document.getElementById("slResizeHandle");
+  const panel   = document.getElementById("slResultsPanel");
+  if (!handle || !panel) return;
+
+  handle.addEventListener("mousedown", e => {
+    slResizing    = true;
+    slResizeStartY = e.clientY;
+    slResizeStartH = panel.getBoundingClientRect().height;
+    handle.style.background = "#bfdbfe";
+    document.body.style.cursor = "ns-resize";
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  });
+
+  document.addEventListener("mousemove", e => {
+    if (!slResizing) return;
+    const delta  = slResizeStartY - e.clientY;   // drag up → bigger
+    const newH   = Math.max(120, Math.min(slResizeStartH + delta, window.innerHeight * 0.8));
+    panel.style.height = newH + "px";
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!slResizing) return;
+    slResizing = false;
+    handle.style.background = "#e2e8f0";
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  });
+})();
+
+/* ─── Clear ──────────────────────────────────────────────────── */
+function slClear() {
+  SL.fieldRows=[]; SL.filterRows=[];
+  slRenderFieldList(); slRenderFilterList(); slSyncAllDropdowns(); slEnableRun();
+  document.getElementById("slResultBody").innerHTML = `<div class="sl-no-result"><span style="font-size:2rem;">📊</span>Run a report to see results here</div>`;
+  document.getElementById("slResultCount").textContent = "";
+  document.getElementById("slResultError").textContent = "";
+  document.getElementById("slSqlBox").textContent = "";
+  document.getElementById("slSqlBox").style.display = "none";
+  if (SL.primaryTable) slRenderColList();
+}
+</script>
+{% endblock %}

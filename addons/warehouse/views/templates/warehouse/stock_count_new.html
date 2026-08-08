@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}New Stock Count{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/stock_count_desktop.css') }}?v=7" />
+{% endblock %}
+{% block content %}
+<div class="page-po sc-desktop-page sc-new-page">
+  <div class="page-po__topbar sc-detail-topbar">
+    <div class="sc-detail-heading">
+      <div class="sc-detail-title-row">
+        <h1 class="page-po__title">New stock count</h1>
+        <span class="sc-platform-badge">Desktop</span>
+      </div>
+      <p class="page-po__muted sc-detail-meta">
+        <span><i class="bi bi-geo-alt" aria-hidden="true"></i> Location {{ location_code }}</span>
+        <span><i class="bi bi-info-circle" aria-hidden="true"></i> Header defaults apply to scanned lines</span>
+      </p>
+    </div>
+    <div class="page-po__topbar-actions sc-detail-actions">
+      <a href="{{ url_for('warehouse.warehouse_stock_counting_list') }}" class="page-po__btn-secondary sc-btn-icon">
+        <i class="bi bi-arrow-left" aria-hidden="true"></i> Back to list
+      </a>
+    </div>
+  </div>
+
+  <section class="sc-form-panel">
+    <div class="sc-scan-panel__head">
+      <h2 class="sc-panel-title"><i class="bi bi-clipboard-plus" aria-hidden="true"></i> Count header</h2>
+      <p class="sc-panel-hint">Warehouse and bin are optional — assign per line when scanning.</p>
+    </div>
+    <form method="post" class="sc-form-grid">
+      <div class="sc-form-field">
+        <label for="count_date">Count date</label>
+        <input type="date" id="count_date" name="count_date" class="input" value="{{ today }}" required />
+      </div>
+      <div class="sc-form-field">
+        <label for="warehouse_id">Warehouse <span class="sc-form-optional">(optional)</span></label>
+        <select id="warehouse_id" name="warehouse_id" class="input">
+          <option value="">— All / assign on lines —</option>
+          {% for s in sites %}
+          <option value="{{ s.warehouse_id or s.key }}">{{ s.name or s.key }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="sc-form-field">
+        <label for="storage_id">Default bin / storage ID <span class="sc-form-optional">(optional)</span></label>
+        <input type="number" id="storage_id" name="storage_id" class="input" min="0" placeholder="From shelf / bin setup" />
+      </div>
+      <div class="sc-form-field sc-form-field--full">
+        <label for="remarks">Remarks</label>
+        <textarea id="remarks" name="remarks" class="input sc-form-textarea" rows="2" maxlength="500" placeholder="Optional notes for this count session"></textarea>
+      </div>
+      <div class="sc-form-actions">
+        <button type="submit" class="page-po__btn-primary sc-btn-icon">
+          <i class="bi bi-check2" aria-hidden="true"></i> Create count
+        </button>
+        <a href="{{ url_for('warehouse.warehouse_stock_counting_list') }}" class="page-po__btn-secondary sc-btn-icon">
+          <i class="bi bi-x-lg" aria-hidden="true"></i> Cancel
+        </a>
+      </div>
+    </form>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-po nexa-list-page grn-list-page" style="max-width:1300px;"
+  data-grn-api="{{ grn_list_api_url or url_for('purchase.api_grn_list') }}"
+  data-po-query-url-tpl="{{ po_query_url_tpl or url_for('purchase.purchase_order_query', lpo_no=999999999) }}"
+  data-grn-query-url-tpl="{{ grn_query_url_tpl or url_for('purchase.goods_receipt_query', receipt_no=999999999) }}"
+  data-grn-pdf-url-tpl="{{ grn_pdf_url_tpl or url_for('purchase.api_receipt_pdf', receipt_no=999999999) }}"
+  data-grn-new-lpo-url-tpl="{{ grn_new_lpo_url_tpl or url_for('purchase.goods_receipt_new', lpono=999999999) }}"
+  data-grn-delete-api="{{ url_for('purchase.api_receipt_delete') }}"
+  data-grn-post-inventory-api="{{ url_for('purchase.api_receipt_post_inventory') }}"
+  data-grn-nonce-api="{{ url_for('purchase.api_receipt_refresh_save_nonce') }}"
+  data-items-per-page="{{ items_per_page or 50 }}"
+  data-initial-total-count="{{ pending_total_count or 0 }}"
+  data-initial-total-pages="{{ pending_total_pages or 1 }}">
+<style>
+  .grn-list-page .grn-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 12px 0 4px;
+    font-size: 12px;
+    color: #475569;
+  }
+  .grn-list-page .grn-pagination-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .grn-list-page .grn-pagination-controls button,
+  .grn-list-page .grn-pagination-controls span {
+    padding: 5px 12px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    background: #fff;
+    color: #374151;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .grn-list-page .grn-pagination-controls button:disabled {
+    color: #adb5bd;
+    cursor: default;
+    background: #f8f9fa;
+  }
+  .grn-list-page .grn-pagination-controls .grn-page-active {
+    background: #1a56a4;
+    border-color: #1a56a4;
+    color: #fff;
+    font-weight: 600;
+  }
+  #grnDeleteModal { position: fixed; inset: 0; z-index: 9999; align-items: center; justify-content: center; padding: 16px; }
+  #grnDeleteModal.hidden { display: none !important; }
+  #grnDeleteModal:not(.hidden) { display: flex; }
+</style>
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Goods Receipt Note (GRN)</h1>
+      <p class="page-po__muted">List of all goods receipts from suppliers.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('purchase.goods_receipt_new') }}" class="page-po__btn-primary">+ New GRN</a>
+      {% include 'includes/list_refresh_bar.html' %}
+      <a href="{{ url_for('purchase.purchase_order_list') }}" class="po-nav-link">Purchase Order</a>
+      <a href="{{ url_for('purchase.purchase_invoice_list') }}" class="po-nav-link">Purchase Invoice</a>
+    </div>
+  </div>
+
+  <div class="po-tabs">
+    <button type="button" class="po-tab active" id="tabPendingPo" onclick="setGrnTab('pending')" title="Purchase orders that are approved and ready for goods receipt">Approved PO</button>
+    <button type="button" class="po-tab" id="tabDraftGrn" onclick="setGrnTab('draft')" title="Saved GRNs not yet posted to stock">Draft GRN</button>
+    <button type="button" class="po-tab" id="tabPostedGrn" onclick="setGrnTab('posted')" title="GRN with stock and item journal posted">GRN list</button>
+    <button type="button" class="po-tab" id="tabReversedGrn" onclick="setGrnTab('reversed')" title="GRNs reversed from Purchase Invoice (number reserved, stock undone)">Reversed GRN</button>
+  </div>
+
+  <div class="nexa-list-toolbar">
+    <input type="text" id="grnSearch" class="input" placeholder="Search no, invoice, supplier, name…"
+           style="min-width:220px; max-width:320px;" autocomplete="off">
+    <label style="font-size:12px; color:#6b7280; white-space:nowrap;">From</label>
+    <input type="date" id="grnDateFrom" class="input" style="width:150px;">
+    <label style="font-size:12px; color:#6b7280; white-space:nowrap;">To</label>
+    <input type="date" id="grnDateTo" class="input" style="width:150px;">
+    <button type="button" class="page-po__btn-secondary" onclick="clearFilters()" style="padding:4px 10px; font-size:11px;">Clear</button>
+    <button type="button" class="page-po__btn-primary" id="btnSummaryPdf" onclick="openSummaryPdf()" style="padding:4px 10px; font-size:11px; display:none;">&#128196; Summary PDF</button>
+    <span id="grnCount" class="nexa-num" style="margin-left:4px;">Loading…</span>
+  </div>
+
+  <div class="co-table-wrap">
+    <table class="co-table" id="grnTable">
+      <thead>
+        <tr>
+          <th data-col="0" style="text-align:center; width:60px;">Sl.No<span class="sort-arrow"></span></th>
+          <th data-col="1">No<span class="sort-arrow"></span></th>
+          <th data-col="2">Date<span class="sort-arrow"></span></th>
+          <th data-col="3">Invoice No<span class="sort-arrow"></span></th>
+          <th data-col="4">Supplier Code<span class="sort-arrow"></span></th>
+          <th data-col="5">Supplier Name<span class="sort-arrow"></span></th>
+          <th data-col="6" style="text-align:right;">Discount<span class="sort-arrow"></span></th>
+          <th data-col="7" style="text-align:right;">Amount<span class="sort-arrow"></span></th>
+          <th data-col="8">User Name<span class="sort-arrow"></span></th>
+          <th style="text-align:center; cursor:default;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="grnBody">
+        <tr id="grnLoading"><td colspan="10" style="text-align:center; padding:20px; color:#6b7280;">Loading…</td></tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="7" style="text-align:right; padding-right:12px; font-weight:700;">Total (loaded)</td>
+          <td class="num" id="grnTotalAmt">0.00</td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div id="grnPagination" class="grn-pagination" style="display:none;">
+    <div id="grnPaginationInfo" class="grn-pagination-info"></div>
+    <div class="grn-pagination-controls">
+      <button type="button" id="grnPrevPage">« Previous</button>
+      <span id="grnPageLabel" class="grn-page-active">1</span>
+      <button type="button" id="grnNextPage">Next »</button>
+      <button type="button" id="grnLoadMore">Load more</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="grnDeleteModal" aria-labelledby="grnDeleteModalTitle">
+  <div class="modal__overlay" id="grnDeleteModalOverlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.45);"></div>
+  <div style="position:relative;background:#fff;border-radius:12px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.2);border:1px solid #e2e8f0;">
+    <div style="padding:12px 16px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;">
+      <h4 id="grnDeleteModalTitle" style="margin:0;font-size:15px;">Delete GRN</h4>
+      <button type="button" id="grnDeleteModalClose" aria-label="Close" style="border:none;background:none;font-size:20px;cursor:pointer;">×</button>
+    </div>
+    <div style="padding:16px;">
+      <p id="grnDeleteModalMessage" style="margin:0 0 12px;color:#475569;font-size:13px;"></p>
+      <label for="grnDeletePassword" style="display:block;margin-bottom:6px;font-size:12px;font-weight:600;color:#334155;">Your password</label>
+      <input type="password" id="grnDeletePassword" class="input" placeholder="Enter your login password" autocomplete="current-password" style="width:100%;box-sizing:border-box;" />
+      <p id="grnDeletePasswordError" style="display:none;margin:10px 0 0;color:#dc3545;font-size:12px;"></p>
+    </div>
+    <div style="padding:12px 16px;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;gap:8px;">
+      <button type="button" id="grnDeleteCancel" class="tsrl-btn-secondary" style="background:transparent;border:1px solid #dee2e6;color:#495057;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;">Cancel</button>
+      <button type="button" id="grnDeleteSubmit" style="background:#dc3545;border:1px solid #dc3545;color:#fff;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const GRN_SUMMARY_PDF_URL = {{ url_for('purchase.grn_summary_pdf') | tojson }};
+window.__activeGrnTab = 'pending';
+function openSummaryPdf() {
+  if (window.__activeGrnTab !== 'posted') {
+    alert('Summary PDF is for posted GRN only.');
+    return;
+  }
+  const search = (document.getElementById('grnSearch').value || '').trim();
+  const dateFrom = (document.getElementById('grnDateFrom').value || '').trim();
+  const dateTo = (document.getElementById('grnDateTo').value || '').trim();
+  const params = new URLSearchParams();
+  if (search) params.set('search', search);
+  if (dateFrom) params.set('date_from', dateFrom);
+  if (dateTo) params.set('date_to', dateTo);
+  const url = GRN_SUMMARY_PDF_URL + (params.toString() ? '?' + params.toString() : '');
+  window.open(url, '_blank');
+}
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/grn_list.js') }}?v=14"></script>
+{% endblock %}

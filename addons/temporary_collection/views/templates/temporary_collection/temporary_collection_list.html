@@ -1,0 +1,874 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="tcl-container nexa-list-page">
+<style>
+  body { overflow-x: auto; min-height: 100vh; background: #fff; color: #212529; }
+  .tcl-page { max-width: 1200px; margin: 0 auto; padding: 14px 16px 16px; }
+  .tcl-topbar { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #dee2e6; }
+  .tcl-topbar h1 { margin: 0; font-size: 22px; font-weight: 400; color: #212529; line-height: 1.2; }
+  .tcl-filters { margin-bottom: 10px; padding: 6px 0 8px; border-bottom: 1px solid #dee2e6; }
+  .tcl-filters .form-grid { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: flex-end; max-width: 800px; }
+  .tcl-filters .form-group { margin: 0; }
+  .tcl-filters .form-group label { margin: 0 0 2px 0; font-size: 12px; font-weight: 400; color: #495057; display: block; line-height: 1.2; }
+  .tcl-filters .input { border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; padding: 4px 0 3px; font-size: 13px; background: transparent; width: 140px; line-height: 1.25; }
+  .tcl-filters .input:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .tcl-btn-primary { background: #28a745 !important; border: none !important; color: #fff !important; padding: 5px 14px; border-radius: 4px; font-size: 12px; font-weight: 500; line-height: 1.2; cursor: pointer; }
+  .tcl-btn-secondary { background: transparent; border: 1px solid #dee2e6; color: #495057; padding: 5px 12px; border-radius: 4px; font-size: 12px; line-height: 1.2; cursor: pointer; }
+  .tcl-btn-secondary:hover { background: #f8f9fa; }
+  .tcl-section-title { font-size: 14px; font-weight: 600; color: #212529; margin: 4px 0 8px; padding-bottom: 6px; border-bottom: 2px solid #007bff; display: inline-block; line-height: 1.2; }
+  #collectionListTable thead { position: sticky; top: 0; z-index: 1; background: #f8f9fa !important; }
+  #collectionListTable thead th { background: #f8f9fa !important; color: #495057 !important; padding: 6px 10px; font-weight: 600; font-size: 12px; border: none; border-bottom: 1px solid #dee2e6; }
+  #collectionListTable thead th.sortable { cursor: pointer; }
+  #collectionListTable thead th.sortable:hover { background: #e9ecef !important; }
+  #collectionListTable tbody td { padding: 6px 10px; border: none; border-bottom: 1px solid #dee2e6; font-size: 13px; }
+  .tcl-container .scroll-table { border: 1px solid #dee2e6; border-radius: 4px; background: #fff; overflow: auto; }
+  .tcl-container .table-total { background: #f8f9fa !important; }
+  .tcl-container .table-total td { font-weight: 700; color: #212529; padding: 6px 10px !important; }
+  .status-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+  .status-badge--pending { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+  .status-badge--completed { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+  .status-badge--rejected { background: #e2e3e5; color: #383d41; border: 1px solid #d6d8db; }
+  .tcl-container .btn-print-pdf { background: #007bff !important; border: none !important; color: #fff !important; padding: 4px 10px !important; border-radius: 4px !important; font-size: 12px !important; cursor: pointer !important; }
+  .tcl-container .btn-print-pdf:hover:not(:disabled) { background: #0056b3 !important; }
+  .tcl-container .btn-print-pdf:disabled { opacity: 0.6; cursor: not-allowed; }
+  .tcl-tabbar { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin-bottom: 8px; }
+  .tcl-tab-btn {
+    padding: 4px 12px;
+    border: 1px solid #dee2e6;
+    background: #fff;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    color: #495057;
+  }
+  .tcl-tab-btn:hover { background: #f8f9fa; }
+  .tcl-tab-btn.is-active { background: #007bff; color: #fff; border-color: #007bff; }
+  .tcl-btn-save-pending {
+    margin-left: auto;
+    padding: 5px 12px;
+    background: #0d9488 !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .tcl-btn-save-pending:hover:not(:disabled) { background: #0f766e !important; }
+  .tcl-btn-save-pending:disabled { opacity: 0.55; cursor: not-allowed; }
+  .tcl-cell-select,
+  #collectionListTable thead .tcl-th-select { width: 40px; text-align: center; vertical-align: middle; padding: 6px 4px !important; }
+  .tcl-cell-select input[type="checkbox"] { cursor: pointer; margin: 0; vertical-align: middle; }
+  .tcl-tabbar .list-refresh-toolbar { gap: 10px !important; }
+  .tcl-tabbar .list-refresh-toolbar label { font-size: 12px !important; margin: 0 !important; }
+  .tcl-tabbar .btn-list-refresh-now { padding: 4px 10px !important; font-size: 12px !important; line-height: 1.2 !important; }
+</style>
+<div class="tcl-page">
+  <div class="tcl-topbar">
+    <h1>Temporary Collection List</h1>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+      <a href="{{ url_for('temporary_collection.temporary_collection_activity_log') }}" class="tcl-btn-secondary" style="text-decoration:none;">Activity report</a>
+    </div>
+  </div>
+
+  <div class="tcl-filters">
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="dateFrom">From Date</label>
+        <input type="date" id="dateFrom" class="input" value="{{ date_from or '' }}" />
+      </div>
+      <div class="form-group">
+        <label for="dateTo">To Date</label>
+        <input type="date" id="dateTo" class="input" value="{{ date_to or '' }}" />
+      </div>
+      <div class="form-group">
+        <label for="searchSalesman">Search</label>
+        <input type="text" id="searchSalesman" class="input" placeholder="Salesman code or name..." style="width: 210px;" />
+      </div>
+      <div class="form-group" style="display: flex; gap: 8px;">
+        <button type="button" id="btnFilter" class="tcl-btn-primary">Filter</button>
+        <button type="button" id="btnClearSearch" class="tcl-btn-secondary">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="tcl-section-title" style="display: inline-block;">Collections</h3>
+  <div class="tcl-tabbar" style="justify-content: space-between;">
+    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+      <button type="button" class="tcl-tab-btn is-active" id="tclTabPending" data-tcl-tab="pending">Pending</button>
+      <button type="button" class="tcl-tab-btn" id="tclTabCompleted" data-tcl-tab="completed">Completed</button>
+      <button type="button" class="tcl-tab-btn" id="tclTabRejected" data-tcl-tab="rejected">Rejected</button>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; align-items: center;">
+      {% with list_refresh_skip_bootstrap=true %}{% include 'includes/list_refresh_bar.html' %}{% endwith %}
+      <button type="button" class="tcl-btn-save-pending" id="btnSavePending" disabled
+        title="Select at least one pending row (salesman + date) to save.">Save pending</button>
+    </div>
+  </div>
+  <div class="scroll-table">
+    <table class="table" id="collectionListTable">
+        <thead>
+          <tr>
+            <th class="tcl-th-select" scope="col" title="Select pending rows"><input type="checkbox" id="tclSelectAllPending" aria-label="Select all pending" /></th>
+            <th class="sortable" data-sort-col="0" data-sort-type="number" title="Sort by Sl.No">Sl.No <span class="sort-icon"></span></th>
+            <th class="sortable" data-sort-col="1" data-sort-type="date" title="Sort by Date">Date <span class="sort-icon"></span></th>
+            <th class="sortable" data-sort-col="2" data-sort-type="text" title="Sort by Salesman Code">Salesman Code <span class="sort-icon"></span></th>
+            <th class="sortable" data-sort-col="3" data-sort-type="text" title="Sort by Salesman Name">Salesman Name <span class="sort-icon"></span></th>
+            <th class="sortable" data-sort-col="4" data-sort-type="number" title="Sort by Total Collection" style="text-align: right;">Total Collection <span class="sort-icon"></span></th>
+            <th class="sortable" data-sort-col="5" data-sort-type="text" title="Sort by Status">Status <span class="sort-icon"></span></th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="collectionListBody">
+          {% if collections %}
+            {% for item in collections %}
+              <tr class="collection-list-row"
+                  data-tc-status="{{ item.list_tab }}"
+                  data-salesman-code="{{ item.salesmancode or '' }}"
+                  data-bill-date="{{ item.billdate or '' }}"
+                  data-bill-date-iso="{% if item.billdate %}{% if item.billdate is string %}{{ item.billdate }}{% else %}{{ item.billdate.strftime('%Y-%m-%d') }}{% endif %}{% endif %}"
+                  style="cursor: pointer;">
+                <td class="tcl-cell-select">
+                  {% if item.list_tab == 'pending' %}
+                    <input type="checkbox" class="tcl-pending-cb"
+                           title="Select for bulk save"
+                           aria-label="Select row {{ loop.index }}" />
+                  {% else %}
+                    <span aria-hidden="true"></span>
+                  {% endif %}
+                </td>
+                <td>{{ loop.index }}</td>
+                <td data-sort-value="{% if item.billdate %}{% if item.billdate is string %}{{ item.billdate }}{% else %}{{ item.billdate.strftime('%Y-%m-%d') }}{% endif %}{% else %}{% endif %}">
+                  {% if item.billdate %}
+                    {% if item.billdate is string %}
+                      {{ item.billdate }}
+                    {% else %}
+                      {{ item.billdate.strftime('%d/%b/%Y').upper() }}
+                    {% endif %}
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td>{{ item.salesmancode or '-' }}</td>
+                <td>{{ item.salesmanname or '-' }}</td>
+                <td style="text-align: right;">{{ "%.2f"|format(item.totalcollection|float) if item.totalcollection else '0.00' }}</td>
+                <td>
+                  {% if item.list_tab == 'completed' %}
+                    <span class="status-badge status-badge--completed">Completed</span>
+                  {% elif item.list_tab == 'rejected' %}
+                    <span class="status-badge status-badge--rejected">Rejected</span>
+                  {% elif item.list_tab == 'pending' %}
+                    <span class="status-badge status-badge--pending">Pending</span>
+                  {% else %}
+                    <span class="status-badge status-badge--pending">Pending</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <button type="button" class="btn-print-pdf"
+                          data-salesman-code="{{ item.salesmancode or '' }}"
+                          data-bill-date="{% if item.billdate %}{% if item.billdate is string %}{{ item.billdate }}{% else %}{{ item.billdate.strftime('%Y-%m-%d') }}{% endif %}{% endif %}"
+                          data-status="{% if item.min_status == 1 and item.list_tab != 'rejected' %}1{% else %}0{% endif %}"
+                          title="Print PDF Report">Print</button>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr class="table-empty">
+            <td colspan="8">No temporary collections found.</td>
+            </tr>
+          {% endif %}
+          <tr id="collectionListNoResults" class="table-empty" style="display: none;">
+            <td colspan="8">No matching records. Try different search criteria.</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr id="collectionListTotalRow" class="table-total" style="display: none;">
+            <td colspan="5" style="text-align: right; font-weight: 700;" id="collectionListTotalLabel">Total (pending)</td>
+            <td id="listTotalCollection" style="text-align: right; font-weight: 700;">0.00</td>
+            <td></td>
+            <td></td>
+          </tr>
+        </tfoot>
+    </table>
+  </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var TCL_SAVE_ALL_URL = {{ url_for('temporary_collection.api_save_all_pending')|tojson }};
+  var TCL_LIST_ROWS_URL = {{ url_for('temporary_collection.api_temporary_collection_list_rows')|tojson }};
+document.addEventListener('DOMContentLoaded', function() {
+  const searchInput = document.getElementById('searchSalesman');
+  const dateFromInput = document.getElementById('dateFrom');
+  const dateToInput = document.getElementById('dateTo');
+  const btnFilter = document.getElementById('btnFilter');
+  const btnClear = document.getElementById('btnClearSearch');
+  const tbody = document.getElementById('collectionListBody');
+  const noResultsRow = document.getElementById('collectionListNoResults');
+  const btnSavePending = document.getElementById('btnSavePending');
+  const tclSelectAllPending = document.getElementById('tclSelectAllPending');
+  const tclTabPending = document.getElementById('tclTabPending');
+  const tclTabCompleted = document.getElementById('tclTabCompleted');
+  const tclTabRejected = document.getElementById('tclTabRejected');
+  let activeTcTab = 'pending';
+  var tclBulkSaveInProgress = false;
+  var tclBulkSaveCompleted = false;
+  var tclBulkRefreshAfterSave = false;
+
+  function getSaveNonce() {
+    if (typeof window !== 'undefined' && window.__GLOBAL_SAVE_NONCE) {
+      return String(window.__GLOBAL_SAVE_NONCE).trim();
+    }
+    return '';
+  }
+  function applySaveNonceFromPayload(data) {
+    if (data && typeof data.save_nonce === 'string' && data.save_nonce) {
+      window.__GLOBAL_SAVE_NONCE = data.save_nonce;
+    }
+  }
+
+  function updateTabButtons() {
+    if (!tclTabPending || !tclTabCompleted || !tclTabRejected) return;
+    tclTabPending.classList.toggle('is-active', activeTcTab === 'pending');
+    tclTabCompleted.classList.toggle('is-active', activeTcTab === 'completed');
+    tclTabRejected.classList.toggle('is-active', activeTcTab === 'rejected');
+    const pendingOnly = activeTcTab === 'pending';
+    if (btnSavePending) btnSavePending.style.display = pendingOnly ? '' : 'none';
+    if (tclSelectAllPending) {
+      if (pendingOnly) {
+        tclSelectAllPending.style.visibility = '';
+        tclSelectAllPending.disabled = false;
+      } else {
+        tclSelectAllPending.checked = false;
+        tclSelectAllPending.indeterminate = false;
+        tclSelectAllPending.disabled = true;
+        tclSelectAllPending.style.visibility = 'hidden';
+      }
+      if (!pendingOnly) {
+        tbody.querySelectorAll('.tcl-pending-cb').forEach(function(cb) { cb.checked = false; });
+      }
+    }
+    syncBulkSelectionUi();
+  }
+
+  function syncSavePendingButtonState() {
+    if (!btnSavePending || activeTcTab !== 'pending') return;
+    if (tclBulkSaveCompleted) return;
+    if (tclBulkSaveInProgress) {
+      btnSavePending.disabled = true;
+      return;
+    }
+    var n = 0;
+    tbody.querySelectorAll('.tcl-pending-cb:checked').forEach(function(cb) {
+      var row = cb.closest('.collection-list-row');
+      if (row && isRowVisiblePending(row)) n++;
+    });
+    btnSavePending.disabled = n < 1;
+    btnSavePending.title = n < 1
+      ? 'Select at least one pending row (salesman + date) to save.'
+      : ('Save ' + n + ' selected group(s). Same rules as Temporary Collection > Save.');
+  }
+  if (tclTabPending) tclTabPending.addEventListener('click', function() { activeTcTab = 'pending'; updateTabButtons(); filterRows(); });
+  if (tclTabCompleted) tclTabCompleted.addEventListener('click', function() { activeTcTab = 'completed'; updateTabButtons(); filterRows(); });
+  if (tclTabRejected) tclTabRejected.addEventListener('click', function() { activeTcTab = 'rejected'; updateTabButtons(); filterRows(); });
+  updateTabButtons();
+
+  var tclRefreshCtl = null;
+  function attachTclCollectionJsonRefresh() {
+    if (tclRefreshCtl && typeof tclRefreshCtl.stop === 'function') tclRefreshCtl.stop();
+    tclRefreshCtl = null;
+    if (!window.ListDataRefresh || typeof ListDataRefresh.initJsonPolling !== 'function') return;
+    tclRefreshCtl = window.ListDataRefresh.initJsonPolling({
+      getUrl: function() {
+        var qs = new URLSearchParams();
+        var df = dateFromInput ? dateFromInput.value : '';
+        var dto = dateToInput ? dateToInput.value : '';
+        if (df) qs.set('date_from', df);
+        if (dto) qs.set('date_to', dto);
+        return TCL_LIST_ROWS_URL + (qs.toString() ? ('?' + qs.toString()) : '');
+      },
+      intervalMs: 5000,
+      shouldSkipPoll: function() {
+        try {
+          if (typeof document !== 'undefined' && document.hidden) return true;
+        } catch (e) {}
+        var se = document.getElementById('searchSalesman');
+        return !!(se && document.activeElement === se);
+      },
+      onPayload: function(resp) {
+        if (!resp || resp.success !== true || !Array.isArray(resp.rows)) return;
+        rebuildCollectionTableBody(resp.rows);
+        if (tclBulkRefreshAfterSave) {
+          tclBulkRefreshAfterSave = false;
+          tclBulkSaveCompleted = false;
+          syncBulkSelectionUi();
+        }
+      }
+    });
+  }
+  attachTclCollectionJsonRefresh();
+
+  function escapeHtml(untrusted) {
+    return String(untrusted == null ? '' : untrusted)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function escapeAttr(untrusted) {
+    return escapeHtml(untrusted).replace(/'/g, '&#39;');
+  }
+  function rebuildCollectionTableBody(rows) {
+    var selectedKeys = new Set();
+    tbody.querySelectorAll('.tcl-pending-cb:checked').forEach(function(cb) {
+      var row = cb.closest('.collection-list-row');
+      if (!row) return;
+      var sm = String(row.dataset.salesmanCode || '').trim();
+      var bd = String(row.dataset.billDateIso || '').trim();
+      if (sm && bd) selectedKeys.add(sm + '\t' + bd);
+    });
+    tbody.querySelectorAll('.collection-list-row').forEach(function(tr) { tr.remove(); });
+    var emptyRows = tbody.querySelectorAll('tr.table-empty');
+    emptyRows.forEach(function(tr) {
+      if (tr.id !== 'collectionListNoResults') tr.remove();
+    });
+    var noResultsRow = document.getElementById('collectionListNoResults');
+    if (!rows || !rows.length) {
+      var trE = document.createElement('tr');
+      trE.className = 'table-empty';
+      var tdE = document.createElement('td');
+      tdE.setAttribute('colspan', '8');
+      tdE.textContent = 'No temporary collections found.';
+      trE.appendChild(tdE);
+      tbody.insertBefore(trE, noResultsRow);
+    } else {
+      var sorted = rows.slice().sort(function(a, b) {
+        var s1 = String(a.salesman_code || '').toLowerCase();
+        var s2 = String(b.salesman_code || '').toLowerCase();
+        if (s1 !== s2) return s1 < s2 ? -1 : (s1 > s2 ? 1 : 0);
+        var d1 = String(a.bill_date_iso || '').slice(0, 10);
+        var d2 = String(b.bill_date_iso || '').slice(0, 10);
+        if (d1 !== d2) return d1 < d2 ? 1 : -1;
+        return 0;
+      });
+      sorted.forEach(function(item, ix) {
+        var tr = document.createElement('tr');
+        tr.className = 'collection-list-row';
+        tr.style.cursor = 'pointer';
+        var msLt = Number(item.min_status);
+        var lt = item.list_tab;
+        if (lt === 'settled') lt = 'completed';
+        if (!lt) {
+          if (msLt === 0) lt = 'pending';
+          else if (msLt >= 2) lt = 'rejected';
+          else lt = 'completed';
+        }
+        tr.setAttribute('data-tc-status', lt);
+        tr.setAttribute('data-salesman-code', item.salesman_code || '');
+        tr.setAttribute('data-bill-date', item.bill_date_display || '');
+        tr.setAttribute('data-bill-date-iso', item.bill_date_iso || '');
+        var isPending = lt === 'pending';
+        var badgeHtml = lt === 'completed'
+          ? '<span class="status-badge status-badge--completed">Completed</span>'
+          : (lt === 'rejected'
+            ? '<span class="status-badge status-badge--rejected">Rejected</span>'
+            : '<span class="status-badge status-badge--pending">Pending</span>');
+        var selectCell = isPending
+          ? '<td class="tcl-cell-select"><input type="checkbox" class="tcl-pending-cb" title="Select for bulk save" aria-label="Select row ' +
+            (ix + 1) + '" /></td>'
+          : '<td class="tcl-cell-select"><span aria-hidden="true"></span></td>';
+        var completedForPrint = Number(item.min_status) === 1 && lt !== 'rejected';
+        var bdSort = item.bill_date_iso || item.bill_date_display || '';
+        var tcStr = (item.total_collection != null ? Number(item.total_collection) : 0).toFixed(2);
+        var billTd = '<td data-sort-value="' + escapeAttr(bdSort) + '">' + escapeHtml(item.bill_date_display || '-') + '</td>';
+        var printBill = escapeAttr(item.bill_date_iso || item.bill_date_display || '');
+        tr.innerHTML =
+          selectCell +
+          '<td>' + (ix + 1) + '</td>' +
+          billTd +
+          '<td>' + escapeHtml(item.salesman_code || '-') + '</td>' +
+          '<td>' + escapeHtml(item.salesman_name || '-') + '</td>' +
+          '<td style="text-align: right;">' + escapeHtml(tcStr) + '</td>' +
+          '<td>' + badgeHtml + '</td>' +
+          '<td><button type="button" class="btn-print-pdf" data-salesman-code="' + escapeAttr(item.salesman_code || '') +
+          '" data-bill-date="' + printBill + '" data-status="' + (completedForPrint ? '1' : '0') + '" title="Print PDF Report">Print</button></td>';
+        tbody.insertBefore(tr, noResultsRow);
+      });
+    }
+    selectedKeys.forEach(function(key) {
+      var parts = key.split('\t');
+      if (parts.length < 2) return;
+      var wantSm = parts[0];
+      var wantBd = parts[1];
+      tbody.querySelectorAll('.tcl-pending-cb').forEach(function(cb) {
+        var row = cb.closest('.collection-list-row');
+        if (!row) return;
+        if (String(row.dataset.salesmanCode || '').trim() !== wantSm) return;
+        if (String(row.dataset.billDateIso || '').trim() !== wantBd) return;
+        cb.checked = true;
+      });
+    });
+    sortCol = -1;
+    sortDir = 1;
+    updateSortIcons();
+    filterRows();
+    syncBulkSelectionUi();
+  }
+  
+  function isRowVisiblePending(row) {
+    return row.style.display !== 'none' && row.getAttribute('data-tc-status') === 'pending';
+  }
+  function syncSelectAllCheckbox() {
+    if (!tclSelectAllPending || activeTcTab !== 'pending') return;
+    const boxes = [];
+    tbody.querySelectorAll('.tcl-pending-cb').forEach(function(cb) {
+      const row = cb.closest('.collection-list-row');
+      if (row && isRowVisiblePending(row)) boxes.push(cb);
+    });
+    if (!boxes.length) {
+      tclSelectAllPending.checked = false;
+      tclSelectAllPending.indeterminate = false;
+      return;
+    }
+    const nChecked = boxes.filter(function(b) { return b.checked; }).length;
+    tclSelectAllPending.checked = nChecked === boxes.length && boxes.length > 0;
+    tclSelectAllPending.indeterminate = nChecked > 0 && nChecked < boxes.length;
+  }
+  function syncBulkSelectionUi() {
+    syncSelectAllCheckbox();
+    syncSavePendingButtonState();
+  }
+
+  if (tbody) {
+    tbody.addEventListener('change', function(e) {
+      if (e.target && e.target.classList && e.target.classList.contains('tcl-pending-cb')) {
+        syncBulkSelectionUi();
+      }
+    });
+  }
+  if (tclSelectAllPending) {
+    tclSelectAllPending.addEventListener('click', function() {
+      if (activeTcTab !== 'pending') return;
+      const on = this.checked;
+      tbody.querySelectorAll('.tcl-pending-cb').forEach(function(cb) {
+        const row = cb.closest('.collection-list-row');
+        if (row && isRowVisiblePending(row)) cb.checked = on;
+      });
+      syncBulkSelectionUi();
+    });
+  }
+
+  function filterRows() {
+    const q = (searchInput.value || '').trim().toLowerCase();
+    
+    const rows = tbody.querySelectorAll('.collection-list-row');
+    let visibleCount = 0;
+    
+    rows.forEach(row => {
+      const code = (row.dataset.salesmanCode || '').toString().toLowerCase();
+      const nameCell = row.cells[4];
+      const name = (nameCell ? nameCell.textContent : '').trim().toLowerCase();
+      const rowTab = row.getAttribute('data-tc-status') || '';
+
+      let tabMatch =
+        activeTcTab === 'pending' || activeTcTab === 'completed' || activeTcTab === 'rejected'
+          ? rowTab === activeTcTab
+          : true;
+      const match = tabMatch && (!q || code.indexOf(q) !== -1 || name.indexOf(q) !== -1);
+      
+      if (match) {
+        row.style.display = '';
+        visibleCount++;
+      } else {
+        row.style.display = 'none';
+      }
+    });
+    
+    if (noResultsRow) {
+      noResultsRow.style.display = (visibleCount === 0 && rows.length > 0) ? '' : 'none';
+    }
+
+    // Renumber Sl.No and compute totals for visible rows
+    let sl = 0;
+    let sumCollection = 0;
+    rows.forEach(row => {
+      if (row.style.display !== 'none') {
+        sl++;
+        if (row.cells[1]) row.cells[1].textContent = sl;
+        const colVal = parseFloat(String(row.cells[5].textContent || '0').replace(/,/g, '')) || 0;
+        sumCollection += colVal;
+      }
+    });
+    
+    const totalRow = document.getElementById('collectionListTotalRow');
+    const totalColEl = document.getElementById('listTotalCollection');
+    const totalLabelEl = document.getElementById('collectionListTotalLabel');
+    if (totalLabelEl) {
+      if (activeTcTab === 'completed') totalLabelEl.textContent = 'Total (completed)';
+      else if (activeTcTab === 'rejected') totalLabelEl.textContent = 'Total (rejected)';
+      else totalLabelEl.textContent = 'Total (pending)';
+    }
+    if (totalRow && totalColEl) {
+      if (visibleCount > 0) {
+        totalRow.style.display = '';
+        totalColEl.textContent = sumCollection.toFixed(2);
+      } else {
+        totalRow.style.display = 'none';
+      }
+    }
+    syncBulkSelectionUi();
+  }
+  
+  searchInput.addEventListener('input', filterRows);
+  searchInput.addEventListener('keyup', filterRows);
+  
+  // Filter button - reload page with date parameters
+  if (btnFilter) {
+    btnFilter.onclick = function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('[DEBUG] Filter button clicked');
+      const dateFrom = dateFromInput ? dateFromInput.value : '';
+      const dateTo = dateToInput ? dateToInput.value : '';
+      console.log('[DEBUG] Date From:', dateFrom, 'Date To:', dateTo);
+      
+      if (!dateFrom && !dateTo) {
+        alert('Please select at least one date (From Date or To Date) to filter');
+        return false;
+      }
+      
+      const params = new URLSearchParams();
+      if (dateFrom) params.set('date_from', dateFrom);
+      if (dateTo) params.set('date_to', dateTo);
+      const queryString = params.toString();
+      const url = '/accounts/temporary-collection/list' + (queryString ? '?' + queryString : '');
+      console.log('[DEBUG] Redirecting to:', url);
+      window.location.href = url;
+      return false;
+    };
+  } else {
+    console.error('[ERROR] Filter button (btnFilter) not found!');
+  }
+  
+  // Allow Enter key to trigger filter
+  if (dateFromInput) {
+    dateFromInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter' && btnFilter) {
+        e.preventDefault();
+        btnFilter.click();
+      }
+    });
+  }
+  if (dateToInput) {
+    dateToInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter' && btnFilter) {
+        e.preventDefault();
+        btnFilter.click();
+      }
+    });
+  }
+  
+  if (btnClear) {
+    btnClear.addEventListener('click', function() {
+      searchInput.value = '';
+      if (dateFromInput) dateFromInput.value = '';
+      if (dateToInput) dateToInput.value = '';
+      searchInput.focus();
+      filterRows();
+      // Reload page without date filters
+      window.location.href = '/accounts/temporary-collection/list';
+    });
+  }
+  
+  // Sorting
+  let sortCol = -1;
+  let sortDir = 1; // 1 = asc, -1 = desc
+  
+  function getCellSortValue(row, colIndex, type) {
+    const cell = row.cells[colIndex];
+    if (!cell) return '';
+    const raw = (cell.textContent || '').trim();
+    const dataVal = cell.getAttribute('data-sort-value');
+    if (type === 'number') {
+      if (colIndex === 1) return parseInt(raw, 10) || 0;
+      const num = dataVal !== null && dataVal !== '' ? parseFloat(dataVal) : parseFloat(raw.replace(/,/g, ''));
+      return isNaN(num) ? 0 : num;
+    }
+    if (type === 'date') {
+      const d = dataVal || raw;
+      return d ? d : '';
+    }
+    return (raw || '').toLowerCase();
+  }
+  
+  function sortTable(logicalCol, type) {
+    if (sortCol === logicalCol) sortDir = -sortDir;
+    else { sortCol = logicalCol; sortDir = 1; }
+    const physCol = logicalCol + 1;
+    
+    const tbodySort = document.getElementById('collectionListBody');
+    const rows = Array.from(tbodySort.querySelectorAll('.collection-list-row'));
+    const noResultsEl = document.getElementById('collectionListNoResults');
+    
+    rows.sort(function(a, b) {
+      const aVal = getCellSortValue(a, physCol, type);
+      const bVal = getCellSortValue(b, physCol, type);
+      let cmp = 0;
+      if (type === 'number') cmp = aVal - bVal;
+      else if (type === 'date') cmp = (aVal || '').localeCompare(bVal || '');
+      else cmp = String(aVal).localeCompare(String(bVal));
+      return sortDir * (cmp < 0 ? -1 : cmp > 0 ? 1 : 0);
+    });
+    
+    const fragment = document.createDocumentFragment();
+    rows.forEach(r => fragment.appendChild(r));
+    if (noResultsEl) tbodySort.insertBefore(fragment, noResultsEl);
+
+    updateSortIcons();
+    filterRows();
+  }
+  
+  function updateSortIcons() {
+    document.querySelectorAll('.sortable .sort-icon').forEach(function(span, i) {
+      span.textContent = (sortCol === i) ? (sortDir === 1 ? ' ▲' : ' ▼') : ' ⇅';
+      span.setAttribute('aria-label', sortCol === i ? (sortDir === 1 ? 'Ascending' : 'Descending') : 'Sort');
+    });
+  }
+  
+  document.querySelectorAll('#collectionListTable thead .sortable').forEach(function(th) {
+    th.addEventListener('click', function() {
+      const col = parseInt(this.getAttribute('data-sort-col'), 10);
+      const type = (this.getAttribute('data-sort-type') || 'text');
+      sortTable(col, type);
+    });
+  });
+  
+  updateSortIcons();
+
+  function runTemporaryCollectionPdfPrint(btn, ev) {
+    if (ev) {
+      ev.stopPropagation();
+      ev.preventDefault();
+    }
+    var salesmanCode = btn.getAttribute('data-salesman-code') || '';
+    var billDate = btn.getAttribute('data-bill-date') || '';
+    var status = btn.getAttribute('data-status') || '';
+    if (!salesmanCode) {
+      alert('Salesman code is missing.');
+      return;
+    }
+    btn.disabled = true;
+    var originalText = btn.textContent;
+    btn.textContent = 'Loading...';
+    var params = new URLSearchParams();
+    params.set('salesman_code', salesmanCode);
+    if (billDate) params.set('billdate', billDate);
+    if (status) params.set('status', status);
+    fetch('/accounts/temporary-collection/print-pdf?' + params.toString())
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        if (res.success && res.pdf_base64 && res.pdf_filename) {
+          try {
+            var pdfBytes = atob(res.pdf_base64);
+            var pdfArray = new Uint8Array(pdfBytes.length);
+            for (var pi = 0; pi < pdfBytes.length; pi++) pdfArray[pi] = pdfBytes.charCodeAt(pi);
+            var blob = new Blob([pdfArray], { type: 'application/pdf' });
+            if (blob.size === 0) throw new Error('PDF file is empty');
+            var printUrl = URL.createObjectURL(blob);
+            var printWindow = window.open(printUrl, '_blank');
+            if (printWindow) {
+              printWindow.onload = function() {
+                printWindow.print();
+                setTimeout(function() { URL.revokeObjectURL(printUrl); }, 1000);
+              };
+              printWindow.onerror = function() {
+                URL.revokeObjectURL(printUrl);
+                alert('Error opening PDF. Please try downloading instead.');
+              };
+            } else {
+              var downloadUrl = URL.createObjectURL(blob);
+              var downloadLink = document.createElement('a');
+              downloadLink.href = downloadUrl;
+              downloadLink.download = res.pdf_filename;
+              downloadLink.style.display = 'none';
+              document.body.appendChild(downloadLink);
+              downloadLink.click();
+              document.body.removeChild(downloadLink);
+              setTimeout(function() {
+                URL.revokeObjectURL(downloadUrl);
+                URL.revokeObjectURL(printUrl);
+              }, 1000);
+            }
+          } catch (pdfErr) {
+            console.error('PDF handling error:', pdfErr);
+            alert('Error processing PDF: ' + (pdfErr.message || 'Unknown error') + '\n\nPlease check if PDF was generated correctly.');
+          }
+        } else {
+          var errorMsg = res.error || res.pdf_error || 'Failed to generate PDF.';
+          alert(errorMsg + '\n\nPlease check server logs for details or contact administrator.');
+          console.error('PDF generation failed:', res);
+        }
+      })
+      .catch(function(err) {
+        console.error('PDF fetch error:', err);
+        alert('Error generating PDF. Please try again.');
+      })
+      .finally(function() {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      });
+  }
+
+  if (tbody && !tbody.dataset.tclDelegated) {
+    tbody.dataset.tclDelegated = '1';
+    tbody.addEventListener('click', function(ev) {
+      var tgt = ev.target;
+      var pdfBtn = tgt.closest ? tgt.closest('.btn-print-pdf') : null;
+      if (pdfBtn) {
+        runTemporaryCollectionPdfPrint(pdfBtn, ev);
+        return;
+      }
+      if (tgt.closest && tgt.closest('.tcl-cell-select')) return;
+      var grow = tgt.closest && tgt.closest('.collection-list-row');
+      if (!grow) return;
+      var scm = grow.dataset.salesmanCode;
+      if (!scm) return;
+      var qs = '?salesman_code=' + encodeURIComponent(String(scm).trim());
+      var bdIso = String(grow.dataset.billDateIso || '').trim();
+      if (bdIso.length >= 10 && bdIso.substring(4, 5) === '-') {
+        qs += '&bill_date=' + encodeURIComponent(bdIso.substring(0, 10));
+      }
+      var tcStat = String(grow.dataset.tcStatus || '').trim();
+      if (tcStat === 'pending') qs += '&line_status=0';
+      else if (tcStat === 'completed') qs += '&line_status=1';
+      else if (tcStat === 'rejected') qs += '&line_status=2';
+      window.location.href = '/accounts/temporary-collection' + qs;
+    });
+  }
+
+  function gatherSelectedBulkPayloadItems() {
+    const out = [];
+    tbody.querySelectorAll('.tcl-pending-cb:checked').forEach(function(cb) {
+      const row = cb.closest('.collection-list-row');
+      if (!row || !isRowVisiblePending(row)) return;
+      const sm = String(row.dataset.salesmanCode || '').trim();
+      const bd = String(row.dataset.billDateIso || '').trim();
+      if (!sm || !bd) return;
+      out.push({ salesman_code: sm, bill_date: bd });
+    });
+    return out;
+  }
+
+  function runBulkPendingSave() {
+    if (tclBulkSaveCompleted) {
+      alert('This bulk save already finished. Wait for the list to refresh, then you can save again.');
+      return;
+    }
+    if (tclBulkSaveInProgress) {
+      return;
+    }
+    const nonce = getSaveNonce();
+    if (!nonce) {
+      alert('Save token missing. Reload the page (or log out and log in again) and try.');
+      return;
+    }
+    const selected = gatherSelectedBulkPayloadItems();
+    if (!selected.length) {
+      alert('Select at least one pending salesman row to save.');
+      return;
+    }
+    const msgConfirm =
+      'Save ' + selected.length + ' selected pending group(s)?\nEach uses the same rules as Temporary Collection > Save.';
+
+    tclBulkSaveInProgress = true;
+    if (!confirm(msgConfirm)) {
+      tclBulkSaveInProgress = false;
+      return;
+    }
+
+    var overlayMsg = 'Saving ' + selected.length + ' group(s)…';
+    if (typeof window.showLoadingOverlay === 'function') {
+      window.showLoadingOverlay(overlayMsg);
+    }
+
+    if (tclRefreshCtl && tclRefreshCtl.stop) tclRefreshCtl.stop();
+    if (btnSavePending) btnSavePending.disabled = true;
+
+    const df = dateFromInput ? dateFromInput.value : '';
+    const dto = dateToInput ? dateToInput.value : '';
+    const payload = {
+      save_nonce: nonce,
+      date_from: df,
+      date_to: dto,
+      selected: selected,
+    };
+
+    function bulkSaveCleanup() {
+      if (typeof window.hideLoadingOverlay === 'function') {
+        window.hideLoadingOverlay();
+      }
+    }
+
+    requestAnimationFrame(function() {
+      fetch(TCL_SAVE_ALL_URL, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, json: j, status: r.status }; }); })
+      .then(function(p) {
+        const data = p.json || {};
+        applySaveNonceFromPayload(data);
+        if (!p.ok) {
+          alert(data.error || ('Request failed (' + p.status + ')'));
+          syncBulkSelectionUi();
+          tclRefreshCtl = null;
+          attachTclCollectionJsonRefresh();
+          return;
+        }
+        const msg =
+          'Bulk save finished.\n' +
+          'OK: ' + (data.saved_ok != null ? data.saved_ok : 0) +
+          ', Skipped / no payable lines: ' + (data.skipped_no_lines != null ? data.skipped_no_lines : 0) +
+          ', Failed: ' + (data.failed != null ? data.failed : 0) +
+          (data.results && data.results.length ? '\n\nSee server log / network response for detail.' : '');
+        alert(msg);
+        var savedOk = (data.saved_ok != null ? data.saved_ok : 0);
+        if (savedOk > 0) {
+          tclBulkSaveCompleted = true;
+          tclBulkRefreshAfterSave = true;
+          if (btnSavePending) {
+            btnSavePending.disabled = true;
+            btnSavePending.title = 'Already saved — refreshing list';
+          }
+        }
+        syncBulkSelectionUi();
+        attachTclCollectionJsonRefresh();
+        if (tclRefreshCtl && typeof tclRefreshCtl.refreshNow === 'function') tclRefreshCtl.refreshNow();
+      })
+      .catch(function(err) {
+        console.error(err);
+        alert('Bulk save failed: ' + (err && err.message ? err.message : 'unknown'));
+        syncBulkSelectionUi();
+        tclRefreshCtl = null;
+        attachTclCollectionJsonRefresh();
+      })
+      .finally(function() {
+        tclBulkSaveInProgress = false;
+        bulkSaveCleanup();
+        if (!tclBulkSaveCompleted) {
+          syncBulkSelectionUi();
+        }
+      });
+    });
+  }
+
+  if (btnSavePending) {
+    btnSavePending.addEventListener('click', runBulkPendingSave);
+  }
+  
+  filterRows();
+});
+</script>
+{% endblock %}

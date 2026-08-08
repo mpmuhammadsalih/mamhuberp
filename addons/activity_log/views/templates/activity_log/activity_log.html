@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Master activity log{% endblock %}
+{% block content %}
+<style>
+  body { background: #fff !important; }
+  .actlog-page { max-width: 1100px; }
+  .actlog-page table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .actlog-page th, .actlog-page td { border-bottom: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; vertical-align: top; }
+  .actlog-page th { background: #f8fafc; color: #475569; font-weight: 600; }
+  .actlog-meta { margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .actlog-pills { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .actlog-pills span { font-size: 12px; color: #64748b; margin-right: 4px; }
+  .actlog-pills a {
+    display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px;
+    background: #f1f5f9; color: #334155; text-decoration: none; border: 1px solid #e2e8f0;
+  }
+  .actlog-pills a:hover { background: #e2e8f0; color: #0f172a; }
+  .actlog-pills a.actlog-pill--on { background: #1e293b; color: #f8fafc; border-color: #1e293b; }
+</style>
+
+<div class="page-po actlog-page">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Master activity log</h1>
+      <p class="page-po__muted">
+        Audit trail for Master menu screens (customer, vendor, salesman, route, customer category, employee, session)
+        and Inventory master screens (category M/D/C, brand–shelf–color, units of measurement, item property &amp; origin).
+        Creates, updates, deletes, and category Excel imports are logged in your tenant database.
+      </p>
+    </div>
+    <div class="page-po__actions">
+      <a href="{{ url_for('dashboard.dashboard') }}" class="page-po__btn-secondary">Dashboard</a>
+    </div>
+  </div>
+
+  <div class="actlog-pills">
+    <span>Show:</span>
+    <a href="{{ url_for('activity_log.activity_log_page') }}" class="{% if not filter_entity %}actlog-pill--on{% endif %}">All</a>
+    {% for slug, label in entity_filters %}
+      <a href="{{ url_for('activity_log.activity_log_page', entity=slug, match='exact') }}"
+        class="{% if filter_entity == slug and filter_match_exact %}actlog-pill--on{% endif %}">{{ label }}</a>
+    {% endfor %}
+  </div>
+
+  <form class="actlog-meta" method="get" action="{{ url_for('activity_log.activity_log_page') }}">
+    <div class="form-group" style="margin:0;">
+      <label for="entity_f" style="display:block;margin-bottom:4px;font-size:12px;color:#64748b;">Filter by entity key</label>
+      <input class="input" id="entity_f" name="entity" type="text" maxlength="96" placeholder="e.g. customer, item_category_master" style="padding:6px 10px;min-width:220px;"
+        value="{{ filter_entity }}" />
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label for="match_m" style="display:block;margin-bottom:4px;font-size:12px;color:#64748b;">Match mode</label>
+      <select class="input" id="match_m" name="match" style="padding:6px 10px;">
+        <option value="prefix" {% if not filter_match_exact %}selected{% endif %}>Starts with (prefix)</option>
+        <option value="exact" {% if filter_match_exact %}selected{% endif %}>Exact entity name</option>
+      </select>
+    </div>
+    <button type="submit" class="page-po__btn-secondary">Apply</button>
+    {% if filter_entity %}
+    <a href="{{ url_for('activity_log.activity_log_page') }}" class="page-po__btn-secondary">Clear</a>
+    {% endif %}
+  </form>
+
+  {% if not rows %}
+  <p class="page-po__muted">No entries yet.</p>
+  {% else %}
+  <div style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th style="white-space:nowrap;">When</th>
+          <th>Action</th>
+          <th>Entity</th>
+          <th>Summary</th>
+          <th>User</th>
+          <th>Detail</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td style="white-space:nowrap;">{{ r.logged_at or '' }}</td>
+          <td>{{ r.action or '' }}</td>
+          <td>{{ r.entity or '' }}</td>
+          <td>{{ r.summary or '' }}</td>
+          <td>{{ r.username or '' }}</td>
+          <td><code style="font-size:11px;word-break:break-all;">{% if r.detail %}{{ r.detail | tojson }}{% endif %}</code></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

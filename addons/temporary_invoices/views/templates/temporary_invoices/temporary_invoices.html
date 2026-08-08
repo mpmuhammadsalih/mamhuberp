@@ -1,0 +1,429 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="ti-container">
+<style>
+  body { overflow-x: auto; min-height: 100vh; background: #fff; color: #212529; }
+  .ti-page { max-width: min(1680px, 98vw); margin: 0 auto; padding: 24px 16px; box-sizing: border-box; }
+  .ti-topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0; padding-top: 0; padding-bottom: 0; border-bottom: 1px solid #dee2e6; }
+  .ti-topbar h1 { margin: 0; font-size: 24px; font-weight: 400; color: #212529; }
+  .ti-topbar .ti-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .ti-toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none !important;
+    border: 1px solid transparent;
+    line-height: 1.3;
+    box-sizing: border-box;
+    font-family: inherit;
+    white-space: nowrap;
+  }
+  .ti-toolbar-btn--primary {
+    background: #28a745 !important;
+    border-color: #28a745 !important;
+    color: #fff !important;
+  }
+  .ti-toolbar-btn--primary:hover { filter: brightness(0.92); }
+  .ti-toolbar-btn--outline {
+    background: #fff;
+    border-color: #cbd5e1 !important;
+    color: #334155 !important;
+  }
+  .ti-toolbar-btn--outline:hover {
+    background: #f8fafc;
+    border-color: #94a3b8 !important;
+    color: #0f172a !important;
+  }
+  .ti-toolbar-btn--export {
+    background: #fff;
+    border-color: #5eead4 !important;
+    color: #0f766e !important;
+  }
+  .ti-toolbar-btn--export:hover {
+    background: #f0fdfa;
+    border-color: #2dd4bf !important;
+    color: #115e59 !important;
+  }
+  .ti-toolbar-btn--ai {
+    background: #f0f9ff;
+    border-color: #93c5fd !important;
+    color: #1d4ed8 !important;
+  }
+  .ti-toolbar-btn--ai:hover {
+    background: #dbeafe;
+    border-color: #3b82f6 !important;
+    color: #1e40af !important;
+  }
+  .ti-toolbar-btn--sales {
+    background: linear-gradient(180deg, #f472b6 0%, #e11d48 100%) !important;
+    border-color: #be123c !important;
+    color: #fff !important;
+    box-shadow: 0 1px 2px rgba(190, 18, 60, 0.25);
+  }
+  .ti-toolbar-btn--sales:hover {
+    filter: brightness(1.06);
+    border-color: #9f1239 !important;
+  }
+  .ti-filters { margin-bottom: 0; padding: 0; border-bottom: 1px solid #dee2e6; }
+  .ti-filters .form-grid { display: flex; flex-wrap: wrap; gap: 0 24px; align-items: center; }
+  .ti-filters .form-group { margin-bottom: 0; }
+  .ti-filters .form-group label { margin: 0; font-size: 13px; font-weight: 400; color: #495057; display: block; line-height: 1.2; }
+  .ti-filters .input, .ti-filters .search-field input { border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; padding: 0; line-height: 1.25; font-size: 13px; background: transparent; width: 140px; }
+  .ti-filters .input:focus, .ti-filters .search-field:focus-within { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .ti-filters .search-field { border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; }
+  .ti-filters .search-field--popup .search-picker { padding: 0 10px; line-height: 1.25; }
+  .ti-filters .search-field--popup .search-clear { height: auto; min-height: 0; padding: 0; line-height: 1; }
+  .ti-filters-extra-grid { margin-top: 12px; padding-top: 12px; border-top: 1px solid #eef1f4; }
+  .ti-filters select.ti-select-filter {
+    border: none;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 0;
+    padding: 0 18px 0 0;
+    line-height: 1.25;
+    font-size: 13px;
+    background-color: transparent;
+    cursor: pointer;
+    width: 168px;
+    max-width: 100%;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10'%3E%3Cpath fill='%23666' d='M2 3h6L5 7z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 2px center;
+  }
+  .ti-filters select.ti-select-filter:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .ti-input-billno { width: 200px !important; max-width: 100%; }
+  .ti-input-num { width: 110px !important; }
+  .ti-section-title { font-size: 14px; font-weight: 600; color: #212529; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #007bff; display: inline-block; }
+  .ti-inv-tabbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .ti-inv-tab-btn {
+    padding: 6px 14px;
+    border: 1px solid #dee2e6;
+    background: #fff;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    color: #495057;
+  }
+  .ti-inv-tab-btn:hover { background: #f8f9fa; }
+  .ti-inv-tab-btn.is-active { background: #007bff; color: #fff; border-color: #007bff; }
+  #temporaryInvoicesTable thead { position: sticky; top: 0; z-index: 1; background: #f8f9fa !important; }
+  #temporaryInvoicesTable thead th { background: #f8f9fa !important; color: #495057 !important; padding: 10px 12px; font-weight: 600; font-size: 12px; border: none; border-bottom: 1px solid #dee2e6; }
+  #temporaryInvoicesTable thead th.sortable { cursor: pointer; }
+  #temporaryInvoicesTable thead th.sortable:hover { background: #e9ecef !important; }
+  #temporaryInvoicesTable tbody td { padding: 8px 12px; border: none; border-bottom: 1px solid #dee2e6; font-size: 13px; }
+  #temporaryInvoicesTable tbody tr:hover { background: #f8f9fa !important; }
+  .ti-container .scroll-table { border: 1px solid #dee2e6; border-radius: 4px; background: #fff; overflow: auto; }
+  .ti-container .table-total { background: #f8f9fa !important; }
+  .ti-container .table-total td { font-weight: 700; color: #212529; padding: 8px 12px !important; }
+  .ti-modal-thead { background: #f8f9fa !important; }
+  .ti-modal-thead th { background: #f8f9fa !important; color: #495057 !important; padding: 8px 12px; border-bottom: 1px solid #dee2e6; font-weight: 600; font-size: 12px; }
+  #temporaryInvoicesTable tbody tr.ti-inv-data-row { cursor: pointer; }
+  #temporaryInvoicesTable tbody tr.ti-inv-data-row:active { background: #eef6ff !important; }
+  .ti-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid #dee2e6;
+    font-size: 13px;
+    color: #495057;
+  }
+  .ti-pagination-meta { flex: 1; min-width: 140px; }
+  .ti-pagination-disabled {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #94a3b8;
+    border: 1px solid #e2e8f0;
+    cursor: not-allowed;
+    user-select: none;
+  }
+</style>
+<div class="ti-page">
+  <div class="ti-topbar">
+    <h1>Sales Invoices</h1>
+    <div class="ti-actions">
+      <button type="button" class="ti-toolbar-btn ti-toolbar-btn--primary" id="tempInvoiceFilter">Filter</button>
+      <button type="button" class="ti-toolbar-btn ti-toolbar-btn--outline" id="tempInvoiceClear">Clear</button>
+      <button type="button" class="ti-toolbar-btn ti-toolbar-btn--export" id="tempInvoiceExport">Export to Excel</button>
+      {% if is_admin_user %}
+      <a class="ti-toolbar-btn ti-toolbar-btn--outline" href="{{ url_for('temporary_invoices.temporary_invoices_data_config') }}">Data config</a>
+      {% endif %}
+      <a class="ti-toolbar-btn ti-toolbar-btn--ai" href="{{ url_for('temporary_invoices.invoice_analysis') }}">AI Reports</a>
+      <a class="ti-toolbar-btn ti-toolbar-btn--sales" href="{{ url_for('temporary_invoices.temporary_invoice_modify') }}" id="tempInvoiceToolbarModify">Modify</a>
+    </div>
+  </div>
+
+  <div class="ti-filters">
+    <input type="hidden" id="tempInvoicePerPage" value="{{ ti_per_page|default(500) }}" />
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="tempInvoiceDateFrom">From Date</label>
+        <input type="date" id="tempInvoiceDateFrom" class="input" value="{{ date_from }}" />
+      </div>
+      <div class="form-group">
+        <label for="tempInvoiceDateTo">To Date</label>
+        <input type="date" id="tempInvoiceDateTo" class="input" value="{{ date_to }}" />
+      </div>
+      <div class="form-group">
+        <label for="tempInvoiceCustomerDisplay">Customer</label>
+        <span class="search-field search-field--popup">
+          <input type="text" id="tempInvoiceCustomerDisplay" placeholder="Select customer..." readonly value="{{ customer_code }}" />
+          <button type="button" class="search-clear" id="tempInvoiceCustomerClear" aria-label="Clear customer" style="display: none;">×</button>
+          <button type="button" class="search-picker" id="tempInvoiceCustomerPicker" aria-label="Open customer list">▾</button>
+        </span>
+        <input type="hidden" id="tempInvoiceCustomer" value="{{ customer_code }}" />
+      </div>
+      <div class="form-group">
+        <label for="tempInvoiceSalesmanDisplay">Salesman</label>
+        <span class="search-field search-field--popup">
+          <input type="text" id="tempInvoiceSalesmanDisplay" placeholder="Select salesman..." readonly value="{{ salesman_code }}" />
+          <button type="button" class="search-clear" id="tempInvoiceSalesmanClear" aria-label="Clear salesman" style="display: none;">×</button>
+          <button type="button" class="search-picker" id="tempInvoiceSalesmanPicker" aria-label="Open salesman list">▾</button>
+        </span>
+        <input type="hidden" id="tempInvoiceSalesman" value="{{ salesman_code }}" />
+      </div>
+    </div>
+    <div class="form-grid ti-filters-extra-grid">
+      <div class="form-group">
+        <label for="tempInvoiceBillno">Bill no</label>
+        <input type="text" id="tempInvoiceBillno" class="input ti-input-billno" placeholder="Search contains…" value="{{ billno_search }}" autocomplete="off" />
+      </div>
+      <div class="form-group">
+        <label for="tempInvoiceOrderno">Order No</label>
+        <input type="text" id="tempInvoiceOrderno" class="input ti-input-billno" placeholder="Search contains…" value="{{ orderno_search }}" autocomplete="off" />
+      </div>
+      <div class="form-group">
+        <label for="tempInvoiceBillType">Bill type</label>
+        <select id="tempInvoiceBillType" class="ti-select-filter" aria-label="Bill type filter">
+          <option value="" {% if not bill_type_filter %}selected{% endif %}>All (C / R / T)</option>
+          <option value="C" {% if bill_type_filter == 'C' %}selected{% endif %}>Cash</option>
+          <option value="R" {% if bill_type_filter == 'R' %}selected{% endif %}>Credit</option>
+          <option value="T" {% if bill_type_filter == 'T' %}selected{% endif %}>Temporary</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="tempInvoiceTxnKind">Sale / Return</label>
+        {% set tk = (txn_kind or 'all')|trim|lower %}
+        <select id="tempInvoiceTxnKind" class="ti-select-filter" aria-label="Sale or sales return filter">
+          <option value="all" {% if tk == 'all' %}selected{% endif %}>All</option>
+          <option value="sale" {% if tk == 'sale' %}selected{% endif %}>Sale (Net &gt; 0)</option>
+          <option value="salesreturn" {% if tk == 'salesreturn' %}selected{% endif %}>Sales Return (Net &lt; 0)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="tempInvoiceCreatedBy">Created by</label>
+        <input type="text" id="tempInvoiceCreatedBy" class="input ti-input-billno" placeholder="User contains…" value="{{ created_by_search }}" autocomplete="off" />
+      </div>
+      <div class="form-group">
+        <label for="tempInvoiceNetMin">Net amount min</label>
+        <input type="text" id="tempInvoiceNetMin" class="input ti-input-num" inputmode="decimal" placeholder="Min" value="{{ net_min }}" autocomplete="off" />
+      </div>
+      <div class="form-group">
+        <label for="tempInvoiceNetMax">Net amount max</label>
+        <input type="text" id="tempInvoiceNetMax" class="input ti-input-num" inputmode="decimal" placeholder="Max" value="{{ net_max }}" autocomplete="off" />
+      </div>
+    </div>
+  </div>
+
+  <h3 class="ti-section-title">Invoices</h3>
+  {% if invoices %}
+  <div class="ti-inv-tabbar" id="tempInvoiceTabBar" role="tablist" aria-label="Invoice type">
+    <button type="button" class="ti-inv-tab-btn is-active" data-inv-tab="all" role="tab" aria-selected="true">All</button>
+    <button type="button" class="ti-inv-tab-btn" data-inv-tab="cash" role="tab" aria-selected="false">Cash</button>
+    <button type="button" class="ti-inv-tab-btn" data-inv-tab="credit" role="tab" aria-selected="false">Credit</button>
+    <button type="button" class="ti-inv-tab-btn" data-inv-tab="temporary" role="tab" aria-selected="false">Temporary</button>
+  </div>
+  {% endif %}
+  <div class="scroll-table">
+    <table class="table" id="temporaryInvoicesTable" data-sl-base="{{ ti_sl_base|default(0) }}">
+      <thead>
+        <tr>
+              <th class="sortable" data-sort="slno">Sl No<span class="sort-indicator"></span></th>
+              <th class="sortable" data-sort="billno">Bill No<span class="sort-indicator"></span></th>
+              <th class="sortable" data-sort="billdate" style="min-width: 120px;">Bill Date<span class="sort-indicator"></span></th>
+              <th class="sortable" data-sort="customercode">Customer Code<span class="sort-indicator"></span></th>
+              <th class="sortable" data-sort="customername">Customer Name<span class="sort-indicator"></span></th>
+              <th class="sortable" data-sort="orderno">Order No<span class="sort-indicator"></span></th>
+              <th class="sortable" data-sort="createdby">Created by<span class="sort-indicator"></span></th>
+              <th class="sortable" data-sort="netbillamount">Net Bill Amount<span class="sort-indicator"></span></th>
+              <th class="sortable" data-sort="billtype">Bill Type<span class="sort-indicator"></span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if invoices %}
+              {% for row in invoices %}
+                {% set bt_raw = ((row.billtype or '')|string)|trim|upper %}
+                {% set btc = (bt_raw[:1] if bt_raw else 'T') %}
+                {% if btc == 'C' %}
+                  {% set inv_tab = 'cash' %}
+                {% elif btc == 'R' %}
+                  {% set inv_tab = 'credit' %}
+                {% else %}
+                  {% set inv_tab = 'temporary' %}
+                {% endif %}
+                <tr
+                  class="ti-inv-data-row"
+                  data-invoice-tab="{{ inv_tab }}"
+                  data-net-amount="{{ (row.netbillamount or 0)|float }}"
+                  data-billno="{{ row.billno }}"
+                >
+                  <td>{{ ti_sl_base|default(0) + loop.index }}</td>
+                  <td>{{ row.billno or '-' }}</td>
+                  <td>
+                    {% if row.billdate %}
+                      {{ row.billdate.strftime('%d-%b-%Y') if row.billdate else '-' }}
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                  <td>{{ row.customercode or '-' }}</td>
+                  <td>{{ row.customername or '-' }}</td>
+                  <td>{{ row.orderno or '-' }}</td>
+                  <td>{{ row.createdby or '-' }}</td>
+                  <td>{{ "%.2f"|format((row.netbillamount or 0)|float) }}</td>
+                  <td>{{ row.billtype or '-' }}</td>
+                </tr>
+              {% endfor %}
+              <tr id="tempInvoicesTabEmpty" class="table-empty ti-tab-empty-row" style="display: none;">
+                <td colspan="9">No invoices in this tab.</td>
+              </tr>
+            {% else %}
+              <tr class="table-empty">
+                <td colspan="9">No invoices found for the selected filters.</td>
+              </tr>
+            {% endif %}
+          </tbody>
+          {% if invoices %}
+            <tfoot id="tempInvoicesTableFoot">
+              <tr class="table-total">
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td style="text-align: right; font-weight: bold;">Total:</td>
+                <td></td>
+                <td></td>
+                <td id="tempInvoicesTotalAmount" style="font-weight: bold;">
+                  {# Sum matches rows on this page only (server-side pagination). #}
+                  {% set total_amount = invoices|sum(attribute='netbillamount')|default(0) %}
+                  {{ "%.2f"|format(total_amount|float) }}
+                </td>
+                <td></td>
+              </tr>
+            </tfoot>
+          {% endif %}
+        </table>
+  </div>
+
+  {% if invoices or (ti_page|default(1) > 1) %}
+  <div class="ti-pagination" role="navigation" aria-label="Invoice list pages">
+    {% if ti_prev_url %}
+    <a href="{{ ti_prev_url }}" class="ti-toolbar-btn ti-toolbar-btn--outline">Previous</a>
+    {% else %}
+    <span class="ti-pagination-disabled">Previous</span>
+    {% endif %}
+    <span class="ti-pagination-meta">
+      Page {{ ti_page|default(1) }}
+      · {{ ti_per_page|default(500) }} per page
+      {% if ti_has_next %}· more on next page{% endif %}
+    </span>
+    {% if ti_next_url %}
+    <a href="{{ ti_next_url }}" class="ti-toolbar-btn ti-toolbar-btn--outline">Next</a>
+    {% else %}
+    <span class="ti-pagination-disabled">Next</span>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+  <div class="modal hidden" id="tempInvoiceCustomerModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="tempInvoiceCustomerModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h4>Select Customer</h4>
+        <button type="button" class="modal__close" data-close="tempInvoiceCustomerModal">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="modal__search">
+          <span class="search-field search-field--wide">
+            <input type="text" id="tempInvoiceCustomerSearch" placeholder="Search customer..." />
+            <button type="button" class="search-clear" id="tempInvoiceCustomerSearchClear" style="display: none;">×</button>
+          </span>
+        </div>
+        <div class="scroll-table modal__table">
+          <table class="table" id="tempInvoiceCustomerTable">
+            <thead class="ti-modal-thead">
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for customer in customers %}
+                <tr data-code="{{ customer.code }}" data-name="{{ customer.name or '' }}">
+                  <td>{{ customer.code }}</td>
+                  <td>{{ customer.name or '-' }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="tempInvoiceSalesmanModal" role="dialog" aria-modal="true">
+    <div class="modal__overlay" data-close="tempInvoiceSalesmanModal"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h4>Select Salesman</h4>
+        <button type="button" class="modal__close" data-close="tempInvoiceSalesmanModal">×</button>
+      </div>
+      <div class="modal__body">
+        <div class="modal__search">
+          <span class="search-field search-field--wide">
+            <input type="text" id="tempInvoiceSalesmanSearch" placeholder="Search salesman..." />
+            <button type="button" class="search-clear" id="tempInvoiceSalesmanSearchClear" style="display: none;">×</button>
+          </span>
+        </div>
+        <div class="scroll-table modal__table">
+          <table class="table" id="tempInvoiceSalesmanTable">
+            <thead class="ti-modal-thead">
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for salesman in salesmen %}
+                <tr data-code="{{ salesman.code }}" data-name="{{ salesman.name or '' }}">
+                  <td>{{ salesman.code }}</td>
+                  <td>{{ salesman.name or '-' }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  <script type="application/json" id="tempInvoicesPageUrl">{{ url_for('temporary_invoices.temporary_invoices')|tojson }}</script>
+  <script type="application/json" id="tempInvoiceModifyUrl">{{ url_for('temporary_invoices.temporary_invoice_modify')|tojson }}</script>
+  <script src="{{ url_for('static', filename='js/temporary_invoices.js') }}"></script>
+{% endblock %}

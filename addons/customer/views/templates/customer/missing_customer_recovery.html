@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body { background: #fff !important; }
+  .mcr-page { max-width: 1200px; margin: 0 auto; padding: 0 16px 32px; }
+  .mcr-page .page-po__topbar { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid #dee2e6; }
+  .mcr-muted { color: #6c757d; font-size: 13px; margin: 8px 0 16px; line-height: 1.45; }
+  .mcr-grid { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: flex-end; margin-bottom: 18px; }
+  .mcr-field label { display: block; font-size: 11px; font-weight: 600; color: #6c757d; text-transform: uppercase; letter-spacing: .35px; margin-bottom: 4px; }
+  .mcr-field input { font-size: 13px; padding: 8px 10px; border: 1px solid #ced4da; border-radius: 4px; min-width: 120px; }
+  .mcr-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .mcr-btn { padding: 8px 16px; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; text-decoration: none; display: inline-block; }
+  .mcr-btn-primary { background: #007bff; color: #fff !important; }
+  .mcr-btn-secondary { background: #f8f9fa; color: #495057 !important; border: 1px solid #dee2e6; }
+  .mcr-table-wrap { overflow: auto; border: 1px solid #dee2e6; border-radius: 6px; margin-top: 12px; }
+  .mcr-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .mcr-table th { background: #f8f9fa; padding: 10px 12px; text-align: left; font-weight: 600; border-bottom: 1px solid #dee2e6; white-space: nowrap; }
+  .mcr-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  .mcr-table tr:last-child td { border-bottom: none; }
+  .mcr-assign-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-top: 16px; padding: 14px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
+  .mcr-search-field { display: inline-flex; align-items: stretch; flex: 1; min-width: 220px; max-width: 420px; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #fff; }
+  .mcr-search-field input.mcr-search-display { flex: 1; border: none !important; padding: 8px 10px; font-size: 13px; min-width: 0; color: #212529; }
+  .mcr-search-field input.mcr-search-display::placeholder { color: #94a3b8; }
+  .mcr-search-field button.mcr-search-picker { background: #334155; color: #fff; border: none; padding: 0 14px; cursor: pointer; font-size: 12px; flex-shrink: 0; }
+  .mcr-modal { position: fixed; inset: 0; z-index: 3000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .mcr-modal.hidden { display: none !important; }
+  .mcr-modal__backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); cursor: pointer; }
+  .mcr-modal__panel { position: relative; background: #fff; border-radius: 14px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); width: 100%; max-width: 520px; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; }
+  .mcr-modal__head { padding: 12px 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+  .mcr-modal__head h4 { margin: 0; font-size: 15px; font-weight: 600; color: #1e293b; }
+  .mcr-modal__close { background: none; border: none; font-size: 22px; cursor: pointer; color: #64748b; line-height: 1; padding: 0 4px; }
+  .mcr-modal__search { padding: 12px 16px 8px; border-bottom: 1px solid #f1f5f9; }
+  .mcr-modal__search input { width: 100%; box-sizing: border-box; padding: 9px 12px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px; }
+  .mcr-modal__body { overflow: auto; flex: 1; padding: 0 8px 12px; }
+  .mcr-modal__body table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .mcr-modal__body th { position: sticky; top: 0; background: #334155; color: #fff; padding: 8px 10px; text-align: left; font-weight: 600; }
+  .mcr-modal__body td { padding: 9px 10px; border-bottom: 1px solid #e2e8f0; cursor: pointer; }
+  .mcr-modal__body tr[data-user]:hover { background: #f1f5f9; }
+  .mcr-modal__body .table-empty td { cursor: default; color: #64748b; }
+</style>
+<div class="mcr-page page-po">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Missing customer recovery</h1>
+      <p class="page-po__muted">Customers who bought before but have <strong>no invoice</strong> in the last <em>N</em> days. Assign them to a user for visits and feedback.</p>
+    </div>
+    <div class="mcr-actions">
+      <a href="{{ url_for('customer.missing_customer_recovery_tasks') }}" class="mcr-btn mcr-btn-primary">My visit tasks</a>
+      <a href="{{ url_for('customer.customer_list') }}" class="mcr-btn mcr-btn-secondary">Customer list</a>
+    </div>
+  </div>
+
+  <p class="mcr-muted">Rule: last bill date is older than <strong>inactive days</strong>, with at least <strong>min. bills</strong> in history. Rows already on an open visit task are skipped. Location scope: current session location when invoice headers have location code.</p>
+
+  {% if auto_recovered_count is defined and auto_recovered_count > 0 %}
+  <div class="flash flash--success" style="margin-bottom:14px;">
+    {{ auto_recovered_count }} open visit task(s) were marked <strong>Recovered</strong> automatically — new invoice detected after the case snapshot date.
+  </div>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('customer.missing_customer_recovery') }}" class="mcr-grid">
+    <input type="hidden" name="action" value="find" />
+    <div class="mcr-field">
+      <label for="inactive_days">Inactive days</label>
+      <input type="number" id="inactive_days" name="inactive_days" min="1" max="3650" value="{{ inactive_days }}" required />
+    </div>
+    <div class="mcr-field">
+      <label for="min_bills">Min. bills (lifetime)</label>
+      <input type="number" id="min_bills" name="min_bills" min="1" max="99999" value="{{ min_bills }}" required />
+    </div>
+    <button type="submit" class="mcr-btn mcr-btn-primary">Load list</button>
+  </form>
+
+  {% if lapsed_rows is not none %}
+    {% if lapsed_rows|length == 0 %}
+      <p class="mcr-muted">No customers match this rule (or all matches already have an open visit task).</p>
+    {% else %}
+      <div id="mcrAssigneeModal" class="mcr-modal hidden" aria-modal="true" role="dialog" aria-labelledby="mcrAssigneeModalTitle">
+        <div class="mcr-modal__backdrop" aria-label="Close" data-mcr-assignee-close></div>
+        <div class="mcr-modal__panel">
+          <div class="mcr-modal__head">
+            <h4 id="mcrAssigneeModalTitle">Assign to tenant user</h4>
+            <button type="button" class="mcr-modal__close" data-mcr-assignee-close aria-label="Close">&times;</button>
+          </div>
+          <div class="mcr-modal__search">
+            <input type="text" id="mcrAssigneeSearch" placeholder="Type to search username or employee code…" autocomplete="off" />
+          </div>
+          <div class="mcr-modal__body">
+            <table>
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>Employee</th>
+                  <th>Tenant</th>
+                </tr>
+              </thead>
+              <tbody id="mcrAssigneeModalBody">
+                {% if assign_users|length == 0 %}
+                  <tr class="table-empty"><td colspan="3">No active users for this branch scope.</td></tr>
+                {% endif %}
+                {% for u in assign_users %}
+                  <tr
+                    data-user="{{ u.username|e }}"
+                    data-ec="{{ (u.employeecode|string if u.employeecode is not none else '')|e }}"
+                    data-tid="{{ u.tenant_id|e }}"
+                  >
+                    <td>{{ u.username }}</td>
+                    <td>{{ u.employeecode if u.employeecode is not none else '—' }}</td>
+                    <td>{{ u.tenant_id or '—' }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <form method="post" action="{{ url_for('customer.missing_customer_recovery_assign') }}" id="mcrAssignForm">
+        <input type="hidden" name="inactive_days_rule" value="{{ inactive_days }}" />
+        <input type="hidden" name="assignee" id="mcrAssigneeHidden" value="" />
+        <div class="mcr-assign-bar">
+          <div class="mcr-field" style="margin:0; flex:1; min-width:240px;">
+            <label for="mcrAssigneeDisplay">Assign to user</label>
+            <span class="mcr-search-field">
+              <input type="text" id="mcrAssigneeDisplay" class="mcr-search-display" readonly placeholder="Click ▾ to open pick list and search…" title="Pick tenant user" />
+              <button type="button" class="mcr-search-picker" id="mcrAssigneeOpen" aria-label="Open user pick list">▾</button>
+            </span>
+          </div>
+          <button type="submit" class="mcr-btn mcr-btn-primary" id="mcrAssignSubmit">Assign selected</button>
+          <span class="mcr-muted" style="margin:0;">{{ lapsed_rows|length }} row(s) loaded · Session location: {{ location_code }}</span>
+        </div>
+        <div class="mcr-table-wrap">
+          <table class="mcr-table">
+            <thead>
+              <tr>
+                <th style="width:40px;"><input type="checkbox" id="mcrSelectAll" title="Select all" /></th>
+                <th>Customer code</th>
+                <th>Customer name</th>
+                <th>Last purchase</th>
+                <th>Bills</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in lapsed_rows %}
+                <tr>
+                  <td><input type="checkbox" name="cust_pick" value="{{ row.customer_code }}" class="mcr-pick" /></td>
+                  <td>{{ row.customer_code }}</td>
+                  <td>{{ row.customer_name or '—' }}</td>
+                  <td>{% if row.last_purchase_date %}{{ row.last_purchase_date.strftime('%d-%b-%Y') if row.last_purchase_date.strftime is defined else row.last_purchase_date }}{% else %}—{% endif %}</td>
+                  <td>{{ row.bill_count or 0 }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </form>
+      <script>
+        (function () {
+          var all = document.getElementById('mcrSelectAll');
+          if (all) {
+            all.addEventListener('change', function () {
+              document.querySelectorAll('.mcr-pick').forEach(function (cb) { cb.checked = all.checked; });
+            });
+          }
+
+          var modal = document.getElementById('mcrAssigneeModal');
+          var openBtn = document.getElementById('mcrAssigneeOpen');
+          var disp = document.getElementById('mcrAssigneeDisplay');
+          var hid = document.getElementById('mcrAssigneeHidden');
+          var search = document.getElementById('mcrAssigneeSearch');
+          var tbody = document.getElementById('mcrAssigneeModalBody');
+          var form = document.getElementById('mcrAssignForm');
+
+          function closeModal() {
+            if (modal) modal.classList.add('hidden');
+          }
+          function openModal() {
+            if (!modal) return;
+            modal.classList.remove('hidden');
+            if (search) {
+              search.value = '';
+              search.focus();
+              filterRows('');
+            }
+          }
+
+          function filterRows(q) {
+            if (!tbody) return;
+            var needle = (q || '').trim().toLowerCase();
+            tbody.querySelectorAll('tr[data-user]').forEach(function (tr) {
+              var u = (tr.getAttribute('data-user') || '').toLowerCase();
+              var ec = (tr.getAttribute('data-ec') || '').toLowerCase();
+              var tid = (tr.getAttribute('data-tid') || '').toLowerCase();
+              var show = !needle || u.includes(needle) || ec.includes(needle) || tid.includes(needle);
+              tr.style.display = show ? '' : 'none';
+            });
+          }
+
+          if (openBtn && disp) {
+            openBtn.addEventListener('click', openModal);
+            disp.addEventListener('click', openModal);
+          }
+          if (modal) {
+            modal.querySelectorAll('[data-mcr-assignee-close]').forEach(function (el) {
+              el.addEventListener('click', closeModal);
+            });
+          }
+          if (search) {
+            search.addEventListener('input', function () { filterRows(search.value); });
+          }
+          if (tbody) {
+            tbody.querySelectorAll('tr[data-user]').forEach(function (tr) {
+              tr.addEventListener('click', function () {
+                var u = tr.getAttribute('data-user') || '';
+                if (hid) hid.value = u;
+                if (disp) disp.value = u;
+                closeModal();
+              });
+            });
+          }
+          if (form) {
+            form.addEventListener('submit', function (ev) {
+              var v = hid ? hid.value.trim() : '';
+              if (!v) {
+                ev.preventDefault();
+                alert('Choose Assign to user from the pick list.');
+                openModal();
+              }
+            });
+          }
+        })();
+      </script>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,1996 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body { overflow-x: auto; min-height: 100vh; background: #fff; color: #212529; }
+  .stf-page { max-width: 1400px; margin: 0 auto; padding: 24px 16px; }
+  .stf-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid #dee2e6; }
+  .stf-top-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .stf-print-head {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 14px;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+  }
+  .stf-print-switch-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #334155;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .stf-print-switch {
+    position: relative;
+    display: inline-block;
+    width: 52px;
+    height: 30px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .stf-print-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+    margin: 0;
+  }
+  .stf-print-switch-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    border-radius: 999px;
+    background: #cbd5e1;
+    border: 1px solid #94a3b8;
+    transition: background 0.2s ease, border-color 0.2s ease;
+  }
+  .stf-print-switch-slider::before {
+    content: '';
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    left: 3px;
+    top: 50%;
+    transform: translateY(-50%);
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.2s ease;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  }
+  .stf-print-switch input:checked + .stf-print-switch-slider {
+    background: linear-gradient(180deg, #0d9488 0%, #0f766e 100%);
+    border-color: #14b8a6;
+  }
+  .stf-print-switch input:checked + .stf-print-switch-slider::before {
+    transform: translateY(-50%) translateX(22px);
+  }
+  .stf-title { margin: 0; font-size: 24px; font-weight: 400; color: #212529; }
+  .stf-sub { margin: 4px 0 0; color: #6c757d; font-size: 13px; }
+  .stf-link { color: #007bff; text-decoration: none; font-size: 13px; }
+  .stf-link:hover { text-decoration: underline; }
+  .stf-card { border: none; border-radius: 0; padding: 0; margin-bottom: 16px; }
+  .stf-grid { display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr)); gap: 12px 16px; }
+  .stf-field label { display: block; margin-bottom: 4px; font-size: 12px; color: #495057; font-weight: 400; }
+  .stf-input, .stf-select {
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 0;
+    padding: 6px 0;
+    font-size: 13px;
+    background: transparent;
+    color: #212529;
+  }
+  .stf-select {
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 0;
+    padding: 6px 0;
+    font-size: 13px;
+    background: transparent;
+    color: #212529;
+  }
+  .stf-input:focus, .stf-select:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .stf-input[readonly] { color: #6c757d; }
+  .stf-search-wrap { display: flex; align-items: center; gap: 6px; }
+  .stf-search-wrap .stf-input { flex: 1; }
+  .stf-table-wrap { border: 1px solid #dee2e6; border-radius: 4px; overflow: auto; background: #fff; }
+  .stf-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 980px; }
+  .stf-table th, .stf-table td { border-bottom: 1px solid #dee2e6; padding: 8px 10px; white-space: nowrap; }
+  .stf-table th { background: #f8f9fa; font-size: 12px; color: #495057; text-transform: uppercase; font-weight: 600; }
+  .stf-table tbody tr:hover { background: #f8f9fa; }
+  .stf-actions { display: flex; gap: 10px; margin-top: 14px; align-items: center; flex-wrap: wrap; }
+  .stf-status-chip { display: inline-flex; align-items: center; padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid #d1d5db; }
+  .stf-status-chip--pending { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+  .stf-status-chip--completed { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+  .stf-btn { border: none; border-radius: 4px; padding: 8px 16px; font-size: 13px; cursor: pointer; font-weight: 500; }
+  .stf-btn-primary { background: #28a745; color: #fff; }
+  .stf-btn-secondary { background: #198754; color: #fff; }
+  .stf-btn-plain { background: transparent; color: #495057; border: 1px solid #dee2e6; }
+  .stf-btn-plain:hover { background: #f8f9fa; }
+  .stf-icon-btn {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font-size: 15px;
+    line-height: 1;
+    font-weight: 600;
+  }
+  .stf-mut { color: #6c757d; font-size: 12px; }
+  .stf-inline { display: flex; gap: 6px; }
+  .stf-inline .stf-input { flex: 1; }
+  .stf-modal-bg { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: none; align-items: center; justify-content: center; z-index: 3000; }
+  .stf-modal-bg.show { display: flex; }
+  .stf-modal { width: min(520px, 92vw); background: #fff; border-radius: 12px; border: 1px solid #dee2e6; box-shadow: 0 20px 45px rgba(15,23,42,0.2); }
+  .stf-modal-head { padding: 10px 12px; border-bottom: 1px solid #dee2e6; font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+  .stf-modal-body { padding: 10px 12px; }
+  .stf-store-list { max-height: 280px; overflow: auto; border: 1px solid #dee2e6; border-radius: 6px; margin-top: 8px; }
+  .stf-store-btn { width: 100%; text-align: left; border: 0; border-bottom: 1px solid #e9ecef; background: #fff; padding: 8px 10px; font-size: 13px; cursor: pointer; }
+  .stf-store-btn:hover { background: #f1f5f9; }
+  .stf-item-list { max-height: 320px; overflow: auto; border: 1px solid #dee2e6; border-radius: 6px; margin-top: 8px; }
+  .stf-item-btn { width: 100%; text-align: left; border: 0; border-bottom: 1px solid #e9ecef; background: #fff; padding: 8px 10px; font-size: 13px; cursor: pointer; display: grid; grid-template-columns: 140px 100px 1fr 80px 90px; gap: 8px; }
+  .stf-item-btn:hover { background: #f1f5f9; }
+  .stf-item-hdr { display: grid; grid-template-columns: 140px 100px 1fr 80px 90px; gap: 8px; font-size: 12px; color: #495057; padding: 6px 10px; border: 1px solid #dee2e6; border-radius: 6px; margin-top: 8px; background: #f8f9fa; font-weight: 600; }
+  .stf-opt-row, .stf-th-lot, .stf-th-from-bin, .stf-th-to-bin, .stf-td-lot, .stf-td-from-bin, .stf-td-to-bin, .stf-only-batch, .stf-only-bin { display: none; }
+  .stf-batch-enabled .stf-only-batch, .stf-batch-enabled .stf-th-lot, .stf-batch-enabled .stf-td-lot { display: block; }
+  .stf-bin-enabled .stf-only-bin, .stf-bin-enabled .stf-th-from-bin, .stf-bin-enabled .stf-th-to-bin, .stf-bin-enabled .stf-td-from-bin, .stf-bin-enabled .stf-td-to-bin { display: table-cell; }
+  .stf-batch-enabled .stf-opt-row, .stf-bin-enabled .stf-opt-row { display: grid; }
+  .stf-opt-row { grid-template-columns: 1.2fr 1fr 1fr; gap: 12px 16px; margin-top: 10px; }
+  .stf-table { min-width: 1180px; }
+</style>
+<div class="stf-page{% if stf_batch_enabled %} stf-batch-enabled{% endif %}{% if stf_bin_enabled %} stf-bin-enabled{% endif %}"
+     data-transaction-audit="StockTransfer"
+     data-transaction-no-selector="#transferNo"
+     data-save-button="#saveBtn"
+     data-track-root=".stf-page"
+     data-save-url-pattern="/purchase/stock-transfer/api/save">
+  <div class="stf-top">
+    <div>
+      <h1 class="stf-title">Store Transfer</h1>
+      <p class="stf-sub">STKTRF + WAREHOUSE_STOCK. From site with type TRANSIT: save as Created, then Transfer; other sites deduct on save.</p>
+    </div>
+    <div class="stf-top-actions">
+      <div class="stf-print-head" title="When enabled, save opens the transfer PDF in a new tab">
+        <span class="stf-print-switch-label" id="stfPrintSwitchLabel">Print PDF</span>
+        <label class="stf-print-switch" for="stfPrintPdfOnSave">
+          <input type="checkbox" id="stfPrintPdfOnSave" autocomplete="off" role="switch" aria-labelledby="stfPrintSwitchLabel" checked />
+          <span class="stf-print-switch-slider"></span>
+        </label>
+      </div>
+      <button id="btnPrintPdf" class="stf-btn stf-btn-plain" type="button" style="display:none;">Print PDF</button>
+      <button id="fromStoreStockBtn" class="stf-btn stf-btn-secondary" type="button" title="Load up to 50 items with stock from From Store (only when the grid is empty)">From store stock</button>
+      <button id="saveBtn" class="stf-btn stf-btn-primary" type="button">Save Request</button>
+      <button id="newBtn" class="stf-btn stf-btn-plain" type="button">New</button>
+      <a
+        class="stf-link"
+        href="{% if user_transit_only %}{{ url_for('purchase.stock_transfer', workflow='transit') }}{% else %}{{ url_for('purchase.stock_transfer') }}{% endif %}"
+      >
+        Back to List
+      </a>
+    </div>
+  </div>
+
+  <div class="stf-card">
+    <div class="stf-grid">
+      <div class="stf-field">
+        <label>Transfer No</label>
+        <input id="transferNo" class="stf-input" type="text" value="{{ (initial_data.header.transferno if initial_data else next_transfer_no) or next_transfer_no }}" readonly />
+      </div>
+      <div class="stf-field">
+        <label>Date</label>
+        <input id="transferDate" class="stf-input" type="date" value="{{ (initial_data.header.transferdate if initial_data else default_transfer_date) or default_transfer_date }}" />
+      </div>
+      <div class="stf-field">
+        <label>From Store</label>
+        <div class="stf-inline">
+          <input id="fromStore" class="stf-input" type="text" value="{{ initial_data.header.fromstore if initial_data else '' }}" placeholder="Press F1" readonly />
+        </div>
+      </div>
+      <div class="stf-field">
+        <label>To Store</label>
+        <div class="stf-inline">
+          <input id="toStore" class="stf-input" type="text" value="{{ initial_data.header.tostore if initial_data else '' }}" placeholder="Press F1" readonly />
+        </div>
+      </div>
+      <div class="stf-field">
+        <label>Remarks</label>
+        <input id="remarks" class="stf-input" type="text" value="{{ initial_data.header.remarks if initial_data else '' }}" />
+      </div>
+    </div>
+  </div>
+
+  <div class="stf-card">
+    <div class="stf-grid" style="grid-template-columns: 1fr 1.3fr 2fr 120px 130px 120px 1fr 80px;">
+      <div class="stf-field">
+        <label>Barcode</label>
+        <input id="lineBarcode" class="stf-input" type="text" placeholder="Press F1" />
+      </div>
+      <div class="stf-field">
+        <label>Item Code</label>
+        <div class="stf-search-wrap">
+          <input id="lineItemCode" class="stf-input" type="number" placeholder="Press F1" />
+        </div>
+      </div>
+      <div class="stf-field">
+        <label>Item Name</label>
+        <input id="lineItemName" class="stf-input" type="text" />
+      </div>
+      <div class="stf-field">
+        <label>UOM</label>
+        <input id="lineUom" class="stf-input" type="text" value="NOS" placeholder="Press F1" readonly />
+      </div>
+      <div class="stf-field">
+        <label>Available</label>
+        <input id="lineAvailable" class="stf-input" type="number" step="0.001" />
+      </div>
+      <div class="stf-field">
+        <label>Transfer Qty</label>
+        <input id="lineQty" class="stf-input" type="number" step="0.001" min="0" title="Not auto-filled from Available. Use From store stock to load lines with qty from stock, or enter qty manually." />
+      </div>
+      <div class="stf-field">
+        <label>Line Remarks</label>
+        <input id="lineRemarks" class="stf-input" type="text" />
+      </div>
+      <div class="stf-field" style="display:flex;align-items:flex-end;">
+        <div style="display:flex;gap:8px;">
+          <button id="addLineBtn" type="button" class="stf-btn stf-btn-plain stf-icon-btn" title="Add line" aria-label="Add line">+</button>
+          <button id="clearBtn" class="stf-btn stf-btn-plain stf-icon-btn" type="button" title="Clear line entry" aria-label="Clear line entry">&#9003;</button>
+        </div>
+      </div>
+    </div>
+    <div class="stf-opt-row">
+      <div class="stf-field stf-only-batch">
+        <label>Lot / Batch <span class="stf-mut">(FEFO if blank)</span></label>
+        <select id="lineLot" class="stf-select" title="Pick lot for batch-tracked items">
+          <option value="">— FEFO / auto —</option>
+        </select>
+      </div>
+      <div class="stf-field stf-only-bin">
+        <label>From bin</label>
+        <select id="lineFromBin" class="stf-select" title="Optional: issue from this bin">
+          <option value="">—</option>
+        </select>
+      </div>
+      <div class="stf-field stf-only-bin">
+        <label>To bin</label>
+        <select id="lineToBin" class="stf-select" title="Optional: putaway on approve">
+          <option value="">—</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="stf-table-wrap">
+    <table class="stf-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Barcode</th>
+          <th>Item Code</th>
+          <th>Item Name</th>
+          <th>UOM</th>
+          <th class="stf-th-lot">Batch</th>
+          <th class="stf-th-from-bin">From bin</th>
+          <th class="stf-th-to-bin">To bin</th>
+          <th>Available</th>
+          <th>Transfer Qty</th>
+          <th>Remarks</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="linesBody"></tbody>
+    </table>
+  </div>
+  <div class="stf-actions">
+    {% if from_all_mode %}
+      <span class="stf-mut">View only mode.</span>
+    {% else %}
+      {% if initial_data and (initial_data.header.status or '')|upper == 'C' %}
+        <button id="transferBtn" class="stf-btn stf-btn-secondary" type="button">Transfer To Transit</button>
+      {% endif %}
+      {% if initial_data and (initial_data.header.status or '')|upper in ['T', 'P'] %}
+        <button id="approveBtn" class="stf-btn stf-btn-secondary" type="button">Approve Transfer</button>
+      {% endif %}
+      <span class="stf-mut">Flow: Save (Created) → Transfer (deduct from warehouse) → Approve (add to destination warehouse). Stock: WAREHOUSE_STOCK only.</span>
+    {% endif %}
+  </div>
+</div>
+<div id="storePopupBg" class="stf-modal-bg">
+  <div class="stf-modal">
+    <div class="stf-modal-head">
+      <span id="storePopupTitle">Select Store</span>
+      <button id="storePopupClose" type="button" class="stf-btn stf-btn-plain">Close</button>
+    </div>
+    <div class="stf-modal-body">
+      <input id="storePopupSearch" class="stf-input" type="text" placeholder="Search store..." />
+      <div id="storePopupList" class="stf-store-list"></div>
+    </div>
+  </div>
+</div>
+<div id="itemPopupBg" class="stf-modal-bg">
+  <div class="stf-modal" style="width:min(840px,95vw);">
+    <div class="stf-modal-head">
+      <span>Select Item (From Store Qty > 0)</span>
+      <button id="itemPopupClose" type="button" class="stf-btn stf-btn-plain">Close</button>
+    </div>
+    <div class="stf-modal-body">
+      <div class="stf-search-wrap">
+        <input id="itemPopupSearch" class="stf-input" type="text" placeholder="Search code/name..." />
+        <button id="itemPopupReload" type="button" class="stf-btn stf-btn-plain">Reload</button>
+      </div>
+      <div class="stf-item-hdr">
+        <span>Barcode</span><span>Code</span><span>Name</span><span>UOM</span><span style="text-align:right;">Available</span>
+      </div>
+      <div id="itemPopupList" class="stf-item-list"></div>
+    </div>
+  </div>
+</div>
+<div id="uomPopupBg" class="stf-modal-bg">
+  <div class="stf-modal" style="width:min(520px,92vw);">
+    <div class="stf-modal-head">
+      <span>Select UOM</span>
+      <button id="uomPopupClose" type="button" class="stf-btn stf-btn-plain">Close</button>
+    </div>
+    <div class="stf-modal-body">
+      <input id="uomPopupSearch" class="stf-input" type="text" placeholder="Search UOM..." />
+      <div id="uomPopupList" class="stf-store-list"></div>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    const initialData = {{ (initial_data or {})|tojson }};
+    const queryMode = {{ 'true' if query_mode else 'false' }};
+    const fromAllMode = {{ 'true' if from_all_mode else 'false' }};
+    const STF_PRINT_PDF_LS_KEY = 'store_transfer_print_pdf_on_save';
+    const stfPrintPdfOnSave = document.getElementById('stfPrintPdfOnSave');
+    const btnPrintPdf = document.getElementById('btnPrintPdf');
+
+    function readStfPrintPdfPref() {
+      try {
+        const v = localStorage.getItem(STF_PRINT_PDF_LS_KEY);
+        if (v === '0') return false;
+        if (v === '1') return true;
+      } catch (e) { /* ignore */ }
+      return true;
+    }
+
+    function isStfPrintPdfOnSaveEnabled() {
+      if (!stfPrintPdfOnSave) return readStfPrintPdfPref();
+      return stfPrintPdfOnSave.checked;
+    }
+
+    if (stfPrintPdfOnSave) {
+      stfPrintPdfOnSave.checked = readStfPrintPdfPref();
+      stfPrintPdfOnSave.addEventListener('change', () => {
+        try {
+          localStorage.setItem(STF_PRINT_PDF_LS_KEY, stfPrintPdfOnSave.checked ? '1' : '0');
+        } catch (e) { /* ignore */ }
+      });
+    }
+
+    function stfPdfUrlFor(transferNoVal) {
+      const no = String(transferNoVal || '').trim();
+      if (!no) return '';
+      return `/purchase/stock-transfer/pdf/${encodeURIComponent(no)}?copy=0`;
+    }
+
+    function openStfPdf(transferNoVal) {
+      const url = stfPdfUrlFor(transferNoVal);
+      if (!url) {
+        alert('Save the transfer first to print PDF.');
+        return;
+      }
+      try {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } catch (e) {
+        console.warn('[store transfer] PDF open failed', e);
+      }
+    }
+
+    const STF_BATCH_ENABLED = {{ (stf_batch_enabled|default(false))|tojson }};
+    const STF_BIN_ENABLED = {{ (stf_bin_enabled|default(false))|tojson }};
+    const headerStatus = String((initialData.header && initialData.header.status) || "").toUpperCase();
+    const isApproved = headerStatus === "A";
+    const isTransferred = headerStatus === "T" || headerStatus === "P";
+    const isEditableRequest = !headerStatus || headerStatus === "C";
+    const canEditRequest = isEditableRequest && !queryMode && !fromAllMode;
+    const linesBody = document.getElementById("linesBody");
+    const transferNo = document.getElementById("transferNo");
+    if (btnPrintPdf) {
+      btnPrintPdf.style.display = queryMode ? '' : 'none';
+      btnPrintPdf.addEventListener('click', () => openStfPdf(transferNo?.value));
+    }
+    const transferDate = document.getElementById("transferDate");
+    const fromStore = document.getElementById("fromStore");
+    const toStore = document.getElementById("toStore");
+    const remarks = document.getElementById("remarks");
+    const lineItemCode = document.getElementById("lineItemCode");
+    const lineBarcode = document.getElementById("lineBarcode");
+    const lineItemName = document.getElementById("lineItemName");
+    const lineUom = document.getElementById("lineUom");
+    const lineAvailable = document.getElementById("lineAvailable");
+    const lineQty = document.getElementById("lineQty");
+    const lineRemarks = document.getElementById("lineRemarks");
+    const lineLot = document.getElementById("lineLot");
+    const lineFromBin = document.getElementById("lineFromBin");
+    const lineToBin = document.getElementById("lineToBin");
+    const addLineBtn = document.getElementById("addLineBtn");
+    let currentItemBatchTracked = false;
+    let currentItemBinConfigured = false;
+    const fromStoreStockBtn = document.getElementById("fromStoreStockBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const storePopupBg = document.getElementById("storePopupBg");
+    const storePopupTitle = document.getElementById("storePopupTitle");
+    const storePopupClose = document.getElementById("storePopupClose");
+    const storePopupSearch = document.getElementById("storePopupSearch");
+    const storePopupList = document.getElementById("storePopupList");
+    const itemPopupBg = document.getElementById("itemPopupBg");
+    const itemPopupClose = document.getElementById("itemPopupClose");
+    const itemPopupSearch = document.getElementById("itemPopupSearch");
+    const itemPopupReload = document.getElementById("itemPopupReload");
+    const itemPopupList = document.getElementById("itemPopupList");
+    const uomPopupBg = document.getElementById("uomPopupBg");
+    const uomPopupClose = document.getElementById("uomPopupClose");
+    const uomPopupSearch = document.getElementById("uomPopupSearch");
+    const uomPopupList = document.getElementById("uomPopupList");
+    const todayStr = new Date().toISOString().slice(0, 10);
+    let popupTarget = null;
+    let allStores = [];
+    let itemRows = [];
+    /** Short-lived client cache for /item-uoms (same item re-selected). */
+    const ITEM_UOMS_CLIENT_CACHE_MS = 90000;
+    const itemUomsResponseCache = new Map();
+    /** Bumped when opening the item popup so an aborted/overlapping fetch cannot render an empty list. */
+    let itemPopupLoadSession = 0;
+    /** Debounced server search so each keystroke does not hit the DB. */
+    let itemPopupSearchTimer = null;
+    let addLineBusy = false;
+    let itemItemsFetchController = null;
+    const ITEM_POPUP_SEARCH_DEBOUNCE_MS = 320;
+    /** Background warm-up after From Store is chosen (does not block UI). */
+    let fromStorePrefetchTimer = null;
+    let prefetchItemsAbort = null;
+    const FROM_STORE_PREFETCH_DELAY_MS = 400;
+    let lineUoms = [];
+    let editingRow = null;
+    let committedFromStore = String(fromStore.value || "");
+    let committedToStore = String(toStore.value || "");
+
+    function normalizeStore(v) {
+      return String(v || "").trim().toUpperCase();
+    }
+    function splitSearchTokens(v) {
+      return normalizeStore(v).split(/\s+/).filter(Boolean);
+    }
+    function matchesSplitSearch(query, values) {
+      const tokens = splitSearchTokens(query);
+      if (!tokens.length) return true;
+      const hay = (values || []).map((x) => normalizeStore(x));
+      return tokens.every((tok) => hay.some((h) => h.includes(tok)));
+    }
+    function looksLikeBarcode(v) {
+      const s = String(v || "").trim();
+      return /^\d{8,}$/.test(s);
+    }
+
+    function hasLineRows() {
+      return linesBody.querySelectorAll("tr").length > 0;
+    }
+    function isStoreSelectionLocked() {
+      return !canEditRequest || hasLineRows();
+    }
+    function rememberCommittedStores() {
+      committedFromStore = String(fromStore.value || "");
+      committedToStore = String(toStore.value || "");
+    }
+
+    function syncStoreLockState() {
+      const locked = isStoreSelectionLocked();
+      fromStore.dataset.locked = locked ? "1" : "0";
+      toStore.dataset.locked = locked ? "1" : "0";
+      const lockHint = locked ? "Store cannot be changed after adding lines." : "";
+      fromStore.title = lockHint;
+      toStore.title = lockHint;
+      syncFromStoreStockBtnState();
+    }
+
+    /** From store stock is only allowed on an empty grid (no line items yet). */
+    function syncFromStoreStockBtnState() {
+      if (!fromStoreStockBtn) {
+        return;
+      }
+      if (!canEditRequest) {
+        fromStoreStockBtn.disabled = true;
+        fromStoreStockBtn.title = "Not editable for this request.";
+        return;
+      }
+      const hasLines = hasLineRows();
+      fromStoreStockBtn.disabled = hasLines;
+      fromStoreStockBtn.title = hasLines
+        ? "Remove all lines first, or start a new request, to use From store stock."
+        : "Load up to 50 items with stock from From Store into the grid (empty grid only).";
+    }
+
+    function getSelectedUomFactor() {
+      const sel = String(lineUom.value || "NOS").toUpperCase();
+      const row = lineUoms.find((u) => String(u.uom || "").toUpperCase() === sel);
+      const factor = parseFloat((row && row.factor) || 1);
+      return factor > 0 ? factor : 1;
+    }
+
+    function renderAvailableByUom() {
+      const base = parseFloat(lineAvailable.dataset.baseQty || "0");
+      const factor = getSelectedUomFactor();
+      const inUom = factor > 0 ? (base / factor) : base;
+      lineAvailable.value = Number(inUom || 0).toFixed(3);
+    }
+
+    function maybeAlertPendingApproval(itemCode, pendingQty) {
+      const pending = Number(pendingQty || 0);
+      if (pending <= 0) {
+        return;
+      }
+      const codeLabel = String(itemCode || "").trim();
+      alert(
+        `Item ${codeLabel || ""} has pending transfer approval qty ${pending.toFixed(3)}. Available qty is reduced by this pending quantity.`
+      );
+    }
+
+    async function loadItemUoms(itemCode, preferredUom) {
+      const ic = String(itemCode || "").trim();
+      if (!ic) {
+        lineUoms = [{ uom: "NOS", factor: 1 }];
+      } else {
+        const now = Date.now();
+        const cached = itemUomsResponseCache.get(ic);
+        if (cached && (now - cached.at) < ITEM_UOMS_CLIENT_CACHE_MS && Array.isArray(cached.rows) && cached.rows.length) {
+          lineUoms = cached.rows.map((u) => ({
+            uom: String(u.uom || "NOS").trim() || "NOS",
+            factor: parseFloat(u.factor || 1) || 1,
+          }));
+        } else {
+          try {
+            const r = await fetch(`/purchase/stock-transfer/api/item-uoms/${encodeURIComponent(ic)}`);
+            const d = await r.json();
+            if (r.ok && d.success && Array.isArray(d.uoms) && d.uoms.length) {
+              lineUoms = d.uoms.map((u) => ({
+                uom: String(u.uom || "NOS").trim() || "NOS",
+                factor: parseFloat(u.factor || 1) || 1,
+              }));
+              if (itemUomsResponseCache.size > 150) {
+                itemUomsResponseCache.clear();
+              }
+              itemUomsResponseCache.set(ic, {
+                at: now,
+                rows: lineUoms.map((u) => ({ uom: u.uom, factor: u.factor })),
+              });
+            } else {
+              lineUoms = [{ uom: "NOS", factor: 1 }];
+            }
+          } catch (e) {
+            lineUoms = [{ uom: "NOS", factor: 1 }];
+          }
+        }
+      }
+      const seen = new Set();
+      lineUoms = lineUoms.filter((u) => {
+        const key = String(u.uom || "").toUpperCase();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      const p = String(preferredUom || "").toUpperCase();
+      const hit = p ? lineUoms.find((u) => String(u.uom || "").toUpperCase() === p) : null;
+      lineUom.value = (hit && hit.uom) || (lineUoms[0] && lineUoms[0].uom) || "NOS";
+      renderAvailableByUom();
+    }
+
+    function renderUomPopupList() {
+      const q = normalizeStore(uomPopupSearch.value);
+      const rows = lineUoms.filter((u) => {
+        const code = normalizeStore(u.uom);
+        if (q && !code.includes(q)) return false;
+        return true;
+      });
+      if (!rows.length) {
+        uomPopupList.innerHTML = `<div class="stf-mut" style="padding:10px;">No UOM available.</div>`;
+        return;
+      }
+      uomPopupList.innerHTML = rows.map((u) => `<button type="button" class="stf-store-btn stf-uom-btn" data-uom="${u.uom || 'NOS'}">${u.uom || 'NOS'}</button>`).join("");
+      uomPopupList.querySelectorAll(".stf-uom-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          lineUom.value = btn.dataset.uom || "NOS";
+          renderAvailableByUom();
+          uomPopupBg.classList.remove("show");
+          lineUom.focus();
+        });
+        btn.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            btn.click();
+            return;
+          }
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            const next = btn.nextElementSibling;
+            if (next && next.classList.contains("stf-uom-btn")) next.focus();
+            return;
+          }
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            const prev = btn.previousElementSibling;
+            if (prev && prev.classList.contains("stf-uom-btn")) prev.focus();
+            else uomPopupSearch.focus();
+          }
+        });
+      });
+    }
+
+    async function openUomPopup() {
+      const code = String(lineItemCode.value || "").trim();
+      if (!code) {
+        alert("Select item first.");
+        return;
+      }
+      if (!lineUoms.length) {
+        await loadItemUoms(code, lineUom.value || "NOS");
+      }
+      renderUomPopupList();
+      uomPopupBg.classList.add("show");
+      uomPopupSearch.focus();
+    }
+
+    function setReadOnly() {
+      if (canEditRequest) return;
+      [transferNo, transferDate, remarks, lineItemCode, lineBarcode, lineItemName, lineUom, lineAvailable, lineQty, lineRemarks, document.getElementById("addLineBtn"), document.getElementById("fromStoreStockBtn"), document.getElementById("saveBtn"), document.getElementById("clearBtn"), document.getElementById("newBtn")].forEach((e) => {
+        if (!e) return;
+        e.disabled = true;
+      });
+      fromStore.dataset.locked = "1";
+      toStore.dataset.locked = "1";
+      fromStore.title = "From Store is locked for this request.";
+      toStore.title = "To Store is locked for this request.";
+    }
+    transferDate.min = todayStr;
+    transferDate.addEventListener("change", () => {
+      if (!transferDate.value) return;
+      if (transferDate.value < todayStr) {
+        alert("Previous date is not allowed.");
+        transferDate.value = todayStr;
+      }
+    });
+
+    function closeStorePopup() {
+      storePopupBg.classList.remove("show");
+      popupTarget = null;
+      storePopupSearch.value = "";
+    }
+
+    function focusPreviousField() {
+      const order = [
+        fromStore,
+        toStore,
+        remarks,
+        lineBarcode,
+        lineItemCode,
+        lineUom,
+        lineQty,
+        lineRemarks,
+        addLineBtn,
+        clearBtn,
+        document.getElementById("saveBtn")
+      ].filter(Boolean);
+      const active = document.activeElement;
+      const idx = order.indexOf(active);
+      if (idx > 0) {
+        order[idx - 1].focus();
+        order[idx - 1].select?.();
+        return true;
+      }
+      if (idx === 0) {
+        order[0].focus();
+        order[0].select?.();
+        return true;
+      }
+      return false;
+    }
+
+    function renderStorePopupList() {
+      const q = normalizeStore(storePopupSearch.value);
+      let blocked = "";
+      if (popupTarget === "from") blocked = normalizeStore(toStore.value);
+      if (popupTarget === "to") blocked = normalizeStore(fromStore.value);
+      const rows = allStores.filter((s) => {
+        const code = normalizeStore(s.code);
+        const desc = normalizeStore(s.description);
+        if (!code || code === "TRANSIT") return false;
+        if (blocked && code === blocked) return false;
+        if (q && !code.includes(q) && !desc.includes(q)) return false;
+        return true;
+      });
+      if (!rows.length) {
+        storePopupList.innerHTML = `<div class="stf-mut" style="padding:10px;">No stores available.</div>`;
+        return;
+      }
+      storePopupList.innerHTML = rows.map((s) => {
+        const code = normalizeStore(s.code);
+        const desc = String(s.description || "").trim();
+        const label = desc ? `${code} - ${desc}` : code;
+        return `<button type="button" class="stf-store-btn" data-store="${code}">${label}</button>`;
+      }).join("");
+      storePopupList.querySelectorAll(".stf-store-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const val = normalizeStore(btn.dataset.store);
+          if (popupTarget === "from") {
+            fromStore.value = val;
+            if (normalizeStore(toStore.value) === val) toStore.value = "";
+            rememberCommittedStores();
+            schedulePrefetchTransferItems();
+            void loadBinsForStore(val, lineFromBin);
+            fromStore.focus();
+          } else if (popupTarget === "to") {
+            toStore.value = val;
+            if (normalizeStore(fromStore.value) === val) fromStore.value = "";
+            rememberCommittedStores();
+            void loadBinsForStore(val, lineToBin);
+            toStore.focus();
+          }
+          closeStorePopup();
+          const code = String(lineItemCode.value || "").trim();
+          if (code) await fetchAvailable(code);
+        });
+        btn.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            btn.click();
+            return;
+          }
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            const next = btn.nextElementSibling;
+            if (next && next.classList.contains("stf-store-btn")) next.focus();
+            return;
+          }
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            const prev = btn.previousElementSibling;
+            if (prev && prev.classList.contains("stf-store-btn")) prev.focus();
+            else storePopupSearch.focus();
+          }
+        });
+      });
+    }
+
+    async function loadStores() {
+      try {
+        const r = await fetch("/purchase/stock-transfer/api/stores");
+        const d = await r.json();
+        if (r.ok && d.success && Array.isArray(d.stores)) {
+          allStores = d.stores
+            .map((s) => {
+              if (typeof s === "string") {
+                return { code: normalizeStore(s), description: "" };
+              }
+              return {
+                code: normalizeStore(s.code || s.dbcode || ""),
+                description: String(s.description || s.desc || "").trim()
+              };
+            })
+            .filter((s) => s.code);
+        }
+      } catch (e) {}
+      const seen = new Set();
+      allStores = allStores.filter((s) => {
+        const code = normalizeStore(s.code);
+        if (!code || code === "TRANSIT" || seen.has(code)) return false;
+        seen.add(code);
+        return true;
+      });
+      if (storePopupBg.classList.contains("show")) {
+        renderStorePopupList();
+      }
+    }
+
+    async function openStorePopup(target) {
+      if (hasLineRows()) {
+        alert("From Store and To Store are locked once item lines are added.");
+        return;
+      }
+      if (!allStores.length) {
+        await loadStores();
+      }
+      popupTarget = target;
+      storePopupTitle.textContent = target === "from" ? "Select From Store" : "Select To Store";
+      renderStorePopupList();
+      storePopupBg.classList.add("show");
+      storePopupSearch.focus();
+    }
+
+    function renderItemPopupList() {
+      const q = normalizeStore(itemPopupSearch.value);
+      const rows = itemRows.filter((r) => {
+        const code = normalizeStore(r.itemcode);
+        const name = normalizeStore(r.itemname);
+        const bc = normalizeStore(r.barcode);
+        if (!matchesSplitSearch(q, [code, name, bc])) return false;
+        return true;
+      });
+      if (!rows.length) {
+        itemPopupList.innerHTML = `<div class="stf-mut" style="padding:10px;">No items with stock in selected From Store.</div>`;
+        return;
+      }
+      itemPopupList.innerHTML = rows.map((r) => {
+        return `<button type="button" class="stf-item-btn" data-code="${r.itemcode || ''}" data-barcode="${String(r.barcode || '').replace(/"/g, '&quot;')}" data-name="${String(r.itemname || '').replace(/"/g, '&quot;')}" data-uom="${r.uom || 'NOS'}" data-available="${r.availableqty || 0}" data-pending="${r.pendingqty || 0}">
+          <span>${r.barcode || ''}</span>
+          <span>${r.itemcode || ''}</span>
+          <span>${r.itemname || ''}</span>
+          <span>${r.uom || 'NOS'}</span>
+          <span style="text-align:right;">${Number(r.availableqty || 0).toFixed(3)}</span>
+        </button>`;
+      }).join("");
+      itemPopupList.querySelectorAll(".stf-item-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const item = {
+            itemcode: btn.dataset.code || "",
+            barcode: btn.dataset.barcode || "",
+            itemname: btn.dataset.name || "",
+            availableqty: btn.dataset.available || "0",
+            pendingqty: btn.dataset.pending || "0",
+            uom: btn.dataset.uom || "NOS",
+          };
+          const { ic, prefUom } = applyItemSelectionFields(item);
+          closeItemPopup();
+          itemPopupSearch.value = "";
+          requestAnimationFrame(() => {
+            lineUom.focus();
+            lineUom.select?.();
+          });
+          if (ic) {
+            void applyItemSelectionServerRefresh(ic, prefUom);
+          }
+        });
+        btn.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            btn.click();
+            return;
+          }
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            const next = btn.nextElementSibling;
+            if (next && next.classList.contains("stf-item-btn")) next.focus();
+            return;
+          }
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            const prev = btn.previousElementSibling;
+            if (prev && prev.classList.contains("stf-item-btn")) prev.focus();
+            else itemPopupSearch.focus();
+          }
+        });
+      });
+    }
+
+    function cancelPendingItemPopupSearch() {
+      clearTimeout(itemPopupSearchTimer);
+      itemPopupSearchTimer = null;
+      if (itemItemsFetchController) {
+        itemItemsFetchController.abort();
+        itemItemsFetchController = null;
+      }
+    }
+
+    function cancelPrefetchTransferItems() {
+      clearTimeout(fromStorePrefetchTimer);
+      fromStorePrefetchTimer = null;
+      if (prefetchItemsAbort) {
+        prefetchItemsAbort.abort();
+        prefetchItemsAbort = null;
+      }
+    }
+
+    function schedulePrefetchTransferItems() {
+      if (!canEditRequest || hasLineRows()) {
+        return;
+      }
+      clearTimeout(fromStorePrefetchTimer);
+      fromStorePrefetchTimer = setTimeout(() => {
+        fromStorePrefetchTimer = null;
+        void prefetchTransferItemRowsIfIdle();
+      }, FROM_STORE_PREFETCH_DELAY_MS);
+    }
+
+    async function prefetchTransferItemRowsIfIdle() {
+      if (!canEditRequest || hasLineRows()) {
+        return;
+      }
+      const fs = normalizeStore(fromStore.value);
+      if (!fs) {
+        return;
+      }
+      if (prefetchItemsAbort) {
+        prefetchItemsAbort.abort();
+      }
+      prefetchItemsAbort = new AbortController();
+      const ac = prefetchItemsAbort;
+      const sig = ac.signal;
+      const lockedStore = fs;
+      try {
+        const p = new URLSearchParams();
+        p.set("from_store", lockedStore);
+        p.set("limit", "220");
+        const r = await fetch(`/purchase/stock-transfer/api/items?${p.toString()}`, { signal: sig });
+        const d = await r.json();
+        if (!r.ok || !d.success || !Array.isArray(d.items)) {
+          return;
+        }
+        if (normalizeStore(fromStore.value) !== lockedStore) {
+          return;
+        }
+        if (itemPopupBg.classList.contains("show")) {
+          return;
+        }
+        itemRows = d.items;
+      } catch (e) {
+        if (e && e.name === "AbortError") {
+          return;
+        }
+      } finally {
+        if (prefetchItemsAbort === ac) {
+          prefetchItemsAbort = null;
+        }
+      }
+    }
+
+    function closeItemPopup() {
+      cancelPendingItemPopupSearch();
+      itemPopupBg.classList.remove("show");
+    }
+
+    async function fetchTransferItemsExact({ itemCode, barcode } = {}) {
+      if (!fromStore.value) {
+        return [];
+      }
+      const p = new URLSearchParams();
+      p.set("from_store", fromStore.value);
+      if (itemCode != null && String(itemCode).trim() !== "") {
+        const ic = parseInt(String(itemCode).trim(), 10);
+        if (!ic) {
+          return [];
+        }
+        p.set("exact_item_code", String(ic));
+      } else if (barcode != null && String(barcode).trim() !== "") {
+        p.set("exact_barcode", String(barcode).trim());
+      } else {
+        return [];
+      }
+      p.set("limit", "50");
+      try {
+        const r = await fetch(`/purchase/stock-transfer/api/items?${p.toString()}`);
+        const d = await r.json();
+        if (!r.ok || !d.success || !Array.isArray(d.items)) {
+          return [];
+        }
+        return d.items;
+      } catch (e) {
+        return [];
+      }
+    }
+
+    async function loadStoreItems(search = "") {
+      if (!fromStore.value) {
+        itemRows = [];
+        return;
+      }
+      const q = String(search || "").trim();
+      if (looksLikeBarcode(q)) {
+        itemRows = await fetchTransferItemsExact({ barcode: q });
+        return;
+      }
+      if (itemItemsFetchController) {
+        itemItemsFetchController.abort();
+      }
+      const ac = new AbortController();
+      itemItemsFetchController = ac;
+      const sig = ac.signal;
+      try {
+        const p = new URLSearchParams();
+        p.set("from_store", fromStore.value);
+        if (search) p.set("search", search);
+        p.set("limit", "220");
+        const r = await fetch(`/purchase/stock-transfer/api/items?${p.toString()}`, { signal: sig });
+        const d = await r.json();
+        if (r.ok && d.success && Array.isArray(d.items)) {
+          itemRows = d.items;
+        } else {
+          itemRows = [];
+        }
+      } catch (e) {
+        if (e && e.name === "AbortError") return;
+        itemRows = [];
+      } finally {
+        if (itemItemsFetchController === ac) {
+          itemItemsFetchController = null;
+        }
+      }
+    }
+
+    async function openItemPopup(resetSearch = false) {
+      if (!fromStore.value) {
+        alert("Select From Store first.");
+        return;
+      }
+      cancelPrefetchTransferItems();
+      cancelPendingItemPopupSearch();
+      itemPopupLoadSession += 1;
+      const sessionForOpen = itemPopupLoadSession;
+      if (resetSearch) {
+        itemPopupSearch.value = "";
+      }
+      await loadStoreItems(itemPopupSearch.value || "");
+      if (sessionForOpen !== itemPopupLoadSession) {
+        return;
+      }
+      itemPopupBg.classList.add("show");
+      renderItemPopupList();
+      itemPopupSearch.focus();
+    }
+
+    /** Instant fill from picker / resolver payload (no server round-trip). */
+    function applyItemSelectionFields(item) {
+      if (!item) {
+        return { ic: "", prefUom: "NOS" };
+      }
+      const itemCode = String(item.itemcode || "").trim();
+      lineItemCode.value = itemCode;
+      lineItemCode.dataset.barcode = item.barcode || "";
+      lineBarcode.value = item.barcode || "";
+      lineItemName.value = item.itemname || "";
+      const baseQtyRaw =
+        item.availableqty != null ? item.availableqty
+        : item.available_qty != null ? item.available_qty
+        : 0;
+      lineAvailable.dataset.baseQty = String(Number(baseQtyRaw) || 0);
+      const pendingQtyRaw =
+        item.pendingqty != null ? item.pendingqty
+        : item.pending_qty != null ? item.pending_qty
+        : 0;
+      lineAvailable.dataset.pendingQty = String(Number(pendingQtyRaw) || 0);
+      const prefUom = String(item.uom || "NOS").trim() || "NOS";
+      lineUoms = [{ uom: prefUom, factor: 1 }];
+      lineUom.value = prefUom;
+      renderAvailableByUom();
+      return { ic: itemCode, prefUom };
+    }
+
+    /** Refresh qty + alternate UOMs after fields are shown (may lag briefly vs picker row). */
+    async function applyItemSelectionServerRefresh(ic, prefUom) {
+      if (!ic || !fromStore.value) return;
+      await Promise.all([
+        fetchAvailable(ic),
+        loadItemUoms(ic, prefUom || "NOS"),
+        refreshItemTrackingFlags(ic),
+        refreshLineLotOptions(ic),
+      ]);
+    }
+
+    async function applyItemSelection(item) {
+      const { ic, prefUom } = applyItemSelectionFields(item);
+      if (!ic) return;
+      await applyItemSelectionServerRefresh(ic, prefUom);
+    }
+
+    function refreshIndex() {
+      [...linesBody.querySelectorAll("tr")].forEach((tr, i) => { tr.children[0].textContent = String(i + 1); });
+    }
+
+    function exitEditMode() {
+      editingRow = null;
+      addLineBtn.innerHTML = "+";
+      addLineBtn.title = "Add line";
+      addLineBtn.setAttribute("aria-label", "Add line");
+    }
+
+    function clearLineInputs() {
+      lineItemCode.value = "";
+      lineItemCode.dataset.barcode = "";
+      lineBarcode.value = "";
+      lineItemName.value = "";
+      lineUom.value = "NOS";
+      lineUoms = [{ uom: "NOS", factor: 1 }];
+      lineAvailable.value = "";
+      lineAvailable.dataset.baseQty = "";
+      lineQty.value = "";
+      lineRemarks.value = "";
+      currentItemBatchTracked = false;
+      currentItemBinConfigured = false;
+      if (lineLot) lineLot.innerHTML = '<option value="">— FEFO / auto —</option>';
+      if (lineFromBin) lineFromBin.innerHTML = '<option value="">—</option>';
+      if (lineToBin) lineToBin.innerHTML = '<option value="">—</option>';
+      lineBarcode.focus();
+    }
+
+    function setLineRowData(tr, line) {
+      tr.children[1].textContent = String(line.barcode || "");
+      tr.children[2].textContent = String(line.item_code || line.itemcode || "");
+      tr.children[3].textContent = String(line.item_name || line.itemname || "");
+      tr.children[4].textContent = String(line.uom || "NOS");
+      if (tr.children[5]) tr.children[5].textContent = String(line.batch_no || line.batchno || "");
+      if (tr.children[6]) tr.children[6].textContent = String(line.from_bin_label || line.from_storage_id || "");
+      if (tr.children[7]) tr.children[7].textContent = String(line.to_bin_label || line.to_storage_id || "");
+      tr.children[8].textContent = Number(line.available_qty ?? line.availableqty ?? 0).toFixed(3);
+      tr.children[9].textContent = Number(line.transfer_qty ?? line.transferqty ?? 0).toFixed(3);
+      tr.children[10].textContent = String(line.remarks || line.lineremarks || "");
+
+      tr.dataset.itemCode = String(line.item_code || line.itemcode || "");
+      tr.dataset.barcode = String(line.barcode || "");
+      tr.dataset.itemName = String(line.item_name || line.itemname || "");
+      tr.dataset.uom = String(line.uom || "NOS");
+      tr.dataset.lotId = String(line.lot_id || line.lotid || "");
+      tr.dataset.batchNo = String(line.batch_no || line.batchno || "");
+      tr.dataset.mfgDate = String(line.mfg_date || line.mfgdate || "");
+      tr.dataset.expiryDate = String(line.expiry_date || line.expirydate || "");
+      tr.dataset.fromStorageId = String(line.from_storage_id || "");
+      tr.dataset.toStorageId = String(line.to_storage_id || "");
+      tr.dataset.available = String(line.available_qty ?? line.availableqty ?? 0);
+      tr.dataset.availableBase = String(line.available_base_qty ?? line.available_base ?? line.available_qty ?? line.availableqty ?? 0);
+      tr.dataset.transferQty = String(line.transfer_qty ?? line.transferqty ?? 0);
+      tr.dataset.remarks = String(line.remarks || line.lineremarks || "");
+    }
+
+    async function editLineRow(tr) {
+      editingRow = tr;
+      addLineBtn.innerHTML = "&#10003;";
+      addLineBtn.title = "Update line";
+      addLineBtn.setAttribute("aria-label", "Update line");
+      const itemCode = String(tr.dataset.itemCode || "").trim();
+      lineItemCode.value = itemCode;
+      lineItemCode.dataset.barcode = tr.dataset.barcode || "";
+      lineBarcode.value = tr.dataset.barcode || "";
+      lineItemName.value = tr.dataset.itemName || "";
+      lineAvailable.dataset.baseQty = tr.dataset.availableBase || tr.dataset.available || "0";
+      lineQty.value = String(tr.dataset.transferQty || "");
+      lineRemarks.value = tr.dataset.remarks || "";
+      await loadItemUoms(itemCode, tr.dataset.uom || "NOS");
+      await refreshItemTrackingFlags(itemCode);
+      await refreshLineLotOptions(itemCode);
+      if (lineLot) lineLot.value = tr.dataset.lotId || "";
+      await loadBinsForStore(fromStore.value, lineFromBin);
+      await loadBinsForStore(toStore.value, lineToBin);
+      if (lineFromBin) lineFromBin.value = tr.dataset.fromStorageId || "";
+      if (lineToBin) lineToBin.value = tr.dataset.toStorageId || "";
+      lineQty.focus();
+      lineQty.select?.();
+    }
+
+    function addLineRow(line) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td class="stf-td-lot"></td>
+        <td class="stf-td-from-bin"></td>
+        <td class="stf-td-to-bin"></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td>
+          ${canEditRequest
+            ? `<button type="button" class="stf-btn stf-btn-plain stf-icon-btn js-edit" title="Edit line" aria-label="Edit line">&#9998;</button>
+          <button type="button" class="stf-btn stf-btn-plain stf-icon-btn js-del" title="Delete line" aria-label="Delete line">&times;</button>`
+            : ``}
+        </td>
+      `;
+      setLineRowData(tr, line);
+      if (canEditRequest) {
+        tr.querySelector(".js-edit").addEventListener("click", async () => {
+          await editLineRow(tr);
+        });
+        tr.querySelector(".js-del").addEventListener("click", () => {
+          if (editingRow === tr) {
+            exitEditMode();
+            clearLineInputs();
+          }
+          tr.remove();
+          refreshIndex();
+          syncStoreLockState();
+        });
+      }
+      linesBody.appendChild(tr);
+      refreshIndex();
+      syncStoreLockState();
+    }
+    async function loadBinsForStore(storeCode, selectEl) {
+      if (!STF_BIN_ENABLED || !selectEl) return;
+      selectEl.innerHTML = '<option value="">—</option>';
+      const sc = String(storeCode || "").trim();
+      if (!sc) return;
+      try {
+        const r = await fetch("/purchase/stock-transfer/api/warehouse-bins?wh=" + encodeURIComponent(sc));
+        const d = await r.json();
+        if (!r.ok || !d.success || !Array.isArray(d.bins)) return;
+        d.bins.forEach((b) => {
+          const sid = b.storage_id;
+          const code = String(b.code || "").trim();
+          if (sid == null || !code) return;
+          const opt = document.createElement("option");
+          opt.value = String(sid);
+          opt.textContent = code + (b.name ? " — " + b.name : "");
+          opt.dataset.code = code;
+          selectEl.appendChild(opt);
+        });
+      } catch (e) { /* ignore */ }
+    }
+
+    async function refreshLineLotOptions(itemCode) {
+      if (!STF_BATCH_ENABLED || !lineLot) return;
+      lineLot.innerHTML = '<option value="">— FEFO / auto —</option>';
+      const ic = parseInt(String(itemCode || "0"), 10) || 0;
+      if (!ic) return;
+      try {
+        const r = await fetch("/purchase/stock-transfer/api/lots?item_code=" + encodeURIComponent(String(ic)));
+        const d = await r.json();
+        if (!r.ok || !d.success || !Array.isArray(d.lots)) return;
+        d.lots.forEach((lot) => {
+          if (lot.lot_blocked) return;
+          const opt = document.createElement("option");
+          opt.value = String(lot.lot_id);
+          const exp = lot.expiry_date ? " exp:" + lot.expiry_date : "";
+          opt.textContent = (lot.batch_no || "LOT") + " (" + Number(lot.qty || 0).toFixed(3) + ")" + exp;
+          opt.dataset.batch = lot.batch_no || "";
+          opt.dataset.mfg = lot.mfg_date || "";
+          opt.dataset.exp = lot.expiry_date || "";
+          lineLot.appendChild(opt);
+        });
+      } catch (e) { /* ignore */ }
+    }
+
+    async function refreshItemTrackingFlags(itemCode) {
+      currentItemBatchTracked = false;
+      currentItemBinConfigured = false;
+      const ic = parseInt(String(itemCode || "0"), 10) || 0;
+      if (!ic) return;
+      try {
+        const r = await fetch("/purchase/stock-transfer/api/item-batch-tracked/" + ic);
+        const d = await r.json();
+        if (r.ok && d.success) {
+          if (STF_BATCH_ENABLED) {
+            currentItemBatchTracked = !!(d.batch_tracked && d.batch_branch_enabled);
+          }
+          if (STF_BIN_ENABLED) {
+            currentItemBinConfigured = !!(d.bin_configured && d.bin_branch_enabled);
+          }
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    async function validateLineTrackingBeforeAdd(itemCode) {
+      await refreshItemTrackingFlags(itemCode);
+      if (STF_BATCH_ENABLED && currentItemBatchTracked) {
+        const lotMeta = selectedLotMeta();
+        if (!lotMeta.lot_id) {
+          alert("Select batch/lot for this batch-tracked item.");
+          if (lineLot) lineLot.focus();
+          return false;
+        }
+      }
+      if (STF_BIN_ENABLED && currentItemBinConfigured) {
+        if (!lineFromBin || !String(lineFromBin.value || "").trim()) {
+          alert("Select from bin for this item.");
+          if (lineFromBin) lineFromBin.focus();
+          return false;
+        }
+        if (!lineToBin || !String(lineToBin.value || "").trim()) {
+          alert("Select to bin for this item.");
+          if (lineToBin) lineToBin.focus();
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function selectedLotMeta() {
+      if (!lineLot || lineLot.selectedIndex < 0) {
+        return { lot_id: "", batch_no: "", mfg_date: "", expiry_date: "" };
+      }
+      const opt = lineLot.options[lineLot.selectedIndex];
+      return {
+        lot_id: String(lineLot.value || "").trim(),
+        batch_no: String((opt && opt.dataset.batch) || "").trim(),
+        mfg_date: String((opt && opt.dataset.mfg) || "").trim(),
+        expiry_date: String((opt && opt.dataset.exp) || "").trim(),
+      };
+    }
+
+    function selectedBinLabel(selectEl) {
+      if (!selectEl || selectEl.selectedIndex < 0) return "";
+      const opt = selectEl.options[selectEl.selectedIndex];
+      return opt && opt.value ? String(opt.textContent || opt.dataset.code || opt.value).trim() : "";
+    }
+
+    async function fetchAvailable(itemCode) {
+      if (!itemCode || !fromStore.value) return;
+      const r = await fetch(`/purchase/stock-transfer/api/item-stock?item_code=${encodeURIComponent(itemCode)}&store=${encodeURIComponent(fromStore.value)}`);
+      const d = await r.json();
+      if (d.success) {
+        lineAvailable.dataset.baseQty = String(d.current_qty || 0);
+        lineAvailable.dataset.pendingQty = String(d.pending_qty || 0);
+        renderAvailableByUom();
+        maybeAlertPendingApproval(itemCode, d.pending_qty || 0);
+      }
+    }
+
+    /** Load item by code for current From Store; returns true if matched and applied. */
+    async function tryResolveItemCodeFromField(options) {
+      const alertOnFail = options && options.alertOnFail;
+      const code = String(lineItemCode.value || "").trim();
+      if (!code) {
+        if (alertOnFail) {
+          alert("Enter item code.");
+          lineItemCode.focus();
+        }
+        return false;
+      }
+      if (!fromStore.value) {
+        if (alertOnFail) {
+          alert("Select From Store first.");
+          lineItemCode.focus();
+          lineItemCode.select?.();
+        }
+        return false;
+      }
+      const rows = await fetchTransferItemsExact({ itemCode: code });
+      const ic = parseInt(code, 10) || 0;
+      const item = rows.find((x) => (parseInt(String(x.itemcode || "0"), 10) || 0) === ic) || rows[0];
+      if (!item) {
+        if (alertOnFail) {
+          alert("Item not found.");
+          lineItemCode.focus();
+          lineItemCode.select?.();
+        }
+        return false;
+      }
+      const sel = applyItemSelectionFields(item);
+      if (!sel.ic) {
+        if (alertOnFail) {
+          alert("Item not found.");
+          lineItemCode.focus();
+          lineItemCode.select?.();
+        }
+        return false;
+      }
+      lineUom.focus();
+      lineUom.select?.();
+      void applyItemSelectionServerRefresh(sel.ic, sel.prefUom);
+      return true;
+    }
+
+    /** Load item by barcode for current From Store; returns true if matched and applied. */
+    async function tryResolveBarcodeFromField(options) {
+      const alertOnFail = options && options.alertOnFail;
+      const barcode = String(lineBarcode.value || "").trim();
+      if (!barcode) {
+        if (alertOnFail) {
+          alert("Enter barcode or press F1.");
+          lineBarcode.focus();
+        }
+        return false;
+      }
+      if (!fromStore.value) {
+        if (alertOnFail) {
+          alert("Select From Store first.");
+          lineBarcode.focus();
+          lineBarcode.select?.();
+        }
+        return false;
+      }
+      const rows = await fetchTransferItemsExact({ barcode });
+      const bc = barcode.toUpperCase();
+      const item = rows.find((x) => String(x.barcode || "").trim().toUpperCase() === bc) || rows[0];
+      if (!item) {
+        if (alertOnFail) {
+          alert("Item not found.");
+          lineBarcode.focus();
+          lineBarcode.select?.();
+        }
+        return false;
+      }
+      const sel = applyItemSelectionFields(item);
+      if (!sel.ic) {
+        if (alertOnFail) {
+          alert("Item not found.");
+          lineBarcode.focus();
+          lineBarcode.select?.();
+        }
+        return false;
+      }
+      lineUom.focus();
+      lineUom.select?.();
+      void applyItemSelectionServerRefresh(sel.ic, sel.prefUom);
+      return true;
+    }
+
+    lineItemCode.addEventListener("change", async () => {
+      const code = String(lineItemCode.value || "").trim();
+      if (!code || !fromStore.value) return;
+      const rows = await fetchTransferItemsExact({ itemCode: code });
+      const ic = parseInt(code, 10) || 0;
+      const item = rows.find((x) => (parseInt(String(x.itemcode || "0"), 10) || 0) === ic) || rows[0];
+      if (item) {
+        await applyItemSelection(item);
+      }
+    });
+    lineBarcode.addEventListener("change", async () => {
+      const barcode = String(lineBarcode.value || "").trim();
+      if (!barcode || !fromStore.value) return;
+      const rows = await fetchTransferItemsExact({ barcode });
+      const bc = barcode.toUpperCase();
+      const item = rows.find((x) => String(x.barcode || "").trim().toUpperCase() === bc) || rows[0];
+      if (item) {
+        await applyItemSelection(item);
+      }
+    });
+    fromStore.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (!String(fromStore.value || "").trim()) {
+          alert("Select From Store.");
+          return;
+        }
+        toStore.focus();
+        return;
+      }
+      if (e.key === "F1") {
+        e.preventDefault();
+        if (isStoreSelectionLocked()) {
+          alert("From Store and To Store are locked.");
+          return;
+        }
+        openStorePopup("from");
+      }
+    });
+    fromStore.addEventListener("input", () => {
+      if (isStoreSelectionLocked()) {
+        fromStore.value = committedFromStore;
+        return;
+      }
+      committedFromStore = String(fromStore.value || "");
+      schedulePrefetchTransferItems();
+    });
+    toStore.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (!String(toStore.value || "").trim()) {
+          alert("Select To Store.");
+          return;
+        }
+        remarks.focus();
+        remarks.select?.();
+        return;
+      }
+      if (e.key === "F1") {
+        e.preventDefault();
+        if (isStoreSelectionLocked()) {
+          alert("From Store and To Store are locked.");
+          return;
+        }
+        openStorePopup("to");
+      }
+    });
+    toStore.addEventListener("input", () => {
+      if (isStoreSelectionLocked()) {
+        toStore.value = committedToStore;
+        return;
+      }
+      committedToStore = String(toStore.value || "");
+    });
+    remarks.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        lineBarcode.focus();
+        lineBarcode.select?.();
+      }
+    });
+    lineBarcode.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        void (async () => {
+          const ok = await tryResolveBarcodeFromField({ alertOnFail: true });
+          if (!ok) return;
+        })();
+        return;
+      }
+      if (e.key === "F1") {
+        e.preventDefault();
+        openItemPopup(true);
+      }
+    });
+    lineItemCode.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        void (async () => {
+          const ok = await tryResolveItemCodeFromField({ alertOnFail: true });
+          if (!ok) return;
+        })();
+        return;
+      }
+      if (e.key === "F1") {
+        e.preventDefault();
+        openItemPopup(true);
+      }
+    });
+    lineUom.addEventListener("keydown", (e) => {
+      if (e.key === "F1") {
+        e.preventDefault();
+        openUomPopup();
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        lineQty.focus();
+        lineQty.select?.();
+      }
+    });
+    lineUom.addEventListener("change", () => {
+      renderAvailableByUom();
+    });
+    lineQty.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        void submitAddLine();
+      }
+    });
+    storePopupClose.addEventListener("click", closeStorePopup);
+    storePopupBg.addEventListener("click", (e) => { if (e.target === storePopupBg) closeStorePopup(); });
+    storePopupSearch.addEventListener("input", renderStorePopupList);
+    storePopupSearch.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const first = storePopupList.querySelector(".stf-store-btn");
+        if (first) {
+          first.focus();
+          return;
+        }
+        alert("No store selected.");
+      }
+    });
+    itemPopupClose.addEventListener("click", () => closeItemPopup());
+    itemPopupBg.addEventListener("click", (e) => { if (e.target === itemPopupBg) closeItemPopup(); });
+    itemPopupSearch.addEventListener("input", () => {
+      const q = itemPopupSearch.value || "";
+      if (looksLikeBarcode(q)) {
+        itemPopupList.innerHTML = `<div class="stf-mut" style="padding:10px;">Looking up barcode…</div>`;
+      } else {
+        renderItemPopupList();
+      }
+      clearTimeout(itemPopupSearchTimer);
+      itemPopupSearchTimer = setTimeout(async () => {
+        itemPopupSearchTimer = null;
+        const sid = itemPopupLoadSession;
+        await loadStoreItems(itemPopupSearch.value || "");
+        if (sid !== itemPopupLoadSession) {
+          return;
+        }
+        renderItemPopupList();
+      }, ITEM_POPUP_SEARCH_DEBOUNCE_MS);
+    });
+    itemPopupSearch.addEventListener("paste", () => {
+      clearTimeout(itemPopupSearchTimer);
+      itemPopupSearchTimer = setTimeout(async () => {
+        itemPopupSearchTimer = null;
+        const sid = itemPopupLoadSession;
+        const q = itemPopupSearch.value || "";
+        if (looksLikeBarcode(q)) {
+          itemPopupList.innerHTML = `<div class="stf-mut" style="padding:10px;">Looking up barcode…</div>`;
+        }
+        await loadStoreItems(q);
+        if (sid !== itemPopupLoadSession) {
+          return;
+        }
+        renderItemPopupList();
+      }, 50);
+    });
+    itemPopupReload.addEventListener("click", async () => {
+      cancelPendingItemPopupSearch();
+      const sid = itemPopupLoadSession;
+      await loadStoreItems(itemPopupSearch.value || "");
+      if (sid !== itemPopupLoadSession) {
+        return;
+      }
+      renderItemPopupList();
+    });
+    itemPopupSearch.addEventListener("keydown", (e) => {
+      if (e.key === "F1") {
+        e.preventDefault();
+        openItemPopup(true);
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const first = itemPopupList.querySelector(".stf-item-btn");
+        if (first) {
+          first.focus();
+          return;
+        }
+        alert("No item selected.");
+      }
+    });
+    uomPopupClose.addEventListener("click", () => uomPopupBg.classList.remove("show"));
+    uomPopupBg.addEventListener("click", (e) => { if (e.target === uomPopupBg) uomPopupBg.classList.remove("show"); });
+    uomPopupSearch.addEventListener("input", renderUomPopupList);
+    uomPopupSearch.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const first = uomPopupList.querySelector(".stf-uom-btn");
+        if (first) {
+          first.focus();
+          return;
+        }
+        alert("No UOM selected.");
+      }
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "F1" && itemPopupBg.classList.contains("show")) {
+        e.preventDefault();
+        openItemPopup(true);
+        return;
+      }
+      if (e.key !== "Escape") return;
+
+      if (uomPopupBg.classList.contains("show")) {
+        e.preventDefault();
+        uomPopupBg.classList.remove("show");
+        lineUom.focus();
+        return;
+      }
+      if (itemPopupBg.classList.contains("show")) {
+        e.preventDefault();
+        closeItemPopup();
+        lineBarcode.focus();
+        lineBarcode.select?.();
+        return;
+      }
+      if (storePopupBg.classList.contains("show")) {
+        e.preventDefault();
+        const target = popupTarget;
+        closeStorePopup();
+        if (target === "to") {
+          toStore.focus();
+          toStore.select?.();
+        } else {
+          fromStore.focus();
+          fromStore.select?.();
+        }
+        return;
+      }
+
+      if (focusPreviousField()) {
+        e.preventDefault();
+      }
+    });
+
+    async function submitAddLine() {
+      if (addLineBusy) return;
+      addLineBusy = true;
+      if (addLineBtn) addLineBtn.disabled = true;
+      try {
+        const item_code = parseInt(lineItemCode.value || "0", 10);
+        const transfer_qty = parseFloat(lineQty.value || "0");
+        const available_qty = parseFloat(lineAvailable.value || "0");
+        const available_base_qty = parseFloat(lineAvailable.dataset.baseQty || "0");
+        const factor = getSelectedUomFactor();
+        const transfer_base_qty = transfer_qty * factor;
+        if (!item_code || transfer_qty <= 0) { alert("Enter item and transfer qty."); return; }
+        if (transfer_base_qty > available_base_qty) { alert("Transfer qty exceeds available stock."); return; }
+        if (!(await validateLineTrackingBeforeAdd(item_code))) return;
+        const lotMeta = selectedLotMeta();
+        const duplicateRow = [...linesBody.querySelectorAll("tr")].find((tr) => (
+          parseInt(tr.dataset.itemCode || "0", 10) === item_code
+          && String(tr.dataset.lotId || "") === String(lotMeta.lot_id || "")
+          && tr !== editingRow
+        ));
+        if (duplicateRow) {
+          alert("Item already added.");
+          return;
+        }
+
+        const lineData = {
+          item_code,
+          barcode: lineItemCode.dataset.barcode || "",
+          item_name: lineItemName.value || "",
+          uom: lineUom.value || "NOS",
+          available_qty,
+          available_base_qty,
+          base_qty: transfer_base_qty,
+          transfer_qty,
+          remarks: lineRemarks.value || "",
+          lot_id: lotMeta.lot_id || "",
+          batch_no: lotMeta.batch_no || "",
+          mfg_date: lotMeta.mfg_date || "",
+          expiry_date: lotMeta.expiry_date || "",
+          from_storage_id: lineFromBin ? lineFromBin.value : "",
+          to_storage_id: lineToBin ? lineToBin.value : "",
+          from_bin_label: selectedBinLabel(lineFromBin),
+          to_bin_label: selectedBinLabel(lineToBin),
+        };
+
+        if (editingRow) {
+          setLineRowData(editingRow, lineData);
+        } else {
+          addLineRow(lineData);
+        }
+        refreshIndex();
+        exitEditMode();
+        clearLineInputs();
+      } finally {
+        addLineBusy = false;
+        if (addLineBtn && canEditRequest) addLineBtn.disabled = false;
+      }
+    }
+
+    addLineBtn.addEventListener("click", () => {
+      void submitAddLine();
+    });
+
+    clearBtn.addEventListener("click", () => {
+      exitEditMode();
+      clearLineInputs();
+    });
+
+    document.getElementById("saveBtn").addEventListener("click", async () => {
+      const saveBtn = document.getElementById("saveBtn");
+      if (!saveBtn || saveBtn.dataset.saving === "1") return;
+
+      saveBtn.dataset.saving = "1";
+      try {
+      const lines = [...linesBody.querySelectorAll("tr")].map((tr) => ({
+        item_code: parseInt(tr.dataset.itemCode || "0", 10),
+        item_name: tr.dataset.itemName || "",
+        uom: tr.dataset.uom || "NOS",
+        available_qty: parseFloat(tr.dataset.available || "0"),
+        transfer_qty: parseFloat(tr.dataset.transferQty || "0"),
+        remarks: tr.dataset.remarks || "",
+        lot_id: tr.dataset.lotId || "",
+        batch_no: tr.dataset.batchNo || "",
+        mfg_date: tr.dataset.mfgDate || "",
+        expiry_date: tr.dataset.expiryDate || "",
+        from_storage_id: tr.dataset.fromStorageId || "",
+        to_storage_id: tr.dataset.toStorageId || "",
+      }));
+      if (!lines.length) { alert("Add at least one line."); return; }
+      if (!fromStore.value || !toStore.value) { alert("Select From Store and To Store."); return; }
+
+      const payload = {
+        transfer_no: String(transferNo.value || '').trim(),
+        transfer_date: transferDate.value,
+        from_store: fromStore.value,
+        to_store: toStore.value,
+        remarks: remarks.value || "",
+        lines,
+        update_existing: queryMode
+      };
+
+      const prevDisabled = saveBtn.disabled;
+      const prevSaveLabel = saveBtn.textContent;
+      saveBtn.disabled = true;
+      saveBtn.style.opacity = "0.65";
+      saveBtn.textContent = "Saving...";
+      try {
+        if (typeof window.showLoadingOverlay === "function") {
+          window.showLoadingOverlay("Saving transfer request...");
+        }
+        try {
+          const r = await fetch("/purchase/stock-transfer/api/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const d = await r.json().catch(() => ({}));
+          if ((r.status === 409 || d.replay_blocked) && d.error) {
+            alert(d.error);
+            return;
+          }
+          if (!r.ok || !d.success) {
+            window.dispatchEvent(new CustomEvent('nexa-transaction-save-failed', { detail: d }));
+            alert(d.error || "Save failed.");
+            return;
+          }
+          window.dispatchEvent(new CustomEvent('nexa-transaction-save-success', { detail: d }));
+          if (typeof d.save_nonce === "string" && d.save_nonce) {
+            window.__GLOBAL_SAVE_NONCE = d.save_nonce;
+          }
+          if (isStfPrintPdfOnSaveEnabled() && d.pdf_url) {
+            window.open(d.pdf_url, "_blank", "noopener,noreferrer");
+          }
+          window.location.href = d.list_url || "{{ url_for('purchase.stock_transfer') }}";
+        } finally {
+          if (typeof window.hideLoadingOverlay === "function") {
+            window.hideLoadingOverlay();
+          }
+        }
+      } finally {
+        saveBtn.disabled = prevDisabled;
+        saveBtn.style.opacity = "";
+        saveBtn.textContent = prevSaveLabel;
+      }
+      } finally {
+        saveBtn.dataset.saving = "0";
+      }
+    });
+    if (fromStoreStockBtn) {
+      fromStoreStockBtn.addEventListener("click", async () => {
+        if (!canEditRequest) {
+          return;
+        }
+        if (hasLineRows()) {
+          alert("From store stock is only available when there are no lines. Remove all lines first or start a new request.");
+          return;
+        }
+        if (!String(fromStore.value || "").trim()) {
+          alert("Select From Store first.");
+          return;
+        }
+        if (!String(toStore.value || "").trim()) {
+          alert("Select To Store first.");
+          return;
+        }
+        if (!window.confirm("Load up to 50 items with stock from " + String(fromStore.value) + " into the grid? Transfer quantity will match available for each line.")) {
+          return;
+        }
+        fromStoreStockBtn.disabled = true;
+        try {
+          const p = new URLSearchParams();
+          p.set("from_store", fromStore.value);
+          p.set("bulk", "1");
+          p.set("limit", "50");
+          const r = await fetch("/purchase/stock-transfer/api/items?" + p.toString());
+          const d = await r.json();
+          if (!r.ok || !d.success || !Array.isArray(d.items)) {
+            alert((d && d.error) || "Failed to load items.");
+            return;
+          }
+          linesBody.innerHTML = "";
+          exitEditMode();
+          clearLineInputs();
+          let n = 0;
+          d.items.forEach((it) => {
+            const avail = parseFloat(it.availableqty || 0) || 0;
+            if (avail <= 0) {
+              return;
+            }
+            const ic = parseInt(String(it.itemcode || "0"), 10) || 0;
+            if (!ic) {
+              return;
+            }
+            addLineRow({
+              item_code: ic,
+              itemcode: it.itemcode,
+              barcode: it.barcode || "",
+              item_name: it.itemname || "",
+              itemname: it.itemname,
+              uom: it.uom || "NOS",
+              available_qty: avail,
+              available_base_qty: avail,
+              availableqty: avail,
+              transfer_qty: avail,
+              transferqty: avail,
+              remarks: "",
+            });
+            n += 1;
+          });
+          window.alert("Loaded " + n + " line(s). Review transfer quantities, then save.");
+        } catch (err) {
+          window.alert((err && err.message) || "Load failed.");
+        } finally {
+          syncFromStoreStockBtnState();
+        }
+      });
+    }
+    const newBtn = document.getElementById("newBtn");
+    if (newBtn) {
+      newBtn.addEventListener("click", () => {
+        window.location.href = "{{ url_for('purchase.stock_transfer_new') }}";
+      });
+    }
+    const transferBtn = document.getElementById("transferBtn");
+    if (transferBtn) {
+      transferBtn.addEventListener("click", async () => {
+        const no = String(transferNo.value || '').trim();
+        if (!no || !confirm("Post this request to transit stock?")) return;
+        if (typeof window.showLoadingOverlay === "function") {
+          window.showLoadingOverlay("Posting to transit...");
+        }
+        try {
+          const r = await fetch(`/purchase/stock-transfer/api/transfer/${encodeURIComponent(no)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok || !d.success) {
+            alert(d.error || "Transfer failed.");
+            return;
+          }
+          alert("Transfer posted to transit.");
+          window.location.href = d.list_url || "{{ url_for('purchase.stock_transfer') }}";
+        } finally {
+          if (typeof window.hideLoadingOverlay === "function") {
+            window.hideLoadingOverlay();
+          }
+        }
+      });
+    }
+
+    const approveBtn = document.getElementById("approveBtn");
+    if (approveBtn) {
+      approveBtn.addEventListener("click", async () => {
+        if (approveBtn.dataset.approving === "1") return;
+        const no = String(transferNo.value || '').trim();
+        if (!no || !confirm("Approve this transfer request?")) return;
+        approveBtn.dataset.approving = "1";
+        const prevDisabled = approveBtn.disabled;
+        approveBtn.disabled = true;
+        approveBtn.style.opacity = "0.65";
+        try {
+          if (typeof window.showLoadingOverlay === "function") {
+            window.showLoadingOverlay("Approving transfer...");
+          }
+          try {
+            const r = await fetch(`/purchase/stock-transfer/api/approve/${encodeURIComponent(no)}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({}),
+            });
+            const d = await r.json().catch(() => ({}));
+            if ((r.status === 409 || d.replay_blocked) && d.error) {
+              alert(d.error);
+              return;
+            }
+            if (!r.ok || !d.success) {
+              alert(d.error || "Approval failed.");
+              return;
+            }
+            if (typeof d.save_nonce === "string" && d.save_nonce) {
+              window.__GLOBAL_SAVE_NONCE = d.save_nonce;
+            }
+            if (typeof window.hideLoadingOverlay === "function") {
+              window.hideLoadingOverlay();
+            }
+            alert("Transfer approved");
+            window.location.href = d.list_url || "{{ url_for('purchase.stock_transfer') }}";
+          } finally {
+            if (typeof window.hideLoadingOverlay === "function") {
+              window.hideLoadingOverlay();
+            }
+          }
+        } finally {
+          approveBtn.dataset.approving = "0";
+          approveBtn.disabled = prevDisabled;
+          approveBtn.style.opacity = "";
+        }
+      });
+    }
+
+    (initialData.lines || []).forEach((ln) => addLineRow(ln));
+    loadStores();
+    setReadOnly();
+    syncStoreLockState();
+    if (canEditRequest) {
+      setTimeout(() => fromStore.focus(), 0);
+    }
+    if (queryMode && !initialData.lines) {
+      // no-op, keeps form usable for fresh new mode
+    }
+  })();
+</script>
+<script src="{{ url_for('static', filename='js/transaction_recording_client.js') }}?v=7"></script>
+{% endblock %}

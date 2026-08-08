@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+.sdc-page{margin:0 auto;padding:12px 14px 32px;font-family:system-ui,sans-serif;max-width:1680px;}
+.sdc-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;border-bottom:2px solid #e9d5ff;padding-bottom:12px;}
+.sdc-bar h1{margin:0;font-size:1.12rem;font-weight:800;color:#5b21b6;}
+.sdc-bar a{font-size:.82rem;color:#6366f1;}
+.sdc-intro{font-size:.8rem;color:#57534e;margin-bottom:12px;line-height:1.55;}
+.sdc-layout{
+  display:grid;
+  grid-template-columns:minmax(260px,340px) minmax(280px,1fr);
+  gap:12px;
+  align-items:stretch;
+  min-height:min(680px,78vh);
+}
+/* Right column fills grid row; panels split space; inner areas scroll */
+.sdc-col-stack{display:flex;flex-direction:column;gap:12px;min-height:0;height:100%;align-self:stretch;}
+.sdc-col-stack > .sdc-panel{flex:1 1 0;min-height:0;display:flex;flex-direction:column;}
+@media(max-width:960px){
+  .sdc-layout{grid-template-columns:1fr;min-height:0;}
+  .sdc-col-stack{height:auto;min-height:min(560px,70vh);}
+}
+.sdc-panel{border:1px solid #c4b5fd;border-radius:12px;background:linear-gradient(165deg,#faf5ff 0%,#fff 42%);display:flex;flex-direction:column;min-height:220px;overflow:hidden;}
+.sdc-panel-drawer{min-height:400px;}
+.sdc-ph{font-size:.72rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#5b21b6;padding:10px 12px;border-bottom:2px solid #ede9fe;background:rgba(245,243,255,.95);}
+.sdc-pbody{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:8px;}
+.sdc-drawer-search{font-size:.78rem;padding:6px 9px;border-radius:8px;border:1px solid #cbd5e1;margin-bottom:8px;outline:none;}
+.sdc-drawer-search:focus{border-color:#7c3aed;}
+/* Drawer table list: viewport fits ~12 collapsed rows; extra tables scroll */
+.sdc-drawer-scroll{
+  flex:1 1 auto;
+  min-height:0;
+  max-height:calc(12 * (2.5rem + 8px));
+  overflow-y:auto;
+  overflow-x:hidden;
+  padding-right:6px;
+  scrollbar-gutter:stable;
+}
+.sdc-tbl-acc{border:1px solid #e9d5ff;border-radius:10px;margin-bottom:8px;background:#fff;overflow:hidden;}
+.sdc-tbl-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;cursor:pointer;font-size:.78rem;font-weight:700;color:#3730a3;background:#f5f3ff;}
+.sdc-tbl-head:hover{background:#ede9fe;}
+.sdc-tbl-meta{font-size:.62rem;font-weight:600;color:#6b7280;text-transform:uppercase;}
+.sdc-tbl-body{display:none;padding:4px 6px 8px;max-height:200px;overflow-y:auto;border-top:1px dashed #e9d5ff;}
+.sdc-tbl-acc.open .sdc-tbl-body{display:block;}
+.sdc-orphan .sdc-tbl-head{opacity:.72;}
+.sdc-drag-chip{
+  display:flex;align-items:center;gap:6px;padding:4px 8px;margin:3px 4px;font-size:.72rem;border-radius:6px;
+  cursor:pointer;background:#fff;border:1px solid #ddd6fe;color:#312e81;font-family:ui-monospace,monospace;
+  user-select:none;-webkit-user-select:none;
+}
+.sdc-drag-chip:hover{background:#f5f3ff;border-color:#a78bfa;}
+.sdc-drag-chip:active{cursor:grabbing;}
+.sdc-chip-plus{
+  margin-left:auto;font-size:.9rem;font-weight:800;line-height:1;color:#7c3aed;opacity:.85;
+  flex-shrink:0;padding:0 4px;
+}
+.sdc-subhd{font-size:.62rem;font-weight:800;color:#6d28d9;padding:4px 8px 2px;text-transform:uppercase;}
+.sdc-drop-zone{
+  flex:1 1 auto;border:2px dashed #c4b5fd;border-radius:10px;padding:8px;min-height:120px;background:rgba(255,255,255,.75);
+  transition:border-color .15s,background .15s;
+}
+/* Panel 2: scroll selected rows inside drop zone */
+.sdc-panel-selected .sdc-pbody{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;}
+.sdc-panel-selected .sdc-drop-zone{
+  flex:1 1 auto;
+  min-height:0;
+  max-height:min(42vh,380px);
+  overflow-y:auto;
+  overflow-x:hidden;
+  scrollbar-gutter:stable;
+}
+.sdc-drop-zone.sdc-drag-hover{border-color:#7c3aed;background:#faf5ff;}
+.sdc-drop-hint{font-size:.74rem;color:#94a3b8;text-align:center;padding:18px 10px;line-height:1.45;}
+.sdc-sel-row,.sdc-calc-row{display:flex;align-items:flex-start;gap:8px;padding:7px 8px;margin-bottom:6px;background:#fff;border:1px solid #e9d5ff;border-radius:8px;font-size:.76rem;}
+.sdc-sel-row[draggable="true"]{cursor:grab;}
+.sdc-handle{color:#cbd5e1;cursor:grab;padding-top:4px;}
+.sdc-field-main{flex:1 1 auto;min-width:0;}
+.sdc-role-tag{font-size:.58rem;font-weight:800;color:#6d28d9;text-transform:uppercase;}
+.sdc-col-name{font-family:ui-monospace,monospace;font-weight:600;color:#1e1b4b;}
+.sdc-inp-alias{width:100%;margin-top:5px;font-size:.74rem;padding:4px 7px;border-radius:6px;border:1px solid #e2e8f0;}
+.sdc-rm{border:none;background:#fef2f2;color:#b91c1c;border-radius:6px;padding:4px 8px;font-size:.72rem;cursor:pointer;}
+.sdc-rm:hover{background:#fee2e2;}
+.sdc-calc-tools{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}
+.sdc-mini{border:1px solid #e2e8f0;background:#f8fafc;border-radius:5px;padding:2px 8px;font-size:.68rem;cursor:pointer;}
+.sdc-mini:hover{background:#ede9fe;border-color:#c4b5fd;}
+.sdc-ta-expr{width:100%;min-height:52px;font-size:.74rem;font-family:ui-monospace,monospace;padding:6px;border-radius:6px;border:1px solid #e2e8f0;resize:vertical;}
+.sdc-ref-sel{font-size:.72rem;padding:4px;border-radius:6px;border:1px solid #e2e8f0;max-width:100%;}
+.sdc-add-link{font-size:.76rem;background:none;border:none;color:#6366f1;cursor:pointer;text-decoration:underline;padding:0;}
+.sdc-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:2px solid #e9d5ff;}
+.sdc-btn{padding:8px 18px;border:none;border-radius:8px;font-size:.82rem;font-weight:700;cursor:pointer;}
+.sdc-btn-primary{background:linear-gradient(135deg,#6366f1,#7c3aed);color:#fff;}
+.sdc-btn-ghost{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;}
+.sdc-msg{font-size:.82rem;margin-top:10px;}
+.sdc-msg.ok{color:#059669;}
+.sdc-msg.err{color:#dc2626;}
+details.sdc-adv{margin-top:16px;border:1px solid #e9d5ff;border-radius:10px;padding:8px 12px;background:#fff;}
+details.sdc-adv summary{cursor:pointer;font-size:.78rem;font-weight:700;color:#5b21b6;}
+.sdc-adv-grid{display:grid;gap:10px;margin-top:10px;}
+@media(min-width:720px){.sdc-adv-grid{grid-template-columns:repeat(2,1fr);}}
+.sdc-src-field label{display:block;font-size:.62rem;font-weight:700;color:#64748b;margin-bottom:4px;text-transform:uppercase;}
+.sdc-src-field input,.sdc-src-field select{width:100%;font-size:.76rem;padding:5px 8px;border-radius:6px;border:1px solid #cbd5e1;}
+/* Apply overlay */
+.sdc-overlay{
+  position:fixed;inset:0;z-index:9998;background:rgba(15,23,42,.48);
+  display:flex;align-items:center;justify-content:center;padding:20px;
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+}
+.sdc-overlay[hidden]{display:none!important;}
+.sdc-overlay-card{
+  background:#fff;border-radius:14px;padding:26px 32px;max-width:380px;width:100%;
+  box-shadow:0 25px 50px -12px rgba(0,0,0,.28);text-align:center;border:1px solid #e9d5ff;
+}
+.sdc-overlay-spinner{
+  width:40px;height:40px;margin:0 auto 16px;border-radius:50%;
+  border:3px solid #ede9fe;border-top-color:#7c3aed;
+  animation:sdc-overlay-spin .7s linear infinite;
+}
+@keyframes sdc-overlay-spin{to{transform:rotate(360deg)}}
+.sdc-overlay-msg{margin:0;font-size:.9rem;font-weight:600;color:#312e81;line-height:1.45;}
+.sdc-overlay-sub{margin:8px 0 0;font-size:.76rem;color:#64748b;line-height:1.4;}
+</style>
+
+<div class="sdc-page">
+  <div class="sdc-bar">
+    <h1>Salesanalysis · Data configuration</h1>
+    <a href="{{ url_for('temporary_invoices.invoice_analysis') }}">← Back to AI Reports</a>
+  </div>
+  <p class="sdc-intro">
+    Layout: <strong>column 1</strong> — Tables &amp; columns drawer. <strong>Column 2</strong> — Selected columns above, Calculated fields below. Drag chips from the left into panel 2 (stacks in one column on small screens).
+    Set optional <strong>column labels</strong> for the analysis grid. Calculations use tokens like <code>@dtl:QTY@ * @dtl:RATE@</code>.
+    <strong>Apply to Salesanalysis</strong> saves your selection to tenant tables <code>SA_ANALYSIS_COL</code>, <code>SA_ANALYSIS_SRC</code>, and (when used) <code>SA_ANALYSIS_CALC</code> (created automatically if missing). Calculated fields in panel 3 are <strong>optional</strong>. The Salesanalysis page loads columns and any saved calculations from those tables. Clear all selected columns and Apply with no calculations to return to full column discovery.
+  </p>
+
+  <div id="sdcMsg" class="sdc-msg" style="display:none;"></div>
+
+  <div class="sdc-layout">
+    <section class="sdc-panel sdc-panel-drawer" aria-label="Catalog drawer">
+      <div class="sdc-ph">1 · Tables &amp; columns</div>
+      <div class="sdc-pbody">
+        <input type="search" id="sdcDrawerSearch" class="sdc-drawer-search" placeholder="Filter tables…" autocomplete="off" />
+        <div id="sdcDrawerScroll" class="sdc-drawer-scroll"><div class="sdc-drop-hint">Loading catalog…</div></div>
+      </div>
+    </section>
+
+    <div class="sdc-col-stack">
+      <section class="sdc-panel sdc-panel-selected" aria-label="Selected columns">
+        <div class="sdc-ph">2 · Selected columns → Analysis</div>
+        <div class="sdc-pbody">
+          <div id="sdcSelectedDrop" class="sdc-drop-zone" data-drop-target="selected">
+            <div id="sdcSelectedList"></div>
+            <div id="sdcSelectedHint" class="sdc-drop-hint">Click a column in the drawer (left), or drag it here. Reorder rows by dragging the handle.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="sdc-panel" aria-label="Calculations">
+        <div class="sdc-ph">3 · Calculated fields <span style="font-weight:600;color:#64748b;text-transform:none;">(optional)</span></div>
+        <div class="sdc-pbody">
+          <p style="margin:0 0 8px;font-size:.72rem;color:#64748b;line-height:1.4;">
+            Optional — leave empty or remove rows if you only need columns from panels 1–2. When present, references must use tokens from panel 2 only, e.g. <code>@hdr:BILLNO@</code>. Operators: + − * / ( ).
+          </p>
+          <div id="sdcCalcList"></div>
+          <button type="button" class="sdc-add-link" id="sdcAddCalcBtn">+ Add calculation</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="sdc-actions">
+    <button type="button" class="sdc-btn sdc-btn-primary" id="sdcSaveBtn">Apply to Salesanalysis</button>
+    <button type="button" class="sdc-btn sdc-btn-ghost" id="sdcReloadBtn">Reload</button>
+  </div>
+
+  <details class="sdc-adv">
+    <summary>Advanced · join source overrides (optional)</summary>
+    <div class="sdc-adv-grid" id="sdcAdvGrid"></div>
+  </details>
+
+  <div id="sdcApplyOverlay" class="sdc-overlay" hidden aria-hidden="true">
+    <div class="sdc-overlay-card" role="status" aria-live="polite">
+      <div id="sdcApplyOverlaySpinner" class="sdc-overlay-spinner"></div>
+      <p id="sdcApplyOverlayText" class="sdc-overlay-msg">Applying to Salesanalysis…</p>
+      <p id="sdcApplyOverlaySub" class="sdc-overlay-sub">Saving your configuration. Please wait.</p>
+    </div>
+  </div>
+</div>
+
+<script type="application/json" id="sdcUrls">{{ {
+  'config': url_for('temporary_invoices.api_salesanalysis_config'),
+  'objects': url_for('temporary_invoices.api_salesanalysis_db_objects'),
+  'columns': url_for('temporary_invoices.api_salesanalysis_table_columns'),
+} | tojson }}</script>
+<script src="{{ url_for('static', filename='js/salesanalysis_data_config.js') }}"></script>
+{% endblock %}

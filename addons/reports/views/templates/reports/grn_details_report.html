@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .page { max-width: 98vw; margin: 0 auto; padding: 14px 10px; }
+  .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #dee2e6; padding-bottom: 10px; }
+  .title { margin: 0; font-size: 22px; font-weight: 400; color: #212529; }
+  .sub { margin: 4px 0 0; font-size: 12px; color: #6c757d; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { border: 1px solid #dee2e6; border-radius: 4px; background: #fff; color: #212529; padding: 7px 12px; font-size: 12px; text-decoration: none; cursor: pointer; }
+  .btn-primary { background: #007bff; border-color: #007bff; color: #fff; }
+  .input-group { display: flex; gap: 6px; align-items: center; }
+  .input-readonly { background: #f8fafc; cursor: pointer; }
+  .btn-popup { white-space: nowrap; }
+  .filters { display: grid; grid-template-columns: repeat(7, minmax(140px, 1fr)); gap: 8px; margin-bottom: 10px; }
+  .input, .select { width: 100%; border: 1px solid #dee2e6; border-radius: 4px; padding: 7px 8px; font-size: 12px; box-sizing: border-box; }
+  .meta { margin: 8px 0 10px; font-size: 12px; color: #495057; }
+  .table-wrap { overflow: auto; border: 1px solid #dee2e6; border-radius: 4px; background: #fff; max-height: 72vh; }
+  table { width: 100%; min-width: 3200px; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #dee2e6; padding: 6px 8px; text-align: left; white-space: nowrap; }
+  th { background: #f8f9fa; position: sticky; top: 0; z-index: 2; text-transform: uppercase; font-size: 11px; letter-spacing: 0.2px; }
+  td.num { text-align: right; }
+  .empty { padding: 14px; color: #6c757d; font-style: italic; }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.25); display: none; align-items: center; justify-content: center; z-index: 9999; }
+  .modal-bg.show { display: flex; }
+  .modal-card { width: min(640px, 94vw); max-height: 76vh; background: #fff; border: 1px solid #dee2e6; border-radius: 8px; display: flex; flex-direction: column; }
+  .modal-head { padding: 10px 12px; border-bottom: 1px solid #dee2e6; display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 600; }
+  .modal-body { padding: 10px 12px; overflow: auto; }
+  .modal-search { width: 100%; border: 1px solid #dee2e6; border-radius: 4px; padding: 7px 8px; font-size: 12px; margin-bottom: 8px; box-sizing: border-box; }
+  .modal-list { border: 1px solid #dee2e6; border-radius: 4px; overflow: auto; max-height: 52vh; }
+  .modal-row { width: 100%; border: 0; border-bottom: 1px solid #edf2f7; background: #fff; text-align: left; padding: 8px 10px; font-size: 12px; cursor: pointer; }
+  .modal-row:hover, .modal-row:focus { background: #e9f2ff; outline: none; }
+  @media (max-width: 1400px) { .filters { grid-template-columns: repeat(4, minmax(140px, 1fr)); } }
+  @media (max-width: 760px) { .filters { grid-template-columns: 1fr; } }
+</style>
+
+<div class="page">
+  <div class="top">
+    <div>
+      <h1 class="title">GRN Details Report</h1>
+      <p class="sub">Goods receipt line items from saved GRNs (RECEIPTHDR / RECEIPTDTL).</p>
+    </div>
+    <div class="actions">
+      <a class="btn" href="{{ url_for('reports.grn_details') }}">Clear</a>
+      <button class="btn" type="submit" form="gdrFilterForm" formaction="{{ url_for('reports.grn_details_export_excel') }}">Export Excel</button>
+    </div>
+  </div>
+
+  <form id="gdrFilterForm" method="get" action="{{ url_for('reports.grn_details') }}">
+    <div class="filters">
+      <input class="input" type="date" name="date_from" value="{{ (filters.date_from if filters else '') or '' }}" />
+      <input class="input" type="date" name="date_to" value="{{ (filters.date_to if filters else '') or '' }}" />
+      <input class="input" type="text" name="receipt_no" placeholder="Receipt No (GRN-0001)" value="{{ (filters.receipt_no if filters else '') or '' }}" />
+      <input class="input" type="text" name="lpo_no" placeholder="LPO No" value="{{ (filters.lpo_no if filters else '') or '' }}" />
+      <div class="input-group">
+        <input id="supplierCode" type="hidden" name="supplier_code" value="{{ (filters.supplier_code if filters else '') or '' }}" />
+        <input id="supplierText" class="input input-readonly" type="text" placeholder="Supplier (Popup)" value="{{ (filters.supplier_label if filters else '') or '' }}" readonly />
+        <button id="pickSupplierBtn" class="btn btn-popup" type="button">Popup</button>
+      </div>
+      <div class="input-group">
+        <input id="itemCode" type="hidden" name="item_code" value="{{ (filters.item_code if filters else '') or '' }}" />
+        <input id="itemText" class="input input-readonly" type="text" placeholder="Item (Popup)" value="{{ (filters.item_label if filters else '') or '' }}" readonly />
+        <button id="pickItemBtn" class="btn btn-popup" type="button">Popup</button>
+      </div>
+    </div>
+    <div class="actions" style="margin-bottom:8px;">
+      <button class="btn btn-primary" type="submit">Apply Filters</button>
+    </div>
+  </form>
+
+  <div class="meta">
+    Total rows: {{ rows|length }}
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Receipt No</th>
+          <th>Receipt Date</th>
+          <th>LPO No</th>
+          <th>Invoice No</th>
+          <th>Invoice Date</th>
+          <th>Posting Date</th>
+          <th>Inv. Posted</th>
+          <th>Warehouse</th>
+          <th>Supplier</th>
+          <th>Receipt Amount</th>
+          <th>Hdr Disc.</th>
+          <th>Hdr O/Chg</th>
+          <th>Header Remarks</th>
+          <th>Sl No</th>
+          <th>Item Code</th>
+          <th>Barcode</th>
+          <th>Item Name</th>
+          <th>UOM</th>
+          <th>Qty</th>
+          <th>Rate</th>
+          <th>Bonus</th>
+          <th>Line Disc.</th>
+          <th>Amount</th>
+          <th>Base Qty</th>
+          <th>FOC</th>
+          <th>Line O/Chg</th>
+          <th>Landing</th>
+          <th>Batch</th>
+          <th>Mfg Date</th>
+          <th>Expiry</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        {% set focv = (r.foc_raw|string)|trim|upper %}
+        {% set invp = (r.inventory_posted|string)|trim|upper %}
+        {% set inv_label = 'Posted' if invp in ['1','Y','TRUE','P','POSTED'] else ('Draft' if invp in ['0','N','FALSE','D','DRAFT'] else invp) %}
+        <tr>
+          <td>{{ r.receiptno }}</td>
+          <td>{{ r.receiptdate.strftime('%Y-%m-%d') if r.receiptdate else '' }}</td>
+          <td>{{ r.lpono or '' }}</td>
+          <td>{{ r.invoiceno or '' }}</td>
+          <td>{{ r.invoicedate.strftime('%Y-%m-%d') if r.invoicedate else '' }}</td>
+          <td>{{ r.postingdate.strftime('%Y-%m-%d') if r.postingdate else '' }}</td>
+          <td>{{ inv_label }}</td>
+          <td>{% if r.warehouse_name %}{{ r.warehouse_name }}{% elif r.warehouse_id is not none %}{{ r.warehouse_id }}{% endif %}</td>
+          <td>{{ r.suppliercode if r.suppliercode is not none else '' }}{% if r.suppliername %} — {{ r.suppliername }}{% endif %}</td>
+          <td class="num">{{ '%.4f'|format((r.receiptamount or 0)|float) }}</td>
+          <td class="num">{{ '%.4f'|format((r.hdr_discount or 0)|float) }}</td>
+          <td class="num">{{ '%.4f'|format((r.hdr_othercharge or 0)|float) }}</td>
+          <td>{{ r.hdr_remarks or '' }}</td>
+          <td>{{ r.slno }}</td>
+          <td>{{ r.itemcode }}</td>
+          <td>{{ r.barcode or '' }}</td>
+          <td>{{ r.itemname or '' }}</td>
+          <td>{{ r.uom or '' }}</td>
+          <td class="num">{{ '%.4f'|format((r.quantity or 0)|float) }}</td>
+          <td class="num">{{ '%.4f'|format((r.rate or 0)|float) }}</td>
+          <td class="num">{{ '%.4f'|format((r.bonus or 0)|float) }}</td>
+          <td class="num">{{ '%.4f'|format((r.linediscount or 0)|float) }}</td>
+          <td class="num">{{ '%.4f'|format((r.amount or 0)|float) }}</td>
+          <td class="num">{{ '%.4f'|format((r.baseqty or 0)|float) }}</td>
+          <td>{% if focv in ['1', 'Y', 'TRUE'] %}Y{% else %}N{% endif %}</td>
+          <td class="num">{{ '%.4f'|format((r.line_othercharge or 0)|float) }}</td>
+          <td class="num">{{ '%.4f'|format((r.landingcost or 0)|float) }}</td>
+          <td>{{ r.batch_no or '' }}</td>
+          <td>{{ r.mfg_date.strftime('%Y-%m-%d') if r.mfg_date else '' }}</td>
+          <td>{{ r.expiry_date.strftime('%Y-%m-%d') if r.expiry_date else '' }}</td>
+        </tr>
+        {% else %}
+        <tr><td class="empty" colspan="31">No GRN details found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="supplierPopupBg" class="modal-bg">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="supplierPopupTitle">
+    <div class="modal-head">
+      <div id="supplierPopupTitle">Select Supplier</div>
+      <button id="supplierPopupClose" class="btn" type="button">Close</button>
+    </div>
+    <div class="modal-body">
+      <input id="supplierPopupSearch" class="modal-search" type="text" placeholder="Search supplier code/name..." />
+      <div id="supplierPopupList" class="modal-list"></div>
+    </div>
+  </div>
+</div>
+
+<div id="itemPopupBg" class="modal-bg">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="itemPopupTitle">
+    <div class="modal-head">
+      <div id="itemPopupTitle">Select Item</div>
+      <button id="itemPopupClose" class="btn" type="button">Close</button>
+    </div>
+    <div class="modal-body">
+      <input id="itemPopupSearch" class="modal-search" type="text" placeholder="Search item code/name..." />
+      <div id="itemPopupList" class="modal-list"></div>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    const supplierApi = {{ url_for('reports.grn_details_suppliers_api')|tojson }};
+    const itemApi = {{ url_for('reports.grn_details_items_api')|tojson }};
+
+    const supplierCode = document.getElementById('supplierCode');
+    const supplierText = document.getElementById('supplierText');
+    const supplierPopupBg = document.getElementById('supplierPopupBg');
+    const supplierPopupClose = document.getElementById('supplierPopupClose');
+    const supplierPopupSearch = document.getElementById('supplierPopupSearch');
+    const supplierPopupList = document.getElementById('supplierPopupList');
+    let supplierRows = [];
+
+    const itemCode = document.getElementById('itemCode');
+    const itemText = document.getElementById('itemText');
+    const itemPopupBg = document.getElementById('itemPopupBg');
+    const itemPopupClose = document.getElementById('itemPopupClose');
+    const itemPopupSearch = document.getElementById('itemPopupSearch');
+    const itemPopupList = document.getElementById('itemPopupList');
+    let itemRows = [];
+
+    function escAttr(s) {
+      return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    }
+
+    function renderSupplierPopupList() {
+      let html = '<button type="button" class="modal-row" data-code="" data-name="">All suppliers</button>';
+      if (!supplierRows.length) {
+        html += '<div class="empty">No suppliers found.</div>';
+      } else {
+        html += supplierRows.map((row) => {
+          const code = String(row.suppliercode || '').trim();
+          const name = String(row.suppliername || '').trim();
+          const text = name ? `${code} — ${name}` : code;
+          return `<button type="button" class="modal-row" data-code="${escAttr(code)}" data-name="${escAttr(name)}">${escAttr(text)}</button>`;
+        }).join('');
+      }
+      supplierPopupList.innerHTML = html;
+      supplierPopupList.querySelectorAll('.modal-row').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const code = btn.dataset.code || '';
+          const name = btn.dataset.name || '';
+          supplierCode.value = code;
+          supplierText.value = code ? (name ? `${code} — ${name}` : code) : '';
+          closeSupplierPopup();
+        });
+      });
+    }
+
+    async function loadSuppliers(search) {
+      try {
+        const p = new URLSearchParams();
+        if (search) p.set('search', search);
+        const r = await fetch(`${supplierApi}?${p.toString()}`);
+        const d = await r.json();
+        supplierRows = (r.ok && d.success && Array.isArray(d.suppliers)) ? d.suppliers : [];
+      } catch (e) {
+        supplierRows = [];
+      }
+    }
+
+    async function openSupplierPopup() {
+      supplierPopupSearch.value = '';
+      await loadSuppliers('');
+      renderSupplierPopupList();
+      supplierPopupBg.classList.add('show');
+      setTimeout(() => supplierPopupSearch.focus(), 20);
+    }
+
+    function closeSupplierPopup() {
+      supplierPopupBg.classList.remove('show');
+    }
+
+    function renderItemPopupList() {
+      let html = '<button type="button" class="modal-row" data-code="" data-name="">All Items</button>';
+      if (!itemRows.length) {
+        html += '<div class="empty">No items found.</div>';
+      } else {
+        html += itemRows.map((row) => {
+          const code = String(row.itemcode || '').trim();
+          const name = String(row.itemname || '').trim();
+          const text = name ? `${code} — ${name}` : code;
+          return `<button type="button" class="modal-row" data-code="${escAttr(code)}" data-name="${escAttr(name)}">${escAttr(text)}</button>`;
+        }).join('');
+      }
+      itemPopupList.innerHTML = html;
+      itemPopupList.querySelectorAll('.modal-row').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const code = btn.dataset.code || '';
+          const name = btn.dataset.name || '';
+          itemCode.value = code;
+          itemText.value = code ? (name ? `${code} — ${name}` : code) : '';
+          closeItemPopup();
+        });
+      });
+    }
+
+    async function loadItems(search) {
+      try {
+        const p = new URLSearchParams();
+        if (search) p.set('search', search);
+        const r = await fetch(`${itemApi}?${p.toString()}`);
+        const d = await r.json();
+        itemRows = (r.ok && d.success && Array.isArray(d.items)) ? d.items : [];
+      } catch (e) {
+        itemRows = [];
+      }
+    }
+
+    async function openItemPopup() {
+      itemPopupSearch.value = '';
+      await loadItems('');
+      renderItemPopupList();
+      itemPopupBg.classList.add('show');
+      setTimeout(() => itemPopupSearch.focus(), 20);
+    }
+
+    function closeItemPopup() {
+      itemPopupBg.classList.remove('show');
+    }
+
+    const pickSupplierBtn = document.getElementById('pickSupplierBtn');
+    if (pickSupplierBtn) pickSupplierBtn.addEventListener('click', openSupplierPopup);
+    if (supplierText) supplierText.addEventListener('click', openSupplierPopup);
+    supplierPopupClose.addEventListener('click', closeSupplierPopup);
+    supplierPopupBg.addEventListener('click', (e) => { if (e.target === supplierPopupBg) closeSupplierPopup(); });
+
+    let supplierSearchTimer = null;
+    supplierPopupSearch.addEventListener('input', () => {
+      if (supplierSearchTimer) clearTimeout(supplierSearchTimer);
+      supplierSearchTimer = setTimeout(async () => {
+        await loadSuppliers(supplierPopupSearch.value || '');
+        renderSupplierPopupList();
+      }, 200);
+    });
+
+    const pickItemBtn = document.getElementById('pickItemBtn');
+    if (pickItemBtn) pickItemBtn.addEventListener('click', openItemPopup);
+    if (itemText) itemText.addEventListener('click', openItemPopup);
+    itemPopupClose.addEventListener('click', closeItemPopup);
+    itemPopupBg.addEventListener('click', (e) => { if (e.target === itemPopupBg) closeItemPopup(); });
+
+    let itemSearchTimer = null;
+    itemPopupSearch.addEventListener('input', () => {
+      if (itemSearchTimer) clearTimeout(itemSearchTimer);
+      itemSearchTimer = setTimeout(async () => {
+        await loadItems(itemPopupSearch.value || '');
+        renderItemPopupList();
+      }, 200);
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      if (supplierPopupBg.classList.contains('show')) {
+        e.preventDefault();
+        closeSupplierPopup();
+        return;
+      }
+      if (itemPopupBg.classList.contains('show')) {
+        e.preventDefault();
+        closeItemPopup();
+      }
+    });
+  })();
+</script>
+{% endblock %}

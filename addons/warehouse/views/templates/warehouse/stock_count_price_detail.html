@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Price batch #{{ batch_no }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/stock_count_desktop.css') }}?v=1" />
+{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page sc-detail-page sc-desktop-page" id="scpDetailPage"
+  data-batch-no="{{ batch_no }}"
+  data-location="{{ location_code }}"
+  data-status="{{ hdr.status or '' }}"
+  data-api-lines="{{ url_for('warehouse.api_stock_count_price_lines') }}"
+  data-api-apply="{{ url_for('warehouse.api_stock_count_price_apply') }}"
+  data-api-delete="{{ url_for('warehouse.api_stock_count_price_delete') }}"
+  data-list-url="{{ url_for('warehouse.warehouse_stock_count_price_list') }}"
+  style="max-width:1400px;">
+
+  <div class="page-header-row" style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+    <div>
+      <h1 class="page-title" style="margin:0;">Price batch #{{ batch_no }}</h1>
+      <p class="text-muted" style="margin:4px 0 0;font-size:13px;">
+        Status: <strong id="scpStatusLabel">{{ hdr.status }}</strong>
+        · Date: {{ hdr.batch_date.strftime('%Y-%m-%d') if hdr.batch_date and hdr.batch_date.strftime else hdr.batch_date }}
+        {% if hdr.source_count_no %} · From stock count #{{ hdr.source_count_no }}{% endif %}
+      </p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <a href="{{ url_for('warehouse.warehouse_stock_count_price_list') }}" class="btn btn-secondary">Back to list</a>
+      {% if hdr.status != 'APPLIED' and hdr.status != 'CANCELLED' %}
+      <label class="text-muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin:0;">
+        <input type="checkbox" id="scpUpdateAllAlts" />
+        Update all alternate UOM rows
+      </label>
+      <button type="button" class="btn btn-primary" id="scpBtnApplySelected">Update selected</button>
+      <button type="button" class="btn btn-outline-primary" id="scpBtnApplyBulk">Bulk update (all pending)</button>
+      <button type="button" class="btn btn-outline-danger" id="scpBtnDelete">Delete batch</button>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if hdr.status != 'APPLIED' and hdr.status != 'CANCELLED' %}
+  <section class="bss-shell" style="padding:14px;margin-bottom:14px;border:1px solid #e5eaf2;border-radius:10px;background:#fff;">
+    <h2 style="font-size:14px;margin:0 0 10px;">Add / update line</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;">
+      <label>Item code
+        <input type="number" id="scpItemCode" class="input" min="1" style="width:110px;" />
+      </label>
+      <label>Barcode
+        <input type="text" id="scpBarcode" class="input" style="min-width:140px;" />
+      </label>
+      <label>UOM
+        <input type="text" id="scpUom" class="input" value="NOS" style="width:70px;" />
+      </label>
+      <label>Alt SLNO
+        <input type="number" id="scpSlno" class="input" min="0" style="width:70px;" />
+      </label>
+      <label>New retail
+        <input type="number" id="scpRetail" class="input" step="0.001" style="width:100px;" />
+      </label>
+      <label>New cost
+        <input type="number" id="scpCost" class="input" step="0.001" style="width:100px;" />
+      </label>
+      <label>New wholesale
+        <input type="number" id="scpWholesale" class="input" step="0.001" style="width:100px;" />
+      </label>
+      <button type="button" class="btn btn-primary" id="scpBtnAddLine">Save line</button>
+    </div>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;font-size:13px;font-weight:600;">JSON import (multiple lines)</summary>
+      <textarea id="scpJsonImport" class="input" rows="5" style="width:100%;font-family:monospace;font-size:12px;margin-top:8px;"
+        placeholder='{"lines":[{"itemcode":1001,"retail_price":9.5,"cost_price":7}]}'></textarea>
+      <button type="button" class="btn btn-secondary" id="scpBtnJsonImport" style="margin-top:8px;">Import JSON</button>
+    </details>
+  </section>
+  {% endif %}
+
+  <div class="co-table-wrap" style="overflow-x:auto;">
+    <table class="co-table" id="scpLinesTable">
+      <thead>
+        <tr>
+          {% if hdr.status != 'APPLIED' and hdr.status != 'CANCELLED' %}
+          <th><input type="checkbox" id="scpCheckAll" title="Select all pending" /></th>
+          {% endif %}
+          <th>#</th>
+          <th>Item</th>
+          <th>Name</th>
+          <th>Barcode</th>
+          <th>UOM</th>
+          <th>Cost (old→new)</th>
+          <th>Retail (old→new)</th>
+          <th>Wholesale (old→new)</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="scpLinesBody">
+        {% for ln in lines %}
+        <tr data-line-no="{{ ln.line_no }}" class="{% if (ln.apply_status or '')|upper == 'APPLIED' %}scp-row--applied{% elif (ln.apply_status or '')|upper == 'ERROR' %}scp-row--err{% endif %}">
+          {% if hdr.status != 'APPLIED' and hdr.status != 'CANCELLED' %}
+          <td>
+            {% if (ln.apply_status or 'PENDING')|upper == 'PENDING' %}
+            <input type="checkbox" class="scp-line-check" value="{{ ln.line_no }}" />
+            {% endif %}
+          </td>
+          {% endif %}
+          <td>{{ ln.line_no }}</td>
+          <td>{{ ln.itemcode }}</td>
+          <td>{{ ln.item_name or '' }}</td>
+          <td>{{ ln.barcode or '' }}</td>
+          <td>{{ ln.uom or '' }}{% if ln.alt_slno %} / {{ ln.alt_slno }}{% endif %}</td>
+          <td>{{ '%.3f'|format(ln.old_costprice|float) if ln.old_costprice is not none else '—' }} →
+            {% if hdr.status != 'APPLIED' and hdr.status != 'CANCELLED' and (ln.apply_status or 'PENDING')|upper == 'PENDING' %}
+            <input type="number" class="input scp-edit-new" data-field="cost_price" data-line="{{ ln.line_no }}" step="0.001"
+              value="{{ ln.new_costprice if ln.new_costprice is not none else '' }}" style="width:88px;" />
+            {% else %}
+            {{ '%.3f'|format(ln.new_costprice|float) if ln.new_costprice is not none else '—' }}
+            {% endif %}
+          </td>
+          <td>{{ '%.3f'|format(ln.old_retailprice|float) if ln.old_retailprice is not none else '—' }} →
+            {% if hdr.status != 'APPLIED' and hdr.status != 'CANCELLED' and (ln.apply_status or 'PENDING')|upper == 'PENDING' %}
+            <input type="number" class="input scp-edit-new" data-field="retail_price" data-line="{{ ln.line_no }}" step="0.001"
+              value="{{ ln.new_retailprice if ln.new_retailprice is not none else '' }}" style="width:88px;" />
+            {% else %}
+            {{ '%.3f'|format(ln.new_retailprice|float) if ln.new_retailprice is not none else '—' }}
+            {% endif %}
+          </td>
+          <td>{{ '%.3f'|format(ln.old_wholesaleprice|float) if ln.old_wholesaleprice is not none else '—' }} →
+            {% if hdr.status != 'APPLIED' and hdr.status != 'CANCELLED' and (ln.apply_status or 'PENDING')|upper == 'PENDING' %}
+            <input type="number" class="input scp-edit-new" data-field="wholesale_price" data-line="{{ ln.line_no }}" step="0.001"
+              value="{{ ln.new_wholesaleprice if ln.new_wholesaleprice is not none else '' }}" style="width:88px;" />
+            {% else %}
+            {{ '%.3f'|format(ln.new_wholesaleprice|float) if ln.new_wholesaleprice is not none else '—' }}
+            {% endif %}
+          </td>
+          <td title="{{ ln.apply_message or '' }}">{{ ln.apply_status or 'PENDING' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11" class="text-muted">No lines. Add items above or import from a stock count when creating the batch.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p id="scpMsg" class="text-muted" style="font-size:13px;margin-top:10px;"></p>
+</div>
+<script src="{{ url_for('static', filename='js/stock_count_price.js') }}?v=1"></script>
+{% endblock %}

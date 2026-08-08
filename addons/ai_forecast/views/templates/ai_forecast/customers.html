@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "ai_forecast/_nav.html" import ai_nav %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('ai_forecast.static', filename='css/ai_forecast.css') }}" />
+{% endblock %}
+{% block content %}
+<div class="ai-fc-page">
+  <div class="ai-fc-topbar">
+    <div><h1 class="ai-fc-title">Customer Buying Analysis</h1><p class="ai-fc-sub">Frequency · high-value · cross-sell patterns</p></div>
+    {{ ai_nav('customers') }}
+  </div>
+  <div class="ai-fc-grid-2">
+    <div class="ai-fc-card"><div class="ai-fc-card__head">Top customers</div><div class="ai-fc-card__body" id="aiFcCust"></div></div>
+    <div class="ai-fc-card"><div class="ai-fc-card__head">Cross-sell / top items</div><div class="ai-fc-card__body" id="aiFcCross"></div></div>
+  </div>
+</div>
+<script>
+fetch({{ url_for('ai_forecast.api_customers')|tojson }}).then(r=>r.json()).then(d=>{
+  document.getElementById('aiFcCust').innerHTML = (d.customers||[]).slice(0,15).map(c=>`<div style="margin-bottom:8px;"><strong>${c.customer_name}</strong> — ${Number(c.total_amount).toFixed(2)} (${c.bill_count} bills, ${c.segment})</div>`).join('');
+  document.getElementById('aiFcCross').innerHTML = (d.cross_sell||[]).slice(0,10).map(x=>`<div style="margin-bottom:10px;">Customer ${x.customer_code}: ${(x.top_items||[]).map(i=>'#'+i.itemcode).join(', ')}</div>`).join('');
+});
+</script>
+{% endblock %}

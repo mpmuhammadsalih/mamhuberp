@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .card { background: #fff; border-radius: 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15); padding: 12px 16px; }
+  .page-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    padding: 10px 16px !important;
+    border-radius: 12px;
+    margin-bottom: 10px !important;
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+  }
+  .page-header h1 { color: #ffffff !important; font-weight: 700; font-size: 22px !important; margin: 0; }
+  .page-header .muted { color: rgba(255, 255, 255, 0.9) !important; font-size: 12px; margin-top: 4px; }
+  .button--secondary {
+    background: rgba(255, 255, 255, 0.2) !important;
+    border: 2px solid rgba(255, 255, 255, 0.3) !important;
+    color: #ffffff !important;
+    border-radius: 10px;
+    padding: 6px 14px !important;
+    font-size: 13px !important;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .button--secondary:hover { background: rgba(255, 255, 255, 0.3) !important; color: #fff; }
+  .notifications-outstanding .scroll-table .table thead {
+    display: table-header-group !important;
+    visibility: visible !important;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  }
+  .notifications-outstanding .scroll-table .table thead th {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    color: #ffffff !important;
+    font-weight: 700;
+    font-size: 12px;
+    padding: 8px 10px !important;
+    border: none !important;
+    position: relative;
+    z-index: 1;
+  }
+  .notifications-outstanding .table td { padding: 6px 10px !important; font-size: 12px !important; }
+  .notifications-outstanding .scroll-table { border-radius: 12px; border: 2px solid #e2e8f0; background: #ffffff; overflow-x: auto; }
+</style>
+<section class="card notifications-outstanding" style="max-width: 1920px; width: 98%; margin: 0 auto;">
+  <div class="page-header">
+    <div>
+      <h1>🔔 Outstanding due</h1>
+      <p class="muted">Your outstanding invoices (Employee: {{ employeecode or '—' }})</p>
+    </div>
+  </div>
+
+  {% if no_employeecode %}
+    <p class="muted">No employee code is linked to your account. Contact IT to assign an employeecode so you can see your outstanding due.</p>
+  {% elif rows %}
+    <div class="scroll-table">
+      <table class="table table-fixed">
+        <thead>
+          <tr>
+            <th>SL No</th>
+            <th>Bill No</th>
+            <th>Bill Date</th>
+            <th>Customer Code</th>
+            <th>Customer Name</th>
+            <th>Salesman Code</th>
+            <th>Salesman Name</th>
+            <th>Expected Date</th>
+            <th>Remarks</th>
+            <th>Bill Amount</th>
+            <th>Paid Amount</th>
+            <th>Outstanding</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>{{ row.slno }}</td>
+              <td>{{ row.billno }}</td>
+              <td>{% if row.billdate %}{{ row.billdate.strftime('%d-%m-%Y') if row.billdate else '-' }}{% else %}-{% endif %}</td>
+              <td>{{ row.customercode }}</td>
+              <td>{{ row.customername or '-' }}</td>
+              <td>{{ row.salesmancode or '-' }}</td>
+              <td>{{ row.salesmanname or '-' }}</td>
+              <td>{% if row.expecteddate %}{% if row.expecteddate.__class__.__name__ in ['date', 'datetime'] %}{{ row.expecteddate.strftime('%d-%m-%Y') }}{% else %}{{ (row.expecteddate|string)[:10] }}{% endif %}{% else %}-{% endif %}</td>
+              <td>{{ row.remarks or '-' }}</td>
+              <td>{{ "%.2f"|format(row.billamount or 0) }}</td>
+              <td>{{ "%.2f"|format(row.paidamount or 0) }}</td>
+              <td>{{ "%.2f"|format(row.outstanding or 0) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          {% set total_bill = rows | sum(attribute='billamount') %}
+          {% set total_paid = rows | sum(attribute='paidamount') %}
+          {% set total_out = rows | sum(attribute='outstanding') %}
+          <tr class="table-total" style="background: rgba(102, 126, 234, 0.15); font-weight: 700;">
+            <th colspan="9">Total</th>
+            <th>{{ "%.2f"|format(total_bill|float) }}</th>
+            <th>{{ "%.2f"|format(total_paid|float) }}</th>
+            <th>{{ "%.2f"|format(total_out|float) }}</th>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  {% else %}
+    <p class="muted">No outstanding invoices for your employee code.</p>
+  {% endif %}
+</section>
+{% endblock %}

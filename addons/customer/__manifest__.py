@@ -1,0 +1,2 @@
+"""Addon manifest — Customer."""
+MANIFEST = {'technical_name': 'customer', 'name': 'Customer', 'version': '1.0.0', 'category': 'Legacy', 'summary': 'Migrated from blueprints/customer.py', 'depends': [], 'application': False, 'installable': True, 'license': 'LGPL-3', 'urls': {'prefix': '/customer'}, 'flask': {'blueprint': 'customer', 'blueprint_ref': 'addons.customer:bp', 'models_package': 'addons.customer.models', 'routes_module': 'addons.customer.controllers.routes'}}

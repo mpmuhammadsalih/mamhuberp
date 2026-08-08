@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body {
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+  
+  /* Modern colorful card */
+  .card {
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.5);
+    border: none !important;
+    padding: 12px 16px;
+  }
+  
+  /* Colorful page header */
+  .page-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    padding: 10px 16px !important;
+    border-radius: 12px;
+    margin-bottom: 10px !important;
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+  }
+  .page-header h2 {
+    color: #ffffff !important;
+    font-weight: 700;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    font-size: 22px !important;
+    margin: 0;
+  }
+  .page-header .muted {
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  
+  /* Colorful form sections */
+  .form-section {
+    background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%) !important;
+    padding: 10px 12px !important;
+    border-radius: 12px;
+    margin-bottom: 10px !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(102, 126, 234, 0.1) !important;
+  }
+  
+  /* Colorful labels */
+  .form-group label {
+    color: #4c51bf;
+    font-weight: 600;
+    font-size: 12px;
+    margin-bottom: 2px;
+    display: block;
+  }
+  
+  /* Modern colorful inputs */
+  .input {
+    border: 2px solid #e2e8f0 !important;
+    border-radius: 10px !important;
+    transition: all 0.3s;
+    background: #ffffff;
+    padding: 6px 10px !important;
+    font-size: 13px !important;
+  }
+  .input:focus {
+    border-color: #667eea !important;
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1) !important;
+    outline: none;
+  }
+  
+  /* Colorful buttons */
+  .button--primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border: none !important;
+    border-radius: 10px;
+    box-shadow: 0 4px 14px rgba(102, 126, 234, 0.4);
+    transition: all 0.3s;
+    font-weight: 600;
+    color: #ffffff !important;
+    padding: 6px 14px !important;
+    font-size: 13px !important;
+  }
+  .button--primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+  }
+  .button--secondary {
+    background: rgba(102, 126, 234, 0.1) !important;
+    border: 2px solid rgba(102, 126, 234, 0.3) !important;
+    color: #667eea !important;
+    border-radius: 10px;
+    padding: 6px 14px !important;
+    font-size: 13px !important;
+    transition: all 0.3s;
+  }
+  .button--secondary:hover {
+    background: rgba(102, 126, 234, 0.2) !important;
+    transform: translateY(-1px);
+  }
+  
+  /* Colorful table header */
+  .table thead {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  }
+  .table thead th {
+    background: transparent !important;
+    color: #ffffff !important;
+    font-weight: 700;
+    padding: 8px 10px !important;
+  }
+  
+  /* Scroll table */
+  .scroll-table {
+    border-radius: 12px;
+    border: 2px solid #e2e8f0;
+    background: #ffffff;
+  }
+</style>
+<div class="card" style="max-width: 1400px; margin: 0 auto;">
+  <div class="page-header">
+    <div>
+      <h2>💬 WhatsApp – Outstanding Invoice Report</h2>
+      <p class="muted">Generate PDF of outstanding invoice details and open WhatsApp to the customer's phone number.</p>
+    </div>
+  </div>
+
+  <div class="form-section" style="margin-bottom: 16px;">
+    <div class="form-grid" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: end;">
+      <div class="form-group" style="margin-bottom: 0;">
+        <label for="dateFrom" style="font-size: 13px;">From Date</label>
+        <input type="date" id="dateFrom" class="input" style="padding: 6px 10px;" value="{{ date_from }}" />
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <label for="dateTo" style="font-size: 13px;">To Date</label>
+        <input type="date" id="dateTo" class="input" style="padding: 6px 10px;" value="{{ date_to }}" />
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <button type="button" class="button button--primary" id="btnFilter" style="padding: 8px 16px;">Filter</button>
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <button type="button" class="button button--secondary" id="btnClearFilter" style="padding: 8px 16px;">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-section">
+    {% if customers %}
+      <div class="scroll-table">
+        <table class="table" id="whatsappCustomerTable">
+          <thead>
+            <tr>
+              <th>Sl No</th>
+              <th>Code</th>
+              <th>Customer Name</th>
+              <th>Phone No</th>
+              <th style="text-align: right;">Outstanding</th>
+              <th>Invoice Count</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for customer in customers %}
+              {% set phone_wa_raw = (customer.whatsappno or customer.phoneno or '')|string %}
+              {% set phone_clean = phone_wa_raw.replace('+', '').replace(' ', '').replace('-', '') %}
+              {% if phone_clean.startswith('974') %}
+                {% set phone_wa = phone_clean %}
+              {% elif phone_clean|length == 8 and phone_clean.isdigit() %}
+                {% set phone_wa = '974' ~ phone_clean %}
+              {% else %}
+                {% set phone_wa = phone_clean %}
+              {% endif %}
+              <tr data-customer-code="{{ customer.customercode }}" data-phone-wa="{{ phone_wa }}" data-customer-name="{{ customer.customername or customer.customercode }}">
+                <td>{{ customer.slno }}</td>
+                <td>{{ customer.customercode }}</td>
+                <td>{{ customer.customername or '-' }}</td>
+                <td>{{ phone_wa_raw or '-' }}</td>
+                <td style="text-align: right;">{{ "%.2f"|format(customer.outstandingamount|float) }}</td>
+                <td>{{ customer.invoicecount or 0 }}</td>
+                <td>
+                  <button type="button" class="button button--secondary btn-pdf" style="padding: 4px 10px; font-size: 12px;" title="Download PDF">PDF</button>
+                  <button type="button" class="button button--primary btn-whatsapp" style="padding: 4px 10px; font-size: 12px; margin-left: 4px;" title="Open WhatsApp chat">WhatsApp</button>
+                  <button type="button" class="button button--primary btn-send-twilio" style="padding: 4px 10px; font-size: 12px; margin-left: 4px;" title="Send PDF directly via Twilio">Send</button>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="table-total">
+              <td colspan="4" style="text-align: right; font-weight: bold;">Total</td>
+              <td style="text-align: right; font-weight: bold;">
+                {% set total_out = customers|sum(attribute='outstandingamount')|default(0) %}
+                {{ "%.2f"|format(total_out|float) }}
+              </td>
+              <td style="font-weight: bold;">
+                {% set total_inv = customers|sum(attribute='invoicecount')|default(0) %}
+                {{ total_inv|int }}
+              </td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    {% elif has_filter %}
+      <p class="muted">No customers with outstanding balance found for the selected date range.</p>
+    {% else %}
+      <p class="muted">Use the date filters above and click <strong>Filter</strong> to load customers.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var dateFrom = document.getElementById('dateFrom');
+  var dateTo = document.getElementById('dateTo');
+  var btnFilter = document.getElementById('btnFilter');
+  var btnClear = document.getElementById('btnClearFilter');
+
+  function applyFilter() {
+    var from = dateFrom && dateFrom.value ? dateFrom.value : '';
+    var to = dateTo && dateTo.value ? dateTo.value : '';
+    var params = new URLSearchParams();
+    if (from) params.set('date_from', from);
+    if (to) params.set('date_to', to);
+    window.location.href = '{{ url_for("sms.whatsapp_page") }}?' + params.toString();
+  }
+
+  function clearFilter() {
+    window.location.href = '{{ url_for("sms.whatsapp_page") }}';
+  }
+
+  if (btnFilter) btnFilter.addEventListener('click', applyFilter);
+  if (btnClear) btnClear.addEventListener('click', clearFilter);
+
+  // PDF: open download link for customer
+  document.querySelectorAll('.btn-pdf').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var row = this.closest('tr');
+      if (!row) return;
+      var code = row.getAttribute('data-customer-code');
+      if (!code) return;
+      var params = new URLSearchParams();
+      params.set('customer_code', code);
+      var url = '{{ url_for("sms.whatsapp_outstanding_pdf") }}?' + params.toString();
+      window.open(url, '_blank');
+    });
+  });
+
+  // WhatsApp: open wa.me with phone; user can attach the PDF after downloading
+  document.querySelectorAll('.btn-whatsapp').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var row = this.closest('tr');
+      if (!row) return;
+      var phone = row.getAttribute('data-phone-wa');
+      var name = row.getAttribute('data-customer-name') || 'Customer';
+      if (!phone || phone.length < 8) {
+        alert('No valid phone number for this customer.');
+        return;
+      }
+      var text = encodeURIComponent('Dear ' + name + ',\nPlease find attached your outstanding invoice details report.\nThank you.');
+      var url = 'https://wa.me/' + phone.replace(/\D/g, '') + (text ? '?text=' + text : '');
+      window.open(url, '_blank');
+    });
+  });
+
+  // Send via Twilio: send PDF directly to customer's WhatsApp
+  document.querySelectorAll('.btn-send-twilio').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var row = this.closest('tr');
+      if (!row) return;
+      var code = row.getAttribute('data-customer-code');
+      if (!code) return;
+      var phone = row.getAttribute('data-phone-wa');
+      if (!phone || phone.replace(/\D/g, '').length < 8) {
+        alert('No valid WhatsApp/phone number for this customer.');
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'Sending...';
+      fetch('{{ url_for("sms.whatsapp_send_twilio") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer_code: code })
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          btn.disabled = false;
+          btn.textContent = 'Send';
+          if (data.success) {
+            alert('Message sent to WhatsApp successfully.');
+          } else {
+            alert('Failed to send: ' + (data.error || 'Unknown error'));
+          }
+        })
+        .catch(function(err) {
+          btn.disabled = false;
+          btn.textContent = 'Send';
+          alert('Request failed: ' + (err.message || 'Network error'));
+        });
+    });
+  });
+});
+</script>
+{% endblock %}

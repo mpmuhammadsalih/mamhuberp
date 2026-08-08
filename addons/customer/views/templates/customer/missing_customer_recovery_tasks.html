@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body { background: #fff !important; }
+  .mct-page { max-width: 1100px; margin: 0 auto; padding: 0 16px 32px; }
+  .mct-page .page-po__topbar { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid #dee2e6; }
+  .mct-muted { color: #6c757d; font-size: 13px; margin-bottom: 14px; line-height: 1.45; }
+  .mct-card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; background: #fff; }
+  .mct-card h3 { margin: 0 0 10px; font-size: 15px; font-weight: 600; color: #1e293b; }
+  .mct-meta { font-size: 13px; color: #475569; margin-bottom: 12px; display: grid; gap: 4px; }
+  .mct-form textarea { width: 100%; min-height: 72px; font-size: 13px; padding: 8px 10px; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; margin-bottom: 10px; }
+  .mct-form input[type="date"] { font-size: 13px; padding: 7px 10px; border: 1px solid #ced4da; border-radius: 4px; margin-right: 12px; }
+  .mct-form input[type="text"] { font-size: 13px; padding: 7px 10px; border: 1px solid #ced4da; border-radius: 4px; min-width: 260px; margin-bottom: 10px; }
+  .mct-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+  .mct-btn { padding: 7px 14px; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; }
+  .mct-btn-visit { background: #0ea5e9; color: #fff; }
+  .mct-btn-recover { background: #059669; color: #fff; }
+  .mct-btn-close { background: #64748b; color: #fff; }
+  .mct-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+  .mct-badge-open { background: #dbeafe; color: #1d4ed8; }
+  .mct-badge-visited { background: #fef3c7; color: #b45309; }
+  .mct-badge-done { background: #ecfdf5; color: #047857; }
+  .mct-badge-closed { background: #f1f5f9; color: #475569; }
+  .mct-toolbar { margin-bottom: 18px; }
+  .mct-toolbar a { font-size: 13px; color: #007bff; text-decoration: none; margin-right: 14px; }
+  .mct-toolbar a:hover { text-decoration: underline; }
+  .mct-history { margin-top: 28px; padding-top: 18px; border-top: 1px solid #e2e8f0; }
+</style>
+<div class="mct-page page-po">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">My visit tasks</h1>
+      <p class="page-po__muted">Assigned missing-customer cases: record visit, then mark <strong>Recovered</strong> or <strong>Closed</strong>.</p>
+    </div>
+  </div>
+  <div class="mct-toolbar">
+    {% if has_menu_permission('customer.missing_customer_recovery') %}
+      <a href="{{ url_for('customer.missing_customer_recovery') }}">Missing customers (find &amp; assign)</a>
+    {% endif %}
+    {% if has_menu_permission('customer.customer_list') %}
+      <a href="{{ url_for('customer.customer_list') }}">Customer list</a>
+    {% endif %}
+  </div>
+  {% if auto_recovered_count is defined and auto_recovered_count > 0 %}
+  <div class="flash flash--success" style="margin-bottom:14px;">
+    {{ auto_recovered_count }} case(s) auto-marked <strong>Recovered</strong> (new sale since snapshot).
+  </div>
+  {% endif %}
+  <p class="mct-muted">Only cases assigned to <strong>{{ session.get('user') }}</strong> appear here. Recovered = customer buying again / agreed to resume; Closed = case finished without recovery (with reason).</p>
+
+  <h2 class="page-po__section-title" style="font-size:16px;margin-bottom:12px;">Active</h2>
+  {% if active_cases|length == 0 %}
+    <p class="mct-muted">No open visit tasks.</p>
+  {% endif %}
+  {% for c in active_cases %}
+    <div class="mct-card">
+      {% set st = (c.status or '')|upper %}
+      <span class="mct-badge {% if st == 'OPEN' %}mct-badge-open{% else %}mct-badge-visited{% endif %}">{{ c.status or 'OPEN' }}</span>
+      <h3>{{ c.customer_name or '—' }} <span style="font-weight:400;color:#64748b;">({{ c.customer_code }})</span></h3>
+      <div class="mct-meta">
+        <span>Last purchase: {% if c.last_purchase_date %}{{ c.last_purchase_date.strftime('%d-%b-%Y') if c.last_purchase_date.strftime is defined else c.last_purchase_date }}{% else %}—{% endif %}</span>
+        <span>Bills (snapshot): {{ c.bill_count or '—' }} · Rule: inactive ≥ {{ c.inactive_days_rule or '—' }} days</span>
+        {% if c.feedback %}<span><strong>Feedback:</strong> {{ c.feedback }}</span>{% endif %}
+      </div>
+      <form method="post" action="{{ url_for('customer.missing_customer_recovery_case_update') }}" class="mct-form">
+        <textarea name="feedback" placeholder="Visit notes / feedback…" maxlength="4000">{{ c.feedback or '' }}</textarea>
+        <div>
+          <label style="font-size:12px;color:#64748b;">Visit date</label><br />
+          <input type="date" name="visit_date" value="{{ (c.visit_date.strftime('%Y-%m-%d') if c.visit_date and c.visit_date.strftime else '') }}" />
+        </div>
+        <input type="hidden" name="case_id" value="{{ c.case_id }}" />
+        <div class="mct-actions">
+          <button type="submit" name="action" value="visit" class="mct-btn mct-btn-visit">Save visit</button>
+          <button type="submit" name="action" value="recover" class="mct-btn mct-btn-recover">Mark recovered</button>
+          <button type="submit" name="action" value="close" class="mct-btn mct-btn-close">Close case</button>
+        </div>
+        <div style="margin-top:10px;">
+          <input type="text" name="close_reason" placeholder="Reason if closing without recovery (optional)" maxlength="500" />
+        </div>
+      </form>
+    </div>
+  {% endfor %}
+
+  <div class="mct-history">
+    <h2 class="page-po__section-title" style="font-size:16px;margin-bottom:12px;">Recently recovered / closed</h2>
+    {% if closed_cases|length == 0 %}
+      <p class="mct-muted">None yet.</p>
+    {% endif %}
+    {% for c in closed_cases %}
+      <div class="mct-card" style="opacity:0.92;">
+        {% set st = (c.status or '')|upper %}
+        <span class="mct-badge {% if st == 'RECOVERED' %}mct-badge-done{% else %}mct-badge-closed{% endif %}">{{ c.status }}</span>
+        <h3 style="font-size:14px;">{{ c.customer_name or '—' }} <span style="font-weight:400;color:#64748b;">({{ c.customer_code }})</span></h3>
+        <div class="mct-meta">
+          {% if c.feedback %}<span>{{ c.feedback }}</span>{% endif %}
+          {% if c.close_reason %}<span><strong>Close reason:</strong> {{ c.close_reason }}</span>{% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

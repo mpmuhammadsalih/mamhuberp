@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Purchase Return Order{% endblock %}
+{% block content %}
+
+<div class="page-po nexa-list-page" style="max-width: 1100px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Purchase Return Order</h1>
+      <p class="page-po__muted">Posting dashboard for return requests and posted returns.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('purchase.purchase_return_order_new') }}" class="page-po__btn-primary">New Purchase Return Order</a>
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+  <div class="po-tabs">
+    <button type="button" class="po-tab active" data-tab="pendingTab">Posting Pending ({{ pending_rows|length }})</button>
+    <button type="button" class="po-tab" data-tab="completedTab">Completed ({{ completed_rows|length }})</button>
+  </div>
+  <div id="pendingTab" class="tab-pane active">
+    <div class="co-table-wrap">
+      <table class="co-table" id="prPendingTable">
+        <thead>
+          <tr>
+            <th>Return No</th>
+            <th>Date</th>
+            <th>Supplier</th>
+            <th class="num">Amount</th>
+            <th style="cursor:default;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in pending_rows %}
+          <tr>
+            <td><a class="pi-link" href="{{ url_for('purchase.purchase_return_order_edit', goods_return_no=r.goodsreturnno) }}">{{ r.goodsreturnno }}</a></td>
+            <td>{{ (r.returndate|string)[:10] if r.returndate else '-' }}</td>
+            <td>
+              {% if r.suppliercode %}{{ r.suppliercode }}{% endif %}
+              {% if r.suppliername %} - {{ r.suppliername }}{% endif %}
+            </td>
+            <td class="num">{{ "%.2f"|format((r.returnamount or 0)|float) }}</td>
+            <td style="white-space:normal;">
+              <a class="btn-view" href="{{ url_for('purchase.purchase_return_order_edit', goods_return_no=r.goodsreturnno) }}">Edit</a>
+              <a class="btn-view" href="{{ url_for('purchase.purchase_return_order_query', goods_return_no=r.goodsreturnno) }}">View</a>
+              <a class="btn-view" href="{{ url_for('purchase.purchase_return_new', return_order_no=r.goodsreturnno) }}">Create Return</a>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" style="text-align:center;padding:10px;color:#6b7280;font-style:italic;">No pending return requests.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div id="completedTab" class="tab-pane">
+    <div class="co-table-wrap">
+      <table class="co-table" id="prCompletedTable">
+        <thead>
+          <tr>
+            <th>Return No</th>
+            <th>Date</th>
+            <th>Supplier</th>
+            <th class="num">Amount</th>
+            <th style="cursor:default;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in completed_rows %}
+          <tr>
+            <td><a class="pi-link" href="{{ url_for('purchase.purchase_return_query', goods_return_no=r.goodsreturnno) }}">{{ r.goodsreturnno }}</a></td>
+            <td>{{ (r.returndate|string)[:10] if r.returndate else '-' }}</td>
+            <td>
+              {% if r.suppliercode %}{{ r.suppliercode }}{% endif %}
+              {% if r.suppliername %} - {{ r.suppliername }}{% endif %}
+            </td>
+            <td class="num">{{ "%.2f"|format((r.returnamount or 0)|float) }}</td>
+            <td><a class="btn-view" href="{{ url_for('purchase.purchase_return_query', goods_return_no=r.goodsreturnno) }}">View</a></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" style="text-align:center;padding:10px;color:#6b7280;font-style:italic;">No completed returns found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    const tabs = document.querySelectorAll('.po-tab[data-tab]');
+    const panes = document.querySelectorAll('.tab-pane');
+    tabs.forEach((btn) => {
+      btn.addEventListener('click', function () {
+        tabs.forEach((b) => b.classList.remove('active'));
+        panes.forEach((p) => p.classList.remove('active'));
+        btn.classList.add('active');
+        const pane = document.getElementById(btn.dataset.tab);
+        if (pane) pane.classList.add('active');
+      });
+    });
+  })();
+</script>
+{% endblock %}

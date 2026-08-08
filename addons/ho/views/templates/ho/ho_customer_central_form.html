@@ -1,0 +1,1675 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body { background: #fff !important; }
+
+  /* ── Exact copy of customer_form.html styles ────────────────── */
+  .page-po.customer-form-page .customer-details { display: grid; grid-template-columns: 1fr 1fr; gap: 0 48px; margin-bottom: 24px; }
+  .page-po.customer-form-page .customer-details .form-group { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; min-height: 32px; }
+  .page-po.customer-form-page .customer-details .form-group label { margin: 0; min-width: 140px; font-size: 13px; font-weight: 400; color: #495057; flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; flex: 1; }
+  .page-po.customer-form-page .customer-details .form-group label > span { min-width: 140px; flex-shrink: 0; }
+  .page-po.customer-form-page .customer-details .form-group .input,
+  .page-po.customer-form-page .customer-details .form-group select { flex: 1; min-width: 0; font-size: 13px; padding: 6px 0; border: none; border-bottom: 1px solid #dee2e6; border-radius: 0; background: transparent; }
+  .page-po.customer-form-page .customer-details .form-group .input:focus,
+  .page-po.customer-form-page .customer-details .form-group select:focus { outline: none; border-bottom-color: var(--nexa-focus-color); }
+  .page-po.customer-form-page .customer-details .form-group input:disabled,
+  .page-po.customer-form-page .customer-details .form-group input[readonly] { background: #f8f9fa; color: #6c757d; cursor: not-allowed; }
+  .page-po.customer-form-page .customer-details .search-field { flex: 1; border: none; border-bottom: 1px solid #dee2e6; display: inline-flex; align-items: center; min-width: 0; }
+  .page-po.customer-form-page .customer-details .search-field .input { border: none; }
+  .page-po.customer-form-page .customer-details .search-picker { background: transparent; border: none; color: #007bff; cursor: pointer; padding: 4px 8px; }
+  .page-po.customer-form-page .customer-details .search-clear { background: transparent; border: none; color: #6c757d; cursor: pointer; padding: 4px 8px; }
+  .page-po.customer-form-page .customer-details .account-search .search-clear { display: none !important; }
+  .page-po.customer-form-page .field-hint { margin: 4px 0 0 152px; color: #6c757d; font-size: 11px; line-height: 1.35; }
+  .page-po.customer-form-page .customer-actions { margin-top: 24px; padding-top: 16px; border-top: 1px solid #dee2e6; }
+  #cf-panel-accounts .form-group label > span:first-child { min-width: 170px; width: 170px; }
+  @media (max-width: 1024px) { .page-po.customer-form-page .customer-details { grid-template-columns: 1fr; } }
+
+  /* ── Tabs ───────────────────────────────────────────────────── */
+  .cf-tabs { display: flex; gap: 0; border-bottom: 2px solid #dee2e6; margin-bottom: 20px; }
+  .cf-tab { background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -2px; padding: 8px 20px; font-size: 13px; font-weight: 500; color: #6c757d; cursor: pointer; }
+  .cf-tab.active { color: #0d6efd; border-bottom-color: #0d6efd; font-weight: 700; }
+  .cf-tab-panel { display: none; }
+  .cf-tab-panel.active { display: block; }
+
+  /* ── Target Branch panel ────────────────────────────────────── */
+  .target-branch-panel { border: 1px solid #dee2e6; border-radius: 8px; padding: 16px 20px; margin-bottom: 20px; background: #f8f9fa; }
+  .target-branch-panel h3 { margin: 0 0 14px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #495057; }
+  .target-branch-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .target-branch-card { display: flex; align-items: center; gap: 8px; border: 2px solid #dee2e6; border-radius: 6px; padding: 8px 14px; background: #fff; cursor: pointer; font-size: 13px; color: #495057; transition: border-color .15s, background .15s; user-select: none; }
+  .target-branch-card:hover { border-color: #86b7fe; background: #f0f6ff; }
+  .target-branch-card.selected { border-color: #0d6efd; background: #e7f1ff; color: #0d6efd; font-weight: 700; }
+  .branch-code-tag { font-size: 11px; background: #e9ecef; padding: 1px 6px; border-radius: 3px; color: #6c757d; font-weight: 600; }
+  .target-branch-card.selected .branch-code-tag { background: #cfe2ff; color: #084298; }
+  .next-code-bar { margin-top: 12px; font-size: 13px; color: #495057; }
+
+  /* ── From-request banner ────────────────────────────────────── */
+  .from-cr-banner { background: #fff3cd; border: 1px solid #ffe08a; border-radius: 6px; padding: 10px 16px; margin-bottom: 16px; font-size: 13px; color: #664d03; display: flex; align-items: center; gap: 8px; }
+
+  /* ── AI Check panel ─────────────────────────────────────────── */
+  .ai-check-panel { border: 1px solid #c9b8f5; border-radius: 8px; background: #faf7ff; margin-bottom: 20px; overflow: hidden; }
+  .ai-check-header { display: flex; align-items: center; gap: 10px; padding: 12px 18px; background: #f0ebff; border-bottom: 1px solid #c9b8f5; }
+  .ai-check-header h3 { margin: 0; font-size: 13px; font-weight: 700; color: #5b21b6; text-transform: uppercase; letter-spacing: .5px; }
+  .ai-check-body { padding: 14px 18px; }
+  .ai-btn { background: #7c3aed; color: #fff; border: none; border-radius: 6px; padding: 7px 18px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: background .15s; }
+  .ai-btn:hover { background: #6d28d9; }
+  .ai-btn:disabled { background: #a78bfa; cursor: not-allowed; }
+  .ai-spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: aiSpin .7s linear infinite; display: none; }
+  @keyframes aiSpin { to { transform: rotate(360deg); } }
+
+  /* ── Save overlay ─────────────────────────────────────────── */
+  #hccSaveOverlay {
+    display: none; position: fixed; inset: 0; z-index: 9999;
+    background: rgba(0,0,0,.48); align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px;
+  }
+  #hccSaveOverlay.active { display: flex; }
+  .hcc-save-spinner {
+    width: 52px; height: 52px; border-radius: 50%;
+    border: 5px solid rgba(255,255,255,.25);
+    border-top-color: #fff;
+    animation: hccSpin .75s linear infinite;
+  }
+  @keyframes hccSpin { to { transform: rotate(360deg); } }
+  .hcc-save-text { color: #fff; font-size: 15px; font-weight: 600; letter-spacing: .3px; }
+  .ai-result-bar { margin-top: 12px; font-size: 13px; }
+  .ai-badge-match { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
+  .ai-badge-none  { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
+  .ai-table-wrap { margin-top: 10px; border: 1px solid #ddd6fe; border-radius: 6px; overflow: auto; max-height: 280px; }
+  .ai-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .ai-table th { background: #ede9fe; color: #5b21b6; font-weight: 700; padding: 7px 10px; text-align: center; position: sticky; top: 0; border-bottom: 1px solid #ddd6fe; }
+  .ai-table td { padding: 6px 10px; border-bottom: 1px solid #f3f0ff; text-align: center; vertical-align: middle; }
+  .ai-table td:nth-child(3) { text-align: left; }
+  .ai-table tr:last-child td { border-bottom: none; }
+  .ai-table tr:hover td { background: #f5f3ff; }
+  .ai-table tbody tr.ai-dup-row[data-ccode] { cursor: pointer; }
+  .ai-table tbody tr.ai-dup-row[data-ccode]:hover td { background: #ecfdf5 !important; }
+  .ai-match-exact { color: #dc2626; font-weight: 700; }
+  .ai-match-partial { color: #d97706; font-weight: 600; }
+  .ai-badge-exact { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
+  .ai-cell-exact { color: #dc2626; font-weight: 700; background: #fff0f0; border-radius: 3px; padding: 1px 5px; }
+  .ai-field-tag  { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 3px; padding: 1px 6px; font-size: 10px; font-weight: 700; display: inline-block; margin: 1px; }
+
+  input:-webkit-autofill { -webkit-box-shadow: 0 0 0 1000px #fff inset !important; }
+  .page-po.customer-form-page input:not([type="number"]):not([type="hidden"]):not([type="checkbox"]).input,
+  .page-po.customer-form-page textarea.input { text-transform: uppercase; }
+</style>
+
+<div class="page-po customer-form-page" style="max-width: 1100px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Customer Creation — New Customer</h1>
+      <p class="page-po__muted">Save a new customer directly into a branch database.</p>
+    </div>
+    <a href="{{ url_for('ho.customer_central') }}" class="page-po__btn-secondary">← Back to List</a>
+  </div>
+
+  {% if from_cr %}
+    <div class="from-cr-banner">⚡ Pre-filled from Customer Request #{{ from_cr }}. Select a target branch and review before saving.</div>
+  {% endif %}
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div style="padding:10px 14px;margin-bottom:12px;border-radius:5px;background:{% if cat=='error' %}#f8d7da{% else %}#d1e7dd{% endif %};color:{% if cat=='error' %}#58151c{% else %}#0a3622{% endif %};">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <form method="post" action="{{ url_for('ho.customer_central_save') }}" id="hccForm" autocomplete="off">
+    <input type="hidden" name="from_cr" value="{{ from_cr or '' }}" />
+
+    <!-- ── Target Branch Panel ─────────────────────────────────── -->
+    <div class="target-branch-panel">
+      <h3>Target Branch</h3>
+      <div class="target-branch-grid" id="branchGrid">
+        {% for t in all_tenants %}
+          <label class="target-branch-card {% if target_tenant == t.tenant_id %}selected{% endif %}"
+                 for="branch_rb_{{ t.tenant_id }}">
+            <input type="radio" id="branch_rb_{{ t.tenant_id }}" name="target_tenants" value="{{ t.tenant_id }}"
+                   {% if target_tenant == t.tenant_id %}checked{% endif %}
+                   onchange="onBranchChange()" />
+            <span class="branch-code-tag">{{ t.tenant_id }}</span>
+            {{ t.display_name or t.tenant_id }}
+          </label>
+        {% endfor %}
+      </div>
+      <div class="next-code-bar" id="nextCodeBar" style="{{ 'display:none' if not target_tenant else '' }}">
+        <span id="nextCodeList"></span>
+      </div>
+    </div>
+
+    <!-- ── AI Name Check Panel ──────────────────────────────────── -->
+    <div class="ai-check-panel">
+      <div class="ai-check-header">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <h3>AI Duplicate Check</h3>
+        <span style="font-size:12px;color:#7c3aed;margin-left:4px;font-weight:400;">Checks customer name against all branch databases</span>
+      </div>
+      <div class="ai-check-body">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <span style="font-size:13px;color:#374151;">Checks Name, Mobile, Telephone, WhatsApp, Qatar ID &amp; CR No across all branches.</span>
+          <button type="button" class="ai-btn" id="aiCheckBtn" onclick="aiCheckName()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <div class="ai-spinner" id="aiSpinner"></div>
+            AI Check
+          </button>
+        </div>
+        <div class="ai-result-bar" id="aiResultBar" style="display:none;"></div>
+        <div id="aiResultTable" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- ── Tabs ───────────────────────────────────────────────── -->
+    <div class="cf-tabs">
+      <button type="button" class="cf-tab active" onclick="hccTab('general',this)">&#128100; General</button>
+      <button type="button" class="cf-tab" onclick="hccTab('sales',this)">&#128200; Sales</button>
+      <button type="button" class="cf-tab" onclick="hccTab('accounts',this)">&#128181; Accounts</button>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════
+         GENERAL TAB  (matches customer_form.html exactly)
+         ════════════════════════════════════════════════════════ -->
+    <div class="cf-tab-panel active" id="hcc-panel-general">
+      <div class="customer-details">
+
+        {% if from_cr %}
+        <div class="form-group">
+          <label>
+            <span>Request No</span>
+            <input type="text" class="input" readonly
+                   style="background:#fff8e1;color:#856404;font-weight:600;border-bottom-color:#ffc107;"
+                   value="{{ from_cr }}" />
+            <input type="hidden" name="from_cr_display" value="{{ from_cr }}" />
+          </label>
+        </div>
+        {% endif %}
+
+        <div class="form-group">
+          <label for="hccCustomerCodeDisplay">
+            <span>Customer Code</span>
+            <input type="text" id="hccCustomerCodeDisplay" class="input" readonly
+                   style="background:#f8f9fa;color:#495057;font-weight:600;"
+                   value="{{ next_code or '' }}" />
+            <input type="hidden" name="customercode" id="hccCustomerCode" value="{{ next_code or '' }}" />
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="hccCcodeDisplay" style="align-items:flex-start;">
+            <span style="padding-top:6px;">C Code</span>
+            <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+              <input type="text" id="hccCcodeDisplay" class="input" readonly
+                     style="background:#f8f9fa;color:#495057;font-weight:600;flex:1;min-width:0;"
+                     value="{{ next_ccode or '' }}" />
+              <button type="button" class="page-po__btn-secondary" id="hccFetchNextCcodeBtn"
+                      style="flex-shrink:0;padding:5px 12px;font-size:12px;white-space:nowrap;"
+                      title="Fetches the next C Code from all branch databases, and the next customer code for the selected target branch.">
+                Next C Code
+              </button>
+            </div>
+            <input type="hidden" name="ccode" id="hccCcode" value="{{ next_ccode or '' }}" />
+          </label>
+        </div>
+
+        <div class="form-group" style="grid-column: span 2;">
+          <label for="customername">
+            <span>Customer Name</span>
+            <input type="text" id="customername" name="customername" class="input"
+                   value="{{ prefill.customername or '' }}" placeholder="Customer name" required />
+          </label>
+        </div>
+
+        <div class="form-group" style="grid-column: span 2;">
+          <label for="address">
+            <span>Address</span>
+            <input type="text" id="address" name="address" class="input"
+                   value="{{ prefill.address or '' }}" placeholder="Address" />
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="street">
+            <span>Street</span>
+            <input type="text" id="street" name="street" class="input"
+                   value="{{ prefill.street or '' }}" placeholder="Street" />
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="zone">
+            <span>Zone</span>
+            <input type="text" id="zone" name="zone" class="input"
+                   value="{{ prefill.zone or '' }}" placeholder="Zone" />
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="pobox">
+            <span>P.O.Box</span>
+            <input type="text" id="pobox" name="pobox" class="input"
+                   value="{{ prefill.pobox or '' }}" placeholder="P.O.Box" />
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="crno">
+            <span>CR No</span>
+            <input type="text" id="crno" name="crno" class="input"
+                   value="{{ prefill.crno or '' }}" placeholder="CR No" />
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="nationality">
+            <span>Nationality</span>
+            <input type="text" id="nationality" name="nationality" class="input"
+                   value="{{ prefill.nationality or '' }}" placeholder="Nationality" />
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="telephone">
+            <span>Telephone</span>
+            <input type="text" id="telephone" name="telephone" class="input"
+                   value="{{ prefill.telephone or '' }}" placeholder="Telephone" />
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="mobile">
+            <span>Mobile</span>
+            <input type="text" id="mobile" name="mobile" class="input"
+                   value="{{ prefill.mobile or '' }}" placeholder="Mobile" />
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="whatsapp">
+            <span>WhatsApp</span>
+            <input type="text" id="whatsapp" name="whatsapp" class="input"
+                   value="{{ prefill.whatsapp or '' }}" placeholder="WhatsApp number" />
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="email">
+            <span>Email</span>
+            <input type="text" id="email" name="email" class="input"
+                   value="{{ prefill.email or '' }}" placeholder="Email address"
+                   style="text-transform:none;" />
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="qatarid">
+            <span>Qatar ID</span>
+            <input type="text" id="qatarid" name="qatarid" class="input"
+                   value="{{ prefill.qatarid or '' }}" placeholder="Qatar ID" />
+          </label>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════
+         SALES TAB  (matches customer_form.html exactly)
+         ════════════════════════════════════════════════════════ -->
+    <div class="cf-tab-panel" id="hcc-panel-sales">
+      <div class="customer-details">
+
+        <div class="form-group">
+          <label for="hccSalesmanDisplay">
+            <span>Salesman</span>
+            <span class="search-field search-field--popup">
+              <input type="text" id="hccSalesmanDisplay" class="input" placeholder="Click to select..." readonly
+                     value="{% if prefill.salesmancode %}{{ prefill.salesmancode }}{% if prefill_names.salesman %} - {{ prefill_names.salesman }}{% endif %}{% endif %}" />
+              <button type="button" class="search-clear" id="hccSalesmanClear" style="display:none;">×</button>
+              <button type="button" class="search-picker" id="hccSalesmanPicker">▾</button>
+            </span>
+            <input type="hidden" name="salesmancode" id="hccSalesmanCode" value="{{ prefill.salesmancode or '' }}" />
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="hccInvoiceCode">
+            <span>Invoice Code</span>
+            <span class="search-field search-field--popup">
+              <input type="text" id="hccInvoiceCodeDisplay" class="input" placeholder="Click to select..." readonly
+                     value="{% if (prefill.invoicecode|string)=='1' %}Cash{% elif (prefill.invoicecode|string)=='2' %}Credit{% endif %}" />
+              <button type="button" class="search-clear" id="hccInvoiceCodeClear" style="display:none;">×</button>
+              <button type="button" class="search-picker" id="hccInvoiceCodePicker">▾</button>
+            </span>
+            <input type="hidden" id="hccInvoiceCode" name="invoicecode" value="{{ prefill.invoicecode or '' }}" />
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="hccCategoryDisplay">
+            <span>Customer Category</span>
+            <span class="search-field search-field--popup">
+              <input type="text" id="hccCategoryDisplay" class="input" placeholder="Click to select..." readonly
+                     value="{% if prefill.customercategory %}{{ prefill.customercategory }}{% if prefill_names.customercategory %} - {{ prefill_names.customercategory }}{% endif %}{% endif %}" />
+              <button type="button" class="search-clear" id="hccCategoryClear" style="display:none;">×</button>
+              <button type="button" class="search-picker" id="hccCategoryPicker">▾</button>
+            </span>
+            <input type="hidden" name="customercategory" id="hccCategoryCode" value="{{ prefill.customercategory or '' }}" />
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="hccBySalesmanDisplay">
+            <span>By Salesman</span>
+            <span class="search-field search-field--popup">
+              <input type="text" id="hccBySalesmanDisplay" class="input" placeholder="Click to select..." readonly
+                     value="{% if prefill.bysalesman %}{{ prefill.bysalesman }}{% if prefill_names.bysalesman %} - {{ prefill_names.bysalesman }}{% endif %}{% endif %}" />
+              <button type="button" class="search-clear" id="hccBySalesmanClear" style="display:none;">×</button>
+              <button type="button" class="search-picker" id="hccBySalesmanPicker">▾</button>
+            </span>
+            <input type="hidden" name="bysalesman" id="hccBySalesmanCode" value="{{ prefill.bysalesman or '' }}" />
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="hccRouteDisplay">
+            <span>Route No</span>
+            <span class="search-field search-field--popup">
+              <input type="text" id="hccRouteDisplay" class="input" placeholder="Click to select..." readonly
+                     value="{% if prefill.routeno %}{{ prefill.routeno }}{% if prefill_names.routeno %} - {{ prefill_names.routeno }}{% endif %}{% endif %}" />
+              <button type="button" class="search-clear" id="hccRouteClear" style="display:none;">×</button>
+              <button type="button" class="search-picker" id="hccRoutePicker">▾</button>
+            </span>
+            <input type="hidden" name="routeno" id="hccRouteCode" value="{{ prefill.routeno or '' }}" />
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="creditlimit">
+            <span>Credit Limit</span>
+            <input type="number" id="creditlimit" name="creditlimit" class="input"
+                   value="{{ prefill.creditlimit or 0 }}" min="0" step="0.01" />
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="creditterm">
+            <span>Credit Term (Days)</span>
+            <input type="number" id="creditterm" name="creditterm" class="input"
+                   value="{{ prefill.creditterms or 0 }}" min="0" step="0.01" />
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="currentcredit">
+            <span>Current Credit</span>
+            <input type="number" id="currentcredit" name="currentcredit" class="input"
+                   value="0" min="0" step="0.01" readonly style="background:#f8f9fa;cursor:default;" />
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="hccEmployeeDisplay">
+            <span>C/O Employee</span>
+            <span class="search-field search-field--popup">
+              <input type="text" id="hccEmployeeDisplay" class="input" placeholder="Press F1 to select..." readonly
+                     value="{% if prefill.employeecode %}{{ prefill.employeecode }}{% if prefill_names.employee %} - {{ prefill_names.employee }}{% endif %}{% endif %}" />
+              <button type="button" class="search-clear" id="hccEmployeeClear" style="display:none;">×</button>
+              <button type="button" class="search-picker" id="hccEmployeePicker">▾</button>
+            </span>
+            <input type="hidden" name="employeecode" id="hccEmployeeCode" value="{{ prefill.employeecode or '' }}" />
+          </label>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════
+         ACCOUNTS TAB  (matches customer_form.html exactly)
+         ════════════════════════════════════════════════════════ -->
+    <div class="cf-tab-panel" id="cf-panel-accounts">
+      <div class="customer-details">
+
+        <!-- Status -->
+        <div class="form-group">
+          <label for="hccFlagDisplay">
+            <span>Status</span>
+            <span class="search-field search-field--popup">
+              <input type="text" id="hccFlagDisplay" class="input" placeholder="Click to select..." readonly
+                     value="{% if prefill.flag == 'N' %}Locked{% else %}Active{% endif %}" />
+              <button type="button" class="search-picker" id="hccFlagPicker">▾</button>
+            </span>
+            <input type="hidden" id="hccFlag" name="flag"
+                   value="{% if prefill.flag == 'N' %}N{% else %}Y{% endif %}" />
+          </label>
+        </div>
+
+        <!-- Account Status -->
+        <div class="form-group">
+          <label for="hccClosedDisplay">
+            <span>Account Status</span>
+            <span class="search-field search-field--popup">
+              <input type="text" id="hccClosedDisplay" class="input" placeholder="Click to select..." readonly
+                     value="{% if prefill.closed == 'Y' %}Closed{% else %}Open{% endif %}" />
+              <button type="button" class="search-picker" id="hccClosedPicker">▾</button>
+            </span>
+            <input type="hidden" id="hccClosed" name="closed"
+                   value="{% if prefill.closed == 'Y' %}Y{% else %}N{% endif %}" />
+          </label>
+        </div>
+
+        <!-- C Code (readonly mirror of General tab — kept in sync by hccSetCcode) -->
+        <div class="form-group">
+          <label><span>C Code</span>
+            <input type="text" id="hccCcodeAccountsDisplay" class="input" readonly style="background:#f8f9fa;cursor:default;"
+                   value="{{ next_ccode or '' }}" />
+          </label>
+        </div>
+
+        <!-- Points (readonly) -->
+        <div class="form-group">
+          <label><span>Points</span>
+            <input type="text" class="input" readonly style="background:#f8f9fa;cursor:default;" value="0" />
+          </label>
+        </div>
+
+        <!-- Counter Sale -->
+        <div class="form-group">
+          <label for="hccCountersaleChk" style="flex-direction:row;align-items:center;gap:10px;cursor:pointer;">
+            <span style="min-width:0;">Counter Sale</span>
+            <input type="checkbox" id="hccCountersaleChk" style="width:18px;height:18px;cursor:pointer;flex-shrink:0;"
+                   {% if prefill.countersale == 'Y' %}checked{% endif %} />
+            <input type="hidden" id="hccCountersale" name="countersale"
+                   value="{% if prefill.countersale == 'Y' %}Y{% else %}N{% endif %}" />
+          </label>
+        </div>
+
+        <!-- Receivable Account -->
+        {% set recv_code = prefill.receivableaccount or (default_accounts.customer_receivable if default_accounts and default_accounts.customer_receivable else '1200') %}
+        {% set recv_display %}{% if recv_code %}{% for acc in chart_accounts %}{% if (acc.code|string)==(recv_code|string) %}{{ acc.code }} - {{ acc.name }}{% endif %}{% endfor %}{% endif %}{% endset %}
+        <div class="form-group" style="grid-column: span 2; max-width: 100%;">
+          <label for="hccRecvDisplay" style="width:100%;">
+            <span>Receivable Account</span>
+            <span class="search-field search-field--popup account-search">
+              <input type="text" id="hccRecvDisplay" class="input" placeholder="Press F1 to select..." value="{{ recv_display }}" />
+              <button type="button" class="search-clear" id="hccRecvClear" style="display:none;">×</button>
+              <button type="button" class="search-picker" id="hccRecvPicker">▾</button>
+            </span>
+            <input type="hidden" id="receivableaccount" name="receivableaccount" value="{{ recv_code }}" />
+          </label>
+          <div class="field-hint">Choose customer control / A/R account (example: <strong>1200 - Accounts Receivable</strong>).</div>
+        </div>
+
+        <!-- Sales Account -->
+        {% set sales_code = prefill.salesaccount or (default_accounts.customer_sales if default_accounts else '') %}
+        {% set sales_display %}{% if sales_code %}{% for acc in chart_accounts %}{% if (acc.code|string)==(sales_code|string) %}{{ acc.code }} - {{ acc.name }}{% endif %}{% endfor %}{% endif %}{% endset %}
+        <div class="form-group" style="grid-column: span 2; max-width: 100%;">
+          <label for="hccSalesAccDisplay" style="width:100%;">
+            <span>Sales Account</span>
+            <span class="search-field search-field--popup account-search">
+              <input type="text" id="hccSalesAccDisplay" class="input" placeholder="Press F1 to select..." value="{{ sales_display }}" />
+              <button type="button" class="search-clear" id="hccSalesAccClear" style="display:none;">×</button>
+              <button type="button" class="search-picker" id="hccSalesAccPicker">▾</button>
+            </span>
+            <input type="hidden" id="salesaccount" name="salesaccount" value="{{ sales_code }}" />
+          </label>
+          <div class="field-hint">Choose revenue account used for this customer (example: <strong>4100 - Sales Revenue</strong>).</div>
+        </div>
+
+        <!-- Output VAT Account -->
+        {% set vat_code = prefill.vatoutputaccount or (default_accounts.customer_vat_output if default_accounts else '') %}
+        {% set vat_display %}{% if vat_code %}{% for acc in chart_accounts %}{% if (acc.code|string)==(vat_code|string) %}{{ acc.code }} - {{ acc.name }}{% endif %}{% endfor %}{% endif %}{% endset %}
+        <div class="form-group" style="grid-column: span 2; max-width: 100%;">
+          <label for="hccVatDisplay" style="width:100%;">
+            <span>Output VAT Account</span>
+            <span class="search-field search-field--popup account-search">
+              <input type="text" id="hccVatDisplay" class="input" placeholder="Press F1 to select..." value="{{ vat_display }}" />
+              <button type="button" class="search-clear" id="hccVatClear" style="display:none;">×</button>
+              <button type="button" class="search-picker" id="hccVatPicker">▾</button>
+            </span>
+            <input type="hidden" id="vatoutputaccount" name="vatoutputaccount" value="{{ vat_code }}" />
+          </label>
+          <div class="field-hint">Choose VAT on sales account used during invoice posting (your VAT payable/output account).</div>
+        </div>
+
+        <!-- Advance Account -->
+        {% set adv_code = prefill.advanceaccount or (default_accounts.customer_advance if default_accounts else '') %}
+        {% set adv_display %}{% if adv_code %}{% for acc in chart_accounts %}{% if (acc.code|string)==(adv_code|string) %}{{ acc.code }} - {{ acc.name }}{% endif %}{% endfor %}{% endif %}{% endset %}
+        <div class="form-group" style="grid-column: span 2; max-width: 100%;">
+          <label for="hccAdvDisplay" style="width:100%;">
+            <span>Advance Account</span>
+            <span class="search-field search-field--popup account-search">
+              <input type="text" id="hccAdvDisplay" class="input" placeholder="Press F1 to select..." value="{{ adv_display }}" />
+              <button type="button" class="search-clear" id="hccAdvClear" style="display:none;">×</button>
+              <button type="button" class="search-picker" id="hccAdvPicker">▾</button>
+            </span>
+            <input type="hidden" id="advanceaccount" name="advanceaccount" value="{{ adv_code }}" />
+          </label>
+          <div class="field-hint">Choose customer advance/prepayment account (for received advances), e.g. <strong>2130 - Customer Advances</strong>.</div>
+        </div>
+
+        <!-- Reason -->
+        <div class="form-group" style="grid-column: span 2;">
+          <label for="reason"><span>Reason</span>
+            <input type="text" id="reason" name="reason" class="input"
+                   value="{{ prefill.reason or '' }}" placeholder="Reason…" />
+          </label>
+        </div>
+
+        <!-- Other Reason -->
+        <div class="form-group" style="grid-column: span 2;">
+          <label for="otherreason"><span>Other Reason</span>
+            <input type="text" id="otherreason" name="otherreason" class="input"
+                   value="{{ prefill.otherreason or '' }}" placeholder="Other reason…" />
+          </label>
+        </div>
+
+        <!-- Closed Reason -->
+        <div class="form-group" style="grid-column: span 2;">
+          <label for="closedreason"><span>Closed Reason</span>
+            <input type="text" id="closedreason" name="closedreason" class="input"
+                   value="{{ prefill.closedreason or '' }}" placeholder="Closed reason…" />
+          </label>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="customer-actions">
+      <button type="submit" class="page-po__btn-primary" id="hccSaveSubmitBtn">Save to Branch</button>
+      {% if from_cr %}
+        <button type="button" onclick="openRejectModal()" class="page-po__btn-secondary"
+                style="margin-left:8px;background:#dc2626;border-color:#dc2626;color:#fff;">
+          ✕ Reject Request
+        </button>
+      {% endif %}
+      <a href="{{ url_for('ho.customer_central') }}" class="page-po__btn-secondary" style="margin-left:8px;">Cancel</a>
+    </div>
+  </form>
+
+  <!-- Save overlay -->
+  <div id="hccSaveOverlay" role="status" aria-live="polite">
+    <div class="hcc-save-spinner"></div>
+    <div class="hcc-save-text">Saving, please wait…</div>
+  </div>
+</div>
+
+{% if from_cr %}
+<!-- ══ Reject Comment Modal ══ -->
+<div class="modal hidden" id="rejectCommentModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" onclick="closeRejectModal()"></div>
+  <div class="modal__content" style="max-width:460px;">
+    <div class="modal__header">
+      <h4 style="color:#dc2626;">✕ Reject Customer Request #{{ from_cr }}</h4>
+      <button type="button" class="modal__close" onclick="closeRejectModal()">×</button>
+    </div>
+    <div class="modal__body">
+      <p style="margin:0 0 12px;color:#444;font-size:13px;">Please provide a reason for rejecting this request. The comment will be saved with the rejection.</p>
+      <label style="display:block;font-weight:600;font-size:13px;margin-bottom:6px;">Comment <span style="color:#dc2626;">*</span></label>
+      <textarea id="rejectCommentText" rows="4" autocomplete="off"
+                style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;resize:vertical;box-sizing:border-box;"
+                placeholder="Enter reason for rejection…"></textarea>
+      <div id="rejectCommentError" style="color:#dc2626;font-size:12px;margin-top:4px;display:none;">Comment is required.</div>
+    </div>
+    <div class="modal__footer" style="display:flex;gap:10px;justify-content:flex-end;padding:12px 20px;border-top:1px solid #e5e7eb;">
+      <button type="button" onclick="closeRejectModal()" class="page-po__btn-secondary">Cancel</button>
+      <button type="button" onclick="submitReject()" id="rejectConfirmBtn"
+              style="background:#dc2626;color:#fff;border:none;padding:8px 20px;border-radius:5px;font-weight:600;cursor:pointer;">
+        Confirm Reject
+      </button>
+    </div>
+  </div>
+</div>
+
+<form id="rejectForm" method="post"
+      action="{{ url_for('ho.customer_request_reject', customercode=from_cr) }}"
+      style="display:none;">
+  <input type="hidden" name="comment"  id="rejectFormComment" />
+  <input type="hidden" name="redirect" value="1" />
+</form>
+
+<script>
+function openRejectModal() {
+  document.getElementById('rejectCommentText').value = '';
+  document.getElementById('rejectCommentError').style.display = 'none';
+  document.getElementById('rejectCommentModal').classList.remove('hidden');
+  setTimeout(function(){ document.getElementById('rejectCommentText').focus(); }, 100);
+}
+function closeRejectModal() {
+  document.getElementById('rejectCommentModal').classList.add('hidden');
+}
+function submitReject() {
+  var comment = (document.getElementById('rejectCommentText').value || '').trim();
+  var errEl   = document.getElementById('rejectCommentError');
+  if (!comment) {
+    errEl.style.display = 'block';
+    document.getElementById('rejectCommentText').focus();
+    return;
+  }
+  errEl.style.display = 'none';
+  var btn = document.getElementById('rejectConfirmBtn');
+  btn.disabled = true;
+  btn.textContent = 'Rejecting…';
+  document.getElementById('rejectFormComment').value = comment;
+  document.getElementById('rejectForm').submit();
+}
+// Close modal on Escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeRejectModal();
+});
+</script>
+{% endif %}
+
+<!-- ══ Salesman / Category / BySalesman / Route / Employee modals ══ -->
+{% for modal_id, title, body_id, search_id in [
+    ('hccSalesmanModal',   'Select Salesman',    'hccSalesmanBody',   'hccSalesmanSearch'),
+    ('hccCategoryModal',   'Select Category',    'hccCategoryBody',   'hccCategorySearch'),
+    ('hccBySalesmanModal', 'Select By Salesman', 'hccBySalesmanBody', 'hccBySalesmanSearch'),
+    ('hccRouteModal',      'Select Route No',    'hccRouteBody',      'hccRouteSearch'),
+    ('hccEmployeeModal',   'Select Employee',    'hccEmployeeBody',   'hccEmployeeSearch')
+] %}
+<div class="modal hidden" id="{{ modal_id }}" role="dialog">
+  <div class="modal__overlay" onclick="document.getElementById('{{ modal_id }}').classList.add('hidden')"></div>
+  <div class="modal__content" style="max-width:520px;">
+    <div class="modal__header">
+      <h4>{{ title }}</h4>
+      <button type="button" class="modal__close" onclick="document.getElementById('{{ modal_id }}').classList.add('hidden')">×</button>
+    </div>
+    <div class="modal__body">
+      <div style="margin-bottom:12px;">
+        <input type="text" id="{{ search_id }}" class="input" placeholder="Search…" style="width:100%;padding:8px;" />
+      </div>
+      <div class="scroll-table" style="max-height:320px;">
+        <table class="table"><thead><tr><th>Code</th><th>Name</th></tr></thead>
+          <tbody id="{{ body_id }}"><tr><td colspan="2" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+<!-- ══ Invoice Code picker modal ══ -->
+<div class="modal hidden" id="hccInvoiceModal" role="dialog">
+  <div class="modal__overlay" onclick="document.getElementById('hccInvoiceModal').classList.add('hidden')"></div>
+  <div class="modal__content" style="max-width:360px;">
+    <div class="modal__header"><h4>Select Invoice Code</h4>
+      <button type="button" class="modal__close" onclick="document.getElementById('hccInvoiceModal').classList.add('hidden')">×</button>
+    </div>
+    <div class="modal__body">
+      <table class="table"><thead><tr><th>Code</th><th>Type</th></tr></thead>
+        <tbody>
+          <tr class="modal-list-row" tabindex="0" data-code="1" data-name="Cash" onclick="hccPickInvoice('1','Cash')"><td>1</td><td>Cash</td></tr>
+          <tr class="modal-list-row" tabindex="0" data-code="2" data-name="Credit" onclick="hccPickInvoice('2','Credit')"><td>2</td><td>Credit</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Status / Account Status modals ══ -->
+<div class="modal hidden" id="hccFlagModal" role="dialog">
+  <div class="modal__overlay" onclick="document.getElementById('hccFlagModal').classList.add('hidden')"></div>
+  <div class="modal__content" style="max-width:360px;">
+    <div class="modal__header"><h4>Select Status</h4>
+      <button type="button" class="modal__close" onclick="document.getElementById('hccFlagModal').classList.add('hidden')">×</button>
+    </div>
+    <div class="modal__body">
+      <table class="table"><thead><tr><th>Value</th><th>Label</th></tr></thead>
+        <tbody>
+          <tr class="modal-list-row" tabindex="0" onclick="hccPickFlag('Y','Active')"><td>Y</td><td>Active</td></tr>
+          <tr class="modal-list-row" tabindex="0" onclick="hccPickFlag('N','Locked')"><td>N</td><td>Locked</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="hccClosedModal" role="dialog">
+  <div class="modal__overlay" onclick="document.getElementById('hccClosedModal').classList.add('hidden')"></div>
+  <div class="modal__content" style="max-width:360px;">
+    <div class="modal__header"><h4>Select Account Status</h4>
+      <button type="button" class="modal__close" onclick="document.getElementById('hccClosedModal').classList.add('hidden')">×</button>
+    </div>
+    <div class="modal__body">
+      <table class="table"><thead><tr><th>Value</th><th>Label</th></tr></thead>
+        <tbody>
+          <tr class="modal-list-row" tabindex="0" onclick="hccPickClosed('N','Open')"><td>N</td><td>Open</td></tr>
+          <tr class="modal-list-row" tabindex="0" onclick="hccPickClosed('Y','Closed')"><td>Y</td><td>Closed</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Account picker modal (same as customer_form) ══ -->
+<div class="modal hidden" id="hccAccountModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" onclick="document.getElementById('hccAccountModal').classList.add('hidden')"></div>
+  <div class="modal__content" style="max-width:640px;">
+    <div class="modal__header">
+      <h4>Select Account</h4>
+      <button type="button" class="modal__close" onclick="document.getElementById('hccAccountModal').classList.add('hidden')">×</button>
+    </div>
+    <div class="modal__body">
+      <input type="text" id="hccAccountSearch" class="input" placeholder="Search code or name…"
+             style="width:100%;margin-bottom:10px;padding:8px;" />
+      <div class="scroll-table" style="max-height:360px;">
+        <table class="table">
+          <thead><tr><th>Code</th><th>Name</th><th>Type</th></tr></thead>
+          <tbody id="hccAccountBody">
+            {% for acc in chart_accounts %}
+              <tr class="modal-list-row" tabindex="0"
+                  data-code="{{ acc.code }}" data-name="{{ acc.name }}"
+                  data-text="{{ (acc.code ~ ' ' ~ acc.name ~ ' ' ~ (acc.type or ''))|lower }}">
+                <td>{{ acc.code }}</td><td>{{ acc.name }}</td><td>{{ acc.type or '' }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/** After blocking implicit form submit from Enter on single-line controls, advance focus so Enter does not feel “stuck”. */
+function hccFocusNextFieldInCustomerForm(formEl, currentEl) {
+  function panelVisible(el) {
+    var p = el.closest('.cf-tab-panel');
+    return !p || p.classList.contains('active');
+  }
+  function isVisible(el) {
+    return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+  }
+  var all = [];
+  Array.prototype.forEach.call(
+    formEl.querySelectorAll(
+      'input:not([disabled]):not([type=hidden]):not([type=file]), select:not([disabled]), textarea:not([disabled])'
+    ),
+    function (el) {
+      if (!panelVisible(el)) return;
+      if (!isVisible(el)) return;
+      all.push(el);
+    }
+  );
+  var ix = all.indexOf(currentEl);
+  if (ix === -1) return false;
+  for (var k = ix + 1; k < all.length; k++) {
+    try {
+      all[k].focus();
+      return true;
+    } catch (_) {}
+  }
+  return false;
+}
+
+var NEXT_CODE_URL = {{ url_for('ho.customer_central_next_code') | tojson }};
+/** Keep C Code in sync: General tab, POST hidden field, Accounts tab duplicate. */
+window.hccSetCcode = function(ccode) {
+  var v = (ccode == null || ccode === undefined) ? '' : String(ccode);
+  var cd = document.getElementById('hccCcodeDisplay');
+  var ch = document.getElementById('hccCcode');
+  var ca = document.getElementById('hccCcodeAccountsDisplay');
+  if (cd) cd.value = v;
+  if (ch) ch.value = v;
+  if (ca) ca.value = v;
+};
+window.HCC_DEFAULT_PARTY = {{ (default_accounts or {}) | tojson }};
+window.HCC_CLEAN_ON_BRANCH = {{ (not from_cr) | tojson }};
+window.HCC_AR_RECV = String((window.HCC_DEFAULT_PARTY || {})['customer_receivable'] || '1200');
+(function() {
+  var API_SALESMAN  = {{ api_salesman_url  | tojson }};
+  var API_CATEGORY  = {{ api_category_url  | tojson }};
+  var API_ROUTE     = {{ api_route_url     | tojson }};
+  var API_EMPLOYEE  = {{ api_employee_url  | tojson }};
+  var API_CHART     = {{ api_chart_accounts_url | tojson }};
+  var _hccChartTenant = '';
+  var _acctAllRows = [];
+
+  window.HCC_CHART_LOOKUP = {};
+  window.hccApplyReceivableCode = function(codeStr) {
+    var c = String(codeStr || '').trim();
+    var map = window.HCC_CHART_LOOKUP || {};
+    var lab = map[c];
+    var disp = document.getElementById('hccRecvDisplay');
+    var hid  = document.getElementById('receivableaccount');
+    if (hid)  hid.value  = c;
+    if (disp) disp.value = lab || (c ? c + ' - ' : '');
+  };
+
+  function hccApplyFourAccountsFromParty() {
+    var d = window.HCC_DEFAULT_PARTY || {};
+    function setPair(dispId, hidId, pyKey){
+      var c = String(d[pyKey] || '').trim();
+      var h = document.getElementById(hidId), dis = document.getElementById(dispId);
+      var mp = window.HCC_CHART_LOOKUP || {};
+      var lab = mp[c];
+      if (h) h.value = c;
+      if (dis) dis.value = lab || (c ? c + ' - (defaults)' : '');
+    }
+    setPair('hccRecvDisplay', 'receivableaccount', 'customer_receivable');
+    setPair('hccSalesAccDisplay', 'salesaccount', 'customer_sales');
+    setPair('hccVatDisplay',      'vatoutputaccount', 'customer_vat_output');
+    setPair('hccAdvDisplay',      'advanceaccount',   'customer_advance');
+  }
+
+  function hccRebuildChartLookupFromRows(rows) {
+    window.HCC_CHART_LOOKUP = {};
+    (rows || []).forEach(function(a){
+      var c = String(a.code != null ? a.code : '');
+      if (!c) return;
+      window.HCC_CHART_LOOKUP[c] = c + ' - ' + (a.name || '');
+    });
+  }
+
+  function hccRebuildAccountModalBody(rows) {
+    var body = document.getElementById('hccAccountBody');
+    if (!body) return;
+    body.innerHTML = '';
+    (rows || []).forEach(function(a){
+      var tr = document.createElement('tr');
+      tr.className = 'modal-list-row'; tr.tabIndex = 0;
+      var c = a.code != null ? String(a.code) : '';
+      var nm = a.name || '';
+      var tp = (a.type != null ? String(a.type) : '');
+      var low = ((c||'') + ' ' + (nm||'') + ' ' + tp).toLowerCase();
+      tr.dataset.code = c;
+      tr.dataset.name = nm;
+      tr.dataset.text = low;
+      tr.innerHTML = '<td>'+c+'</td><td>'+nm+'</td><td>'+tp+'</td>';
+      body.appendChild(tr);
+    });
+    _acctAllRows = Array.from(body.querySelectorAll('tr.modal-list-row'));
+  }
+
+  window.hccLoadChartForTenant = function(tenant, done) {
+    if (!tenant || !API_CHART) { if (done) done(false); return; }
+    fetch(API_CHART + '?tenant=' + encodeURIComponent(tenant), { credentials: 'same-origin' })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        var rows = (data && data.success && data.accounts) ? data.accounts : [];
+        _hccChartTenant = tenant;
+        hccRebuildChartLookupFromRows(rows);
+        hccRebuildAccountModalBody(rows);
+        if (done) done(true);
+      })
+      .catch(function(){ _hccChartTenant = ''; if (done) done(false); });
+  };
+
+  function hccWipeBranchFields() {
+    if (!window.HCC_CLEAN_ON_BRANCH) return;
+    var idsGen = ['customername','address','street','zone','pobox','crno','nationality','telephone','mobile','whatsapp','email','qatarid','currentcredit'];
+    idsGen.forEach(function(id){ var el = document.getElementById(id); if (el) el.value=''; });
+    [['hccSalesmanDisplay','hccSalesmanCode'],['hccCategoryDisplay','hccCategoryCode'],['hccBySalesmanDisplay','hccBySalesmanCode'],['hccRouteDisplay','hccRouteCode'],['hccEmployeeDisplay','hccEmployeeCode']].forEach(function(p){
+      var d = document.getElementById(p[0]), h = document.getElementById(p[1]);
+      if (d) d.value = ''; if (h) h.value = '';
+    });
+    [['hccRecvDisplay','receivableaccount'],['hccSalesAccDisplay','salesaccount'],['hccVatDisplay','vatoutputaccount'],['hccAdvDisplay','advanceaccount']].forEach(function(p){
+      var d = document.getElementById(p[0]), h = document.getElementById(p[1]);
+      if (d) d.value = ''; if (h) h.value = '';
+    });
+    var invH = document.getElementById('hccInvoiceCode'), invD = document.getElementById('hccInvoiceCodeDisplay');
+    if (invH) invH.value = ''; if (invD) invD.value = '';
+    var cs = document.getElementById('hccCountersaleChk'), csHid = document.getElementById('hccCountersale');
+    if (cs){ cs.checked = false; cs.disabled = false; cs.style.opacity='1'; cs.style.cursor='pointer'; }
+    if (csHid) csHid.value = 'N';
+    ['creditlimit'].forEach(function(id){ var e=document.getElementById(id); if(e)e.value='0'; });
+    ['creditterm'].forEach(function(id){ var e=document.getElementById(id); if(e)e.value='2'; });
+    ['reason','otherreason','closedreason'].forEach(function(id){ var e=document.getElementById(id); if(e)e.value=''; });
+    var flgv = document.getElementById('hccFlag'); var fld = document.getElementById('hccFlagDisplay');
+    var clh = document.getElementById('hccClosed'); var cld = document.getElementById('hccClosedDisplay');
+    if (flgv) flgv.value = 'Y'; if (fld) fld.value = 'Active';
+    if (clh) clh.value = 'N';   if (cld) cld.value = 'Open';
+    var bar = document.getElementById('aiResultBar'), tbl = document.getElementById('aiResultTable');
+    if(bar){ bar.style.display='none'; bar.innerHTML=''; }
+    if(tbl){ tbl.style.display='none'; tbl.innerHTML=''; }
+  }
+
+  var hccFormEl = document.getElementById('hccForm');
+  var hccSaveBtn = document.getElementById('hccSaveSubmitBtn');
+  if (hccFormEl && hccSaveBtn) {
+    hccFormEl.addEventListener('keydown', function(e) {
+      if (e.key !== 'Enter' && e.which !== 13) return;
+      var t = e.target;
+      if (t && t.tagName === 'TEXTAREA') return;
+      /* Let <select> use native Enter behaviour (expand / pick). */
+      if (t && t.tagName === 'SELECT') return;
+      /* Save button submits normally (explicit submit). */
+      if (document.activeElement === hccSaveBtn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (!hccFocusNextFieldInCustomerForm(hccFormEl, t) && document.activeElement !== hccSaveBtn) {
+        try { hccSaveBtn.focus(); } catch (_) {}
+      }
+    }, true);
+  }
+
+  /* ── Tab switch ─────────────────────────────────────────────── */
+  window.hccTab = function(name, btn) {
+    document.querySelectorAll('.cf-tab').forEach(function(b) { b.classList.remove('active'); });
+    document.querySelectorAll('.cf-tab-panel').forEach(function(p) { p.classList.remove('active'); });
+    if (btn) btn.classList.add('active');
+    var panel = document.getElementById('hcc-panel-' + name) || document.getElementById('cf-panel-' + name);
+    if (panel) panel.classList.add('active');
+  };
+
+  /* ── Branch radio buttons ──────────────────────────────────── */
+  window.__hccPrevBranchTenant = '';
+
+  window.onBranchChange = function() {
+    var selected = document.querySelector('input[name="target_tenants"]:checked');
+    document.querySelectorAll('.target-branch-card').forEach(function(card) {
+      var rb = card.querySelector('input[type="radio"]');
+      card.classList.toggle('selected', rb && rb.checked);
+    });
+    var bar = document.getElementById('nextCodeBar'), list = document.getElementById('nextCodeList');
+    var codeDisp = document.getElementById('hccCustomerCodeDisplay'), codeHid = document.getElementById('hccCustomerCode');
+    var prevTenant = window.__hccPrevBranchTenant;
+
+    if (!selected) {
+      if (bar) bar.style.display = 'none'; if (list) list.innerHTML = '';
+      [codeDisp, codeHid].forEach(function(e){ if (e) e.value = ''; });
+      if (window.hccSetCcode) window.hccSetCcode('');
+      _hccChartTenant = '';
+      window.__hccPrevBranchTenant = '';
+      return;
+    }
+    if (window.HCC_CLEAN_ON_BRANCH && prevTenant && prevTenant !== selected.value) {
+      hccWipeBranchFields();
+    }
+
+    if (bar) bar.style.display = ''; if (list) list.innerHTML = 'Fetching codes…';
+    fetch(NEXT_CODE_URL + '?tenant=' + encodeURIComponent(selected.value))
+      .then(function(r){ return r.json(); })
+      .then(function(d) {
+        var code  = d.next_code || '?';
+        var ccode = d.ccode     || '?';
+        if (list) list.innerHTML =
+          '<strong>' + selected.value + '</strong>: '
+          + 'Code <strong style="color:#0d6efd;">' + code  + '</strong>'
+          + ' &nbsp;|&nbsp; C Code <strong style="color:#198754;">' + ccode + '</strong>';
+        if (codeDisp) codeDisp.value = code;  if (codeHid) codeHid.value = code;
+        if (window.hccSetCcode) window.hccSetCcode(ccode);
+        var switched = !!(window.HCC_CLEAN_ON_BRANCH && prevTenant && prevTenant !== selected.value);
+        window.__hccPrevBranchTenant = selected.value;
+        window.hccLoadChartForTenant(selected.value, function(ok) {
+          if (ok !== false && switched) {
+            hccApplyFourAccountsFromParty();
+            window.hccPickInvoice('1', 'Cash');
+          }
+        });
+      })
+      .catch(function() {
+        if (list) list.innerHTML = '<span style="color:#dc3545;">Failed to fetch next code.</span>';
+      });
+  };
+  window.addEventListener('DOMContentLoaded', function(){
+    onBranchChange();
+    var fetchCcodeBtn = document.getElementById('hccFetchNextCcodeBtn');
+    if (fetchCcodeBtn) {
+      fetchCcodeBtn.addEventListener('click', function() {
+        var selected = document.querySelector('input[name="target_tenants"]:checked');
+        if (!selected) {
+          alert('Select a target branch first.');
+          return;
+        }
+        fetchCcodeBtn.disabled = true;
+        fetch(NEXT_CODE_URL + '?tenant=' + encodeURIComponent(selected.value))
+          .then(function(r) { return r.json(); })
+          .then(function(d) {
+            if (!d || !d.success) {
+              alert((d && d.error) ? d.error : 'Failed to fetch next C Code.');
+              return;
+            }
+            var code  = d.next_code;
+            var ccode = d.ccode;
+            var codeDisp = document.getElementById('hccCustomerCodeDisplay');
+            var codeHid  = document.getElementById('hccCustomerCode');
+            var list     = document.getElementById('nextCodeList');
+            var bar      = document.getElementById('nextCodeBar');
+            if (codeDisp) codeDisp.value = code;
+            if (codeHid)  codeHid.value  = code;
+            if (window.hccSetCcode) window.hccSetCcode(ccode);
+            if (bar) bar.style.display = '';
+            if (list) {
+              list.innerHTML =
+                '<strong>' + selected.value + '</strong>: '
+                + 'Code <strong style="color:#0d6efd;">' + code + '</strong>'
+                + ' &nbsp;|&nbsp; C Code <strong style="color:#198754;">' + ccode + '</strong>'
+                + ' <span style="color:#6c757d;font-size:11px;">(all branches / global C Code)</span>';
+            }
+          })
+          .catch(function() { alert('Failed to fetch next C Code.'); })
+          .finally(function() { fetchCcodeBtn.disabled = false; });
+      });
+    }
+    {% if from_cr %}
+    // Auto-run AI duplicate check when converting from a customer request
+    setTimeout(function(){ aiCheckName(); }, 600);
+    {% endif %}
+  });
+
+  /* ── Counter Sale sync ──────────────────────────────────────── */
+  var csChk = document.getElementById('hccCountersaleChk');
+  var csHid = document.getElementById('hccCountersale');
+  if (csChk) csChk.addEventListener('change', function() {
+    if (csHid) csHid.value = this.checked ? 'Y' : 'N';
+  });
+
+  /* ── Invoice Code picker (matches branch customer_form setInvoiceCode) ── */
+  window.hccPickInvoice = function(code, label) {
+    var hidden = document.getElementById('hccInvoiceCode');
+    var display = document.getElementById('hccInvoiceCodeDisplay');
+    var clearBtn = document.getElementById('hccInvoiceCodeClear');
+    if (hidden) hidden.value = code || '';
+    if (display) display.value = label || '';
+    if (clearBtn) clearBtn.style.display = (code && label) ? '' : 'none';
+
+    var chk = document.getElementById('hccCountersaleChk');
+    var csH = document.getElementById('hccCountersale');
+    var isCash = (String(code) === '1');
+    var isCredit = (String(code) === '2');
+    if (chk) {
+      if (isCredit) {
+        chk.checked = false;
+        chk.disabled = true;
+        chk.style.opacity = '0.4';
+        chk.style.cursor = 'not-allowed';
+      } else {
+        chk.disabled = false;
+        chk.style.opacity = '1';
+        chk.style.cursor = 'pointer';
+        if (isCash || !code) {
+          chk.checked = false;
+        }
+      }
+    }
+    if (csH) {
+      if (isCredit) {
+        csH.value = 'N';
+      } else if (isCash || !code) {
+        csH.value = 'N';
+      } else {
+        csH.value = chk && chk.checked ? 'Y' : 'N';
+      }
+    }
+
+    if (isCredit && typeof hccApplyFourAccountsFromParty === 'function') {
+      hccApplyFourAccountsFromParty();
+    }
+
+    var modal = document.getElementById('hccInvoiceModal');
+    if (modal) modal.classList.add('hidden');
+    if (display) display.focus();
+  };
+  var invPicker = document.getElementById('hccInvoiceCodePicker');
+  var invDisp   = document.getElementById('hccInvoiceCodeDisplay');
+  if (invPicker) invPicker.addEventListener('click', function(){ document.getElementById('hccInvoiceModal').classList.remove('hidden'); });
+  if (invDisp)   invDisp.addEventListener('click',   function(){ document.getElementById('hccInvoiceModal').classList.remove('hidden'); });
+  var invClear = document.getElementById('hccInvoiceCodeClear');
+  if (invClear) invClear.addEventListener('click', function() { window.hccPickInvoice('', ''); });
+  (function() {
+    var hidden = document.getElementById('hccInvoiceCode');
+    var chk = document.getElementById('hccCountersaleChk');
+    var csHidden = document.getElementById('hccCountersale');
+    var clearBtn = document.getElementById('hccInvoiceCodeClear');
+    if (clearBtn && hidden) clearBtn.style.display = (hidden.value === '1' || hidden.value === '2') ? '' : 'none';
+    if (!chk || !csHidden || !hidden) return;
+    var inv = String(hidden.value || '');
+    if (inv === '2') {
+      chk.checked = false;
+      chk.disabled = true;
+      chk.style.opacity = '0.4';
+      chk.style.cursor = 'not-allowed';
+      csHidden.value = 'N';
+    } else if (inv === '1') {
+      chk.disabled = false;
+      chk.style.opacity = '1';
+      chk.style.cursor = 'pointer';
+      csHidden.value = chk.checked ? 'Y' : 'N';
+    }
+  })();
+
+  /* ── Status picker ──────────────────────────────────────────── */
+  window.hccPickFlag = function(val, label) {
+    document.getElementById('hccFlag').value        = val;
+    document.getElementById('hccFlagDisplay').value = label;
+    document.getElementById('hccFlagModal').classList.add('hidden');
+    document.getElementById('hccFlagDisplay').focus();
+  };
+  var fpick = document.getElementById('hccFlagPicker');
+  var fdisp = document.getElementById('hccFlagDisplay');
+  if (fpick) fpick.addEventListener('click', function(){ document.getElementById('hccFlagModal').classList.remove('hidden'); });
+  if (fdisp) fdisp.addEventListener('click', function(){ document.getElementById('hccFlagModal').classList.remove('hidden'); });
+
+  /* ── Account Status picker ──────────────────────────────────── */
+  window.hccPickClosed = function(val, label) {
+    document.getElementById('hccClosed').value         = val;
+    document.getElementById('hccClosedDisplay').value  = label;
+    document.getElementById('hccClosedModal').classList.add('hidden');
+    document.getElementById('hccClosedDisplay').focus();
+  };
+  var cpick = document.getElementById('hccClosedPicker');
+  var cdisp = document.getElementById('hccClosedDisplay');
+  if (cpick) cpick.addEventListener('click', function(){ document.getElementById('hccClosedModal').classList.remove('hidden'); });
+  if (cdisp) cdisp.addEventListener('click', function(){ document.getElementById('hccClosedModal').classList.remove('hidden'); });
+
+  /* ── Account picker (shared) ────────────────────────────────── */
+  var _acctTarget = null;
+  var hccAccountModal = document.getElementById('hccAccountModal');
+  var hccAccountSearch = document.getElementById('hccAccountSearch');
+  var hccAccountBody   = document.getElementById('hccAccountBody');
+  if (hccAccountBody) {
+    _acctAllRows = Array.from(hccAccountBody.querySelectorAll('tr.modal-list-row'));
+  }
+
+  function _openAccountPickerInner(displayId, hiddenId) {
+    if (!hccAccountModal) return;
+    _acctTarget = { displayId: displayId, hiddenId: hiddenId };
+    if (hccAccountSearch) { hccAccountSearch.value = ''; }
+    _acctAllRows.forEach(function(r){ r.style.display = ''; });
+    hccAccountModal.classList.remove('hidden');
+    setTimeout(function(){ if (hccAccountSearch) hccAccountSearch.focus(); }, 60);
+  }
+
+  function openAccountPicker(displayId, hiddenId) {
+    var selectedBranchEl = document.querySelector('input[name="target_tenants"]:checked');
+    if (!selectedBranchEl || !selectedBranchEl.value) {
+      alert('Please select a target branch first.');
+      return;
+    }
+    var tid = selectedBranchEl.value;
+    if (_hccChartTenant !== tid) {
+      window.hccLoadChartForTenant(tid, function(ok) {
+        if (ok === false) {
+          alert('Could not load chart of accounts for this branch.');
+          return;
+        }
+        _openAccountPickerInner(displayId, hiddenId);
+      });
+      return;
+    }
+    _openAccountPickerInner(displayId, hiddenId);
+  }
+  if (hccAccountSearch) {
+    hccAccountSearch.addEventListener('input', function() {
+      var q = this.value.toLowerCase().trim();
+      _acctAllRows.forEach(function(r){ r.style.display = (!q || (r.dataset.text||'').indexOf(q) !== -1) ? '' : 'none'; });
+    });
+    hccAccountSearch.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        var first = hccAccountBody.querySelector('tr.modal-list-row:not([style*="display: none"])');
+        if (first) { e.preventDefault(); first.focus(); }
+      }
+    });
+  }
+  if (hccAccountBody) {
+    hccAccountBody.addEventListener('click', function(e) {
+      var row = e.target.closest('tr.modal-list-row');
+      if (!row || !_acctTarget) return;
+      var code = row.dataset.code, name = row.dataset.name;
+      var disp = document.getElementById(_acctTarget.displayId);
+      var hid  = document.getElementById(_acctTarget.hiddenId);
+      if (disp) disp.value = code + ' - ' + name;
+      if (hid)  hid.value  = code;
+      hccAccountModal.classList.add('hidden');
+      if (disp) disp.focus();
+    });
+    hccAccountBody.addEventListener('keydown', function(e) {
+      var row = e.target.closest('tr.modal-list-row');
+      if (!row) return;
+      if (e.key === 'Enter')     { e.preventDefault(); row.click(); }
+      else if (e.key === 'ArrowDown') { var n = row.nextElementSibling; if (n) n.focus(); }
+      else if (e.key === 'ArrowUp')   { var p = row.previousElementSibling; if (p) p.focus(); else if (hccAccountSearch) hccAccountSearch.focus(); }
+      else if (e.key === 'Escape')    { hccAccountModal.classList.add('hidden'); }
+    });
+  }
+
+  var ACCT_PICKERS = [
+    ['hccRecvPicker',     'hccRecvDisplay',     'receivableaccount'],
+    ['hccSalesAccPicker', 'hccSalesAccDisplay', 'salesaccount'],
+    ['hccVatPicker',      'hccVatDisplay',      'vatoutputaccount'],
+    ['hccAdvPicker',      'hccAdvDisplay',      'advanceaccount'],
+  ];
+  ACCT_PICKERS.forEach(function(p) {
+    var btn  = document.getElementById(p[0]);
+    var disp = document.getElementById(p[1]);
+    if (btn)  btn.addEventListener('click',  function(){ openAccountPicker(p[1], p[2]); });
+    if (disp) disp.addEventListener('click',  function(){ openAccountPicker(p[1], p[2]); });
+    if (disp) disp.addEventListener('keydown', function(e){ if(e.key==='F1'){ e.preventDefault(); openAccountPicker(p[1],p[2]); } });
+  });
+
+  /* ── Generic list popup (Salesman/Category/Route/Employee) ───── */
+  function openListPopup(modalId, apiUrl, bodyId, searchId, displayId, hiddenId, dataKey) {
+    var modal = document.getElementById(modalId), body = document.getElementById(bodyId);
+    var search = document.getElementById(searchId), display = document.getElementById(displayId);
+    var hidden = document.getElementById(hiddenId);
+    if (!modal || !body) return;
+    var selectedBranchEl = document.querySelector('input[name="target_tenants"]:checked');
+    if (!selectedBranchEl || !selectedBranchEl.value) {
+      alert('Please select a target branch first.');
+      return;
+    }
+    modal.classList.remove('hidden');
+    if (search) { search.value = ''; search.focus(); }
+    body.innerHTML = '<tr><td colspan="2" class="muted">Loading…</td></tr>';
+    var list = [];
+    function render(items) {
+      if (!items.length) { body.innerHTML = '<tr><td colspan="2" class="muted">No results.</td></tr>'; return; }
+      body.innerHTML = '';
+      items.forEach(function(item) {
+        var tr = document.createElement('tr');
+        tr.className = 'modal-list-row'; tr.setAttribute('tabindex','0');
+        tr.innerHTML = '<td>'+(item.code!=null?item.code:'')+'</td><td>'+(item.name||'')+'</td>';
+        function pick(){ if(hidden) hidden.value=item.code!=null?String(item.code):''; if(display) display.value=(item.code!=null?item.code:'')+(item.name?' - '+item.name:''); modal.classList.add('hidden'); if(display) display.focus(); }
+        tr.addEventListener('click',pick);
+        tr.addEventListener('keydown',function(e){ if(e.key==='Enter'){e.preventDefault();pick();} else if(e.key==='ArrowDown'){var n=tr.nextElementSibling;if(n)n.focus();} else if(e.key==='ArrowUp'){var p=tr.previousElementSibling;if(p)p.focus();else if(search)search.focus();} else if(e.key==='Escape'){modal.classList.add('hidden');if(display)display.focus();} });
+        body.appendChild(tr);
+      });
+    }
+    var tenantParam = '?tenant=' + encodeURIComponent(selectedBranchEl.value);
+    fetch(apiUrl + tenantParam).then(function(r){return r.json();}).then(function(data){
+      list = data[dataKey]||[];
+      render(list);
+      if (search) {
+        search.addEventListener('input',function(){ var q=this.value.toLowerCase(); render(list.filter(function(i){return !q||String(i.code||'').toLowerCase().indexOf(q)!==-1||(i.name||'').toLowerCase().indexOf(q)!==-1;})); });
+        search.addEventListener('keydown',function(e){ if(e.key==='Enter'){ var f=body.querySelector('tr');if(f){e.preventDefault();f.focus();} } else if(e.key==='Escape'){modal.classList.add('hidden');if(display)display.focus();} });
+      }
+    }).catch(function(){body.innerHTML='<tr><td colspan="2" class="muted">Error loading.</td></tr>';});
+  }
+
+  var PICKERS = [
+    ['hccSalesmanPicker',   'hccSalesmanModal',   API_SALESMAN, 'hccSalesmanBody',   'hccSalesmanSearch',   'hccSalesmanDisplay',   'hccSalesmanCode',   'salesmen'],
+    ['hccCategoryPicker',   'hccCategoryModal',   API_CATEGORY, 'hccCategoryBody',   'hccCategorySearch',   'hccCategoryDisplay',   'hccCategoryCode',   'categories'],
+    ['hccBySalesmanPicker', 'hccBySalesmanModal', API_SALESMAN, 'hccBySalesmanBody', 'hccBySalesmanSearch', 'hccBySalesmanDisplay', 'hccBySalesmanCode', 'salesmen'],
+    ['hccRoutePicker',      'hccRouteModal',      API_ROUTE,    'hccRouteBody',      'hccRouteSearch',      'hccRouteDisplay',      'hccRouteCode',      'routes'],
+    ['hccEmployeePicker',   'hccEmployeeModal',   API_EMPLOYEE, 'hccEmployeeBody',   'hccEmployeeSearch',   'hccEmployeeDisplay',   'hccEmployeeCode',   'employees'],
+  ];
+  PICKERS.forEach(function(p) {
+    var btn=document.getElementById(p[0]), disp=document.getElementById(p[5]), args=p.slice(1);
+    if(btn)  btn.addEventListener('click',  function(){openListPopup.apply(null,args);});
+    if(disp) disp.addEventListener('click', function(){openListPopup.apply(null,args);});
+    if(disp) disp.addEventListener('keydown',function(e){if(e.key==='F1'){e.preventDefault();openListPopup.apply(null,args);}});
+  });
+
+  /* ── Form validation ────────────────────────────────────────── */
+  document.getElementById('hccForm').addEventListener('submit', function(e) {
+    var form = document.getElementById('hccForm');
+    var overlay = document.getElementById('hccSaveOverlay');
+    var checked = document.querySelector('input[name="target_tenants"]:checked');
+    if (!checked) {
+      e.preventDefault();
+      if (window.reEnableFormSubmit) window.reEnableFormSubmit(form);
+      alert('Please select a target branch.');
+      return;
+    }
+
+    function markErr(id) {
+      var el = document.getElementById(id);
+      if (el) el.style.borderBottomColor = '#dc3545';
+    }
+
+    function focusFirst(err) {
+      if (!err || !err.displayId) return;
+      setTimeout(function() {
+        var el = document.getElementById(err.displayId);
+        if (el) { try { el.focus(); el.select(); } catch (_) {} }
+      }, 40);
+    }
+
+    var tabMap = { general: 0, sales: 1, accounts: 2 };
+
+    function switchToTab(tabName) {
+      var ix = tabMap[tabName] != null ? tabMap[tabName] : 0;
+      var tabs = document.querySelectorAll('.cf-tab');
+      var names = ['general','sales','accounts'];
+      if (tabs[ix]) hccTab(names[ix], tabs[ix]);
+    }
+
+    var errors = [];
+    function fail(displayId, hiddenId, label, tab) {
+      errors.push({ displayId: displayId, hiddenId: hiddenId, label: label, tab: tab });
+    }
+
+    var nameEl = document.getElementById('customername');
+    if (!nameEl || !String(nameEl.value || '').trim()) fail('customername', null, 'Customer Name', 'general');
+
+    var addrEl = document.getElementById('address');
+    if (!addrEl || !String(addrEl.value || '').trim()) fail('address', null, 'Address', 'general');
+
+    var mobileEl  = document.getElementById('mobile');
+    var phoneEl   = document.getElementById('telephone');
+    var mobileVal = mobileEl ? String(mobileEl.value || '').trim() : '';
+    var phoneVal  = phoneEl  ? String(phoneEl.value  || '').trim() : '';
+    if (!phoneVal) {
+      fail('telephone', null, 'Telephone', 'general');
+      markErr('telephone');
+    } else if (phoneVal.replace(/\D/g, '').length !== 8) {
+      fail('telephone', null, 'Telephone must be exactly 8 digits', 'general');
+      markErr('telephone');
+    }
+    if (!mobileVal) {
+      fail('mobile', null, 'Mobile', 'general');
+      markErr('mobile');
+    } else if (mobileVal.replace(/\D/g, '').length !== 8) {
+      fail('mobile', null, 'Mobile must be exactly 8 digits', 'general');
+      markErr('mobile');
+    }
+
+    var qidEl = document.getElementById('qatarid');
+    var qidRaw = qidEl ? String(qidEl.value || '').trim() : '';
+    if (qidRaw) {
+      var qd = qidRaw.replace(/\D/g, '');
+      if (qd.length !== 11) {
+        fail('qatarid', null, 'Qatar ID must be 11 digits when provided', 'general');
+        markErr('qatarid');
+      }
+    }
+
+    var invEl  = document.getElementById('hccInvoiceCode');
+    var invVal = invEl ? String(invEl.value || '').trim() : '';
+    if (!invVal || (invVal !== '1' && invVal !== '2')) fail('hccInvoiceCodeDisplay', 'hccInvoiceCode', 'Invoice Code', 'sales');
+
+    var acctChecks = [
+      { disp: 'hccRecvDisplay',     id: 'receivableaccount', label: 'Receivable Account' },
+      { disp: 'hccSalesAccDisplay', id: 'salesaccount',       label: 'Sales Account'        },
+      { disp: 'hccVatDisplay',      id: 'vatoutputaccount',   label: 'Output VAT Account'    },
+      { disp: 'hccAdvDisplay',      id: 'advanceaccount',      label: 'Advance Account'      }
+    ];
+    for (var ai = 0; ai < acctChecks.length; ai++) {
+      var ac = acctChecks[ai];
+      var acEl = document.getElementById(ac.id);
+      if (!acEl || !String(acEl.value || '').trim()) fail(ac.disp, ac.id, ac.label, 'accounts');
+    }
+
+    if (invVal === '2') {
+      var clEl = document.getElementById('creditlimit');
+      var ctEl = document.getElementById('creditterm');
+      var clOk = clEl && parseFloat(String(clEl.value || '').trim()) > 0;
+      var ctOk = ctEl && parseFloat(String(ctEl.value || '').trim()) > 0;
+      if (!clOk) fail('creditlimit', null, 'Credit Limit', 'sales');
+      if (!ctOk) fail('creditterm', null, 'Credit Term', 'sales');
+    }
+
+    var ccHid = document.getElementById('hccCcode');
+    var ccodeVal = (ccHid && ccHid.value) ? String(ccHid.value).trim() : '';
+    if (!ccodeVal) fail('hccCcodeDisplay', 'hccCcode', 'C Code — click Next C Code after selecting a branch', 'general');
+
+    if (errors.length > 0) {
+      e.preventDefault();
+      if (window.reEnableFormSubmit) window.reEnableFormSubmit(form);
+      var labels = errors.map(function(err){ return err.label; });
+      alert('Please fill in the required fields:\n\n• ' + labels.join('\n• '));
+      errors.forEach(function(err) {
+        markErr(err.displayId);
+        if (err.hiddenId) markErr(err.hiddenId);
+      });
+      switchToTab(errors[0].tab);
+      focusFirst(errors[0]);
+      return;
+    }
+
+    if (overlay) overlay.classList.add('active');
+  });
+})();
+
+function aiCheckName() {
+  var cnInput = document.getElementById('customername');
+  var name = (cnInput && cnInput.value.trim()) || '';
+  if (!name) {
+    alert('Please fill in the Customer Name field first.');
+    if (cnInput) { cnInput.focus(); cnInput.style.borderBottomColor = '#dc3545'; }
+    return;
+  }
+
+  // Collect extra fields from the form for exact-match detection
+  function fv(id) { var el = document.getElementById(id); return el ? (el.value || '').trim() : ''; }
+  var payload = {
+    name:      name,
+    telephone: fv('telephone'),
+    mobile:    fv('mobile'),
+    whatsapp:  fv('whatsapp'),
+    crno:      fv('crno'),
+    qatarid:   fv('qatarid'),
+  };
+
+  var btn     = document.getElementById('aiCheckBtn');
+  var spinner = document.getElementById('aiSpinner');
+  var bar     = document.getElementById('aiResultBar');
+  var tbl     = document.getElementById('aiResultTable');
+
+  btn.disabled = true;
+  if (spinner) spinner.style.display = 'inline-block';
+  bar.style.display = 'none';
+  tbl.style.display = 'none';
+  bar.innerHTML = '';
+  tbl.innerHTML = '';
+
+  // Also refresh next customer code for the selected target branch
+  var selectedBranch = document.querySelector('input[name="target_tenants"]:checked');
+  var nextCodePromise = selectedBranch
+    ? fetch(NEXT_CODE_URL + '?tenant=' + encodeURIComponent(selectedBranch.value))
+        .then(function(r){ return r.json(); })
+        .catch(function(){ return null; })
+    : Promise.resolve(null);
+
+  Promise.all([
+    fetch('/ho/customer-central/check-name', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(r){ return r.json(); }),
+    nextCodePromise
+  ])
+  .then(function(results) {
+    var data      = results[0];
+    var codeData  = results[1];
+    btn.disabled = false;
+    if (spinner) spinner.style.display = 'none';
+
+    // Update customer code fields if we got a fresh next code
+    if (codeData && codeData.next_code) {
+      var codeDisp = document.getElementById('hccCustomerCodeDisplay');
+      var codeHid  = document.getElementById('hccCustomerCode');
+      var list     = document.getElementById('nextCodeList');
+      var bar2     = document.getElementById('nextCodeBar');
+      if (codeDisp) codeDisp.value = codeData.next_code;
+      if (codeHid)  codeHid.value  = codeData.next_code;
+      if (window.hccSetCcode) window.hccSetCcode(codeData.ccode || '');
+      if (bar2) bar2.style.display = '';
+      if (list) list.innerHTML =
+        '<strong>' + selectedBranch.value + '</strong>: '
+        + 'Next Code <strong style="color:#0d6efd;">' + codeData.next_code + '</strong>'
+        + ' &nbsp;|&nbsp; C Code <strong style="color:#198754;">' + (codeData.ccode || '') + '</strong>';
+    }
+
+    if (!data.success) {
+      bar.innerHTML = '<span style="color:#dc2626;">Error: ' + (data.error || 'Unknown') + '</span>';
+      bar.style.display = 'block';
+      return;
+    }
+
+    var count = data.count || 0;
+    bar.style.display = 'block';
+
+    if (count === 0) {
+      bar.innerHTML = '<span class="ai-badge-none">&#10003; No Duplicate Found</span>'
+                    + ' <span style="color:#6b7280;font-size:12px;">No matching customer found in any branch database.</span>';
+      return;
+    }
+
+    // Label mapping for matched_fields display
+    var FIELD_LABELS = { customername:'Name', telephone:'Tel', mobile:'Mobile', whatsapp:'WhatsApp', crno:'CR No', qatarid:'Qatar ID' };
+    var upperName   = name.toUpperCase();
+    var exactFields = ['mobile','telephone','whatsapp','crno','qatarid'];
+
+    // Cross-field match: any search value found in any DB column = highlight
+    var DB_COLS    = ['customername','telephone','mobile','whatsapp','qatarid','crno'];
+    var searchVals = [upperName, payload.telephone, payload.mobile,
+                      payload.whatsapp, payload.crno, payload.qatarid]
+                     .map(function(v){ return (v||'').trim().toUpperCase(); })
+                     .filter(function(v){ return v.length > 0; });
+
+    function rowHasExact(r) {
+      if (r.matched_fields && r.matched_fields.length) return true;
+      // Exact equality only — full column value must match search value completely
+      for (var ci = 0; ci < DB_COLS.length; ci++) {
+        var dbVal = (r[DB_COLS[ci]] || '').toString().trim().toUpperCase();
+        if (!dbVal) continue;
+        for (var si = 0; si < searchVals.length; si++) {
+          if (searchVals[si] && dbVal === searchVals[si]) return true;
+        }
+      }
+      return false;
+    }
+
+    // Attach computed flag, then sort: exact-match rows always first
+    var rows = (data.results || []).slice().map(function(r) {
+      r._hasExact = rowHasExact(r);
+      return r;
+    }).sort(function(a, b) {
+      if (a._hasExact === b._hasExact) return 0;
+      return a._hasExact ? -1 : 1;
+    });
+
+    // Count exact matches after sort (uses the recomputed flag)
+    var exactCount = rows.filter(function(r){ return r._hasExact; }).length;
+    var badgeHtml  = '';
+    if (exactCount > 0) {
+      badgeHtml += '<span class="ai-badge-exact">&#128683; ' + exactCount + ' Exact Field Match' + (exactCount > 1 ? 'es' : '') + '</span> ';
+    }
+    badgeHtml += '<span class="ai-badge-match">&#9888; ' + count + ' Total Match' + (count > 1 ? 'es' : '') + ' Found</span>';
+    bar.innerHTML = badgeHtml + ' <span style="color:#6b7280;font-size:12px;">Review matches below — <strong style="color:#059669;">click a row</strong> to apply its <strong>C Code</strong>.</span>';
+
+    function hccAiAttrEsc(s) {
+      return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    }
+
+    var colSpan = 12;
+    var html = '<div class="ai-table-wrap"><table class="ai-table"><thead><tr>'
+             + '<th>#</th><th>Code</th><th>C Code</th><th>Customer Name</th><th>Branch</th>'
+             + '<th>Mobile</th><th>Telephone</th><th>WhatsApp</th><th>CR No</th><th>Qatar ID</th>'
+             + '<th>Invoice</th><th>Status</th><th>Matched On</th>'
+             + '</tr></thead><tbody>';
+
+    var shownDivider = false;
+    rows.forEach(function(r, i) {
+      var mf        = r.matched_fields || [];
+      var isExact   = r._hasExact || false;
+      var cn        = (r.customername || '').toUpperCase();
+      var nameExact = cn === upperName;
+      var rowStyle  = isExact ? 'background:#fff0f0;border-left:4px solid #dc2626;' : 'border-left:4px solid transparent;';
+
+      // Insert a divider row when transitioning from exact-field rows to name-only rows
+      if (!isExact && !shownDivider && exactCount > 0) {
+        shownDivider = true;
+        html += '<tr><td colspan="' + colSpan + '" style="background:#f3f4f6;color:#6b7280;font-size:11px;font-weight:600;text-align:center;padding:4px;letter-spacing:.5px;">── Name matches only ──</td></tr>';
+      }
+
+      var nameCls = isExact ? 'ai-match-exact' : (nameExact ? 'ai-match-exact' : 'ai-match-partial');
+
+      function cellVal(field, raw) {
+        var val = raw || '—';
+        if (mf.indexOf(field) !== -1) {
+          return '<span class="ai-cell-exact">' + val + '</span>';
+        }
+        return val;
+      }
+
+      var flag = r.flag
+        ? (r.flag === 'Y' ? '<span style="color:#059669;font-weight:600;">Active</span>' : '<span style="color:#dc2626;">Locked</span>')
+        : '—';
+
+      var matchedBadges = mf.length
+        ? mf.map(function(f){ return '<span class="ai-field-tag">' + (FIELD_LABELS[f] || f) + '</span>'; }).join(' ')
+        : '<span style="color:#9ca3af;font-size:11px;">Name</span>';
+
+      var ccStr = (r.ccode == null ? '' : String(r.ccode)).trim();
+      var trClick = ccStr !== ''
+        ? (' class="ai-dup-row" title="Click to apply this C Code (General & Accounts tab)" data-ccode="' + hccAiAttrEsc(ccStr) + '"')
+        : '';
+
+      html += '<tr style="' + rowStyle + '"' + trClick + '>'
+            + '<td>' + (i + 1) + '</td>'
+            + '<td>' + (r.customercode || '') + '</td>'
+            + '<td style="color:#198754;font-weight:600;">' + (r.ccode || '') + '</td>'
+            + '<td class="' + nameCls + '">' + (r.customername || '') + '</td>'
+            + '<td>' + (r.tenant_name || r.tenant_id || '') + '</td>'
+            + '<td>' + cellVal('mobile',    r.mobile)    + '</td>'
+            + '<td>' + cellVal('telephone', r.telephone) + '</td>'
+            + '<td>' + cellVal('whatsapp',  r.whatsapp)  + '</td>'
+            + '<td>' + cellVal('crno',      r.crno)      + '</td>'
+            + '<td>' + cellVal('qatarid',   r.qatarid)   + '</td>'
+            + '<td>' + (r.invoicecode == 1 ? 'Cash' : r.invoicecode == 2 ? 'Credit' : (r.invoicecode || '—')) + '</td>'
+            + '<td>' + flag + '</td>'
+            + '<td>' + matchedBadges + '</td>'
+            + '</tr>';
+    });
+    html += '</tbody></table></div>';
+    tbl.innerHTML = html;
+    tbl.style.display = 'block';
+    tbl.onclick = function(ev) {
+      var tgt = ev.target;
+      var row = (tgt && tgt.closest) ? tgt.closest('tbody tr[data-ccode]') : null;
+      if (!row) return;
+      var cc = row.getAttribute('data-ccode');
+      if (!cc || !window.hccSetCcode) return;
+      window.hccSetCcode(cc);
+    };
+
+    // ── Post-render actions based on exact matches ────────────────────
+    var selectedBranchEl = document.querySelector('input[name="target_tenants"]:checked');
+    var selectedBranchId = selectedBranchEl ? selectedBranchEl.value : '';
+
+    var exactRows = rows.filter(function(r){ return r._hasExact; });
+
+    // Helper: update CCODE fields in the form with an existing value
+    function applyExistingCcode(ccode) {
+      if (!ccode) return;
+      if (window.hccSetCcode) window.hccSetCcode(ccode);
+      var list = document.getElementById('nextCodeList');
+      if (list) {
+        list.innerHTML += ' &nbsp;|&nbsp; <span style="color:#d97706;font-weight:600;">C Code reused from existing: <strong>' + ccode + '</strong></span>';
+      }
+    }
+
+    // 1. Exact match in the SAME target branch → alert + update CCODE
+    var samebranchExact = exactRows.filter(function(r){
+      return r.tenant_id === selectedBranchId;
+    });
+    if (samebranchExact.length) {
+      var hit        = samebranchExact[0];
+      var branchLabel = hit.tenant_name || hit.tenant_id;
+      applyExistingCcode(hit.ccode);
+      setTimeout(function(){
+        alert('⚠️ Duplicate found in Branch: ' + branchLabel
+          + '\nCustomer already exists with Code: ' + hit.customercode
+          + (hit.ccode ? ' (' + hit.ccode + ')' : ''));
+      }, 400);
+    }
+
+    // 2. Exact match in a DIFFERENT branch → update CCODE + alert
+    var otherBranchExact = exactRows.filter(function(r){
+      return r.tenant_id !== selectedBranchId && r.ccode;
+    });
+    if (!samebranchExact.length && otherBranchExact.length) {
+      var ohit        = otherBranchExact[0];
+      var obranchLabel = ohit.tenant_name || ohit.tenant_id;
+      applyExistingCcode(ohit.ccode);
+      setTimeout(function(){
+        alert('⚠️ Existing customer found in Branch: ' + obranchLabel
+          + '\nCode: ' + ohit.customercode
+          + (ohit.ccode ? ' (' + ohit.ccode + ')' : '')
+          + '\nC Code has been updated to match the existing record.');
+      }, 400);
+    }
+
+    // Scroll the AI panel into view so exact matches are immediately visible
+    var panel = document.querySelector('.ai-check-panel');
+    if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  })
+  .catch(function(err) {
+    btn.disabled = false;
+    if (spinner) spinner.style.display = 'none';
+    bar.innerHTML = '<span style="color:#dc2626;">Network error: ' + err.message + '</span>';
+    bar.style.display = 'block';
+  });
+}
+</script>
+{% endblock %}

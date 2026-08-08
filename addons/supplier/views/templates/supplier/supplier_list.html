@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+
+{% set sk = namespace(total=0, local=0, intl=0, acct=0, rows=(suppliers or [])|length) %}
+{% for s in suppliers or [] %}
+  {% set sk.total = sk.total + 1 %}
+  {% set st = ((s.suppliertype or '')|string|upper|trim) %}
+  {% if st == 'LOCAL' %}{% set sk.local = sk.local + 1 %}{% endif %}
+  {% if st == 'INTERNATIONAL' %}{% set sk.intl = sk.intl + 1 %}{% endif %}
+  {% if s.payableaccount or s.purchaseaccount %}{% set sk.acct = sk.acct + 1 %}{% endif %}
+{% endfor %}
+
+<style>
+  .muted { color: #6c757d; }
+</style>
+
+<div class="page-po nexa-list-page nexa-setup-list-page">
+  <section class="nexa-stat-grid" aria-label="Supplier summary">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-truck" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Showing</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(sk.rows) }}</p>
+        <p class="nexa-stat-sub">Rows on this page</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-geo" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">LOCAL</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(sk.local) }}</p>
+        <p class="nexa-stat-sub">In loaded rows</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-globe2" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">INTERNATIONAL</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(sk.intl) }}</p>
+        <p class="nexa-stat-sub">In loaded rows</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-journal-text" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">GL hints</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(sk.acct) }}</p>
+        <p class="nexa-stat-sub">Payable / purchase set</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--cyan"><i class="bi bi-building" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Locations</p>
+        <p class="nexa-stat-value">{{ "{:,}".format(locations|length if locations else 0) }}</p>
+        <p class="nexa-stat-sub">Branch picklist</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Supplier List</h1>
+      <p class="page-po__muted">View and manage suppliers by location.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      {% include 'includes/list_refresh_bar.html' %}
+      <a href="{{ url_for('supplier.supplier_create') }}" class="page-po__btn-primary">New Supplier</a>
+    </div>
+  </div>
+
+  <div class="nexa-list-toolbar">
+    <div>
+      <label class="label" style="font-size:12px;">Location</label>
+      <select id="locationFilter" class="input" style="min-width:200px;">
+        {% for loc in locations %}
+          <option value="{{ loc.code }}" {% if location_code and loc.code == location_code %}selected{% endif %}>{{ loc.name or loc.code }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <input type="text" id="searchSupplier" class="input" placeholder="Search by code or name…"
+           style="min-width:220px;" value="{{ search_term or '' }}" />
+    <button type="button" id="btnFilter" class="page-po__btn-primary" style="height:36px;">Filter</button>
+    <button type="button" id="btnSearch" class="page-po__btn-primary" style="height:36px;">Search</button>
+  </div>
+  <p class="page-po__muted nexa-num" style="margin:-6px 0 8px;">Showing up to 100 suppliers. Use Search to find others.</p>
+
+  <div class="co-table-wrap">
+    <table class="co-table co-table--th-hint" id="supplierTable">
+      <thead>
+        <tr>
+          <th style="text-align:center;">Sl.No</th>
+          <th>Location</th>
+          <th>Supplier Code</th>
+          <th>Supplier Name</th>
+          <th>Type</th>
+          <th>Contact Person</th>
+          <th>Payable Account</th>
+          <th>Purchase Account</th>
+          <th>Input VAT Account</th>
+          <th>Advance Account</th>
+          <th style="text-align:center;">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="supplierListBody">
+        {% if suppliers %}
+          {% for s in suppliers %}
+            <tr class="supplier-row"
+                data-code="{{ (s.suppliercode or '')|string }}"
+                data-name="{{ (s.suppliername or '')|string }}"
+                data-loc="{{ (s.locationcode or '')|string }}">
+              <td style="text-align:center;" class="sl-no">{{ loop.index }}</td>
+              <td>{{ s.locationcode or '-' }}</td>
+              <td>{{ s.suppliercode or '-' }}</td>
+              <td>{{ s.suppliername or '-' }}</td>
+              <td>{{ s.suppliertype or '-' }}</td>
+              <td>{{ s.contactperson or '-' }}</td>
+              <td>{{ s.payableaccount or '-' }}</td>
+              <td>{{ s.purchaseaccount or '-' }}</td>
+              <td>{{ s.vatinputaccount or '-' }}</td>
+              <td>{{ s.advanceaccount or '-' }}</td>
+              <td style="text-align:center;">
+                <a href="{{ url_for('supplier.supplier_edit', location_code=s.locationcode, supplier_code=s.suppliercode) }}"
+                   class="btn-view">Edit</a>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="11" class="muted" style="text-align:center; padding:20px;">No suppliers found.</td></tr>
+        {% endif %}
+        <tr id="supplierListNoResults" style="display:none;">
+          <td colspan="11" class="muted" style="text-align:center;">No matching suppliers.</td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <th colspan="11" id="supCount">Total: {{ suppliers|length if suppliers else 0 }} suppliers</th>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const searchInput    = document.getElementById('searchSupplier');
+  const locationFilter = document.getElementById('locationFilter');
+  const btnFilter      = document.getElementById('btnFilter');
+  const btnSearch      = document.getElementById('btnSearch');
+  const tbody          = document.getElementById('supplierListBody');
+  const noResultsRow   = document.getElementById('supplierListNoResults');
+  const supCount       = document.getElementById('supCount');
+  const table          = document.getElementById('supplierTable');
+  const headers        = table.querySelectorAll('thead th');
+
+  // ── Sort ─────────────────────────────────────────────
+  headers.forEach((th, idx) => {
+    th.addEventListener('click', () => {
+      const order = th.getAttribute('data-order') === 'asc' ? 'desc' : 'asc';
+      headers.forEach(h => h.removeAttribute('data-order'));
+      th.setAttribute('data-order', order);
+      const rows = Array.from(tbody.querySelectorAll('tr.supplier-row:not([style*="display: none"])'));
+      rows.sort((a, b) => {
+        const av = (a.children[idx]?.textContent || '').trim();
+        const bv = (b.children[idx]?.textContent || '').trim();
+        const an = parseFloat(av), bn = parseFloat(bv);
+        const res = (!isNaN(an) && !isNaN(bn)) ? an - bn : av.localeCompare(bv);
+        return order === 'asc' ? res : -res;
+      });
+      rows.forEach(r => tbody.insertBefore(r, noResultsRow));
+      reindex();
+    });
+  });
+
+  // ── Client-side search ───────────────────────────────
+  function filterRows() {
+    const q = (searchInput ? searchInput.value : '').trim().toLowerCase();
+    const rows = tbody.querySelectorAll('.supplier-row');
+    let visible = 0;
+    rows.forEach(row => {
+      const code = (row.dataset.code || '').toLowerCase();
+      const name = (row.dataset.name || '').toLowerCase();
+      const show = !q || code.includes(q) || name.includes(q);
+      row.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    if (noResultsRow)
+      noResultsRow.style.display = (visible === 0 && rows.length > 0) ? '' : 'none';
+    if (supCount)
+      supCount.textContent = `Total: ${visible} supplier${visible !== 1 ? 's' : ''}`;
+    reindex();
+  }
+
+  function reindex() {
+    let sl = 0;
+    tbody.querySelectorAll('.supplier-row').forEach(row => {
+      if (row.style.display !== 'none') {
+        sl++;
+        const cell = row.querySelector('.sl-no');
+        if (cell) cell.textContent = sl;
+      }
+    });
+  }
+
+  function buildUrl() {
+    const loc = locationFilter ? locationFilter.value : '';
+    const q   = searchInput ? searchInput.value.trim() : '';
+    let url   = '{{ url_for("supplier.supplier_list") }}?location=' + encodeURIComponent(loc);
+    if (q) url += '&search=' + encodeURIComponent(q);
+    return url;
+  }
+
+  if (searchInput) {
+    searchInput.addEventListener('input', filterRows);
+    searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') window.location.href = buildUrl(); });
+  }
+  if (btnFilter) btnFilter.addEventListener('click', () => { window.location.href = buildUrl(); });
+  if (btnSearch) btnSearch.addEventListener('click', () => { window.location.href = buildUrl(); });
+});
+</script>
+{% endblock %}

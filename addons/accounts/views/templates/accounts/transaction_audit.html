@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Transaction Accounts Audit{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page sv-list-page" id="taPage"
+  data-api-list="{{ url_for('accounts.api_transaction_audit_vouchers') }}"
+  data-api-detail="{{ url_for('accounts.api_transaction_audit_detail') }}"
+  data-export-url="{{ url_for('accounts.transaction_audit_export_csv') }}"
+  data-voucher-view="{{ url_for('accounts.journal_voucher_view', voucher_no='__VNO__') }}"
+  data-location="{{ session_location_code }}">
+<style>
+  .sv-list-page .sv-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .sv-list-page .sv-stat-card { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 11px; border: 1px solid #e5eaf2; border-radius: 10px; background: #fff; box-shadow: 0 8px 18px rgba(15, 23, 42, .06); }
+  .sv-list-page .sv-stat-icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex: 0 0 36px; border-radius: 9px; color: #fff; font-size: 17px; }
+  .sv-list-page .sv-stat-icon--blue { background: linear-gradient(135deg, #2563eb, #38bdf8); }
+  .sv-list-page .sv-stat-icon--green { background: linear-gradient(135deg, #16a34a, #22c55e); }
+  .sv-list-page .sv-stat-icon--amber { background: linear-gradient(135deg, #f59e0b, #facc15); }
+  .sv-list-page .sv-stat-icon--red { background: linear-gradient(135deg, #dc2626, #f87171); }
+  .sv-list-page .sv-stat-label { margin: 0 0 4px; color: #475569; font-size: 11px; font-weight: 700; }
+  .sv-list-page .sv-stat-value { margin: 0; color: #0f172a; font-size: clamp(16px, 1.45vw, 21px); font-weight: 850; line-height: 1.1; }
+  .sv-list-page .sv-stat-sub { margin: 3px 0 0; color: #64748b; font-size: 11px; }
+  .sv-list-page #taTable tbody tr.ta-row { cursor: pointer; }
+  .nexa-list-page.sv-list-page .co-table tbody tr.ta-row.is-selected { background: #dcfce7 !important; box-shadow: inset 3px 0 0 #16a34a; }
+  .sv-list-page .co-table tbody tr.ta-row--err { background: #fef2f2 !important; }
+  .sv-list-page .co-status { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+  .sv-list-page .co-status--ok { background: #dcfce7; color: #166534; }
+  .sv-list-page .co-status--warn { background: #ffedd5; color: #c2410c; }
+  .sv-list-page .co-status--err { background: #fee2e2; color: #991b1b; }
+  .sv-list-page .sv-preview-drawer { border: 1px solid #dbe3ef; border-radius: 14px; background: #fff; box-shadow: 0 12px 28px rgba(15, 23, 42, .16); position: fixed; top: 50%; right: 14px; z-index: 1040; width: min(520px, calc(100vw - 28px)); height: min(820px, calc(100vh - 28px)); transform: translate(120%, -50%); opacity: 0; pointer-events: none; transition: transform .18s ease, opacity .18s ease; display: flex; flex-direction: column; overflow: hidden; }
+  .sv-list-page .sv-preview-drawer.has-row { transform: translate(0, -50%); opacity: 1; pointer-events: auto; }
+  .sv-list-page .sv-preview-drawer__empty, .sv-list-page .sv-preview-drawer__body { padding: 18px; flex: 1 1 auto; overflow-y: auto; }
+  .sv-list-page .sv-preview-drawer__empty { color: #64748b; font-size: 13px; line-height: 1.45; }
+  .sv-list-page .sv-preview-drawer__body { display: none; }
+  .sv-list-page .sv-preview-drawer.has-row .sv-preview-drawer__empty { display: none; }
+  .sv-list-page .sv-preview-drawer.has-row .sv-preview-drawer__body { display: block; }
+  .sv-list-page .sv-preview-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+  .sv-list-page .sv-preview-title { margin: 0; color: #0f172a; font-size: 14px; font-weight: 800; word-break: break-all; }
+  .sv-list-page .sv-preview-subtitle { margin-top: 5px; color: #64748b; font-size: 12px; }
+  .sv-list-page .sv-preview-close { border: 0; background: #f1f5f9; color: #334155; border-radius: 999px; width: 30px; height: 30px; cursor: pointer; font-size: 18px; }
+  .sv-list-page .ta-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; }
+  .sv-list-page .ta-tab { border: 1px solid #e2e8f0; background: #f8fafc; color: #475569; border-radius: 8px; padding: 5px 10px; font-size: 11px; font-weight: 700; cursor: pointer; }
+  .sv-list-page .ta-tab.is-active { background: #2563eb; border-color: #2563eb; color: #fff; }
+  .sv-list-page .ta-panel { display: none; font-size: 12px; }
+  .sv-list-page .ta-panel.is-active { display: block; }
+  .sv-list-page .ta-mini-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 8px; }
+  .sv-list-page .ta-mini-table th, .sv-list-page .ta-mini-table td { border-bottom: 1px solid #edf2f7; padding: 5px 6px; text-align: left; }
+  .sv-list-page .ta-mini-table th { color: #64748b; font-weight: 700; }
+  .sv-list-page .ta-mini-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .sv-list-page .sv-preview-issues { margin-top: 12px; padding: 10px; border-radius: 8px; background: #fef2f2; color: #991b1b; font-size: 12px; line-height: 1.45; }
+  .sv-list-page .sv-scroll-status { margin: 10px 0 2px; padding: 9px 12px; border: 1px dashed #cbd5e1; border-radius: 8px; background: #f8fafc; color: #475569; font-size: 12px; text-align: center; }
+  .sv-list-page .sv-scroll-status.is-error { border-color: #fecaca; background: #fff1f2; color: #b91c1c; }
+  .sv-list-page .sv-rules-hint { font-size: 12px; color: #64748b; margin: 0 0 8px; line-height: 1.45; }
+  .sv-list-page .ta-acc-chip { display: inline-block; margin: 2px 4px 2px 0; padding: 3px 8px; background: #f0f9ff; border-radius: 6px; font-size: 11px; color: #1e40af; }
+</style>
+
+  <section class="sv-stat-grid" aria-label="Audit summary">
+    <div class="sv-stat-card">
+      <span class="sv-stat-icon sv-stat-icon--blue"><i class="bi bi-journal-text"></i></span>
+      <div>
+        <p class="sv-stat-label">Vouchers</p>
+        <p class="sv-stat-value" id="taKpiTotal">—</p>
+        <p class="sv-stat-sub" id="taKpiTotalSub">Run scan</p>
+      </div>
+    </div>
+    <div class="sv-stat-card">
+      <span class="sv-stat-icon sv-stat-icon--green"><i class="bi bi-check-circle"></i></span>
+      <div>
+        <p class="sv-stat-label">Balanced</p>
+        <p class="sv-stat-value" id="taKpiOk">—</p>
+        <p class="sv-stat-sub">Dr = Cr</p>
+      </div>
+    </div>
+    <div class="sv-stat-card">
+      <span class="sv-stat-icon sv-stat-icon--red"><i class="bi bi-exclamation-triangle"></i></span>
+      <div>
+        <p class="sv-stat-label">Unbalanced</p>
+        <p class="sv-stat-value" id="taKpiErr">—</p>
+        <p class="sv-stat-sub">GL mismatch</p>
+      </div>
+    </div>
+    <div class="sv-stat-card">
+      <span class="sv-stat-icon sv-stat-icon--amber"><i class="bi bi-building"></i></span>
+      <div>
+        <p class="sv-stat-label">Branch</p>
+        <p class="sv-stat-value">{{ session_location_code }}</p>
+        <p class="sv-stat-sub">All GL sources</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title page-po__title--with-icon">
+        <span class="page-po__title-icon"><i class="bi bi-list-columns"></i></span>
+        Transaction accounts audit
+      </h1>
+      <p class="page-po__muted">
+        View affected GL accounts for GRN, purchase return, sales, POS, payments, and all posted vouchers.
+      </p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a class="page-po__btn-secondary" id="taBtnExport" href="#">Export CSV</a>
+      <button type="button" class="page-po__btn-primary" id="taBtnRunTop">Run audit</button>
+    </div>
+  </div>
+
+  <div id="taMessage" class="sv-scroll-status" role="alert" style="display:none;"></div>
+
+  <form id="taFilterForm" class="nexa-list-toolbar" action="#" method="get" autocomplete="off">
+    <select id="taSource" class="input" style="min-width:200px;" title="Transaction source">
+      <option value="ALL">All sources</option>
+    </select>
+    <input type="date" id="taDateFrom" class="input" title="From date" />
+    <input type="date" id="taDateTo" class="input" title="To date" />
+    <input type="text" id="taSearch" class="input" placeholder="Voucher / reference / narration…" style="min-width:180px;" />
+    <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#475569;">
+      <input type="checkbox" id="taUnbalanced" value="1" /> Unbalanced only
+    </label>
+    <button type="submit" class="page-po__btn-primary" id="taBtnRun" style="padding:4px 12px;font-size:11px;">Run</button>
+    <span id="taListMeta" class="nexa-num">—</span>
+  </form>
+
+  <p class="sv-rules-hint">
+    Covers all GL postings: GRN, purchase return, debit note, sales invoice, sales return, POS, AP/AR receipts, CPV, manual journals, and more. Select a row for account lines, staging posting (GRN/PR), and balance checks.
+  </p>
+
+  <div class="co-table-wrap">
+    <table class="co-table" id="taTable">
+      <thead>
+        <tr>
+          <th style="width:40px;">#</th>
+          <th>Voucher</th>
+          <th>Date</th>
+          <th>Source</th>
+          <th>Doc</th>
+          <th class="num">Debit</th>
+          <th class="num">Credit</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="taTableBody">
+        <tr id="taNoData">
+          <td colspan="8" style="text-align:center;padding:20px;color:#6b7280;font-style:italic;">
+            Set filters and click <strong>Run audit</strong>.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div id="taScrollStatus" class="sv-scroll-status">No report loaded.</div>
+
+  <aside class="sv-preview-drawer" id="taPreviewDrawer" aria-label="Voucher detail">
+    <div class="sv-preview-drawer__empty">Select a voucher to see GL account lines, accounts affected, and posting checks.</div>
+    <div class="sv-preview-drawer__body">
+      <div class="sv-preview-head">
+        <div>
+          <h2 class="sv-preview-title" id="taPreviewTitle">—</h2>
+          <div class="sv-preview-subtitle" id="taPreviewSubtitle">—</div>
+        </div>
+        <button type="button" class="sv-preview-close" id="taPreviewClose" aria-label="Close">×</button>
+      </div>
+      <div class="ta-tabs">
+        <button type="button" class="ta-tab is-active" data-panel="summary">Summary</button>
+        <button type="button" class="ta-tab" data-panel="accounts">Accounts</button>
+        <button type="button" class="ta-tab" data-panel="gl">GL lines</button>
+        <button type="button" class="ta-tab" data-panel="staging">Staging</button>
+        <button type="button" class="ta-tab" data-panel="issues">Issues</button>
+      </div>
+      <div class="ta-panel is-active" id="taPanelSummary"></div>
+      <div class="ta-panel" id="taPanelAccounts"></div>
+      <div class="ta-panel" id="taPanelGl"></div>
+      <div class="ta-panel" id="taPanelStaging"></div>
+      <div class="ta-panel" id="taPanelIssues"></div>
+      <p style="margin-top:12px;"><a href="#" id="taOpenVoucherLink" target="_blank" rel="noopener">Open full journal voucher →</a></p>
+    </div>
+  </aside>
+</div>
+<script src="{{ url_for('static', filename='js/transaction_audit.js') }}?v=1"></script>
+{% endblock %}

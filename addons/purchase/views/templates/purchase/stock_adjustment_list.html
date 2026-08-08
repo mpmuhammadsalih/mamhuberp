@@ -1,0 +1,543 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .co-table-wrap { overflow: auto; border-radius: 4px; max-height: 72vh; }
+  .co-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .co-table th, .co-table td { border: 1px solid #cfd4da !important; padding: 7px 10px; white-space: nowrap; }
+  .co-table thead th { background: #eef2f7 !important; position: sticky; top: 0; z-index: 2; font-weight: 600; color: #374151; }
+  .co-table tbody tr:nth-child(even) { background: #fbfcfe; }
+  .co-table tbody tr:hover { background: #f0f5ff !important; }
+  .co-table td.sl-no { text-align: center; color: #6b7280; }
+  .co-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .co-table th.num { text-align: right; }
+  .sa-list-total {
+    margin: 0 0 10px;
+    font-size: 13px;
+    color: #334155;
+    font-weight: 600;
+  }
+  .sa-list-actions { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: center; align-items: center; }
+  .btn-view { border: 1px solid #cfd4da; background: #fff; color: #374151; border-radius: 3px; font-size: 12px; padding: 3px 10px; text-decoration: none; }
+  .btn-view:hover { background: #eef2f7; }
+  .btn-view--pdf { color: #1d4ed8; border-color: var(--nexa-focus-color); }
+  .btn-view--pdf:hover { background: #f0f9ff; }
+  .btn-view--reverse { color: #b91c1c; border-color: #fca5a5; }
+  .btn-view--reverse:hover { background: #fef2f2; }
+  .btn-view--date { color: #1d4ed8; border-color: #93c5fd; }
+  .btn-view--date:hover { background: #eff6ff; }
+  .sa-inline-form { display: inline; margin: 0; }
+  .sa-reversed-label { color: #64748b; font-size: 12px; font-weight: 700; }
+  .stk-adj-flash {
+    margin-bottom: 12px;
+    padding: 12px 14px;
+    border-radius: 6px;
+    background: #ecfdf5;
+    border: 1px solid #6ee7b7;
+    color: #065f46;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .stk-adj-mode-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #334155;
+  }
+  .stk-adj-mode-badge--opening {
+    border-color: #6ee7b7;
+    background: #ecfdf5;
+    color: #065f46;
+  }
+</style>
+<div class="list-refresh-slot" style="display:flex;justify-content:flex-end;flex-wrap:wrap;align-items:center;margin:6px 0 12px;">{% include 'includes/list_refresh_bar.html' %}</div>
+
+
+<div class="page-po nexa-list-page" style="max-width:1200px;">
+  <div id="stkAdjSaveFlash" class="stk-adj-flash" {% if not server_flash %}hidden{% endif %} role="status">{{ server_flash or '' }}</div>
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Stock Adjustment List</h1>
+      <p class="page-po__muted">View and reverse saved stock adjustments. Showing latest {{ list_limit or 300 }}.</p>
+      {% if opening_stock_mode %}
+      <div class="stk-adj-mode-badge stk-adj-mode-badge--opening">Mode: Opening Stock Import (Dr 1300 / Cr 3900)</div>
+      {% else %}
+      <div class="stk-adj-mode-badge">Mode: Stock Adjustment (normal adjustment accounts)</div>
+      {% endif %}
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <a href="{{ url_for('purchase.stock_adjustment_accounts_configuration_page') }}" class="page-po__btn-secondary">Accounts Configuration</a>
+      <a href="{{ url_for('purchase.stock_adjustment_form') }}" class="page-po__btn-primary">+ New Adjustment</a>
+    </div>
+  </div>
+
+  {% if rows %}
+  <p class="sa-list-total">Total stock value (listed): {{ '{:,.2f}'.format((list_total_stock_value or 0)|float) }}</p>
+  {% endif %}
+
+  <form method="get" style="display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap;">
+    <input class="input" type="text" name="search" value="{{ search or '' }}" placeholder="Search no/remarks/user..." style="min-width:240px;" />
+    <input class="input" type="date" name="date_from" value="{{ date_from or '' }}" />
+    <input class="input" type="date" name="date_to" value="{{ date_to or '' }}" />
+    <button class="page-po__btn-secondary" type="submit">Search</button>
+    <a class="page-po__btn-secondary" href="{{ url_for('purchase.stock_adjustment_list') }}">Reset</a>
+  </form>
+
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th style="width:60px;">Sl.No</th>
+          <th>Adjustment No</th>
+          <th>Date</th>
+          <th>Remarks</th>
+          <th>Created By</th>
+          <th class="num">Stock Value</th>
+          <th style="text-align:center; min-width:200px;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="sl-no">{{ loop.index }}</td>
+          <td>{{ r.adjno or '-' }}</td>
+          <td>{{ (r.adjdate|string)[:10] if r.adjdate else '-' }}</td>
+          <td>{{ r.remarks or '' }}</td>
+          <td>{{ r.createdby or '' }}</td>
+          <td class="num">{{ '{:,.2f}'.format((r.stock_value or 0)|float) }}</td>
+          <td style="text-align:center;">
+            <div class="sa-list-actions">
+              <a class="btn-view" href="{{ url_for('purchase.stock_adjustment_view', adj_no=r.adjno) }}">View</a>
+              <a class="btn-view btn-view--pdf" href="{{ url_for('purchase.stock_adjustment_pdf', adj_no=r.adjno) }}" target="_blank" rel="noopener noreferrer">PDF</a>
+              {% if r.is_reversal %}
+              <span class="sa-reversed-label">Reversal</span>
+              {% elif r.reversal_no %}
+              <span class="sa-reversed-label">Reversed by #{{ r.reversal_no }}</span>
+              {% else %}
+              <button type="button"
+                      class="btn-view btn-view--date sa-change-date-btn"
+                      data-adj-no="{{ r.adjno }}"
+                      data-adj-date="{{ (r.adjdate|string)[:10] if r.adjdate else '' }}"
+                      data-gl-voucher="{{ r.gl_voucher_no or '' }}">Change Date</button>
+              <button type="button"
+                      class="btn-view btn-view--reverse sa-reverse-btn"
+                      data-adj-no="{{ r.adjno }}"
+                      data-action="{{ url_for('purchase.stock_adjustment_reverse', adj_no=r.adjno) }}">Reverse</button>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" style="text-align:center; padding:14px; color:#6b7280; font-style:italic;">No stock adjustments found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="modal hidden" id="saReverseModal" aria-labelledby="saReverseModalTitle" style="position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center;padding:16px;">
+  <div class="modal__overlay" id="saReverseModalOverlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.45);"></div>
+  <div class="modal__panel" style="position:relative;z-index:1;background:#fff;border-radius:8px;max-width:420px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #e2e8f0;">
+      <h4 id="saReverseModalTitle" style="margin:0;font-size:15px;">Reverse Stock Adjustment</h4>
+      <button type="button" id="saReverseModalClose" aria-label="Close" style="border:none;background:none;font-size:20px;cursor:pointer;">×</button>
+    </div>
+    <div style="padding:16px;">
+      <p id="saReverseModalMessage" style="margin:0 0 12px;color:#475569;font-size:13px;"></p>
+      <label for="saReversePassword" style="display:block;margin-bottom:6px;font-size:12px;font-weight:600;color:#334155;">Your password</label>
+      <input type="password" id="saReversePassword" class="input" placeholder="Enter your login password" autocomplete="current-password" style="width:100%;box-sizing:border-box;" />
+      <p id="saReversePasswordError" style="display:none;margin:10px 0 0;color:#dc3545;font-size:12px;"></p>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid #e2e8f0;">
+      <button type="button" id="saReverseCancel" class="page-po__btn-secondary" style="background:transparent;border:1px solid #dee2e6;color:#495057;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;">Cancel</button>
+      <button type="button" id="saReverseSubmit" style="background:#b91c1c;border:1px solid #b91c1c;color:#fff;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;">Reverse</button>
+    </div>
+  </div>
+</div>
+<style>#saReverseModal.hidden,#saChangeDateModal.hidden{display:none!important;}#saReverseModal:not(.hidden),#saChangeDateModal:not(.hidden){display:flex;}</style>
+<div class="modal hidden" id="saChangeDateModal" aria-labelledby="saChangeDateModalTitle" style="position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center;padding:16px;">
+  <div class="modal__overlay" id="saChangeDateModalOverlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.45);"></div>
+  <div class="modal__panel" style="position:relative;z-index:1;background:#fff;border-radius:8px;max-width:440px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #e2e8f0;">
+      <h4 id="saChangeDateModalTitle" style="margin:0;font-size:15px;">Change Stock Adjustment Date</h4>
+      <button type="button" id="saChangeDateModalClose" aria-label="Close" style="border:none;background:none;font-size:20px;cursor:pointer;">×</button>
+    </div>
+    <div style="padding:16px;">
+      <p id="saChangeDateModalMessage" style="margin:0 0 12px;color:#475569;font-size:13px;"></p>
+      <label for="saChangeAdjDate" style="display:block;margin-bottom:6px;font-size:12px;font-weight:600;color:#334155;">Adjustment date</label>
+      <input type="date" id="saChangeAdjDate" class="input" style="width:100%;box-sizing:border-box;margin-bottom:12px;" />
+      <label for="saChangeGlDate" style="display:block;margin-bottom:6px;font-size:12px;font-weight:600;color:#334155;">GL voucher date</label>
+      <input type="date" id="saChangeGlDate" class="input" style="width:100%;box-sizing:border-box;margin-bottom:12px;" />
+      <p style="margin:0 0 12px;font-size:11px;color:#64748b;">Dates must fall in an open accounting period. Stock quantities are not changed.</p>
+      <label for="saChangeDatePassword" style="display:block;margin-bottom:6px;font-size:12px;font-weight:600;color:#334155;">Your password</label>
+      <input type="password" id="saChangeDatePassword" class="input" placeholder="Enter your login password" autocomplete="current-password" style="width:100%;box-sizing:border-box;" />
+      <p id="saChangeDatePasswordError" style="display:none;margin:10px 0 0;color:#dc3545;font-size:12px;"></p>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid #e2e8f0;">
+      <button type="button" id="saChangeDateCancel" class="page-po__btn-secondary" style="background:transparent;border:1px solid #dee2e6;color:#495057;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;">Cancel</button>
+      <button type="button" id="saChangeDateSubmit" style="background:#1d4ed8;border:1px solid #1d4ed8;color:#fff;padding:8px 16px;border-radius:4px;font-size:13px;cursor:pointer;">Update Dates</button>
+    </div>
+  </div>
+</div>
+<script type="application/json" id="saClosedPeriodsJson">{{ (closed_periods or [])|tojson }}</script>
+<script src="{{ url_for('static', filename='js/period_date_guard.js') }}?v=1"></script>
+<script>
+(function () {
+  var msg = '';
+  try { msg = sessionStorage.getItem('stk_adj_save_flash') || ''; } catch (_) { msg = ''; }
+  if (!msg) return;
+  try { sessionStorage.removeItem('stk_adj_save_flash'); } catch (_) {}
+  var el = document.getElementById('stkAdjSaveFlash');
+  if (!el) return;
+  el.textContent = msg;
+  el.hidden = false;
+})();
+(function () {
+  function showReverseProgress(current, total, phase) {
+    var cur = Number(current) || 0;
+    var tot = Number(total) || 1;
+    var label = phase || 'Reversing';
+    if (typeof window.updateLoadingOverlayProgress === 'function') {
+      window.updateLoadingOverlayProgress(cur, tot, label + ' stock adjustment…', label);
+    } else if (typeof window.showLoadingOverlay === 'function') {
+      window.showLoadingOverlay(label + ' stock adjustment…');
+    }
+  }
+
+  function hideReverseProgress() {
+    if (typeof window.hideLoadingOverlay === 'function') window.hideLoadingOverlay();
+  }
+
+  function parseJson(res) {
+    return res.json().catch(function () { return {}; }).then(function (data) {
+      if (data && typeof data.save_nonce === 'string' && data.save_nonce) {
+        window.__GLOBAL_SAVE_NONCE = data.save_nonce;
+      }
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || ('Reverse failed (' + res.status + ')'));
+      }
+      return data;
+    });
+  }
+
+  var reverseModal = document.getElementById('saReverseModal');
+  var reverseModalOverlay = document.getElementById('saReverseModalOverlay');
+  var reverseModalClose = document.getElementById('saReverseModalClose');
+  var reverseCancel = document.getElementById('saReverseCancel');
+  var reverseSubmit = document.getElementById('saReverseSubmit');
+  var reverseMessage = document.getElementById('saReverseModalMessage');
+  var reversePassword = document.getElementById('saReversePassword');
+  var reversePasswordError = document.getElementById('saReversePasswordError');
+  var reversePendingNo = '';
+  var reversePendingUrl = '';
+  var reversePendingBtn = null;
+
+  function closeReverseModal() {
+    if (reverseModal) reverseModal.classList.add('hidden');
+    if (reversePassword) reversePassword.value = '';
+    if (reversePasswordError) {
+      reversePasswordError.style.display = 'none';
+      reversePasswordError.textContent = '';
+    }
+    reversePendingNo = '';
+    reversePendingUrl = '';
+    reversePendingBtn = null;
+    if (reverseSubmit) reverseSubmit.disabled = false;
+  }
+
+  function openReverseModal(adjNo, actionUrl, btn) {
+    if (!reverseModal || !actionUrl) return;
+    reversePendingNo = String(adjNo || '');
+    reversePendingUrl = actionUrl;
+    reversePendingBtn = btn || null;
+    if (reverseMessage) {
+      reverseMessage.textContent = 'Reverse stock adjustment #' + reversePendingNo + '? This will post opposite stock and GL entries.';
+    }
+    reverseModal.classList.remove('hidden');
+    if (reversePassword) {
+      reversePassword.value = '';
+      window.setTimeout(function () { reversePassword.focus(); }, 0);
+    }
+  }
+
+  function submitReverse() {
+    if (!reversePendingUrl || !reversePendingNo) return;
+    var actionUrl = reversePendingUrl;
+    var adjNo = reversePendingNo;
+    var btn = reversePendingBtn;
+    var pwd = (reversePassword && reversePassword.value || '').trim();
+    if (!pwd) {
+      if (reversePasswordError) {
+        reversePasswordError.textContent = 'Enter your password.';
+        reversePasswordError.style.display = 'block';
+      }
+      if (reversePassword) reversePassword.focus();
+      return;
+    }
+    if (reversePasswordError) {
+      reversePasswordError.style.display = 'none';
+      reversePasswordError.textContent = '';
+    }
+    if (reverseSubmit) reverseSubmit.disabled = true;
+    if (btn) btn.disabled = true;
+    if (reverseModal) reverseModal.classList.add('hidden');
+    showReverseProgress(0, 3, 'Starting reversal');
+    var payload = { password: pwd };
+    if (typeof window.__GLOBAL_SAVE_NONCE === 'string' && window.__GLOBAL_SAVE_NONCE) {
+      payload.save_nonce = window.__GLOBAL_SAVE_NONCE;
+    }
+    fetch(actionUrl, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify(payload),
+    })
+      .then(function (res) {
+        showReverseProgress(2, 3, 'Posting stock & GL');
+        return parseJson(res);
+      })
+      .then(function (data) {
+        showReverseProgress(3, 3, 'Complete');
+        try {
+          sessionStorage.setItem('stk_adj_save_flash', data.message || 'Stock adjustment reversed.');
+        } catch (_) {}
+        if (data.pdf_url) window.open(data.pdf_url, '_blank', 'noopener,noreferrer');
+        window.location.href = data.list_url || "{{ url_for('purchase.stock_adjustment_list') }}";
+      })
+      .catch(function (err) {
+        hideReverseProgress();
+        alert(err.message || 'Reverse failed');
+        if (btn) btn.disabled = false;
+        if (reverseSubmit) reverseSubmit.disabled = false;
+        openReverseModal(adjNo, actionUrl, btn);
+      });
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.sa-reverse-btn'), function (btn) {
+    btn.addEventListener('click', function () {
+      openReverseModal(btn.getAttribute('data-adj-no') || '', btn.getAttribute('data-action') || '', btn);
+    });
+  });
+  if (reverseModalClose) reverseModalClose.addEventListener('click', closeReverseModal);
+  if (reverseCancel) reverseCancel.addEventListener('click', closeReverseModal);
+  if (reverseModalOverlay) reverseModalOverlay.addEventListener('click', closeReverseModal);
+  if (reverseSubmit) reverseSubmit.addEventListener('click', submitReverse);
+  if (reversePassword) {
+    reversePassword.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        submitReverse();
+      }
+    });
+  }
+})();
+(function () {
+  var changeDateApi = {{ url_for('purchase.api_stock_adjustment_change_date')|tojson }};
+  var closedPeriods = [];
+  try {
+    var cpEl = document.getElementById('saClosedPeriodsJson');
+    closedPeriods = cpEl ? JSON.parse(cpEl.textContent || '[]') : [];
+  } catch (_) { closedPeriods = []; }
+
+  var changeModal = document.getElementById('saChangeDateModal');
+  var changeOverlay = document.getElementById('saChangeDateModalOverlay');
+  var changeClose = document.getElementById('saChangeDateModalClose');
+  var changeCancel = document.getElementById('saChangeDateCancel');
+  var changeSubmit = document.getElementById('saChangeDateSubmit');
+  var changeMessage = document.getElementById('saChangeDateModalMessage');
+  var changeAdjDate = document.getElementById('saChangeAdjDate');
+  var changeGlDate = document.getElementById('saChangeGlDate');
+  var changePassword = document.getElementById('saChangeDatePassword');
+  var changePasswordError = document.getElementById('saChangeDatePasswordError');
+  var changePendingNo = '';
+  var changePendingBtn = null;
+
+  function closeChangeDateModal() {
+    if (changeModal) changeModal.classList.add('hidden');
+    if (changePassword) changePassword.value = '';
+    if (changePasswordError) {
+      changePasswordError.style.display = 'none';
+      changePasswordError.textContent = '';
+    }
+    changePendingNo = '';
+    changePendingBtn = null;
+    if (changeSubmit) changeSubmit.disabled = false;
+  }
+
+  function openChangeDateModal(adjNo, adjDate, glVoucher, btn) {
+    if (!changeModal) return;
+    changePendingNo = String(adjNo || '');
+    changePendingBtn = btn || null;
+    if (changeMessage) {
+      changeMessage.textContent = 'Update adjustment #' + changePendingNo
+        + (glVoucher ? (' and GL voucher ' + glVoucher) : '') + '.';
+    }
+    var d = String(adjDate || '').slice(0, 10);
+    if (changeAdjDate) changeAdjDate.value = d;
+    if (changeGlDate) changeGlDate.value = d;
+    changeModal.classList.remove('hidden');
+    if (changeAdjDate) {
+      window.setTimeout(function () { changeAdjDate.focus(); }, 0);
+    }
+  }
+
+  function showChangeProgress(label) {
+    if (typeof window.showLoadingOverlay === 'function') {
+      window.showLoadingOverlay(label || 'Updating dates…');
+    }
+  }
+
+  function hideChangeProgress() {
+    if (typeof window.hideLoadingOverlay === 'function') window.hideLoadingOverlay();
+  }
+
+  function submitChangeDate() {
+    if (!changePendingNo) return;
+    var adjDateVal = (changeAdjDate && changeAdjDate.value || '').trim();
+    var glDateVal = (changeGlDate && changeGlDate.value || '').trim();
+    var pwd = (changePassword && changePassword.value || '').trim();
+    if (!adjDateVal) {
+      if (changePasswordError) {
+        changePasswordError.textContent = 'Adjustment date is required.';
+        changePasswordError.style.display = 'block';
+      }
+      return;
+    }
+    if (!glDateVal) {
+      if (changePasswordError) {
+        changePasswordError.textContent = 'GL date is required.';
+        changePasswordError.style.display = 'block';
+      }
+      return;
+    }
+    if (!pwd) {
+      if (changePasswordError) {
+        changePasswordError.textContent = 'Enter your password.';
+        changePasswordError.style.display = 'block';
+      }
+      if (changePassword) changePassword.focus();
+      return;
+    }
+    if (window.PeriodDateGuard) {
+      var adjMsg = window.PeriodDateGuard.messageForDate(adjDateVal, closedPeriods);
+      if (adjMsg) {
+        if (changePasswordError) {
+          changePasswordError.textContent = 'Adjustment date: ' + adjMsg;
+          changePasswordError.style.display = 'block';
+        }
+        return;
+      }
+      var glMsg = window.PeriodDateGuard.messageForDate(glDateVal, closedPeriods);
+      if (glMsg) {
+        if (changePasswordError) {
+          changePasswordError.textContent = 'GL date: ' + glMsg;
+          changePasswordError.style.display = 'block';
+        }
+        return;
+      }
+    }
+    if (changePasswordError) {
+      changePasswordError.style.display = 'none';
+      changePasswordError.textContent = '';
+    }
+    if (changeSubmit) changeSubmit.disabled = true;
+    if (changePendingBtn) changePendingBtn.disabled = true;
+    if (changeModal) changeModal.classList.add('hidden');
+    showChangeProgress('Updating dates');
+    var payload = {
+      adj_no: changePendingNo,
+      new_adj_date: adjDateVal,
+      new_gl_date: glDateVal,
+      password: pwd,
+    };
+    if (typeof window.__GLOBAL_SAVE_NONCE === 'string' && window.__GLOBAL_SAVE_NONCE) {
+      payload.save_nonce = window.__GLOBAL_SAVE_NONCE;
+    }
+    fetch(changeDateApi, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify(payload),
+    })
+      .then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (data) {
+          if (data && typeof data.save_nonce === 'string' && data.save_nonce) {
+            window.__GLOBAL_SAVE_NONCE = data.save_nonce;
+          }
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || ('Date change failed (' + res.status + ')'));
+          }
+          return data;
+        });
+      })
+      .then(function (data) {
+        hideChangeProgress();
+        try {
+          sessionStorage.setItem('stk_adj_save_flash', data.message || 'Dates updated.');
+        } catch (_) {}
+        window.location.reload();
+      })
+      .catch(function (err) {
+        hideChangeProgress();
+        alert(err.message || 'Date change failed');
+        if (changePendingBtn) changePendingBtn.disabled = false;
+        if (changeSubmit) changeSubmit.disabled = false;
+        openChangeDateModal(
+          changePendingNo,
+          changeAdjDate ? changeAdjDate.value : '',
+          '',
+          changePendingBtn
+        );
+      });
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.sa-change-date-btn'), function (btn) {
+    btn.addEventListener('click', function () {
+      openChangeDateModal(
+        btn.getAttribute('data-adj-no') || '',
+        btn.getAttribute('data-adj-date') || '',
+        btn.getAttribute('data-gl-voucher') || '',
+        btn
+      );
+    });
+  });
+  if (changeClose) changeClose.addEventListener('click', closeChangeDateModal);
+  if (changeCancel) changeCancel.addEventListener('click', closeChangeDateModal);
+  if (changeOverlay) changeOverlay.addEventListener('click', closeChangeDateModal);
+  if (changeSubmit) changeSubmit.addEventListener('click', submitChangeDate);
+  if (changeAdjDate) {
+    changeAdjDate.addEventListener('change', function () {
+      if (changeGlDate && !changeGlDate.dataset.userEdited) {
+        changeGlDate.value = changeAdjDate.value;
+      }
+    });
+  }
+  if (changeGlDate) {
+    changeGlDate.addEventListener('change', function () {
+      changeGlDate.dataset.userEdited = '1';
+    });
+  }
+  if (changePassword) {
+    changePassword.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        submitChangeDate();
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}Inventory Valuation{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page iv-page" id="ivPage"
+  data-api-url="{{ url_for('purchase.inventory_valuation_api') }}"
+  data-export-url="{{ url_for('purchase.inventory_valuation_export_csv') }}"
+  data-export-pdf-url="{{ url_for('purchase.inventory_valuation_export_pdf') }}"
+  data-location="{{ session_location_code }}"
+  data-warehouse-enabled="{{ '1' if warehouse_enabled else '0' }}">
+<style>
+  .iv-page { max-width: 100%; margin: 0 auto; padding: 8px 16px 24px; }
+  .iv-page .iv-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .iv-page .iv-stat-card {
+    display: flex; align-items: center; gap: 10px; min-width: 0;
+    padding: 11px; border: 1px solid #e5eaf2; border-radius: 10px;
+    background: #fff; box-shadow: 0 8px 18px rgba(15, 23, 42, .06);
+  }
+  .iv-page .iv-stat-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; flex: 0 0 36px; border-radius: 9px; color: #fff; font-size: 17px;
+  }
+  .iv-page .iv-stat-icon--blue { background: linear-gradient(135deg, #2563eb, #38bdf8); }
+  .iv-page .iv-stat-icon--green { background: linear-gradient(135deg, #16a34a, #22c55e); }
+  .iv-page .iv-stat-icon--amber { background: linear-gradient(135deg, #f59e0b, #facc15); }
+  .iv-page .iv-stat-icon--violet { background: linear-gradient(135deg, #7c3aed, #a78bfa); }
+  .iv-page .iv-stat-label { margin: 0 0 4px; color: #475569; font-size: 11px; font-weight: 700; }
+  .iv-page .iv-stat-value { margin: 0; color: #0f172a; font-size: clamp(16px, 1.45vw, 21px); font-weight: 850; line-height: 1.1; }
+  .iv-page .iv-stat-sub { margin: 3px 0 0; color: #64748b; font-size: 11px; }
+  .iv-page .iv-filter-extra { display: none; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e2e8f0; width: 100%; }
+  .iv-page .iv-filter-extra.is-open { display: flex; }
+  .iv-page .iv-filter-extra label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #475569; font-weight: 600; }
+  .iv-page .co-table-wrap { overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; max-height: 68vh; }
+  .iv-page .co-table { width: 100%; min-width: 980px; border-collapse: collapse; font-size: 13px; }
+  .iv-page .co-table th, .iv-page .co-table td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+  .iv-page .co-table thead th { position: sticky; top: 0; z-index: 2; background: #f8fafc; font-size: 12px; font-weight: 700; color: #334155; }
+  .iv-page .co-table td.num, .iv-page .co-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .iv-page .co-table tbody tr:hover { background: #f8fafc; }
+  .iv-page .iv-scroll-status {
+    margin: 10px 0 2px; padding: 9px 12px; border: 1px dashed #cbd5e1; border-radius: 8px;
+    background: #f8fafc; color: #475569; font-size: 12px; text-align: center;
+  }
+  .iv-page .iv-scroll-status.is-error { border-color: #fecaca; background: #fff1f2; color: #b91c1c; }
+  .iv-page .iv-col-store { background: #f8fafc; min-width: 76px; text-align: right; font-variant-numeric: tabular-nums; }
+  .iv-page .iv-col-total { background: #ecfdf5; font-weight: 700; }
+  .iv-page .iv-export-group { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+  .iv-page .iv-pick-wrap { min-width: 0; display: inline-flex; }
+  .iv-page .iv-pick-wrap .search-field--popup { min-width: 180px; max-width: 300px; }
+  .iv-page .iv-pick-wrap .search-field--popup .input { cursor: pointer; }
+  @media (max-width: 980px) { .iv-page .iv-stat-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); } }
+  @media (max-width: 560px) { .iv-page .iv-stat-grid { grid-template-columns: 1fr; } }
+</style>
+
+  <section class="iv-stat-grid" aria-label="Valuation summary">
+    <div class="iv-stat-card">
+      <span class="iv-stat-icon iv-stat-icon--blue"><i class="bi bi-box-seam" aria-hidden="true"></i></span>
+      <div>
+        <p class="iv-stat-label">Items</p>
+        <p class="iv-stat-value" id="ivKpiItems">—</p>
+        <p class="iv-stat-sub" id="ivKpiItemsSub">Run report</p>
+      </div>
+    </div>
+    <div class="iv-stat-card">
+      <span class="iv-stat-icon iv-stat-icon--green"><i class="bi bi-stack" aria-hidden="true"></i></span>
+      <div>
+        <p class="iv-stat-label">Total quantity</p>
+        <p class="iv-stat-value" id="ivKpiQty">—</p>
+        <p class="iv-stat-sub">On-hand units</p>
+      </div>
+    </div>
+    <div class="iv-stat-card">
+      <span class="iv-stat-icon iv-stat-icon--amber"><i class="bi bi-currency-dollar" aria-hidden="true"></i></span>
+      <div>
+        <p class="iv-stat-label">Inventory value</p>
+        <p class="iv-stat-value" id="ivKpiValue">—</p>
+        <p class="iv-stat-sub" id="ivKpiCostMethod">Average cost</p>
+      </div>
+    </div>
+    <div class="iv-stat-card">
+      <span class="iv-stat-icon iv-stat-icon--violet"><i class="bi bi-building" aria-hidden="true"></i></span>
+      <div>
+        <p class="iv-stat-label">Branch / store</p>
+        <p class="iv-stat-value">{{ session_location_code }}</p>
+        <p class="iv-stat-sub" id="ivKpiScope">All stores</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title page-po__title--with-icon">
+        <span class="page-po__title-icon" aria-hidden="true"><i class="bi bi-calculator"></i></span>
+        Inventory Valuation
+      </h1>
+      <p class="page-po__muted" id="ivPageSubtitle">
+        Stock value by item for branch {{ session_location_code }}. One row per item with qty per store column.
+      </p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <div class="iv-export-group">
+        <a class="page-po__btn-secondary" id="ivBtnExportCsv" href="#" title="Export all matching rows">Export CSV</a>
+        <a class="page-po__btn-secondary" id="ivBtnExportPdf" href="#" title="Export all matching rows">Export PDF</a>
+      </div>
+      <button type="button" class="page-po__btn-primary" id="ivBtnRunTop">Run report</button>
+      {% set list_refresh_skip_bootstrap = true %}
+      {% include 'includes/list_refresh_bar.html' %}
+    </div>
+  </div>
+
+  <div id="ivMessage" class="iv-scroll-status" role="alert" style="display:none;"></div>
+
+  <form id="ivFilterForm" class="nexa-list-toolbar" action="#" method="get" autocomplete="off">
+    {% if warehouse_enabled %}
+    {% set ns_wh = namespace(label='All stores (branch total)') %}
+    {% if opts.warehouse_id %}
+      {% for w in warehouses %}
+        {% if opts.warehouse_id == w.warehouse_id %}
+          {% set ns_wh.label = w.label %}
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+    <div class="iv-pick-wrap">
+      <input type="hidden" name="warehouse_id" id="ivWarehouse" value="{{ opts.warehouse_id or '' }}" />
+      <span class="search-field search-field--popup" title="Filter to one store/warehouse">
+        <input type="text" id="ivWarehouseDisplay" class="input js-iv-pick" readonly autocomplete="off"
+               placeholder="All stores…" value="{{ ns_wh.label }}" data-iv-pick="warehouse" style="min-width:200px;" />
+        <button type="button" class="search-clear" data-iv-clear="warehouse" aria-label="Clear store filter">×</button>
+        <button type="button" class="search-picker" data-iv-pick="warehouse" aria-label="Open store list">▾</button>
+      </span>
+    </div>
+    {% endif %}
+    {% set iv_cost_labels = {'average': 'Average cost', 'cost': 'Cost price', 'landing': 'Landing cost'} %}
+    {% set iv_cost_val = opts.cost_method if opts.cost_method in iv_cost_labels else 'average' %}
+    <div class="iv-pick-wrap">
+      <input type="hidden" name="cost_method" id="ivCostMethod" value="{{ iv_cost_val }}" />
+      <span class="search-field search-field--popup" title="Cost basis">
+        <input type="text" id="ivCostMethodDisplay" class="input js-iv-pick" readonly autocomplete="off"
+               placeholder="Cost basis…" value="{{ iv_cost_labels[iv_cost_val] }}" data-iv-pick="cost_method" style="min-width:150px;" />
+        <button type="button" class="search-picker" data-iv-pick="cost_method" aria-label="Open cost methods">▾</button>
+      </span>
+    </div>
+    <input type="text" id="ivItem" name="item" class="input" placeholder="Item code…"
+           value="{{ opts.item_code or '' }}" style="min-width:100px; max-width:120px;" />
+    <input type="text" id="ivBarcode" name="barcode" class="input" placeholder="Barcode…"
+           value="{{ opts.barcode or '' }}" style="min-width:120px; max-width:160px;" autocomplete="off" />
+    <input type="text" id="ivSearch" name="q" class="input" placeholder="Search item name…"
+           value="{{ opts.search or '' }}" style="min-width:200px; max-width:320px;" />
+    <button type="button" class="page-po__btn-secondary" id="ivToggleFilters" style="padding:4px 10px; font-size:11px;">More filters</button>
+    <button type="submit" class="page-po__btn-primary" id="ivBtnRun" style="padding:4px 12px; font-size:11px;">Run</button>
+    <button type="button" class="page-po__btn-secondary" id="ivBtnClear" style="padding:4px 10px; font-size:11px;">Clear</button>
+    <span id="ivListMeta" class="nexa-num">—</span>
+    <div class="iv-filter-extra" id="ivFilterExtra">
+      {% set ns_cat = namespace(label='') %}
+      {% if opts.category_code %}
+        {% for c in categories %}
+          {% if opts.category_code == c.code %}
+            {% set ns_cat.label = c.label %}
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+      <div class="iv-pick-wrap">
+        <input type="hidden" name="category" id="ivCategory" value="{{ opts.category_code or '' }}" />
+        <span class="search-field search-field--popup">
+          <input type="text" id="ivCategoryDisplay" class="input js-iv-pick" readonly autocomplete="off"
+                 placeholder="All categories…" value="{{ ns_cat.label }}" data-iv-pick="category" style="min-width:180px;" />
+          <button type="button" class="search-clear" data-iv-clear="category" aria-label="Clear category">×</button>
+          <button type="button" class="search-picker" data-iv-pick="category" aria-label="Open categories">▾</button>
+        </span>
+      </div>
+      <label><input type="checkbox" name="include_zero" id="ivIncludeZero" value="1" {% if opts.include_zero %}checked{% endif %} /> Include zero qty</label>
+    </div>
+  </form>
+
+  <p class="iv-scope-hint" id="ivScopeHint">
+    {% if warehouse_enabled %}
+    Each row shows item details, qty in every warehouse (WH001, SH002, …), then total qty and stock value.
+    Use the store filter to limit to one warehouse column.
+    {% else %}
+    Warehouse module is off — store columns use ITEMMASTER store fields; totals use branch stock.
+    {% endif %}
+  </p>
+
+  <div class="co-table-wrap">
+    <table class="co-table" id="ivTable">
+      <thead id="ivTableHead">
+        <tr>
+          <th style="text-align:center; width:48px;">#</th>
+          <th>Item</th>
+          <th>Item name</th>
+          <th>Category</th>
+          <th>UOM</th>
+          <th class="num iv-col-total">Total qty</th>
+          <th class="num iv-col-total">Unit cost</th>
+          <th class="num iv-col-total">Total value</th>
+        </tr>
+      </thead>
+      <tbody id="ivTableBody">
+        <tr>
+          <td colspan="8" style="text-align:center; padding:20px; color:#6b7280; font-style:italic;">
+            Set filters and click <strong>Run report</strong>.
+          </td>
+        </tr>
+      </tbody>
+      <tfoot id="ivTableFoot" style="display:none;"></tfoot>
+    </table>
+  </div>
+
+  <div id="ivScrollStatus" class="iv-scroll-status">
+    No report loaded. Click <strong>Run report</strong> to calculate inventory value.
+  </div>
+  <div id="ivScrollSentinel" style="height:1px;"></div>
+</div>
+
+<div class="modal hidden" id="ivPickModal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="modal__overlay" data-close="ivPickModal"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3 id="ivPickModalTitle">Pick</h3>
+      <button type="button" class="modal__close" data-close="ivPickModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <label class="search">
+        Search
+        <span class="search-field search-field--wide">
+          <input type="text" id="ivPickModalSearch" placeholder="Search…" autocomplete="off" />
+          <button type="button" class="search-clear" id="ivPickModalClear" aria-label="Clear search">×</button>
+        </span>
+      </label>
+      <div class="scroll-table modal__table">
+        <table class="table table-fixed" id="ivPickModalTable">
+          <thead id="ivPickModalHead">
+            <tr><th id="ivPickModalColHeader">Value</th></tr>
+          </thead>
+          <tbody id="ivPickModalBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="application/json" id="ivFilterOptionsJson">{{ {'warehouses': warehouses, 'categories': categories}|tojson }}</script>
+<script src="{{ url_for('static', filename='js/inventory_valuation.js') }}?v=9"></script>
+{% endblock %}

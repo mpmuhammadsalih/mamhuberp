@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Employee details{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/im_form_shell.css') }}?v=1" />
+<style>
+  .emp-view-page .detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border: 1px solid #b8c8d4;
+    border-radius: 4px;
+    background: #fff;
+    overflow: hidden;
+  }
+  .emp-view-page .detail-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #dee2e6;
+    min-height: 36px;
+  }
+  .emp-view-page .detail-row:nth-last-child(-n+2) { border-bottom: none; }
+  .emp-view-page .detail-row.span-2 { grid-column: 1 / -1; }
+  .emp-view-page .detail-label {
+    min-width: 160px;
+    font-size: 13px;
+    color: #495057;
+    flex-shrink: 0;
+  }
+  .emp-view-page .detail-value { font-size: 13px; color: #212529; flex: 1; }
+  .emp-view-page .badge {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .emp-view-page .badge--yes { background: #fef3c7; color: #92400e; }
+  .emp-view-page .badge--no { background: #d1fae5; color: #065f46; }
+  @media (max-width: 900px) {
+    .emp-view-page .detail-grid { grid-template-columns: 1fr; }
+  }
+</style>
+{% set e = employee %}
+{% set emp_std = is_standard_employee if is_standard_employee is defined else (employee_table and employee_table|upper == 'EMPLOYEE') %}
+
+<div class="im-page im-form-shell-page emp-view-page">
+  <div class="im-topbar">
+    <div class="im-topbar-main">
+      <h1>Employee Master / <span class="im-ref">{{ e.employeecode or '—' }}</span></h1>
+      <div class="im-actions">
+        <a href="{{ url_for('employee.employee_edit', employeecode=e.employeecode) }}" class="im-btn-save">Edit</a>
+        <a href="{{ url_for('employee.employee_list') }}" class="im-btn-secondary">List</a>
+      </div>
+    </div>
+  </div>
+
+  <section class="itemmaster-container">
+    <h2 class="im-section-title">Identification</h2>
+    <div class="form-section im-panel-body">
+      <div class="detail-grid">
+        <div class="detail-row"><span class="detail-label">Branch</span><span class="detail-value">{{ e.locationcode or '—' }}</span></div>
+        {% if has_employee_id %}
+        <div class="detail-row"><span class="detail-label">Employee ID</span><span class="detail-value">{{ e.employeeid or '—' }}</span></div>
+        {% endif %}
+        <div class="detail-row"><span class="detail-label">Employee code</span><span class="detail-value"><strong>{{ e.employeecode or '—' }}</strong></span></div>
+        <div class="detail-row span-2"><span class="detail-label">Name</span><span class="detail-value">{{ e.employeename or '—' }}</span></div>
+      </div>
+    </div>
+
+    <h2 class="im-section-title">Personal</h2>
+    <div class="form-section im-panel-body">
+      <div class="detail-grid">
+        <div class="detail-row"><span class="detail-label">{% if emp_std %}Designation{% else %}Department{% endif %}</span><span class="detail-value">{{ e.department or e.designation or '—' }}</span></div>
+        {% if emp_std %}
+        <div class="detail-row"><span class="detail-label">Gender</span><span class="detail-value">{% if (e.sex or '')|upper|trim == 'M' %}Male{% elif (e.sex or '')|upper|trim == 'F' %}Female{% else %}—{% endif %}</span></div>
+        <div class="detail-row"><span class="detail-label">Nationality</span><span class="detail-value">{{ e.nationality or '—' }}</span></div>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if emp_std %}
+    <h2 class="im-section-title">Contact</h2>
+    <div class="form-section im-panel-body">
+      <div class="detail-grid">
+        <div class="detail-row span-2"><span class="detail-label">Address</span><span class="detail-value">{{ e.address or '—' }}</span></div>
+        <div class="detail-row"><span class="detail-label">Telephone</span><span class="detail-value">{{ e.telephone or '—' }}</span></div>
+        <div class="detail-row"><span class="detail-label">Mobile</span><span class="detail-value">{{ e.mobile or '—' }}</span></div>
+      </div>
+    </div>
+
+    <h2 class="im-section-title">Employment</h2>
+    <div class="form-section im-panel-body">
+      <div class="detail-grid">
+        <div class="detail-row"><span class="detail-label">Date of joining</span><span class="detail-value">{{ e.dateofjoining or '—' }}</span></div>
+        <div class="detail-row">
+          <span class="detail-label">Resigned</span>
+          <span class="detail-value">
+            <span class="badge {% if (e.resignationflag|string|trim|upper)|default('', true) == 'Y' %}badge--yes{% else %}badge--no{% endif %}">
+              {% if (e.resignationflag|string|trim|upper)|default('', true) == 'Y' %}Yes{% else %}No{% endif %}
+            </span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="im-section-title">Remarks</h2>
+    <div class="form-section im-panel-body">
+      <div class="detail-grid">
+        <div class="detail-row span-2"><span class="detail-label">Remarks</span><span class="detail-value">{{ e.remarks or '—' }}</span></div>
+      </div>
+    </div>
+    {% else %}
+    <h2 class="im-section-title">Employment</h2>
+    <div class="form-section im-panel-body">
+      <div class="detail-grid">
+        <div class="detail-row"><span class="detail-label">Date of joining</span><span class="detail-value">{{ e.dateofjoining or '—' }}</span></div>
+        <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value">{{ (e.status or '—')|trim }}</span></div>
+        <div class="detail-row"><span class="detail-label">Date of transfer</span><span class="detail-value">{{ e.dateoftransfer or '—' }}</span></div>
+        <div class="detail-row"><span class="detail-label">Shift code</span><span class="detail-value">{{ e.shiftcode if e.shiftcode is not none else '—' }}</span></div>
+        <div class="detail-row">
+          <span class="detail-label">Pending</span>
+          <span class="detail-value">
+            <span class="badge {% if (e.pending|string|trim|upper)|default('', true) == 'Y' %}badge--yes{% else %}badge--no{% endif %}">
+              {% if (e.pending|string|trim|upper)|default('', true) == 'Y' %}Yes{% else %}No{% endif %}
+            </span>
+          </span>
+        </div>
+        <div class="detail-row span-2"><span class="detail-label">Shift times</span><span class="detail-value">{{ (e.time1 or '')|trim }} / {{ (e.time2 or '')|trim }} / {{ (e.time3 or '')|trim }} / {{ (e.time4 or '')|trim }}</span></div>
+      </div>
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
