@@ -4,6 +4,8 @@
 window.bootGrnList = function () {
   const pageRoot = document.querySelector('.grn-list-page');
   if (!pageRoot) return;
+  if (pageRoot.dataset.grnListBooted === '1') return;
+  pageRoot.dataset.grnListBooted = '1';
 
   const grnApi = pageRoot.dataset.grnApi || '/purchase/receipt/api/list';
   const poQueryTpl = pageRoot.dataset.poQueryUrlTpl || '';
@@ -175,7 +177,7 @@ window.bootGrnList = function () {
 
   function createPendingRow(row, absoluteIndex) {
     const tr = document.createElement('tr');
-    tr.className = 'grn-row';
+    tr.className = 'grn-row grn-row-clickable';
     tr.dataset.kind = 'pending';
     const lpono = row.lpono;
     tr.dataset.docno = lpono;
@@ -202,7 +204,7 @@ window.bootGrnList = function () {
 
   function createGrnRow(row, absoluteIndex, tabKind) {
     const tr = document.createElement('tr');
-    tr.className = 'grn-row';
+    tr.className = 'grn-row grn-row-clickable';
     tr.dataset.kind = tabKind;
     const receiptno = row.receiptno;
     tr.dataset.docno = receiptno;
@@ -270,10 +272,28 @@ window.bootGrnList = function () {
     renderPagination();
   }
 
+  function setListLoadingUi(loading) {
+    if (!tbody) return;
+    tbody.classList.toggle('grn-list-is-loading', !!loading);
+    if (table) table.classList.toggle('grn-list-is-loading', !!loading);
+  }
+
   function showLoadingRow() {
     if (!tbody) return;
     tbody.innerHTML =
       '<tr id="grnLoading"><td colspan="10" style="text-align:center;padding:20px;color:#6b7280;">Loading…</td></tr>';
+  }
+
+  function openGrnRow(tr) {
+    if (!tr) return;
+    const kind = tr.dataset.kind || activeTab;
+    const docno = tr.dataset.docno;
+    if (!docno) return;
+    if (kind === 'pending') {
+      window.location.href = poUrl(docno);
+      return;
+    }
+    window.location.href = grnUrl(docno, true);
   }
 
   async function loadGrnPage(page, mode) {
@@ -282,7 +302,10 @@ window.bootGrnList = function () {
     if (!replace && !hasMorePages()) return;
 
     listLoading = true;
-    if (replace) showLoadingRow();
+    if (replace) {
+      if (listLoaded === 0) showLoadingRow();
+      else setListLoadingUi(true);
+    }
 
     try {
       const res = await fetch(buildApiUrl(page), {
@@ -336,6 +359,7 @@ window.bootGrnList = function () {
       if (paginationEl) paginationEl.style.display = 'none';
     } finally {
       listLoading = false;
+      setListLoadingUi(false);
     }
   }
 
@@ -531,6 +555,18 @@ window.bootGrnList = function () {
         grnOpenDeleteModal(rno, hint, delBtn);
         return;
       }
+      if (ev.target.closest('a, button')) return;
+      const tr = ev.target.closest('tr.grn-row-clickable');
+      if (!tr) return;
+      openGrnRow(tr);
+    });
+    tbody.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      const tr = ev.target.closest('tr.grn-row-clickable');
+      if (!tr || !tbody.contains(tr)) return;
+      if (ev.target.closest('a, button, input, select, textarea')) return;
+      ev.preventDefault();
+      openGrnRow(tr);
     });
   }
 

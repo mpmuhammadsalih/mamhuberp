@@ -17,6 +17,7 @@ from mobile_backend.services.stock_transfer_service import _erp_session_scope
 
 def _order_features() -> dict[str, bool]:
     from db import (
+        get_sales_minus_billing_order_enabled,
         get_sales_orderno_mandatory_order_enabled,
         is_location_batch_tracking_enabled,
         is_location_bin_tracking_enabled,
@@ -30,6 +31,7 @@ def _order_features() -> dict[str, bool]:
         "bin_tracking_enabled": wh and bool(is_location_bin_tracking_enabled(loc)),
         "batch_tracking_enabled": bool(is_location_batch_tracking_enabled(loc)),
         "orderno_mandatory": bool(get_sales_orderno_mandatory_order_enabled()),
+        "minus_billing_enabled": bool(get_sales_minus_billing_order_enabled()),
     }
 
 
@@ -117,14 +119,24 @@ def _stamp_order_warehouse(
 
 def get_order_open_context(*, peek_billno: bool = True) -> dict[str, Any]:
     from addons.document_numbering.document_numbering_db import DOC_TYPE_SALES_ORDER
-    from db import get_location_info_by_dbkey, get_next_bill_no, get_open_bill_date, peek_next_bill_no
+    from db import get_location_info_by_dbkey, get_next_bill_no
+    from mobile_backend.services.transaction_date_helper import (
+        missing_setup_date_message,
+        open_context as txn_open_context,
+    )
 
     with _erp_session_scope() as username:
         loc = _location_code()
-        open_dt = get_open_bill_date(loc)
-        bill_date = open_dt.strftime("%Y-%m-%d") if open_dt else datetime.now().strftime("%Y-%m-%d")
+        txn = txn_open_context("sales_order", location_code=loc)
+        bill_date = str(txn.get("preferred_date") or "")[:10]
+        if not bill_date:
+            raise ValueError(
+                txn.get("transaction_date_error") or missing_setup_date_message("sales_order")
+            )
         if peek_billno:
-            billno = peek_next_bill_no(loc, None, doc_type=DOC_TYPE_SALES_ORDER)
+            from mobile_backend.services.sales_invoice_service import _fresh_peek_billno
+
+            billno = _fresh_peek_billno(loc, DOC_TYPE_SALES_ORDER, for_order=True)
             reserved = False
         else:
             billno = get_next_bill_no(loc, None, doc_type=DOC_TYPE_SALES_ORDER)
@@ -135,6 +147,11 @@ def get_order_open_context(*, peek_billno: bool = True) -> dict[str, Any]:
         return {
             "billno": billno,
             "bill_date": bill_date,
+            "bill_date_from": str(txn.get("open_date_from") or bill_date)[:10],
+            "bill_date_to": str(txn.get("open_date_to") or bill_date)[:10],
+            "open_date_from": str(txn.get("open_date_from") or bill_date)[:10],
+            "open_date_to": str(txn.get("open_date_to") or bill_date)[:10],
+            "transaction_date_blocked": bool(txn.get("transaction_date_blocked")),
             "bill_time": datetime.now().strftime("%H:%M:%S"),
             "location_code": loc,
             "location_name": str(info.get("locationname") or "").strip(),
@@ -417,9 +434,18 @@ def save_order(payload: dict[str, Any], *, username: str) -> dict[str, Any]:
         if line_err:
             raise ValueError(line_err)
 
+        from mobile_backend.services.transaction_date_helper import resolve_doc_date
+
         header["location_code"] = loc
+        bill_date = resolve_doc_date(
+            "sales_order",
+            header.get("billdate") or header.get("bill_date"),
+            location_code=loc,
+            snap_out_of_range=True,
+        )
+        header["billdate"] = bill_date
+        header["bill_date"] = bill_date
         header.setdefault("createdby", user or username)
-        header.setdefault("billdate", datetime.now().strftime("%Y-%m-%d"))
         header.setdefault("billtime", datetime.now().strftime("%H:%M:%S"))
         header.setdefault("sessioncode", 0)
         header.setdefault("countercode", 0)
@@ -472,11 +498,11 @@ def convert_order_to_invoice(order_billno: Any, *, username: str) -> dict[str, A
     from db import (
         billno_is_valid,
         find_invoice_billno_for_source_sales_order,
-        get_open_bill_date,
         get_sales_order_for_edit,
         mark_sales_order_invoiced,
         parse_billno_from_request,
     )
+    from mobile_backend.services.transaction_date_helper import resolve_doc_date
     from mobile_backend.services import sales_invoice_service
 
     bn = parse_billno_from_request(order_billno)
@@ -535,13 +561,12 @@ def convert_order_to_invoice(order_billno: Any, *, username: str) -> dict[str, A
             if po_note.lower() not in remarks.lower():
                 remarks = "; ".join(filter(None, [remarks, po_note])).strip("; ")
 
-        open_dt = get_open_bill_date(loc)
-        open_date = open_dt.strftime("%Y-%m-%d") if open_dt else datetime.now().strftime("%Y-%m-%d")
-        raw_bd = hdr.get("billdate")
-        if hasattr(raw_bd, "strftime"):
-            billdate = raw_bd.strftime("%Y-%m-%d")
-        else:
-            billdate = str(raw_bd or "").strip()[:10] or open_date
+        billdate = resolve_doc_date(
+            "sales",
+            hdr.get("billdate"),
+            location_code=loc,
+            snap_out_of_range=True,
+        )
 
         inv_header: dict[str, Any] = {
             "customercode": cc,
@@ -578,6 +603,9 @@ def convert_order_to_invoice(order_billno: Any, *, username: str) -> dict[str, A
                     "discount": row.get("discount") or 0,
                     "amount": row.get("amount"),
                     "base_qty": row.get("base_qty"),
+                    "conversion_factor": row.get("conversion_factor")
+                    or row.get("conversionfactor")
+                    or row.get("factor"),
                     "cost": row.get("cost") or 0,
                     "barcode": row.get("barcode") or "",
                     "store": row.get("store") or "",
@@ -653,3 +681,66 @@ def cancel_order(order_billno: Any) -> dict[str, Any]:
             "billstatus": "V",
             "message": f"Sales order {bn} cancelled.",
         }
+
+
+def build_order_pdf(billno: Any) -> tuple[bytes, str]:
+    """ERP cashbilldup sales-order PDF (same layout as desktop Sales Order print)."""
+    from addons.reports.controllers.routes import _generate_cashbilldup_pdf
+    from addons.reports.invoice_templates import get_saved_invoice_template
+    from db import billno_is_valid, get_sales_order_for_edit, parse_billno_from_request
+
+    bn = parse_billno_from_request(billno)
+    if not billno_is_valid(bn):
+        raise ValueError("Invalid bill number.")
+
+    with _erp_session_scope():
+        loc = _location_code()
+        order = get_sales_order_for_edit(loc, bn)
+        if not order:
+            raise ValueError("Sales order not found for PDF.")
+        hdr = order.get("header") or {}
+        lines: list[dict[str, Any]] = []
+        total_discount = 0.0
+        total_amount = 0.0
+        for ln in order.get("lines") or []:
+            qty = _to_float(ln.get("quantity"))
+            rate = _to_float(ln.get("rate"))
+            disc = _to_float(ln.get("discount"))
+            total_discount += disc
+            total_amount += qty * rate - disc
+            lines.append(
+                {
+                    "itemcode": ln.get("item_code"),
+                    "itemname": ln.get("item_name"),
+                    "uom": ln.get("uom"),
+                    "unitofmeasurement": ln.get("uom"),
+                    "quantity": ln.get("quantity"),
+                    "rate": ln.get("rate"),
+                    "discount": ln.get("discount"),
+                    "itdisc": ln.get("discount") or 0,
+                    "amount": ln.get("amount"),
+                }
+            )
+        header = {
+            "customercode": hdr.get("customercode"),
+            "partyname": hdr.get("customername"),
+            "billdate": hdr.get("billdate"),
+            "billtime": hdr.get("billtime"),
+            "remarks": hdr.get("remarks"),
+            "address": hdr.get("address") or "",
+            "locationcode": loc,
+            "orderno": hdr.get("orderno") or "",
+            "discountamount": round(total_discount, 3),
+            "netbillamount": round(total_amount, 3),
+        }
+        pdf_bytes = _generate_cashbilldup_pdf(
+            billno=bn,
+            header=header,
+            lines=lines,
+            invoice_title="SALES ORDER",
+            template=get_saved_invoice_template(),
+        )
+        if not pdf_bytes:
+            raise ValueError("Failed to generate sales order PDF. Check reportlab on the server.")
+        safe = str(bn).replace("/", "-").replace("\\", "-")
+        return pdf_bytes, f"sales_order_{safe}.pdf"

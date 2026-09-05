@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 220" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1040" y2="220" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F5EDE4"/>
+      <stop offset="0.55" stop-color="#FAF6F1"/>
+      <stop offset="1" stop-color="#E8DFD4"/>
+    </linearGradient>
+  </defs>
+  <rect width="1040" height="220" rx="16" fill="url(#bg)"/>
+  <rect x="1" y="1" width="1038" height="218" rx="15" stroke="#e7ddd3" stroke-width="2"/>
+  <text x="48" y="88" font-family="Georgia, 'Times New Roman', serif" font-size="52" font-weight="700" fill="#4A3728">Weekly Deals</text>
+  <text x="48" y="122" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#64748b">Toys, games &amp; gifts kids will love</text>
+  <rect x="48" y="144" width="132" height="40" rx="8" fill="#4A3728"/>
+  <text x="114" y="169" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="1.2" fill="#ffffff">SHOP NOW</text>
+  <rect x="690" y="52" width="88" height="88" rx="14" fill="#ffffff" stroke="#fecdd3" stroke-width="3"/>
+  <rect x="710" y="72" width="48" height="48" rx="8" fill="#ff4b8b" opacity="0.85"/>
+  <rect x="792" y="42" width="96" height="96" rx="14" fill="#ffffff" stroke="#fecdd3" stroke-width="3"/>
+  <circle cx="840" cy="78" r="22" fill="#8b5cf6" opacity="0.85"/>
+  <rect x="900" y="62" width="88" height="88" rx="14" fill="#ffffff" stroke="#fecdd3" stroke-width="3"/>
+  <polygon points="944,88 964,118 924,118" fill="#fbbf24"/>
+  <rect x="748" y="118" width="110" height="72" rx="12" fill="#ffffff" stroke="#fecdd3" stroke-width="3"/>
+  <rect x="768" y="136" width="70" height="36" rx="6" fill="#14b8a6" opacity="0.75"/>
+</svg>

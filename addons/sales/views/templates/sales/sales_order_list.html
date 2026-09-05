@@ -99,7 +99,7 @@
           <td>{{ row.customercode or '-' }}</td>
           <td>{{ row.customername or '-' }}</td>
           <td>{{ row.orderno or '' }}</td>
-          <td class="num">{{ "%.2f"|format((row.netbillamount or 0)|float) }}</td>
+          <td class="num">{{ "%.3f"|format((row.netbillamount or 0)|float) }}</td>
           <td>
             {% if so_st == 'V' %}Cancelled{% elif so_st == 'I' %}Invoiced{% elif so_st == 'P' %}Pending{% else %}{{ row.billstatus or 'P' }}{% endif %}
           </td>
@@ -126,7 +126,7 @@
           <td class="num" id="soTotalAmt">
             {% set ns = namespace(total=0) %}
             {% for r in orders %}{% set ns.total = ns.total + (r.netbillamount|float if r.netbillamount is not none and r.netbillamount != '' else 0) %}{% endfor %}
-            {{ '{:,.2f}'.format(ns.total) }}
+            {{ '{:,.3f}'.format(ns.total) }}
           </td>
           <td colspan="3"></td>
         </tr>
@@ -431,7 +431,7 @@ async function invoiceEachSelected() {
         break;
       }
       if (data.transaction_date_blocked) {
-        alert(data.error || 'No open transaction date.');
+        alert(data.error || 'Setup date is missing. Open a From–To date range in Transaction Date Setup before posting.');
         aborted = true;
         break;
       }
@@ -580,7 +580,7 @@ async function invoiceEachSelected() {
     reindex();
     const totalRows = rows.length;
     if (countEl) countEl.textContent = totalRows ? (vis + ' of ' + totalRows + ' shown') : '0 records';
-    if (totalEl) totalEl.textContent = total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (totalEl) totalEl.textContent = total.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
     updateSalesOrderSelectionUi();
   }
 

@@ -235,29 +235,56 @@ def _amount_in_words(amount: float) -> str:
     return f'{prefix}{words} Only'
 
 
-def _generate_cashbilldup_pdf(billno: int, header: Dict[str, Any], lines: List[Dict[str, Any]], invoice_title: str='INVOICE') -> Optional[bytes]:
-    """Generate Sales Invoice / Return / Order PDF in a professional invoice layout."""
+def _generate_cashbilldup_pdf(
+    billno: int,
+    header: Dict[str, Any],
+    lines: List[Dict[str, Any]],
+    invoice_title: str = 'INVOICE',
+    template: str = 'classic',
+) -> Optional[bytes]:
+    """Generate Sales Invoice / Return / Order PDF in a professional invoice layout.
+
+    ``template`` selects a visual layout: classic | modern | compact | slate.
+    """
     if not REPORTLAB_AVAILABLE:
         return None
     try:
+        from addons.reports.invoice_templates import invoice_template_theme, normalize_invoice_template
+
+        theme = invoice_template_theme(template)
+        template_key = str(theme.get('id') or normalize_invoice_template(template))
+        layout_mode = str(theme.get('layout') or 'split')
+
         buffer = io.BytesIO()
+        # Extra bottom room: amount-in-words + totals (last page) + signature boxes.
         doc = SimpleDocTemplate(
             buffer,
             pagesize=A4,
-            topMargin=0.4 * inch,
-            bottomMargin=1.55 * inch,
-            leftMargin=0.45 * inch,
-            rightMargin=0.45 * inch,
+            topMargin=float(theme.get('top_margin') or 0.4) * inch,
+            bottomMargin=float(theme.get('bottom_margin') or 2.55) * inch,
+            leftMargin=float(theme.get('left_margin') or 0.45) * inch,
+            rightMargin=float(theme.get('right_margin') or 0.45) * inch,
         )
         styles = getSampleStyleSheet()
         arabic_font = _ensure_arabic_pdf_font()
-        BLUE = colors.HexColor('#1a3a6b')
-        BORDER = colors.HexColor('#c5cdd8')
-        GRAY_ROW = colors.HexColor('#f5f7fa')
-        TEXT = colors.HexColor('#1a1a1a')
-        MUTED = colors.HexColor('#555f6b')
-        PAD = 4
+        BLUE = colors.HexColor(str(theme.get('primary') or '#1a3a6b'))
+        BORDER = colors.HexColor(str(theme.get('border') or '#c5cdd8'))
+        GRAY_ROW = colors.HexColor(str(theme.get('row_alt') or '#f5f7fa'))
+        TEXT = colors.HexColor(str(theme.get('text') or '#1a1a1a'))
+        MUTED = colors.HexColor(str(theme.get('muted') or '#555f6b'))
+        PAD = int(theme.get('pad') or 4)
         W = 7.4 * inch
+        GT_BG = colors.HexColor(str(theme.get('gt_bg') or '#eef3fb'))
+        GT_FG = colors.HexColor(str(theme.get('gt_fg') or theme.get('primary') or '#1a3a6b'))
+        ACCENT = colors.HexColor(str(theme.get('accent') or theme.get('primary') or '#1a3a6b'))
+        LOGO_IN = float(theme.get('logo_size') or 0.7) * inch
+        TITLE_SIZE = float(theme.get('title_size') or 18)
+        CO_NAME_SIZE = float(theme.get('co_name_size') or 13)
+        SHOW_ACCENT_RULE = bool(theme.get('accent_rule', True))
+        DISCOUNT_ACCENT = bool(theme.get('discount_accent'))
+        THANK_YOU_FOOTER = bool(theme.get('thank_you_footer'))
+        SKIP_SIGNATURE_BOXES = bool(theme.get('skip_signature_boxes'))
+        IS_RETAIL = layout_mode == 'retail'
 
         def _s(name, **kw):
             base = kw.pop('parent', styles['Normal'])
@@ -269,11 +296,21 @@ def _generate_cashbilldup_pdf(billno: int, header: Dict[str, Any], lines: List[D
         N9 = _s('si9', fontSize=9, leading=11)
         N9B = _s('si9b', fontSize=9, leading=11, fontName='Helvetica-Bold')
         N8R = _s('si8r', fontSize=8, leading=10, alignment=TA_RIGHT)
+        N8R_ACC = _s('si8racc', fontSize=8, leading=10, alignment=TA_RIGHT, textColor=ACCENT)
+        N8R_B = _s('si8rb', fontSize=8, leading=10, alignment=TA_RIGHT, fontName='Helvetica-Bold')
         N8C = _s('si8c', fontSize=8, leading=10, alignment=TA_CENTER)
+        ACCENT_LBL = _s('siaccl', fontSize=8, leading=10, textColor=ACCENT)
+        META_LBL = _s('simetal', fontSize=8, leading=10, textColor=BLUE, fontName='Helvetica-Bold')
         WHT = _s('siwht', fontSize=8.5, leading=11, alignment=TA_CENTER, textColor=colors.white, fontName='Helvetica-Bold')
         WHT_L = _s('siwhtl', fontSize=9, leading=11, textColor=colors.white, fontName='Helvetica-Bold')
-        TITLE = _s('sititle', fontSize=18, leading=22, alignment=TA_RIGHT, textColor=BLUE, fontName='Helvetica-Bold')
-        CO_NAME = _s('sicomp', fontSize=13, leading=16, textColor=BLUE, fontName='Helvetica-Bold')
+        TITLE = _s('sititle', fontSize=TITLE_SIZE, leading=TITLE_SIZE + 4, alignment=TA_RIGHT, textColor=BLUE, fontName='Helvetica-Bold')
+        TITLE_C = _s('sititlec', fontSize=TITLE_SIZE, leading=TITLE_SIZE + 4, alignment=TA_CENTER, textColor=BLUE, fontName='Helvetica-Bold')
+        TITLE_W = _s('sititlew', fontSize=TITLE_SIZE, leading=TITLE_SIZE + 4, alignment=TA_CENTER, textColor=colors.white, fontName='Helvetica-Bold')
+        CO_NAME = _s('sicomp', fontSize=CO_NAME_SIZE, leading=CO_NAME_SIZE + 3, textColor=BLUE, fontName='Helvetica-Bold')
+        CO_NAME_C = _s('sicompc', fontSize=CO_NAME_SIZE, leading=CO_NAME_SIZE + 3, alignment=TA_CENTER, textColor=BLUE, fontName='Helvetica-Bold')
+        CO_NAME_W = _s('sicompw', fontSize=CO_NAME_SIZE, leading=CO_NAME_SIZE + 3, alignment=TA_CENTER, textColor=colors.white, fontName='Helvetica-Bold')
+        N8M_C = _s('si8mc', fontSize=8, leading=10, alignment=TA_CENTER, textColor=MUTED)
+        N8M_W = _s('si8mw', fontSize=8, leading=10, alignment=TA_CENTER, textColor=colors.HexColor('#cbd5e1'))
 
         # Sample uses INVOICE (not TAX INVOICE). Keep RETURN / ORDER titles as-is.
         raw_title = str(invoice_title or 'INVOICE').strip().upper()
@@ -283,6 +320,8 @@ def _generate_cashbilldup_pdf(billno: int, header: Dict[str, Any], lines: List[D
             display_title = raw_title
         # Sales returns store qty/amounts as negative — print absolute values (no "-" sign).
         is_sales_return_pdf = 'RETURN' in raw_title
+        is_sales_order_pdf = display_title == 'SALES ORDER'
+        amt_decimals = 3 if is_sales_order_pdf else 2
 
         customer_code = str(header.get('customercode') or '')
         customer_name = str(header.get('customername') or '')
@@ -307,7 +346,26 @@ def _generate_cashbilldup_pdf(billno: int, header: Dict[str, Any], lines: List[D
         company_phone = ''
         company_email = ''
         company_tax = ''
+        company_website = ''
         company_logo = ''
+        company_profile_logo = ''
+
+        def _resolve_static_logo_abs(logo_rel: str) -> str:
+            rel = str(logo_rel or '').strip().lstrip('/').replace('\\', '/')
+            if not rel:
+                return ''
+            # LOCATIONMASTER / COMPANYPROFILE store paths relative to static/
+            if rel.lower().startswith('static/'):
+                rel = rel[7:]
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+            for base in (
+                os.path.join(project_root, 'static'),
+                os.path.join(os.getcwd(), 'static'),
+            ):
+                cand = os.path.abspath(os.path.join(base, rel.replace('/', os.sep)))
+                if os.path.isfile(cand):
+                    return cand
+            return ''
 
         try:
             from db import get_company_profile
@@ -329,18 +387,70 @@ def _generate_cashbilldup_pdf(billno: int, header: Dict[str, Any], lines: List[D
             company_phone = str(cp.get('phone') or cp.get('PHONE') or '').strip() or company_phone
             company_email = str(cp.get('email') or cp.get('EMAIL') or '').strip() or company_email
             company_tax = str(cp.get('tax_id') or cp.get('TAX_ID') or '').strip()
-            logo_rel = str(cp.get('logo_path') or cp.get('LOGO_PATH') or '').strip()
-            if logo_rel:
-                for base in (
-                    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), 'static'),
-                    os.path.join(os.getcwd(), 'static'),
-                ):
-                    cand = os.path.abspath(os.path.join(base, logo_rel.replace('/', os.sep)))
-                    if os.path.isfile(cand):
-                        company_logo = cand
-                        break
+            company_website = str(cp.get('website') or cp.get('WEBSITE') or '').strip()
+            company_profile_logo = _resolve_static_logo_abs(
+                str(cp.get('logo_path') or cp.get('LOGO_PATH') or '').strip()
+            )
         except Exception:
             pass
+
+        # Prefer branch logo (LOCATIONMASTER.LOGO_PATH) — same precedence as LPO PDF.
+        loc_code_val = header.get('locationcode')
+        if loc_code_val in (None, '', 'None'):
+            try:
+                loc_code_val = session.get('location_code')
+            except Exception:
+                loc_code_val = None
+        try:
+            from db import get_location_master_row
+
+            loc_row = None
+            try:
+                lc_i = int(loc_code_val) if loc_code_val not in (None, '', 'None') else None
+            except (TypeError, ValueError):
+                lc_i = None
+            if lc_i is not None:
+                loc_row = get_location_master_row(lc_i)
+            if loc_row:
+                branch_logo = _resolve_static_logo_abs(
+                    str(loc_row.get('logo_path') or loc_row.get('LOGO_PATH') or '').strip()
+                )
+                if branch_logo:
+                    company_logo = branch_logo
+                loc_name = str(loc_row.get('locationname') or loc_row.get('LOCATIONNAME') or '').strip()
+                if loc_name and (not company_name or company_name == 'Nexus Erp'):
+                    company_name = loc_name
+                for key, dest in (
+                    ('address', 'company_address'),
+                    ('address1', 'company_address'),
+                    ('locationaddress', 'company_address'),
+                    ('phone', 'company_phone'),
+                    ('telephone', 'company_phone'),
+                    ('telno', 'company_phone'),
+                    ('email', 'company_email'),
+                    ('emailid', 'company_email'),
+                    ('gstin', 'company_tax'),
+                    ('gstno', 'company_tax'),
+                    ('taxno', 'company_tax'),
+                    ('tax_id', 'company_tax'),
+                    ('trn', 'company_tax'),
+                ):
+                    val = str(loc_row.get(key) or loc_row.get(key.upper()) or '').strip()
+                    if not val:
+                        continue
+                    if dest == 'company_address' and not company_address:
+                        company_address = val
+                    elif dest == 'company_phone' and not company_phone:
+                        company_phone = val
+                    elif dest == 'company_email' and not company_email:
+                        company_email = val
+                    elif dest == 'company_tax' and not company_tax:
+                        company_tax = val
+        except Exception:
+            pass
+
+        if not company_logo:
+            company_logo = company_profile_logo
 
         try:
             loc_tbl = 'LOCATIONMASTER'
@@ -360,7 +470,6 @@ def _generate_cashbilldup_pdf(billno: int, header: Dict[str, Any], lines: List[D
                 sel_cols.append(tax_col)
             where_parts = ["BASELOCATIONFLAG = 'Y'"]
             params: Dict[str, Any] = {}
-            loc_code_val = header.get('locationcode')
             if loc_code_col and loc_code_val not in (None, '', 'None'):
                 where_parts = [f'{loc_code_col} = :loc']
                 params['loc'] = loc_code_val
@@ -382,16 +491,16 @@ def _generate_cashbilldup_pdf(billno: int, header: Dict[str, Any], lines: List[D
 
         if customer_code and (not customer_phone or not customer_mobile):
             try:
-                cust_tbl = 'CUSTOMERS'
-                cust_code_col = _detect_column(cust_tbl, ['CUSTOMERCODE', 'CUST_CODE', 'CODE'])
-                cust_phone_col = _detect_column(cust_tbl, ['PHONE', 'TELEPHONE', 'TELNO', 'PHONE1', 'LANDLINE'])
-                cust_mobile_col = _detect_column(cust_tbl, ['MOBILE', 'MOBILENO', 'MOBILE_NO', 'MOBNO', 'MOBILE1'])
+                cust_tbl = _detect_table(['CUSTOMER', 'customer', 'CUSTOMERS', 'customers'])
+                cust_code_col = _detect_column(cust_tbl, ['CUSTOMERCODE', 'CUST_CODE', 'CODE']) if cust_tbl else None
+                cust_phone_col = _detect_column(cust_tbl, ['PHONE', 'TELEPHONE', 'TELNO', 'PHONE1', 'LANDLINE']) if cust_tbl else None
+                cust_mobile_col = _detect_column(cust_tbl, ['MOBILE', 'MOBILENO', 'MOBILE_NO', 'MOBNO', 'MOBILE1']) if cust_tbl else None
                 select_cols = []
                 if cust_phone_col:
                     select_cols.append(cust_phone_col)
                 if cust_mobile_col and cust_mobile_col not in select_cols:
                     select_cols.append(cust_mobile_col)
-                if cust_code_col and select_cols:
+                if cust_tbl and cust_code_col and select_cols:
                     c_rows = _safe_rows(f"SELECT {', '.join(select_cols)} FROM {cust_tbl} WHERE {cust_code_col} = :cc", {'cc': customer_code})
                     if c_rows:
                         c0 = c_rows[0]
@@ -405,6 +514,30 @@ def _generate_cashbilldup_pdf(billno: int, header: Dict[str, Any], lines: List[D
         cust_phone_display = customer_phone or customer_mobile
         if customer_phone and customer_mobile and customer_phone != customer_mobile:
             cust_phone_display = f'{customer_phone} / {customer_mobile}'
+
+        # Dedicated Gulf Nova layout (exact navy/red mockup)
+        if str(template_key or '').strip().lower() == 'gulfnova':
+            try:
+                from addons.reports.gulfnova_invoice_pdf import build_gulfnova_invoice_pdf
+
+                pdf_bytes = build_gulfnova_invoice_pdf(
+                    billno,
+                    header,
+                    lines,
+                    invoice_title=invoice_title,
+                    company_name=company_name,
+                    company_address=company_address,
+                    company_phone=company_phone,
+                    company_email=company_email,
+                    company_tax=company_tax,
+                    company_website=company_website,
+                    company_logo=company_logo,
+                    arabic_font=arabic_font,
+                )
+                if pdf_bytes:
+                    return pdf_bytes
+            except Exception:
+                pass
 
         subtotal = 0.0
         line_disc_total = 0.0
@@ -450,11 +583,11 @@ def _generate_cashbilldup_pdf(billno: int, header: Dict[str, Any], lines: List[D
                 Paragraph(str(row.get('slno') or idx), N8C),
                 Paragraph(_xml_escape(str(row.get('itemcode') or '')), N8C),
                 Paragraph(item_name_cell or '', N8),
-                Paragraph(f'{print_qty:.2f}', N8R),
+                Paragraph(f'{print_qty:.{amt_decimals}f}', N8R),
                 Paragraph(_xml_escape(str(row.get('unitofmeasurement') or row.get('uom') or '')), N8C),
                 Paragraph(f'{rate:.3f}', N8R),
-                Paragraph(f'{print_disc:.2f}', N8R),
-                Paragraph(f'{print_amt:.2f}', N8R),
+                Paragraph(f'{print_disc:.{amt_decimals}f}', N8R_ACC if DISCOUNT_ACCENT else N8R),
+                Paragraph(f'{print_amt:.{amt_decimals}f}', N8R_B if IS_RETAIL else N8R),
             ])
 
         header_disc = float(header.get('discountamount') or 0)
@@ -476,7 +609,7 @@ def _generate_cashbilldup_pdf(billno: int, header: Dict[str, Any], lines: List[D
 
         elements: List[Any] = []
 
-        # 1. HEADER: company left + title/meta right
+        # 1. HEADER — layout varies by invoice template
         co_bits = [Paragraph(_xml_escape(company_name), CO_NAME)]
         if company_address:
             co_bits.append(Paragraph(_xml_escape(company_address), N8M))
@@ -487,36 +620,25 @@ def _generate_cashbilldup_pdf(billno: int, header: Dict[str, Any], lines: List[D
         if company_tax:
             co_bits.append(Paragraph(f'Tax / GST No.: {_xml_escape(company_tax)}', N8M))
 
-        left_header_content: Any = co_bits
+        logo_cell: Any = ''
         if company_logo and Image is not None:
             try:
-                logo_img = Image(company_logo, width=0.55 * inch, height=0.55 * inch, kind='proportional')
-                left_header_content = Table(
-                    [[logo_img, co_bits]],
-                    colWidths=[0.65 * inch, 3.55 * inch],
-                )
-                left_header_content.setStyle(TableStyle([
-                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                    ('LEFTPADDING', (0, 0), (-1, -1), 0),
-                    ('RIGHTPADDING', (0, 0), (-1, -1), 2),
-                    ('TOPPADDING', (0, 0), (-1, -1), 0),
-                    ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
-                ]))
+                logo_cell = Image(company_logo, width=LOGO_IN, height=LOGO_IN, kind='proportional')
             except Exception:
-                left_header_content = co_bits
+                logo_cell = ''
 
         meta_rows = [
-            [Paragraph('<b>Invoice No.</b>', N8M), Paragraph(f':  {_xml_escape(str(billno))}', N8)],
-            [Paragraph('<b>Invoice Date</b>', N8M), Paragraph(f':  {_xml_escape(bill_date_display)}', N8)],
+            [Paragraph('<b>Invoice No.</b>', META_LBL if IS_RETAIL else N8M), Paragraph(f':  {_xml_escape(str(billno))}', N8)],
+            [Paragraph('<b>Invoice Date</b>', META_LBL if IS_RETAIL else N8M), Paragraph(f':  {_xml_escape(bill_date_display)}', N8)],
         ]
         if bill_time:
-            meta_rows.append([Paragraph('<b>Time</b>', N8M), Paragraph(f':  {_xml_escape(bill_time)}', N8)])
+            meta_rows.append([Paragraph('<b>Time</b>', META_LBL if IS_RETAIL else N8M), Paragraph(f':  {_xml_escape(bill_time)}', N8)])
         if order_no:
-            meta_rows.append([Paragraph('<b>PO / Reference</b>', N8M), Paragraph(f':  {_xml_escape(order_no)}', N8)])
+            meta_rows.append([Paragraph('<b>PO / Reference</b>', META_LBL if IS_RETAIL else N8M), Paragraph(f':  {_xml_escape(order_no)}', N8)])
         if created_by:
-            meta_rows.append([Paragraph('<b>Created By</b>', N8M), Paragraph(f':  {_xml_escape(created_by)}', N8)])
+            meta_rows.append([Paragraph('<b>Created By</b>', META_LBL if IS_RETAIL else N8M), Paragraph(f':  {_xml_escape(created_by)}', N8)])
         if prepared_by:
-            meta_rows.append([Paragraph('<b>Prepared By</b>', N8M), Paragraph(f':  {_xml_escape(prepared_by)}', N8)])
+            meta_rows.append([Paragraph('<b>Prepared By</b>', META_LBL if IS_RETAIL else N8M), Paragraph(f':  {_xml_escape(prepared_by)}', N8)])
         meta_tbl = Table(meta_rows, colWidths=[1.05 * inch, 2.0 * inch])
         meta_tbl.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
@@ -525,22 +647,156 @@ def _generate_cashbilldup_pdf(billno: int, header: Dict[str, Any], lines: List[D
             ('TOPPADDING', (0, 0), (-1, -1), 1),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
         ]))
-        right_header = [Paragraph(_xml_escape(display_title), TITLE), Spacer(1, 4), meta_tbl]
 
-        hdr_outer = Table([[left_header_content, right_header]], colWidths=[4.2 * inch, 3.2 * inch], hAlign='LEFT')
-        hdr_outer.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 0),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-            ('TOPPADDING', (0, 0), (-1, -1), 0),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
-        ]))
-        elements.append(hdr_outer)
-        elements.append(Spacer(1, 6))
-        rule = Table([['']], colWidths=[W], rowHeights=[2.2], hAlign='LEFT')
-        rule.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, -1), BLUE)]))
-        elements.append(rule)
-        elements.append(Spacer(1, 8))
+        if layout_mode == 'banner':
+            banner_bits: List[Any] = []
+            if logo_cell:
+                banner_bits.append(logo_cell)
+            banner_bits.append(Paragraph(_xml_escape(company_name), CO_NAME_W))
+            if company_address:
+                banner_bits.append(Paragraph(_xml_escape(company_address), N8M_W))
+            banner_bits.append(Spacer(1, 4))
+            banner_bits.append(Paragraph(_xml_escape(display_title), TITLE_W))
+            banner_inner = Table([[banner_bits]], colWidths=[W])
+            banner_inner.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), BLUE),
+                ('LEFTPADDING', (0, 0), (-1, -1), 12),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 12),
+                ('TOPPADDING', (0, 0), (-1, -1), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ]))
+            elements.append(banner_inner)
+            elements.append(Spacer(1, 8))
+            meta_wrap = Table([[meta_tbl]], colWidths=[W], hAlign='LEFT')
+            meta_wrap.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ]))
+            elements.append(meta_wrap)
+            elements.append(Spacer(1, 6))
+        elif layout_mode == 'centered':
+            center_bits: List[Any] = []
+            if logo_cell:
+                center_bits.append(logo_cell)
+            center_bits.append(Paragraph(_xml_escape(company_name), CO_NAME_C))
+            if company_address:
+                center_bits.append(Paragraph(_xml_escape(company_address), N8M_C))
+            if company_phone or company_email:
+                contact = ' · '.join(p for p in [company_phone, company_email] if p)
+                center_bits.append(Paragraph(_xml_escape(contact), N8M_C))
+            center_bits.append(Spacer(1, 4))
+            center_bits.append(Paragraph(_xml_escape(display_title), TITLE_C))
+            brand = Table([[center_bits]], colWidths=[W], hAlign='LEFT')
+            brand.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ]))
+            elements.append(brand)
+            elements.append(Spacer(1, 6))
+            if SHOW_ACCENT_RULE:
+                rule = Table([['']], colWidths=[W], rowHeights=[2.2], hAlign='LEFT')
+                rule.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, -1), BLUE)]))
+                elements.append(rule)
+                elements.append(Spacer(1, 6))
+            meta_wrap = Table([[meta_tbl]], colWidths=[W], hAlign='LEFT')
+            meta_wrap.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ]))
+            elements.append(meta_wrap)
+            elements.append(Spacer(1, 8))
+        elif layout_mode == 'retail':
+            # Gulf Nova retail: logo + dual-tone company name left, INVOICE + meta right
+            name_parts = [p for p in str(company_name or '').strip().split() if p]
+            if len(name_parts) >= 2:
+                mid = max(1, len(name_parts) // 2)
+                name_html = (
+                    f'<font color="#002060"><b>{" ".join(name_parts[:mid])}</b></font><br/>'
+                    f'<font color="#c41e3a"><b>{" ".join(name_parts[mid:])}</b></font>'
+                )
+            else:
+                name_html = f'<font color="#002060"><b>{_xml_escape(company_name)}</b></font>'
+            retail_co = [Paragraph(name_html, _s('sirname', fontSize=CO_NAME_SIZE, leading=CO_NAME_SIZE + 4))]
+            if company_address:
+                retail_co.append(Paragraph(f'• {_xml_escape(company_address)}', ACCENT_LBL))
+            if company_phone:
+                retail_co.append(Paragraph(f'Tel: {_xml_escape(company_phone)}', ACCENT_LBL))
+            if company_email:
+                retail_co.append(Paragraph(f'Email: {_xml_escape(company_email)}', ACCENT_LBL))
+            if company_tax:
+                retail_co.append(Paragraph(f'Tax: {_xml_escape(company_tax)}', N8M))
+            left_header_content: Any = retail_co
+            if logo_cell:
+                left_header_content = Table(
+                    [[logo_cell, retail_co]],
+                    colWidths=[LOGO_IN + 0.12 * inch, max(2.6 * inch, 4.1 * inch - LOGO_IN - 0.12 * inch)],
+                )
+                left_header_content.setStyle(TableStyle([
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+                    ('TOPPADDING', (0, 0), (-1, -1), 0),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+                ]))
+            title_bits = [
+                Paragraph(_xml_escape(display_title), TITLE),
+                Table([['']], colWidths=[1.6 * inch], rowHeights=[2.0]),
+            ]
+            title_bits[1].setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), ACCENT),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ]))
+            title_bits.append(Spacer(1, 6))
+            title_bits.append(meta_tbl)
+            right_header = title_bits
+            hdr_outer = Table([[left_header_content, right_header]], colWidths=[4.3 * inch, 3.1 * inch], hAlign='LEFT')
+            hdr_outer.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                ('TOPPADDING', (0, 0), (-1, -1), 0),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            ]))
+            elements.append(hdr_outer)
+            elements.append(Spacer(1, 10))
+        else:
+            # classic / dense — company left, title+meta right
+            left_header_content = co_bits
+            if logo_cell:
+                left_header_content = Table(
+                    [[logo_cell, co_bits]],
+                    colWidths=[LOGO_IN + 0.15 * inch, max(2.8 * inch, 4.2 * inch - LOGO_IN - 0.15 * inch)],
+                )
+                left_header_content.setStyle(TableStyle([
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+                    ('TOPPADDING', (0, 0), (-1, -1), 0),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+                ]))
+            right_header = [Paragraph(_xml_escape(display_title), TITLE), Spacer(1, 4), meta_tbl]
+            hdr_outer = Table([[left_header_content, right_header]], colWidths=[4.2 * inch, 3.2 * inch], hAlign='LEFT')
+            hdr_outer.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                ('TOPPADDING', (0, 0), (-1, -1), 0),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            ]))
+            elements.append(hdr_outer)
+            elements.append(Spacer(1, 4 if layout_mode == 'dense' else 6))
+            if SHOW_ACCENT_RULE:
+                rule = Table([['']], colWidths=[W], rowHeights=[1.6 if layout_mode == 'dense' else 2.2], hAlign='LEFT')
+                rule.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, -1), BLUE)]))
+                elements.append(rule)
+                elements.append(Spacer(1, 6 if layout_mode == 'dense' else 8))
 
         # 2. BILL TO
         bill_body_lines = []
@@ -564,8 +820,9 @@ def _generate_cashbilldup_pdf(billno: int, header: Dict[str, Any], lines: List[D
             colWidths=[items_w],
             hAlign='LEFT',
         )
+        bill_hdr_color = ACCENT if IS_RETAIL else BLUE
         bill_inner.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), BLUE),
+            ('BACKGROUND', (0, 0), (-1, 0), bill_hdr_color),
             ('BACKGROUND', (0, 1), (-1, 1), colors.white),
             ('BOX', (0, 0), (-1, -1), 0.6, BORDER),
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
@@ -593,59 +850,168 @@ def _generate_cashbilldup_pdf(billno: int, header: Dict[str, Any], lines: List[D
             ('RIGHTPADDING', (0, 0), (-1, -1), 3),
         ]))
         elements.append(lines_tbl)
-        elements.append(Spacer(1, 8))
-
-        # 4. AMOUNT IN WORDS + TOTALS
-        words_bits = [
-            Paragraph('<b>Amount in Words:</b>', N8M),
-            Paragraph(_xml_escape(_amount_in_words(net_amount)), N9B),
-        ]
-        if remarks:
-            words_bits.append(Spacer(1, 4))
-            words_bits.append(Paragraph('<b>Remarks:</b>', N8M))
-            words_bits.append(Paragraph(_xml_escape(remarks).replace('\n', '<br/>'), N8))
-
-        SL = _s('sisl', fontSize=9, leading=11, alignment=TA_LEFT, textColor=MUTED)
-        SR = _s('sisr', fontSize=9, leading=11, alignment=TA_RIGHT)
-        GT_L = _s('sigtl', fontSize=10, leading=13, alignment=TA_LEFT, textColor=BLUE, fontName='Helvetica-Bold')
-        GT_R = _s('sigtr', fontSize=10, leading=13, alignment=TA_RIGHT, textColor=BLUE, fontName='Helvetica-Bold')
-        sum_rows = [
-            [Paragraph('Sub Total', SL), Paragraph(f'{subtotal:,.2f}', SR)],
-            [Paragraph('Discount', SL), Paragraph(f'{total_discount:,.2f}', SR)],
-            [Paragraph('GRAND TOTAL', GT_L), Paragraph(f'{net_amount:,.2f}', GT_R)],
-        ]
-        # Equal label/value columns; box width matches last 3 item columns (Unit Price+Discount+Amount)
-        sum_col = 1.15 * inch
-        sum_tbl = Table(sum_rows, colWidths=[sum_col, sum_col])
-        sum_tbl.setStyle(TableStyle([
-            ('BOX', (0, 0), (-1, -1), 0.7, BLUE),
-            ('LINEBELOW', (0, 0), (-1, -2), 0.3, BORDER),
-            ('LINEABOVE', (0, -1), (-1, -1), 1.0, BLUE),
-            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#eef3fb')),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('TOPPADDING', (0, 0), (-1, -1), 5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-            ('LEFTPADDING', (0, 0), (-1, -1), 6),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-        ]))
-
-        sum_w = sum_col * 2
-        words_w = items_w - sum_w
-        bottom_row = Table([[words_bits, sum_tbl]], colWidths=[words_w, sum_w], hAlign='LEFT')
-        bottom_row.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 0),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-            ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
-        ]))
-        elements.append(bottom_row)
+        # Amount in Words + totals are drawn at the bottom of the last page
+        # (above signature boxes) — see _draw_page_footer.
 
         printed_on = datetime.now().strftime('%d-%m-%Y %H:%M')
         prepared_name = (created_by or prepared_by or '').strip()
         prepared_date = (bill_date_display or '').strip()
+        amount_words = _amount_in_words(net_amount)
+        remarks_footer = str(remarks or '').strip()
+
+        def _draw_amount_totals(canv, x_left: float, usable_w: float, y_bottom: float) -> None:
+            """Amount in Words (left) + Sub Total / Discount / GRAND TOTAL box (right)."""
+            sum_w = 2.3 * inch
+            sum_h = 0.92 * inch
+            gap = 0.15 * inch
+            words_w = max(usable_w - sum_w - gap, 2.0 * inch)
+            sum_x = x_left + usable_w - sum_w
+            words_x = x_left + (10 if IS_RETAIL else 0)
+
+            canv.saveState()
+            if IS_RETAIL:
+                # Red accent bar beside amount-in-words
+                canv.setFillColor(ACCENT)
+                canv.rect(x_left, y_bottom + 6, 3.2, sum_h - 10, stroke=0, fill=1)
+
+            # Left: amount in words
+            canv.setFillColor(BLUE if IS_RETAIL else MUTED)
+            canv.setFont('Helvetica', 8)
+            canv.drawString(words_x, y_bottom + sum_h - 12, 'Amount in Words:')
+            canv.setFillColor(TEXT)
+            canv.setFont('Helvetica-Bold', 10 if IS_RETAIL else 9)
+            words_y = y_bottom + sum_h - 26
+            max_chars = max(28, int(words_w / 5.2))
+            words = amount_words
+            while words:
+                chunk = words[:max_chars]
+                if len(words) > max_chars:
+                    sp = chunk.rfind(' ')
+                    if sp > 12:
+                        chunk = chunk[:sp]
+                canv.drawString(words_x, words_y, chunk)
+                words = words[len(chunk):].lstrip()
+                words_y -= 11
+                if words_y < y_bottom + 8:
+                    break
+            if remarks_footer and words_y >= y_bottom + 20:
+                canv.setFillColor(MUTED)
+                canv.setFont('Helvetica', 7.5)
+                canv.drawString(words_x if IS_RETAIL else x_left, words_y - 2, 'Notes:' if IS_RETAIL else 'Remarks:')
+                canv.setFillColor(TEXT)
+                canv.setFont('Helvetica', 7.5)
+                rem = remarks_footer.replace('\n', ' ')[:max_chars]
+                canv.drawString(words_x if IS_RETAIL else x_left, words_y - 13, rem)
+
+            # Right: totals box
+            row_h = sum_h / 3.0
+            box_stroke = ACCENT if IS_RETAIL else BLUE
+            canv.setStrokeColor(box_stroke)
+            canv.setLineWidth(0.8)
+            canv.setFillColor(colors.white)
+            canv.rect(sum_x, y_bottom, sum_w, sum_h, stroke=1, fill=1)
+
+            rows = (
+                ('Sub Total', f'{subtotal:,.{amt_decimals}f}', False),
+                ('Discount', f'{total_discount:,.{amt_decimals}f}', False),
+                ('GRAND TOTAL', f'{net_amount:,.{amt_decimals}f}', True),
+            )
+            for i, (label, value, is_gt) in enumerate(rows):
+                ry = y_bottom + sum_h - (i + 1) * row_h
+                if is_gt:
+                    canv.setFillColor(GT_BG)
+                    canv.rect(sum_x, ry, sum_w, row_h, stroke=0, fill=1)
+                    if not IS_RETAIL:
+                        canv.setStrokeColor(BLUE)
+                        canv.setLineWidth(1.0)
+                        canv.line(sum_x, ry + row_h, sum_x + sum_w, ry + row_h)
+                    canv.setFillColor(GT_FG)
+                    canv.setFont('Helvetica-Bold', 9)
+                else:
+                    canv.setFillColor(MUTED)
+                    canv.setFont('Helvetica', 8.5)
+                    if i < 2:
+                        canv.setStrokeColor(BORDER)
+                        canv.setLineWidth(0.35)
+                        canv.line(sum_x + 4, ry, sum_x + sum_w - 4, ry)
+                text_y = ry + row_h * 0.32
+                canv.drawString(sum_x + 8, text_y, label)
+                if is_gt:
+                    font_name, font_size = 'Helvetica-Bold', 9
+                    canv.setFillColor(GT_FG)
+                else:
+                    font_name, font_size = 'Helvetica', 8.5
+                    canv.setFillColor(TEXT)
+                canv.setFont(font_name, font_size)
+                vw = canv.stringWidth(value, font_name, font_size)
+                canv.drawString(sum_x + sum_w - 8 - vw, text_y, value)
+
+            canv.setStrokeColor(box_stroke)
+            canv.setLineWidth(0.8)
+            canv.rect(sum_x, y_bottom, sum_w, sum_h, stroke=1, fill=0)
+            canv.restoreState()
+
+        def _draw_thank_you_footer(canv, x_left: float, x_right: float, usable_w: float) -> None:
+            """Retail thank-you ribbon + contact strip + corner accents."""
+            mid_y = 0.72 * inch
+            canv.saveState()
+            # Corner triangles
+            canv.setFillColor(BLUE)
+            path = canv.beginPath()
+            path.moveTo(x_left - 0.15 * inch, 0)
+            path.lineTo(x_left + 0.55 * inch, 0)
+            path.lineTo(x_left - 0.15 * inch, 0.35 * inch)
+            path.close()
+            canv.drawPath(path, stroke=0, fill=1)
+            canv.setFillColor(ACCENT)
+            path2 = canv.beginPath()
+            path2.moveTo(x_right + 0.15 * inch, 0)
+            path2.lineTo(x_right - 0.55 * inch, 0)
+            path2.lineTo(x_right + 0.15 * inch, 0.35 * inch)
+            path2.close()
+            canv.drawPath(path2, stroke=0, fill=1)
+
+            # Thank-you ribbon
+            ribbon_w = 3.4 * inch
+            ribbon_h = 0.28 * inch
+            ribbon_x = x_left + (usable_w - ribbon_w) / 2.0
+            canv.setStrokeColor(ACCENT)
+            canv.setLineWidth(1.0)
+            canv.line(x_left, mid_y + ribbon_h / 2, ribbon_x - 0.05 * inch, mid_y + ribbon_h / 2)
+            canv.line(ribbon_x + ribbon_w + 0.05 * inch, mid_y + ribbon_h / 2, x_right, mid_y + ribbon_h / 2)
+            canv.setFillColor(BLUE)
+            path3 = canv.beginPath()
+            path3.moveTo(ribbon_x + 0.12 * inch, mid_y)
+            path3.lineTo(ribbon_x, mid_y + ribbon_h / 2)
+            path3.lineTo(ribbon_x + 0.12 * inch, mid_y + ribbon_h)
+            path3.lineTo(ribbon_x + ribbon_w - 0.12 * inch, mid_y + ribbon_h)
+            path3.lineTo(ribbon_x + ribbon_w, mid_y + ribbon_h / 2)
+            path3.lineTo(ribbon_x + ribbon_w - 0.12 * inch, mid_y)
+            path3.close()
+            canv.drawPath(path3, stroke=0, fill=1)
+            canv.setFillColor(colors.white)
+            canv.setFont('Helvetica-Oblique', 9)
+            msg = 'Thank you for your business!'
+            mw = canv.stringWidth(msg, 'Helvetica-Oblique', 9)
+            canv.drawString(ribbon_x + (ribbon_w - mw) / 2.0, mid_y + 0.08 * inch, msg)
+
+            # Contact strip
+            contact_y = 0.38 * inch
+            parts = [p for p in [
+                company_phone and f'Tel: {company_phone}',
+                company_email and f'Email: {company_email}',
+                company_address and company_address[:42],
+            ] if p]
+            if parts:
+                canv.setFillColor(MUTED)
+                canv.setFont('Helvetica', 7.5)
+                text = '   |   '.join(parts)
+                tw = canv.stringWidth(text, 'Helvetica', 7.5)
+                canv.drawString(x_left + max(0, (usable_w - tw) / 2.0), contact_y, text[:120])
+            canv.restoreState()
 
         def _draw_page_footer(canv, pdf_doc):
-            """Fixed footer: Prepared By / Received By / Authorized Signatory boxes + page meta."""
+            """Fixed footer: totals (last page) + signatures or retail thank-you chrome."""
             x_left = pdf_doc.leftMargin
             x_right = pdf_doc.pagesize[0] - pdf_doc.rightMargin
             usable_w = x_right - x_left
@@ -653,62 +1019,97 @@ def _generate_cashbilldup_pdf(billno: int, header: Dict[str, Any], lines: List[D
             box_w = (usable_w - 2 * gap) / 3.0
             box_h = 1.05 * inch
             box_y = 0.32 * inch
+            totals_h = 0.95 * inch
+            # Always reserve room for signature boxes unless explicitly skipped.
+            totals_y = box_y + box_h + 0.14 * inch
+            if SKIP_SIGNATURE_BOXES:
+                totals_y = 1.15 * inch
             titles = ('Prepared By', 'Received By', 'Authorized Signatory')
             extras = ('', '', '(Company Seal)')
-            # Pre-fill Prepared By name (and date) from the bill creator / bill date.
             name_fills = (prepared_name, '', '')
             date_fills = (prepared_date, '', '')
 
             canv.saveState()
-            for i, title in enumerate(titles):
-                bx = x_left + i * (box_w + gap)
-                canv.setStrokeColor(BORDER)
-                canv.setFillColor(colors.white)
-                canv.setLineWidth(0.6)
-                canv.rect(bx, box_y, box_w, box_h, stroke=1, fill=1)
+            page_count = getattr(canv, '_cashbill_page_count', None)
+            page_no = getattr(canv, '_pageNumber', pdf_doc.page)
+            is_last = page_count is None or page_no == page_count
+            if is_last:
+                _draw_amount_totals(canv, x_left, usable_w, totals_y)
+                if THANK_YOU_FOOTER and SKIP_SIGNATURE_BOXES:
+                    _draw_thank_you_footer(canv, x_left, x_right, usable_w)
 
-                canv.setFillColor(TEXT)
-                canv.setFont('Helvetica-Bold', 8)
-                canv.drawString(bx + 8, box_y + box_h - 14, title)
+            # Signature boxes on every page (classic invoice footer).
+            if not SKIP_SIGNATURE_BOXES:
+                for i, title in enumerate(titles):
+                    bx = x_left + i * (box_w + gap)
+                    canv.setStrokeColor(BORDER)
+                    canv.setFillColor(colors.white)
+                    canv.setLineWidth(0.6)
+                    canv.rect(bx, box_y, box_w, box_h, stroke=1, fill=1)
 
-                canv.setStrokeColor(MUTED)
-                canv.setLineWidth(0.4)
-                line_y = box_y + box_h - 36
-                canv.line(bx + 8, line_y, bx + box_w - 8, line_y)
-
-                canv.setFillColor(MUTED)
-                canv.setFont('Helvetica', 7.5)
-                nm = name_fills[i]
-                dt = date_fills[i]
-                if nm:
                     canv.setFillColor(TEXT)
-                    canv.setFont('Helvetica', 8)
-                    canv.drawString(bx + 8, box_y + 28, f'Name: {nm}'[:48])
-                else:
-                    canv.drawString(bx + 8, box_y + 28, 'Name: ____________________')
-                if dt:
-                    canv.setFillColor(TEXT)
-                    canv.setFont('Helvetica', 8)
-                    canv.drawString(bx + 8, box_y + 14, f'Date: {dt}'[:48])
-                else:
+                    canv.setFont('Helvetica-Bold', 8)
+                    canv.drawString(bx + 8, box_y + box_h - 14, title)
+
+                    canv.setStrokeColor(MUTED)
+                    canv.setLineWidth(0.4)
+                    line_y = box_y + box_h - 36
+                    canv.line(bx + 8, line_y, bx + box_w - 8, line_y)
+
                     canv.setFillColor(MUTED)
                     canv.setFont('Helvetica', 7.5)
-                    canv.drawString(bx + 8, box_y + 14, 'Date: ____________________')
-                if extras[i]:
-                    canv.setFillColor(MUTED)
-                    canv.setFont('Helvetica', 7.5)
-                    canv.drawString(bx + 8, box_y + 4, extras[i])
+                    nm = name_fills[i]
+                    dt = date_fills[i]
+                    if nm:
+                        canv.setFillColor(TEXT)
+                        canv.setFont('Helvetica', 8)
+                        canv.drawString(bx + 8, box_y + 28, f'Name: {nm}'[:48])
+                    else:
+                        canv.drawString(bx + 8, box_y + 28, 'Name: ____________________')
+                    if dt:
+                        canv.setFillColor(TEXT)
+                        canv.setFont('Helvetica', 8)
+                        canv.drawString(bx + 8, box_y + 14, f'Date: {dt}'[:48])
+                    else:
+                        canv.setFillColor(MUTED)
+                        canv.setFont('Helvetica', 7.5)
+                        canv.drawString(bx + 8, box_y + 14, 'Date: ____________________')
+                    if extras[i]:
+                        canv.setFillColor(MUTED)
+                        canv.setFont('Helvetica', 7.5)
+                        canv.drawString(bx + 8, box_y + 4, extras[i])
 
-            meta_y = 0.12 * inch
+            meta_y = 0.10 * inch
             canv.setFillColor(MUTED)
             canv.setFont('Helvetica', 7)
-            canv.drawString(x_left, meta_y, f'Page {pdf_doc.page}')
+            page_label = int(getattr(canv, '_pageNumber', pdf_doc.page) or pdf_doc.page)
+            canv.drawString(x_left, meta_y, f'Page {page_label}')
             right_txt = f'Printed On: {printed_on}'
             right_w = canv.stringWidth(right_txt, 'Helvetica', 7)
             canv.drawString(x_right - right_w, meta_y, right_txt)
             canv.restoreState()
 
-        doc.build(elements, onFirstPage=_draw_page_footer, onLaterPages=_draw_page_footer)
+        class _CashbillPageCanvas(rl_canvas.Canvas):
+            """Defer page chrome until save so we know the last page for totals."""
+
+            def __init__(self, *args, **kwargs):
+                rl_canvas.Canvas.__init__(self, *args, **kwargs)
+                self._saved_page_states: List[Dict[str, Any]] = []
+
+            def showPage(self):  # type: ignore[override]
+                self._saved_page_states.append(dict(self.__dict__))
+                self._startPage()
+
+            def save(self):  # type: ignore[override]
+                page_count = len(self._saved_page_states)
+                for state in self._saved_page_states:
+                    self.__dict__.update(state)
+                    self._cashbill_page_count = page_count
+                    _draw_page_footer(self, doc)
+                    rl_canvas.Canvas.showPage(self)
+                rl_canvas.Canvas.save(self)
+
+        doc.build(elements, canvasmaker=_CashbillPageCanvas)
         return buffer.getvalue()
     except Exception as e:
         logger.exception('Cashbilldup PDF generation failed: %s', e)
@@ -2055,7 +2456,7 @@ def _get_sales_detail_rows(
     if item_code:
         where_parts.append(f'd.{d_item} = :item_code')
         params['item_code'] = int(item_code)
-    cust_tbl = _detect_table(['CUSTOMERS', 'customers', 'CUSTOMER', 'customer'])
+    cust_tbl = _detect_table(['CUSTOMER', 'customer', 'CUSTOMERS', 'customers'])
     cust_code_col = _detect_column(cust_tbl, ['CUSTOMERCODE', 'CUSTOMER_CODE', 'customercode', 'CUST_CODE', 'cust_code']) if cust_tbl else None
     cust_name_col = _detect_column(cust_tbl, ['CUSTOMERNAME', 'CUSTOMER_NAME', 'customername', 'CUST_NAME', 'cust_name', 'NAME', 'name']) if cust_tbl else None
     join_cust = ''
@@ -2100,7 +2501,7 @@ def _get_sales_detail_rows(
         return []
 
 def _get_sales_detail_customer_options(search: str = '', limit: int = 300) -> List[Dict[str, Any]]:
-    tbl = _detect_table(['CUSTOMERS', 'customers', 'CUSTOMER', 'customer'])
+    tbl = _detect_table(['CUSTOMER', 'customer', 'CUSTOMERS', 'customers'])
     if not tbl:
         return []
     code_col = _detect_column(tbl, ['CUSTOMERCODE', 'CUSTOMER_CODE', 'customercode', 'CUST_CODE', 'cust_code'])
@@ -2140,6 +2541,122 @@ def _get_sales_detail_customer_options(search: str = '', limit: int = 300) -> Li
             continue
         out.append({'customercode': c, 'customername': str(r.get('customername') or '').strip()})
     return out
+
+
+def _get_customer_wise_sales_rows(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    customer_code: Optional[int] = None,
+    bill_type: str = '',
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """Aggregate BILLHDR by customer: sales, returns, and net totals."""
+    hdr, _dt = _sales_detail_hdr_dtl_tables()
+    if not hdr:
+        return [], {}
+    h_no = _detect_column(hdr, ['BILLNO', 'billno'])
+    h_date = _detect_column(hdr, ['BILLDATE', 'billdate'])
+    h_type = _detect_column(hdr, ['BILLTYPE', 'billtype'])
+    h_cust = _detect_column(hdr, ['CUSTOMERCODE', 'CUSTOMER_CODE', 'customercode'])
+    h_custname = _detect_column(hdr, ['CUSTOMERNAME', 'CUSTOMER_NAME', 'customername'])
+    h_net = _detect_column(hdr, ['NETBILLAMOUNT', 'NET_BILL_AMOUNT', 'netbillamount'])
+    h_loc = _detect_column(hdr, ['LOCATIONCODE', 'LOCATION_CODE', 'locationcode'])
+    h_reset = _detect_column(hdr, ['RESETNO', 'RESET_NO', 'resetno'])
+    h_del = _detect_column(hdr, ['DELFLAG', 'DEL_FLAG', 'delflag'])
+    h_status = _detect_column(hdr, ['BILLSTATUS', 'BILL_STATUS', 'billstatus'])
+    if not h_no or not h_date or not h_cust or not h_net:
+        return [], {}
+    where_parts: List[str] = []
+    params: Dict[str, Any] = {}
+    if h_loc:
+        where_parts.append(f'h.{h_loc} = :loc')
+        params['loc'] = _resolve_location_code()
+    if h_reset:
+        where_parts.append(f'h.{h_reset} = :rn')
+        params['rn'] = _SALES_DETAILS_RESET_NO
+    if h_del:
+        where_parts.append(f"NVL(h.{h_del}, 'N') = 'N'")
+    if h_status:
+        where_parts.append(f"(h.{h_status} IS NULL OR UPPER(TRIM(h.{h_status})) <> 'V')")
+    if date_from:
+        where_parts.append(f"TRUNC(h.{h_date}) >= TO_DATE(:df, 'YYYY-MM-DD')")
+        params['df'] = date_from
+    if date_to:
+        where_parts.append(f"TRUNC(h.{h_date}) <= TO_DATE(:dt, 'YYYY-MM-DD')")
+        params['dt'] = date_to
+    bt = (bill_type or '').strip().upper()[:1]
+    if bt and h_type:
+        where_parts.append(f"UPPER(TRIM(NVL(h.{h_type}, ''))) = :bt")
+        params['bt'] = bt
+    if customer_code is not None and customer_code >= 0:
+        where_parts.append(f'h.{h_cust} = :cust')
+        params['cust'] = int(customer_code)
+    cust_tbl = _detect_table(['CUSTOMER', 'customer', 'CUSTOMERS', 'customers'])
+    cust_code_col = _detect_column(cust_tbl, ['CUSTOMERCODE', 'CUSTOMER_CODE', 'customercode', 'CUST_CODE', 'cust_code']) if cust_tbl else None
+    cust_name_col = _detect_column(cust_tbl, ['CUSTOMERNAME', 'CUSTOMER_NAME', 'customername', 'CUST_NAME', 'cust_name', 'NAME', 'name']) if cust_tbl else None
+    join_cust = ''
+    cust_disp = "''"
+    if cust_tbl and cust_code_col and cust_name_col:
+        join_cust = f' LEFT JOIN {cust_tbl} c ON h.{h_cust} = c.{cust_code_col} '
+        if h_custname:
+            cust_disp = f"NVL(NULLIF(TRIM(h.{h_custname}), ''), NVL(c.{cust_name_col}, ''))"
+        else:
+            cust_disp = f"NVL(c.{cust_name_col}, '')"
+    elif h_custname:
+        cust_disp = f"NVL(TRIM(h.{h_custname}), '')"
+    net_expr = f'NVL(h.{h_net}, 0)'
+    q = f"""
+        SELECT
+            h.{h_cust} AS customercode,
+            {cust_disp} AS customername,
+            SUM(CASE WHEN {net_expr} > 0 THEN 1 ELSE 0 END) AS billcount,
+            SUM(CASE WHEN {net_expr} > 0 THEN {net_expr} ELSE 0 END) AS salesamount,
+            SUM(CASE WHEN {net_expr} < 0 THEN 1 ELSE 0 END) AS return_billcount,
+            SUM(CASE WHEN {net_expr} < 0 THEN ABS({net_expr}) ELSE 0 END) AS sales_return,
+            COUNT(*) AS total_billcount,
+            SUM({net_expr}) AS total_sale
+        FROM {hdr} h
+        {join_cust}
+        WHERE {' AND '.join(where_parts) if where_parts else '1=1'}
+        GROUP BY h.{h_cust}, {cust_disp}
+        ORDER BY {cust_disp}, h.{h_cust}
+    """
+    try:
+        rows = _safe_rows(q, params) or []
+    except Exception as e:
+        logger.exception('Customer-wise sales report failed: %s', e)
+        return [], {}
+    out: List[Dict[str, Any]] = []
+    totals = {
+        'billcount': 0,
+        'salesamount': 0.0,
+        'return_billcount': 0,
+        'sales_return': 0.0,
+        'total_billcount': 0,
+        'total_sale': 0.0,
+    }
+    for r in rows:
+        row = {
+            'customercode': r.get('customercode'),
+            'customername': str(r.get('customername') or '').strip(),
+            'billcount': int(r.get('billcount') or 0),
+            'salesamount': round(float(r.get('salesamount') or 0), 3),
+            'return_billcount': int(r.get('return_billcount') or 0),
+            'sales_return': round(float(r.get('sales_return') or 0), 3),
+            'total_billcount': int(r.get('total_billcount') or 0),
+            'total_sale': round(float(r.get('total_sale') or 0), 3),
+        }
+        out.append(row)
+        totals['billcount'] += row['billcount']
+        totals['salesamount'] += row['salesamount']
+        totals['return_billcount'] += row['return_billcount']
+        totals['sales_return'] += row['sales_return']
+        totals['total_billcount'] += row['total_billcount']
+        totals['total_sale'] += row['total_sale']
+    totals['salesamount'] = round(totals['salesamount'], 3)
+    totals['sales_return'] = round(totals['sales_return'], 3)
+    totals['total_sale'] = round(totals['total_sale'], 3)
+    return out, totals
+
 
 def _get_sales_detail_item_options(search: str='', limit: int=300) -> List[Dict[str, str]]:
     hdr, dtl = _sales_detail_hdr_dtl_tables()
@@ -2913,6 +3430,96 @@ def sales_details_export_excel():
         writer.writerow([r.get('billno') or '', dt, tt, r.get('billtype') or '', r.get('customercode') if r.get('customercode') is not None else '', r.get('customername') or '', r.get('orderno') or '', f"{float(r.get('netbillamount') or 0):.4f}", f"{float(r.get('hdr_discount') or 0):.4f}", r.get('hdr_remarks') or '', r.get('salesmancode') if r.get('salesmancode') is not None else '', r.get('countercode') if r.get('countercode') is not None else '', r.get('billstatus') or '', r.get('slno') or '', r.get('itemcode') or '', r.get('storecode') or '', r.get('itemname') or '', r.get('uom') or '', f"{float(r.get('quantity') or 0):.4f}", f"{float(r.get('rate') or 0):.4f}", f"{float(r.get('linediscount') or 0):.4f}", f"{float(r.get('lineamount') or 0):.4f}"])
     filename = f"sales_details_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     return Response(output.getvalue(), mimetype='text/csv', headers={'Content-Disposition': f'attachment; filename={filename}'})
+
+
+@bp.route('/reports/customer-wise-sales', methods=['GET'])
+def customer_wise_sales_report():
+    if not session.get('user'):
+        return redirect(url_for('auth.login'))
+    user_dbkey = session.get('tenant_id')
+    if user_dbkey:
+        _apply_active_connection(user_dbkey)
+    date_from = (request.args.get('date_from') or '').strip()
+    date_to = (request.args.get('date_to') or '').strip()
+    date_from, date_to = _default_report_date_range(date_from, date_to)
+    customer_raw = (request.args.get('customer_code') or '').strip()
+    bill_type = (request.args.get('bill_type') or '').strip()
+    customer_code: Optional[int] = int(customer_raw) if customer_raw.isdigit() else None
+    rows, totals = _get_customer_wise_sales_rows(
+        date_from=date_from or None,
+        date_to=date_to or None,
+        customer_code=customer_code,
+        bill_type=bill_type,
+    )
+    selected_customer_label = ''
+    if customer_raw:
+        for opt in _get_sales_detail_customer_options(search=customer_raw, limit=100):
+            if str(opt.get('customercode') or '').strip() == customer_raw:
+                name = str(opt.get('customername') or '').strip()
+                selected_customer_label = f'{customer_raw} — {name}' if name else customer_raw
+                break
+        if not selected_customer_label:
+            selected_customer_label = customer_raw
+    return render_template(
+        'reports/customer_wise_sales_report.html',
+        rows=rows,
+        totals=totals,
+        filters={
+            'date_from': date_from,
+            'date_to': date_to,
+            'customer_code': customer_raw,
+            'customer_label': selected_customer_label,
+            'bill_type': bill_type,
+        },
+    )
+
+
+@bp.route('/reports/customer-wise-sales/export-excel', methods=['GET'])
+def customer_wise_sales_export_excel():
+    if not session.get('user'):
+        return redirect(url_for('auth.login'))
+    user_dbkey = session.get('tenant_id')
+    if user_dbkey:
+        _apply_active_connection(user_dbkey)
+    date_from = (request.args.get('date_from') or '').strip()
+    date_to = (request.args.get('date_to') or '').strip()
+    date_from, date_to = _default_report_date_range(date_from, date_to)
+    customer_raw = (request.args.get('customer_code') or '').strip()
+    bill_type = (request.args.get('bill_type') or '').strip()
+    customer_code: Optional[int] = int(customer_raw) if customer_raw.isdigit() else None
+    rows, totals = _get_customer_wise_sales_rows(
+        date_from=date_from or None,
+        date_to=date_to or None,
+        customer_code=customer_code,
+        bill_type=bill_type,
+    )
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Customer Code', 'Customer Name', 'Bill Count', 'Sales Amount', 'Return Bill Count', 'Sales Return', 'Total Bill Count', 'Total Sale'])
+    for r in rows:
+        writer.writerow([
+            r.get('customercode') if r.get('customercode') is not None else '',
+            r.get('customername') or '',
+            r.get('billcount') or 0,
+            f"{float(r.get('salesamount') or 0):.3f}",
+            r.get('return_billcount') or 0,
+            f"{float(r.get('sales_return') or 0):.3f}",
+            r.get('total_billcount') or 0,
+            f"{float(r.get('total_sale') or 0):.3f}",
+        ])
+    writer.writerow([])
+    writer.writerow([
+        'TOTAL', '',
+        totals.get('billcount') or 0,
+        f"{float(totals.get('salesamount') or 0):.3f}",
+        totals.get('return_billcount') or 0,
+        f"{float(totals.get('sales_return') or 0):.3f}",
+        totals.get('total_billcount') or 0,
+        f"{float(totals.get('total_sale') or 0):.3f}",
+    ])
+    filename = f"customer_wise_sales_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(output.getvalue(), mimetype='text/csv', headers={'Content-Disposition': f'attachment; filename={filename}'})
+
 
 def _margin_sales_hdr_dtl_tables() -> Tuple[str, str]:
     """Margin report uses BILLHDR / BILLDTL only (not history tables)."""
@@ -4090,6 +4697,123 @@ def stock_report_datewise_export_excel():
     filename = f"stock_report_datewise_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     return Response(output.getvalue(), mimetype='text/csv', headers={'Content-Disposition': f'attachment; filename={filename}'})
 
+from addons.reports.inventory_reports_logic import (
+    get_supplier_balance_report_rows,
+    get_warehouse_summary_report_rows,
+)
+
+
+@bp.route('/reports/inventory')
+def inventory_reports_hub():
+    if not session.get('user'):
+        return redirect(url_for('auth.login'))
+    user_dbkey = session.get('tenant_id')
+    if user_dbkey:
+        _apply_active_connection(user_dbkey)
+    return render_template('reports/inventory_reports_hub.html', session_location_code=_resolve_location_code())
+
+
+@bp.route('/reports/inventory/warehouse-summary')
+def warehouse_summary_report():
+    if not session.get('user'):
+        return redirect(url_for('auth.login'))
+    user_dbkey = session.get('tenant_id')
+    if user_dbkey:
+        _apply_active_connection(user_dbkey)
+    loc = _resolve_location_code()
+    search = (request.args.get('search') or '').strip()
+    rows, summary = get_warehouse_summary_report_rows(loc, search=search)
+    export_qs = {'search': search} if search else {}
+    return render_template(
+        'reports/warehouse_summary_report.html',
+        rows=rows,
+        summary=summary,
+        search=search,
+        location_code=loc,
+        export_url=url_for('reports.warehouse_summary_export_csv', **export_qs),
+    )
+
+
+@bp.route('/reports/inventory/warehouse-summary/export-csv')
+def warehouse_summary_export_csv():
+    if not session.get('user'):
+        return redirect(url_for('auth.login'))
+    user_dbkey = session.get('tenant_id')
+    if user_dbkey:
+        _apply_active_connection(user_dbkey)
+    loc = _resolve_location_code()
+    search = (request.args.get('search') or '').strip()
+    rows, _ = get_warehouse_summary_report_rows(loc, search=search)
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Warehouse', 'Name', 'Items', 'Quantity', 'Stock value'])
+    for r in rows:
+        writer.writerow([
+            r.get('warehouse_code') or r.get('warehouse_id'),
+            r.get('warehouse_name') or '',
+            r.get('item_count') or 0,
+            r.get('total_qty') or 0,
+            r.get('stock_value') or 0,
+        ])
+    filename = f'warehouse_summary_{loc}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+    return Response(output.getvalue(), mimetype='text/csv', headers={'Content-Disposition': f'attachment; filename={filename}'})
+
+
+@bp.route('/reports/inventory/supplier-balance')
+def supplier_balance_report():
+    if not session.get('user'):
+        return redirect(url_for('auth.login'))
+    user_dbkey = session.get('tenant_id')
+    if user_dbkey:
+        _apply_active_connection(user_dbkey)
+    search = (request.args.get('search') or '').strip()
+    try:
+        min_balance = float(request.args.get('min_balance') or 0)
+    except (TypeError, ValueError):
+        min_balance = 0.0
+    rows, summary = get_supplier_balance_report_rows(search=search, min_balance=min_balance)
+    export_qs = {}
+    if search:
+        export_qs['search'] = search
+    if min_balance > 0:
+        export_qs['min_balance'] = min_balance
+    return render_template(
+        'reports/supplier_balance_report.html',
+        rows=rows,
+        summary=summary,
+        search=search,
+        min_balance=min_balance,
+        export_url=url_for('reports.supplier_balance_export_csv', **export_qs),
+    )
+
+
+@bp.route('/reports/inventory/supplier-balance/export-csv')
+def supplier_balance_export_csv():
+    if not session.get('user'):
+        return redirect(url_for('auth.login'))
+    user_dbkey = session.get('tenant_id')
+    if user_dbkey:
+        _apply_active_connection(user_dbkey)
+    search = (request.args.get('search') or '').strip()
+    try:
+        min_balance = float(request.args.get('min_balance') or 0)
+    except (TypeError, ValueError):
+        min_balance = 0.0
+    rows, _ = get_supplier_balance_report_rows(search=search, min_balance=min_balance)
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Supplier', 'Name', 'Payable account', 'Outstanding'])
+    for r in rows:
+        writer.writerow([
+            r.get('suppliercode'),
+            r.get('suppliername') or '',
+            r.get('payableaccount') or '',
+            r.get('payable_balance') or 0,
+        ])
+    filename = f'supplier_balance_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+    return Response(output.getvalue(), mimetype='text/csv', headers={'Content-Disposition': f'attachment; filename={filename}'})
+
+
 @bp.route('/reports/smart-list')
 def smart_list():
     if not session.get('user'):
@@ -4802,11 +5526,54 @@ def crystal_reports_cashbilldup_qz_pdf():
     header, lines = get_sales_print_data(billno, location_code_int)
     if not header:
         return jsonify({'success': False, 'error': 'Bill data not found'}, 404)
-    pdf_bytes = _generate_cashbilldup_pdf(billno=billno, header=header, lines=lines, invoice_title='INVOICE')
+    from addons.reports.invoice_templates import resolve_invoice_template
+
+    pdf_bytes = _generate_cashbilldup_pdf(
+        billno=billno,
+        header=header,
+        lines=lines,
+        invoice_title='INVOICE',
+        template=resolve_invoice_template(request.args.get('template')),
+    )
     if not pdf_bytes:
         return jsonify({'success': False, 'error': 'Failed to generate PDF'}, 500)
     pdf_b64 = base64.b64encode(pdf_bytes).decode('ascii')
     return jsonify({'success': True, 'billno': billno, 'pdf_base64': pdf_b64})
+
+@bp.route('/reports/invoice-templates/preview', methods=['GET'])
+def invoice_template_preview():
+    """Sample PDF for a chosen invoice template (no bill required)."""
+    if not session.get('user'):
+        return redirect(url_for('auth.login'))
+    from addons.reports.invoice_templates import normalize_invoice_template, sample_invoice_print_payload
+
+    tmpl = normalize_invoice_template(request.args.get('template'))
+    user_dbkey = session.get('tenant_id')
+    if user_dbkey:
+        _apply_active_connection(user_dbkey)
+    header, lines = sample_invoice_print_payload()
+    try:
+        loc = _resolve_location_code()
+        header['locationcode'] = loc
+    except Exception:
+        pass
+    pdf_bytes = _generate_cashbilldup_pdf(
+        billno='PREVIEW',
+        header=header,
+        lines=lines,
+        invoice_title='INVOICE',
+        template=tmpl,
+    )
+    if not pdf_bytes:
+        return redirect(url_for('sales.sales_invoice_templates'))
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype='application/pdf',
+        as_attachment=False,
+        download_name=f'invoice_template_{tmpl}_preview.pdf',
+        max_age=0,
+    )
+
 
 @bp.route('/reports/crystal-reports/open/<report_name>', methods=['GET'])
 def crystal_reports_open_report(report_name: str):
@@ -4826,7 +5593,15 @@ def crystal_reports_open_report(report_name: str):
         if not header:
             return redirect(url_for('reports.crystal_reports', billno=billno_raw, error='Bill data not found'))
         pdf_title = 'SALES RETURN' if report_key == 'salesreturn' else 'INVOICE'
-        pdf_bytes = _generate_cashbilldup_pdf(billno=billno, header=header, lines=lines, invoice_title=pdf_title)
+        from addons.reports.invoice_templates import resolve_invoice_template
+
+        pdf_bytes = _generate_cashbilldup_pdf(
+            billno=billno,
+            header=header,
+            lines=lines,
+            invoice_title=pdf_title,
+            template=resolve_invoice_template(request.args.get('template')),
+        )
         if not pdf_bytes:
             return redirect(url_for('reports.crystal_reports', billno=billno_raw, error='Failed to generate PDF'))
         filename_prefix = 'salesreturn' if report_key == 'salesreturn' else 'cashbilldup'

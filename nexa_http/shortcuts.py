@@ -41,6 +41,11 @@ _KNOWN_STATIC_PATHS: dict[str, str] = {
     "purchase.stock_transfer_approval_setup_init": "/purchase/stock-transfer/approval-setup/api/init",
     "purchase.stock_transfer_approval_setup_load": "/purchase/stock-transfer/approval-setup/api/load",
     "purchase.stock_transfer_approval_setup_save": "/purchase/stock-transfer/approval-setup/api/save",
+    "ecommerce.products": "/ecommerce/products",
+    "ecommerce.products_web_catalog": "/ecommerce/products/web-catalog",
+    "ecommerce.products_image_import_template": "/ecommerce/products/images/template.xlsx",
+    "ecommerce.products_image_import": "/ecommerce/products/images/import",
+    "ecommerce.products_image_fetch_web": "/ecommerce/products/images/fetch-web",
 }
 
 

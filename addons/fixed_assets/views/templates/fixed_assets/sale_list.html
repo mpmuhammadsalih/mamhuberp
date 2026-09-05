@@ -80,6 +80,11 @@
             <a class="btn-view" href="{{ url_for('fixed_assets.fa_sale_form', id=r.sale_id) }}">Open</a>
             {% if st == 'POSTED' %}
             <a class="btn-view" href="{{ url_for('fixed_assets.fa_sale_pdf', sale_id=r.sale_id) }}" target="_blank" rel="noopener">PDF</a>
+            {% else %}
+            <form method="post" action="{{ url_for('fixed_assets.fa_sale_post') }}" style="display:inline;" onsubmit="return confirm('Post sale {{ r.sale_no }} to GL? All assets on this sale will be marked disposed.');">
+              <input type="hidden" name="sale_id" value="{{ r.sale_id }}" />
+              <button type="submit" class="btn-view" style="border:none;background:none;cursor:pointer;padding:0;margin-left:6px;">Post</button>
+            </form>
             {% endif %}
           </td>
         </tr>

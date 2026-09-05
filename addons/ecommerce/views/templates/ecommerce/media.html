@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=5" />
+{% endblock %}
+{% block content %}
+{% set filter_display = placement_labels.get(placement_filter, placement_filter) if placement_filter else 'All placements' %}
+<div class="page-po nexa-list-page ecommerce-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Storefront media</h1>
+      <p class="page-po__muted">Hero slides, promo tiles, banners, category and brand images · {{ media_items|length }} shown</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('ecommerce.media_new') }}" class="page-po__btn-primary">Add media</a>
+      <a href="{{ url_for('ecommerce.cms') }}" class="page-po__btn-secondary">CMS pages</a>
+      <a href="{{ url_for('ecommerce.dashboard') }}" class="page-po__btn-secondary">Dashboard</a>
+    </div>
+  </div>
+
+  {% if warning %}
+  <div class="ecommerce-alert">{{ warning }}</div>
+  {% endif %}
+
+  <div class="ecommerce-form-panel mb-5" style="display:flex; flex-wrap:wrap; align-items:center; gap:20px;">
+    <div>
+      <h2 class="page-po__title" style="font-size:1.05rem; margin-bottom:4px;">Storefront logo</h2>
+      <p class="page-po__muted" style="margin:0;">Header and footer logo on mamahub.store · PNG or SVG recommended</p>
+    </div>
+    <div style="display:flex; align-items:center; gap:16px; margin-left:auto;">
+      {% if logo_item %}
+        {% set logo_fname = logo_item.image_url.split('/media/files/')[-1] if logo_item.image_url and '/media/files/' in logo_item.image_url else None %}
+        {% if logo_fname %}
+          <img src="{{ url_for('ecommerce.media_file', filename=logo_fname) }}" alt="Storefront logo" style="height:56px; width:56px; object-fit:contain; border-radius:8px; background:#fff; border:1px solid #e2e8f0; padding:4px;" />
+        {% elif logo_item.image_url and (logo_item.image_url.startswith('http://') or logo_item.image_url.startswith('https://')) %}
+          <img src="{{ logo_item.image_url }}" alt="Storefront logo" style="height:56px; width:56px; object-fit:contain; border-radius:8px; background:#fff; border:1px solid #e2e8f0; padding:4px;" />
+        {% endif %}
+        <a href="{{ url_for('ecommerce.media_logo') }}" class="page-po__btn-primary">Change logo</a>
+      {% else %}
+        <a href="{{ url_for('ecommerce.media_logo') }}" class="page-po__btn-primary">Upload logo</a>
+      {% endif %}
+      <a href="{{ url_for('ecommerce.media', placement='storefront_logo') }}" class="page-po__btn-secondary">View logo media</a>
+    </div>
+  </div>
+
+  <form method="get" class="nexa-list-toolbar" id="mediaFilterForm">
+    <div
+      class="ecommerce-toolbar-picker"
+      data-ec-list-picker
+      data-modal="mediaFilterPlacementModal"
+      data-display="mediaFilterDisplay"
+      data-hidden="mediaFilterPlacement"
+      data-picker="mediaFilterPicker"
+      data-clear="mediaFilterClear"
+    >
+      <span class="search-field search-field--popup">
+        <input
+          type="text"
+          id="mediaFilterDisplay"
+          value="{{ filter_display }}"
+          placeholder="All placements"
+          readonly
+          autocomplete="off"
+        />
+        <button type="button" class="search-clear" id="mediaFilterClear" aria-label="Clear filter" {% if not placement_filter %}style="display:none;"{% endif %}>×</button>
+        <button type="button" class="search-picker" id="mediaFilterPicker" aria-label="Open placement filter">▾</button>
+      </span>
+      <input type="hidden" id="mediaFilterPlacement" name="placement" value="{{ placement_filter or '' }}" />
+    </div>
+    <button type="submit" class="page-po__btn-primary" style="padding:4px 12px; font-size:11px;">Filter</button>
+    <a href="{{ url_for('ecommerce.media') }}" class="page-po__btn-secondary" style="padding:4px 10px; font-size:11px;">Clear</a>
+    <span class="nexa-num">{{ media_items|length }} record{{ '' if media_items|length == 1 else 's' }}</span>
+  </form>
+
+  <div class="co-table-wrap">
+    <table class="co-table co-table--th-hint">
+      <thead>
+        <tr>
+          <th style="text-align:center; width:56px; cursor:default;">Sl.No</th>
+          <th style="width:90px;">Preview</th>
+          <th>Placement</th>
+          <th>Ref</th>
+          <th>Title</th>
+          <th style="text-align:center;">Order</th>
+          <th>Status</th>
+          <th style="text-align:center; cursor:default;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in media_items %}
+        <tr>
+          <td class="sl-no">{{ loop.index }}</td>
+          <td>
+            {% set fname = row.image_url.split('/media/files/')[-1] if row.image_url and '/media/files/' in row.image_url else None %}
+            {% if fname and row.image_url.lower().endswith(('.mp4', '.webm', '.mov', '.m4v')) %}
+              <video src="{{ url_for('ecommerce.media_file', filename=fname) }}" muted playsinline style="height:40px;width:72px;object-fit:cover;border-radius:4px;" />
+            {% elif fname %}
+              <img src="{{ url_for('ecommerce.media_file', filename=fname) }}" alt="" style="height:40px;width:72px;object-fit:cover;border-radius:4px;" />
+            {% elif row.image_url and (row.image_url.startswith('http://') or row.image_url.startswith('https://')) %}
+              <img src="{{ row.image_url }}" alt="" style="height:40px;width:72px;object-fit:cover;border-radius:4px;" />
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td><code>{{ row.placement }}</code></td>
+          <td>{{ row.ref_key or '—' }}</td>
+          <td>{{ row.title or '—' }}</td>
+          <td style="text-align:center;">{{ row.sort_order }}</td>
+          <td>
+            <span class="ecommerce-flag {% if row.is_active %}ecommerce-flag-Y{% else %}ecommerce-flag-N{% endif %}">
+              {% if row.is_active %}Active{% else %}Inactive{% endif %}
+            </span>
+          </td>
+          <td style="text-align:center; white-space:nowrap;">
+            <a href="{{ url_for('ecommerce.media_edit', media_id=row.media_id) }}" class="btn-view">Edit</a>
+            {% if row.is_active %}
+            <form method="post" action="{{ url_for('ecommerce.media_deactivate', media_id=row.media_id) }}" style="display:inline;">
+              <button type="submit" class="btn-view" style="border:none; cursor:pointer; color:#dc2626;">Deactivate</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" style="text-align:center;padding:20px;color:#64748b;">
+            {% if tables_ready %}No media records yet.{% else %}MH_MEDIA table not available.{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% with modal_id='mediaFilterPlacementModal', include_all=true %}
+  {% include 'ecommerce/_placement_picker_modal.html' %}
+{% endwith %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('ecommerce.static', filename='js/ecommerce-list-picker.js') }}?v=1"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var hidden = document.getElementById('mediaFilterPlacement');
+    var form = document.getElementById('mediaFilterForm');
+    if (hidden && form) {
+      hidden.addEventListener('change', function () {
+        form.submit();
+      });
+    }
+  });
+</script>
+{% endblock %}

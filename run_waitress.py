@@ -1,11 +1,12 @@
 """Production entry: Waitress (WSGI) + ASGI adapter for the FastAPI app."""
 import os
-import socket
 
 from a2wsgi import ASGIMiddleware
 from waitress import serve
 
 from config.bootstrap_env import bootstrap_dotenv
+
+from nexa_http.network_util import resolve_lan_ip
 
 bootstrap_dotenv()
 
@@ -17,11 +18,7 @@ try:
 except ValueError:
     port = 5051
 
-hostname = socket.gethostname()
-try:
-    local_ip = socket.gethostbyname(hostname)
-except OSError:
-    local_ip = "127.0.0.1"
+local_ip = resolve_lan_ip()
 
 print("\n  Waitress serving Nexus (ASGI via a2wsgi):")
 print(f"    http://127.0.0.1:{port}")

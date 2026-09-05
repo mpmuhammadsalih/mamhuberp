@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=4" />
+{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page ecommerce-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Reports</h1>
+      <p class="page-po__muted">Sales analytics and store performance · location {{ location_code }}</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('ecommerce.orders') }}" class="po-nav-link">Orders</a>
+      <a href="{{ url_for('ecommerce.dashboard') }}" class="page-po__btn-secondary">Dashboard</a>
+    </div>
+  </div>
+
+  {% if warning %}
+  <div class="ecommerce-alert">{{ warning }}</div>
+  {% endif %}
+
+  <div class="ecommerce-kpi-grid">
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Total revenue</div>
+      <div class="ecommerce-kpi-val ecommerce-kpi-val--sm">{{ '%.2f'|format(sales.total_revenue or 0) }}</div>
+    </div>
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Total orders</div>
+      <div class="ecommerce-kpi-val">{{ sales.total_orders }}</div>
+    </div>
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Customers</div>
+      <div class="ecommerce-kpi-val">{{ total_customers }}</div>
+    </div>
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Cancelled</div>
+      <div class="ecommerce-kpi-val">{{ sales.cancelled_orders }}</div>
+    </div>
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Revenue today</div>
+      <div class="ecommerce-kpi-val ecommerce-kpi-val--sm">{{ '%.2f'|format(sales.revenue_today or 0) }}</div>
+    </div>
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Orders today</div>
+      <div class="ecommerce-kpi-val">{{ sales.orders_today }}</div>
+    </div>
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Products</div>
+      <div class="ecommerce-kpi-val">{{ catalog.total_products }}</div>
+    </div>
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Active promos</div>
+      <div class="ecommerce-kpi-val">{{ active_promotions }}</div>
+    </div>
+  </div>
+
+  <div class="ecommerce-reports-grid">
+    <div class="page-po__section">
+      <h2 class="page-po__section-title">Last 7 days sales</h2>
+      <div class="co-table-wrap">
+        <table class="co-table co-table--th-hint">
+          <thead>
+            <tr><th>Day</th><th style="text-align:center;">Orders</th><th style="text-align:right;">Revenue</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for row in weekly_sales %}
+            <tr>
+              <td>{{ row.day_label }} <span class="page-po__muted">{{ row.day_date }}</span></td>
+              <td style="text-align:center;">{{ row.order_count }}</td>
+              <td class="num">{{ '%.2f'|format(row.revenue or 0) }}</td>
+              <td style="width:40%;">
+                <div class="ecommerce-bar-track">
+                  <div class="ecommerce-bar-fill" style="width:{{ ((row.revenue or 0) / max_weekly_revenue * 100)|round(1) if max_weekly_revenue else 0 }}%;"></div>
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align:center;padding:16px;color:#64748b;">No order data for the last 7 days.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="page-po__section">
+      <h2 class="page-po__section-title">Category mix (by revenue)</h2>
+      <div class="co-table-wrap">
+        <table class="co-table co-table--th-hint">
+          <thead>
+            <tr><th>Category</th><th style="text-align:right;">Revenue</th><th style="text-align:center;">Share</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for row in category_mix %}
+            <tr>
+              <td>{{ row.category_name }}</td>
+              <td class="num">{{ '%.2f'|format(row.total_amount or 0) }}</td>
+              <td style="text-align:center;">{{ row.share_pct }}%</td>
+              <td style="width:35%;">
+                <div class="ecommerce-bar-track">
+                  <div class="ecommerce-bar-fill" style="width:{{ row.share_pct }}%; background:{{ row.color }};"></div>
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align:center;padding:16px;color:#64748b;">No category sales data yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-po__section">
+    <h2 class="page-po__section-title">Top products</h2>
+    <div class="co-table-wrap">
+      <table class="co-table co-table--th-hint">
+        <thead>
+          <tr>
+            <th style="text-align:center; width:56px; cursor:default;">Sl.No</th>
+            <th>Code</th>
+            <th>Item</th>
+            <th style="text-align:center;">Qty sold</th>
+            <th style="text-align:right;">Revenue</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in top_products %}
+          <tr>
+            <td class="sl-no">{{ loop.index }}</td>
+            <td>{{ row.item_code }}</td>
+            <td>{{ row.item_name }}</td>
+            <td style="text-align:center;">{{ row.qty_sold }}</td>
+            <td class="num">{{ '%.2f'|format(row.revenue or 0) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" style="text-align:center;padding:16px;color:#64748b;">No product sales yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="page-po__section">
+    <h2 class="page-po__section-title">Recent orders</h2>
+    <div class="co-table-wrap">
+      <table class="co-table co-table--th-hint">
+        <thead>
+          <tr>
+            <th style="text-align:center; width:56px; cursor:default;">Sl.No</th>
+            <th>Order #</th>
+            <th>Customer</th>
+            <th style="text-align:right;">Total</th>
+            <th>Status</th>
+            <th>Date</th>
+            <th style="text-align:center; cursor:default;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in recent_orders %}
+          {% set st = (row.order_status or '')|upper %}
+          <tr>
+            <td class="sl-no">{{ loop.index }}</td>
+            <td><strong>{{ row.order_number }}</strong></td>
+            <td>{{ row.customer_email or '—' }}</td>
+            <td class="num">{{ row.currency_code or 'QAR' }} {{ '%.2f'|format(row.grand_total or 0) }}</td>
+            <td>
+              <span class="ecommerce-flag ecommerce-flag-{% if st in ('CONFIRMED', 'DELIVERED', 'COMPLETED') %}Y{% elif st in ('CANCELLED', 'REFUNDED') %}N{% else %}M{% endif %}">
+                {{ row.order_status or '—' }}
+              </span>
+            </td>
+            <td>{{ (row.created_at|string)[:19].replace('T', ' ') if row.created_at else '—' }}</td>
+            <td style="text-align:center;">
+              <a href="{{ url_for('ecommerce.order_detail', order_id=row.order_id) }}" class="btn-view">View</a>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" style="text-align:center;padding:16px;color:#64748b;">No recent orders.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="page-po__section">
+    <h2 class="page-po__section-title">Quick links</h2>
+    <div class="ecommerce-nav-grid">
+      <a class="ecommerce-nav-card" href="{{ url_for('ecommerce.orders') }}">Order reports</a>
+      <a class="ecommerce-nav-card" href="{{ url_for('ecommerce.inventory') }}">Inventory report</a>
+      <a class="ecommerce-nav-card" href="{{ url_for('ecommerce.customers') }}">Customer report</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

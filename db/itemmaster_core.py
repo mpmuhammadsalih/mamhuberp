@@ -2050,6 +2050,13 @@ def save_item_in_tenant(item_data: Dict[str, Any], is_new: bool, tenant_id: str,
                 SET DEFAULT_WAREHOUSE_ID = :wh_id
                 WHERE ITEMCODE = :item_code AND LOCATIONCODE = :location_code
             """, {'wh_id': wh_id_val, 'item_code': item_code, 'location_code': location_code})
+        if 'IS_WEIGHT_ITEM' in item_cols:
+            weight_flg = 'Y' if str(item_data.get('is_weight_item') or '').strip().upper() == 'Y' else 'N'
+            cur.execute(f"""
+                UPDATE ITEMMASTER
+                SET IS_WEIGHT_ITEM = :flg
+                WHERE ITEMCODE = :item_code AND LOCATIONCODE = :location_code
+            """, {'flg': weight_flg, 'item_code': item_code, 'location_code': location_code})
         if 'RAWABICODE' in item_cols:
             cur.execute('\n                        UPDATE ITEMMASTER\n                        SET RAWABICODE = :item_code\n                        WHERE ITEMCODE = :item_code\n                          AND LOCATIONCODE = :location_code\n                        ', {'item_code': item_code, 'location_code': location_code})
         _itemmaster_sync_ownproduct_column(cur, item_cols, item_data, int(item_code), int(location_code))

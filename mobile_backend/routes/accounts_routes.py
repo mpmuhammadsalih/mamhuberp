@@ -12,6 +12,7 @@ from mobile_backend.services import cash_payment_voucher_service as cpv
 from mobile_backend.services import financial_statements_service as fs
 from mobile_backend.services import journal_entry_service as je
 from mobile_backend.services import party_ledger_service
+from mobile_backend.services import pos_settlement_service as pss
 from mobile_backend.utils.response import failure, success
 
 router = APIRouter(
@@ -87,6 +88,14 @@ _je_perm = Depends(
         "mobile.accounts",
     )
 )
+_pos_settlement_perm = Depends(
+    require_any_permission(
+        "pos_billing.pos_settlement_posting_page",
+        "pos_billing.pos_settlement_posting_workflow_page",
+        "mobile.pos_settlement",
+        "mobile.accounts",
+    )
+)
 
 
 def _username() -> str:
@@ -102,6 +111,24 @@ def cpv_open():
 @router.get("/cash-payment-vouchers/expense-children", dependencies=[_cpv_perm])
 def cpv_expense_children(parent_code: str = Query(..., min_length=1)):
     return success({"accounts": cpv.list_expense_children(parent_code)})
+
+
+@router.post(
+    "/cash-payment-vouchers/expense-sub-accounts",
+    dependencies=[_cpv_perm, require_save_nonce],
+)
+def cpv_create_expense_sub_account(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
+    """Create a postable expense sub-account under a parent (Chart of Accounts)."""
+    try:
+        data = cpv.create_expense_sub_account(payload)
+    except Exception as exc:
+        return failure_from_mutation_exc(exc, fallback="Failed to create expense sub-account.")
+    return success_after_mutation(
+        request,
+        data,
+        message=data.get("message") or "Expense sub-account created",
+        status_code=201,
+    )
 
 
 @router.get("/cash-payment-vouchers", dependencies=[_cpv_perm])
@@ -650,3 +677,114 @@ def supplier_ledger_statement(
     except Exception as exc:
         return failure(str(exc) or "Failed to load supplier ledger.", status_code=400)
     return success(data)
+
+
+# ---- POS Settlement (ERP POS Settlement Posting) ----
+
+
+@router.get("/pos-settlements/open", dependencies=[_pos_settlement_perm])
+def pos_settlement_open():
+    try:
+        return success(pss.get_open_context())
+    except Exception as exc:
+        return failure(str(exc) or "Failed to open POS settlement.", status_code=400)
+
+
+@router.get("/pos-settlements/pending-by-date", dependencies=[_pos_settlement_perm])
+def pos_settlement_pending_by_date(limit: int = Query(90, ge=1, le=366)):
+    try:
+        return success(pss.list_pending_by_date(limit=limit))
+    except Exception as exc:
+        return failure(str(exc) or "Failed to list pending settlements.", status_code=400)
+
+
+@router.get("/pos-settlements/drafts", dependencies=[_pos_settlement_perm])
+def pos_settlement_drafts(limit: int = Query(40, ge=1, le=200)):
+    try:
+        return success(pss.list_drafts(limit=limit))
+    except Exception as exc:
+        return failure(str(exc) or "Failed to list settlement drafts.", status_code=400)
+
+
+@router.get("/pos-settlements/bills", dependencies=[_pos_settlement_perm])
+def pos_settlement_bills(
+    from_date: str = Query("", alias="from"),
+    to_date: str = Query("", alias="to"),
+    settlement_scope: str = Query("pending"),
+    limit: int = Query(500, ge=1, le=500),
+):
+    try:
+        return success(
+            pss.list_bills(
+                from_date=from_date,
+                to_date=to_date,
+                settlement_scope=settlement_scope,
+                limit=limit,
+            )
+        )
+    except Exception as exc:
+        return failure(str(exc) or "Failed to list settlement bills.", status_code=400)
+
+
+@router.post("/pos-settlements/payment-mode-summary", dependencies=[_pos_settlement_perm])
+def pos_settlement_payment_mode_summary(payload: dict[str, Any] = Body(default_factory=dict)):
+    try:
+        bill_nos = payload.get("bill_nos") if isinstance(payload.get("bill_nos"), list) else []
+        return success(pss.payment_mode_summary(bill_nos))
+    except Exception as exc:
+        return failure(str(exc) or "Failed to compute payment summary.", status_code=400)
+
+
+@router.get("/pos-settlements/drafts/{draft_id}", dependencies=[_pos_settlement_perm])
+def pos_settlement_draft_get(draft_id: int):
+    try:
+        return success(pss.get_draft(draft_id))
+    except Exception as exc:
+        return failure(str(exc) or "Failed to load settlement draft.", status_code=400)
+
+
+@router.post("/pos-settlements/drafts/generate", dependencies=[_pos_settlement_perm, require_save_nonce])
+def pos_settlement_draft_generate(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
+    try:
+        data = pss.generate_draft(payload, username=_username())
+    except Exception as exc:
+        return failure_from_mutation_exc(exc, fallback="Failed to create settlement draft.")
+    return success_after_mutation(
+        request,
+        data,
+        message=data.get("message") or "Settlement draft created",
+        status_code=201,
+    )
+
+
+@router.post("/pos-settlements/drafts/{draft_id}/verify", dependencies=[_pos_settlement_perm, require_save_nonce])
+def pos_settlement_draft_verify(request: Request, draft_id: int):
+    try:
+        data = pss.verify_draft(draft_id)
+    except Exception as exc:
+        return failure_from_mutation_exc(exc, fallback="Failed to verify settlement.")
+    return success_after_mutation(request, data, message=data.get("message") or "Settlement verified")
+
+
+@router.post("/pos-settlements/drafts/{draft_id}/cancel", dependencies=[_pos_settlement_perm, require_save_nonce])
+def pos_settlement_draft_cancel(request: Request, draft_id: int):
+    try:
+        data = pss.cancel_draft(draft_id)
+    except Exception as exc:
+        return failure_from_mutation_exc(exc, fallback="Failed to cancel settlement.")
+    return success_after_mutation(request, data, message=data.get("message") or "Settlement cancelled")
+
+
+@router.post("/pos-settlements/drafts/{draft_id}/post", dependencies=[_pos_settlement_perm, require_save_nonce])
+def pos_settlement_draft_post(
+    request: Request,
+    draft_id: int,
+    payload: dict[str, Any] = Body(default_factory=dict),
+):
+    body = dict(payload or {})
+    body["draft_id"] = draft_id
+    try:
+        data = pss.post_draft(body, username=_username())
+    except Exception as exc:
+        return failure_from_mutation_exc(exc, fallback="Failed to post settlement.")
+    return success_after_mutation(request, data, message=data.get("message") or "Settlement posted")

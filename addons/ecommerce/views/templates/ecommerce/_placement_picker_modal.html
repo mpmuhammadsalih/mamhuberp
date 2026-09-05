@@ -1,0 +1,42 @@
+{# Placement picker modal — requires: modal_id, placements, placement_labels, include_all=false #}
+<div class="modal hidden" id="{{ modal_id }}" role="dialog" aria-modal="true" aria-labelledby="{{ modal_id }}Title">
+  <div class="modal__overlay" data-ec-picker-close="1"></div>
+  <div class="modal__content ecommerce-picker-modal">
+    <div class="modal__header">
+      <h3 id="{{ modal_id }}Title">Select placement</h3>
+      <button type="button" class="modal__close" data-ec-picker-close="1" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__search">
+        <div class="search-field">
+          <input type="text" data-ec-picker-search placeholder="Search placement..." autocomplete="off" />
+          <button type="button" class="search-clear" data-ec-picker-search-clear aria-label="Clear search">×</button>
+        </div>
+      </div>
+      <div class="scroll-table modal__table">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Label</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if include_all %}
+            <tr class="ec-picker-row" data-value="" data-label="All placements" style="cursor:pointer;">
+              <td><em>—</em></td>
+              <td>All placements</td>
+            </tr>
+            {% endif %}
+            {% for p in placements %}
+            <tr class="ec-picker-row" data-value="{{ p }}" data-label="{{ placement_labels.get(p, p) }}" style="cursor:pointer;">
+              <td><code>{{ p }}</code></td>
+              <td>{{ placement_labels.get(p, p) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

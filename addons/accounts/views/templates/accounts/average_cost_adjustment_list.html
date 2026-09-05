@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .aca-list { max-width: 1200px; margin: 0 auto; padding: 12px 16px 24px; }
+  .aca-list__top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .aca-list__title { margin: 0; font-size: 22px; font-weight: 500; }
+  .aca-list__muted { margin: 4px 0 0; font-size: 13px; color: #6c757d; }
+  .aca-btn { border: 1px solid #dee2e6; border-radius: 4px; padding: 7px 14px; font-size: 13px; background: #fff; cursor: pointer; text-decoration: none; color: #212529; display: inline-flex; align-items: center; }
+  .aca-btn--primary { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+  .aca-btn--primary:hover { background: #0b5ed7; color: #fff; }
+  .aca-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: end; }
+  .aca-filters label { font-size: 12px; color: #6c757d; display: block; margin-bottom: 2px; }
+  .aca-filters input, .aca-filters select { border: 1px solid #dee2e6; border-radius: 4px; padding: 6px 8px; font-size: 13px; }
+  .aca-table-wrap { overflow: auto; border: 1px solid #dee2e6; border-radius: 4px; max-height: 72vh; }
+  .aca-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .aca-table th, .aca-table td { padding: 8px 10px; border-bottom: 1px solid #e9ecef; white-space: nowrap; }
+  .aca-table th { background: #f8f9fa; font-weight: 600; position: sticky; top: 0; z-index: 1; }
+  .aca-table tbody tr:hover { background: #f0f7ff; }
+  .aca-table td.num, .aca-table th.num { text-align: right; }
+  .aca-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .aca-badge--draft { background: #e9ecef; color: #495057; }
+  .aca-badge--progress { background: #cff4fc; color: #055160; }
+  .aca-badge--posted { background: #d1e7dd; color: #0f5132; }
+  .aca-summary { margin-bottom: 10px; font-size: 13px; font-weight: 600; color: #334155; }
+</style>
+
+<div class="aca-list">
+  <div class="aca-list__top">
+    <div>
+      <h1 class="aca-list__title">Average Cost Adjustment</h1>
+      <p class="aca-list__muted">Update item average cost, revalue inventory, and correct COGS for minus billing (negative stock).</p>
+    </div>
+    <div>
+      <a class="aca-btn aca-btn--primary" href="{{ url_for('accounts.average_cost_adjustment_form') }}">+ New adjustment</a>
+    </div>
+  </div>
+
+  <form class="aca-filters" method="get" action="{{ url_for('accounts.average_cost_adjustment_list') }}">
+    <div>
+      <label for="search">Search</label>
+      <input type="search" id="search" name="search" value="{{ search or '' }}" placeholder="Journal no, name, reference…" />
+    </div>
+    <div>
+      <label for="status">Status</label>
+      <select id="status" name="status">
+        <option value="">All</option>
+        <option value="DRAFT"{% if status_filter == 'DRAFT' %} selected{% endif %}>Draft</option>
+        <option value="IN_PROGRESS"{% if status_filter == 'IN_PROGRESS' %} selected{% endif %}>In progress</option>
+        <option value="POSTED"{% if status_filter == 'POSTED' %} selected{% endif %}>Posted</option>
+      </select>
+    </div>
+    <button type="submit" class="aca-btn">Filter</button>
+    {% if search or status_filter %}
+    <a class="aca-btn" href="{{ url_for('accounts.average_cost_adjustment_list') }}">Clear</a>
+    {% endif %}
+  </form>
+
+  {% if rows %}
+  <p class="aca-summary">Total value delta (listed): {{ '{:,.2f}'.format((total_delta or 0)|float) }}</p>
+  {% endif %}
+
+  <div class="aca-table-wrap">
+    <table class="aca-table">
+      <thead>
+        <tr>
+          <th>Journal</th>
+          <th>Description</th>
+          <th>Date</th>
+          <th>Posting date</th>
+          <th>Warehouse</th>
+          <th>Status</th>
+          <th class="num">Lines</th>
+          <th class="num">Value delta</th>
+          <th>GL voucher</th>
+          <th>Created by</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if not rows %}
+        <tr><td colspan="11" style="padding:16px;color:#6c757d;">No average cost adjustments yet.</td></tr>
+        {% endif %}
+        {% for r in rows %}
+        {% set st = (r.status or 'DRAFT')|upper %}
+        <tr>
+          <td>{{ r.journalname or ('ACA-%06d'|format(r.journalno|int)) }}</td>
+          <td>{{ r.description or '—' }}</td>
+          <td>{{ (r.journal_date or '')|string|truncate(10, True, '') }}</td>
+          <td>{{ (r.posting_date or '')|string|truncate(10, True, '') }}</td>
+          <td>{{ r.warehouse_code or '—' }}</td>
+          <td>
+            <span class="aca-badge aca-badge--{% if st == 'POSTED' %}posted{% elif st == 'IN_PROGRESS' %}progress{% else %}draft{% endif %}">{{ st }}</span>
+          </td>
+          <td class="num">{{ r.line_count or 0 }}</td>
+          <td class="num">{{ '{:,.2f}'.format((r.total_delta or 0)|float) }}</td>
+          <td>{{ r.gl_voucher_no or '—' }}</td>
+          <td>{{ r.createdby or '—' }}</td>
+          <td>
+            {% if st == 'POSTED' %}
+            <a class="aca-btn" href="{{ url_for('accounts.average_cost_adjustment_view', journal_no=r.journalno) }}">View</a>
+            {% else %}
+            <a class="aca-btn" href="{{ url_for('accounts.average_cost_adjustment_edit', journal_no=r.journalno) }}">Edit</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

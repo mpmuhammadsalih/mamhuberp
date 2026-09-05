@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=4" />
+{% endblock %}
+{% block content %}
+{% set acct = (customer.account_status or '')|upper %}
+<div class="page-po nexa-list-page ecommerce-order-detail" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">{{ customer.first_name }} {{ customer.last_name }}</h1>
+      <p class="page-po__muted">
+        {{ customer.email }}
+        {% if customer.mobile %} · {{ customer.mobile }}{% endif %}
+        · Registered {{ (customer.created_at|string)[:19].replace('T', ' ') if customer.created_at else '—' }}
+      </p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('ecommerce.customers') }}" class="page-po__btn-secondary">← Back to customers</a>
+      <span class="ecommerce-flag ecommerce-flag-{% if acct == 'ACTIVE' %}Y{% elif acct in ('INACTIVE', 'LOCKED', 'SUSPENDED', 'BLOCKED') %}N{% else %}M{% endif %} ecommerce-order-detail__status-badge">
+        {{ customer.account_status or '—' }}
+      </span>
+    </div>
+  </div>
+
+  <div class="ecommerce-form-panel" style="margin-bottom:20px;">
+    <h2 class="page-po__section-title">Account actions</h2>
+    <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+      {% if acct != 'ACTIVE' %}
+      <form method="post" action="{{ url_for('ecommerce.customer_status', user_id=customer.user_id) }}">
+        <input type="hidden" name="status" value="ACTIVE" />
+        <button type="submit" class="page-po__btn-primary">Activate account</button>
+      </form>
+      {% endif %}
+      {% if acct != 'INACTIVE' %}
+      <form method="post" action="{{ url_for('ecommerce.customer_status', user_id=customer.user_id) }}">
+        <input type="hidden" name="status" value="INACTIVE" />
+        <button type="submit" class="page-po__btn-secondary">Suspend account</button>
+      </form>
+      {% endif %}
+      {% if acct != 'LOCKED' %}
+      <form method="post" action="{{ url_for('ecommerce.customer_status', user_id=customer.user_id) }}">
+        <input type="hidden" name="status" value="LOCKED" />
+        <button type="submit" class="page-po__btn-secondary">Lock account</button>
+      </form>
+      {% endif %}
+      <span class="page-po__muted">Suspended and locked customers cannot sign in to the storefront.</span>
+    </div>
+  </div>
+
+  <div class="ecommerce-kpi-grid ecommerce-order-summary">
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Total orders</div>
+      <div class="ecommerce-kpi-val">{{ customer.order_count }}</div>
+    </div>
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Total spent</div>
+      <div class="ecommerce-kpi-val ecommerce-kpi-val--sm">{{ '%.2f'|format(customer.total_spent or 0) }}</div>
+    </div>
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Last order</div>
+      <div class="ecommerce-kpi-val ecommerce-kpi-val--sm">{{ (customer.last_order_at|string)[:19].replace('T', ' ') if customer.last_order_at else '—' }}</div>
+    </div>
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Last login</div>
+      <div class="ecommerce-kpi-val ecommerce-kpi-val--sm">{{ (customer.last_login_at|string)[:19].replace('T', ' ') if customer.last_login_at else '—' }}</div>
+    </div>
+  </div>
+
+  <div class="page-po__section">
+    <h2 class="page-po__section-title">Order history</h2>
+    <div class="co-table-wrap">
+      <table class="co-table co-table--th-hint">
+        <thead>
+          <tr>
+            <th style="text-align:center; width:56px; cursor:default;">Sl.No</th>
+            <th>Order #</th>
+            <th>Date</th>
+            <th style="text-align:right;">Total</th>
+            <th>Status</th>
+            <th style="text-align:center; cursor:default;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in customer.orders %}
+          {% set st = (row.order_status or '')|upper %}
+          <tr>
+            <td class="sl-no">{{ loop.index }}</td>
+            <td><strong>{{ row.order_number }}</strong></td>
+            <td>{{ (row.created_at|string)[:19].replace('T', ' ') if row.created_at else '—' }}</td>
+            <td class="num">{{ row.currency_code or 'QAR' }} {{ '%.2f'|format(row.grand_total or 0) }}</td>
+            <td>
+              <span class="ecommerce-flag ecommerce-flag-{% if st in ('CONFIRMED', 'DELIVERED', 'COMPLETED') %}Y{% elif st in ('CANCELLED', 'REFUNDED') %}N{% else %}M{% endif %}">
+                {{ row.order_status or '—' }}
+              </span>
+            </td>
+            <td style="text-align:center;">
+              <a href="{{ url_for('ecommerce.order_detail', order_id=row.order_id) }}" class="btn-view">View</a>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6" style="text-align:center;padding:20px;color:#64748b;">No orders yet for this customer.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -19,8 +19,9 @@ from typing import Any, Dict, List, Optional, Tuple
 RECEIPT_WIDTH = 48
 DEFAULT_RECEIPT_DESIGN = {'page_width': 48, 'header': {'business_name': True, 'logo': True}, 'bill': {'bill_no': True, 'bill_date': True, 'bill_time': True, 'print_date': True, 'print_time': True, 'customer': True}, 'items': {'slno': True, 'item': True, 'item_ara': True, 'unit_price': True, 'qty': True, 'line_total': True}, 'summary': {'cashier': True, 'waiter': True, 'paid': True, 'currency': True, 'total_tax_ex': True, 'disc_pct': True, 'taxes': True, 'grand_total': True}, 'footer': {'message': True, 'powered_by': True, 'barcode': True}, 'labels': {'powered_by': 'POWERED BY KAPP', 'grand_total_prefix': 'T'}, 'output_encoding': 'utf-8', 'nls_lang': '', 'escpos_left_align': True, 'escpos_header_double_height': True, 'paper_width_mm': 80, 'receipt_printer_name': '', 'receipt_printer_ip': ''}
 from nexa_http import Blueprint, Response, current_app, flash, has_request_context, jsonify, redirect, render_template, request, session, url_for
-from db import DATABASES, add_cart_line_to_temp, build_pos_price_edited_report, build_pos_receipt_from_save_payload, build_pos_sales_list_summary, build_pos_shift_preclose_report, validate_pos_counter_dates_closed_for_sales_load, claim_next_pos_save_job, claim_pos_save_job_by_id, close_pos_counter_operation, compute_pos_settlement_payment_mode_summary, count_pos_held_bills_for_counter, count_pos_save_processing_jobs, create_pos_settlement_draft, delete_pos_counter_row, enqueue_pos_save_job, enrich_location_details_with_branch_logo, finalize_temp_bill, finish_pos_save_job, find_counter_by_systemname, find_open_counter_operation, fetch_counter_row_by_rowid, force_requeue_all_pos_save_processing_jobs, get_latest_closed_pos_date_for_counter, get_counter_name_by_code, get_counter_row_by_code, get_held_bill, get_item_warehouse_stock_qty, get_pos_bill_receipt_for_tab, get_pos_save_queue_job_detail, get_receipt_data_from_temp_bill, get_temp_bill_by_billno, get_base_locations_list, get_locations_list, get_next_countercode, get_system_config_rows, insert_pos_counter_row, is_location_warehouse_enabled, list_counter_operations_recent, list_pos_bills_canceled, list_pos_bills_held, list_pos_bills_posted, list_pos_canceled_bills_for_counter, list_pos_held_bills_for_counter, list_pos_counters_for_location, list_pos_save_queue, list_pos_settlement_drafts, list_pos_settlement_pending_by_date, list_temp_bills_for_pos_verify, list_warehouses_for_location, list_warehouse_picker_bins, mark_temp_bill_queued, open_pos_counter_operation, post_pos_settlement_draft, prepare_pos_save_queue_for_claim, release_stale_pos_save_processing_jobs, resolve_pos_settlement_default_date, resolve_pos_counter_warehouse, retry_pos_save_job, reverse_pos_settlement_gl_journal, settlement_tender_amounts_by_bill, update_pos_counter_row, verify_pos_settlement_draft, cancel_pos_settlement_draft, void_all_temp_bill, get_last_in_progress_bill, get_all_chart_of_accounts, get_pos_settlement_draft_detail, get_pos_settlement_account_defaults_from_tenders, get_pos_settlement_account_config, get_pos_tender_gl_by_code, upsert_pos_settlement_account_config, list_pos_tender_types, upsert_pos_tender_type_row, delete_pos_tender_type_row, list_pos_payment_tender_types, remove_cart_line_from_temp, get_item_by_alternate_barcode, get_item_by_code, get_item_by_manufacturer_id, get_item_alternate_uom_by_barcode, get_item_alternate_uoms, get_item_uom_pricing, get_categories, get_items_list, get_location_info_by_dbkey, get_next_bill_no, peek_next_bill_no, billhdr_exists, get_customers_master_list, get_customer_loyalty_for_picker, peek_next_customer_loyalty_code, insert_customer_loyalty_row, hold_bill, save_sales_invoice, pos_payload_credit_delta, validate_pos_credit_customer_accounts, ensure_billhdr_pos_settlement_columns, update_billhdr_pos_settlement_posting, simulate_pos_sale_stock_impact, read_pos_stock_live_snapshot, set_active_db_key, set_held_bill_in_progress, sync_cart_to_temp, update_cart_line_qty_in_temp, update_cart_line_discount_in_temp, update_cart_line_rate_in_temp, void_bill, void_cart_line_in_temp, _fetch_billhdr_rows_by_billnos, _fetch_billhdr_rows_for_pos_settlement, _is_pos_shift_credit_tender, _safe_rows, _get_table_columns, _table_exists, _shift_code_from_header, parse_billno_from_request, billno_is_valid, coerce_billno
+from db import DATABASES, add_cart_line_to_temp, build_pos_price_edited_report, build_pos_receipt_from_save_payload, build_pos_sales_list_summary, build_pos_shift_preclose_report, validate_pos_counter_dates_closed_for_sales_load, claim_next_pos_save_job, claim_pos_save_job_by_id, close_pos_counter_operation, compute_pos_settlement_payment_mode_summary, count_pos_held_bills_for_counter, count_pos_save_processing_jobs, create_pos_settlement_draft, delete_pos_counter_row, enqueue_pos_save_job, enrich_location_details_with_branch_logo, finalize_temp_bill, finish_pos_save_job, find_counter_by_systemname, find_open_counter_operation, fetch_counter_row_by_rowid, force_requeue_all_pos_save_processing_jobs, get_latest_closed_pos_date_for_counter, get_counter_name_by_code, get_counter_row_by_code, get_held_bill, get_item_warehouse_stock_qty, get_pos_bill_receipt_for_tab, get_pos_save_queue_job_detail, get_receipt_data_from_temp_bill, get_temp_bill_by_billno, get_base_locations_list, get_locations_list, get_next_countercode, get_system_config_rows, insert_pos_counter_row, is_location_warehouse_enabled, list_counter_operations_recent, list_pos_bills_canceled, list_pos_bills_held, list_pos_bills_posted, list_pos_canceled_bills_for_counter, list_pos_held_bills_for_counter, list_pos_counters_for_location, list_pos_save_queue, list_pos_settlement_drafts, list_pos_settlement_pending_by_date, list_temp_bills_for_pos_verify, list_warehouses_for_location, list_warehouse_picker_bins, mark_temp_bill_queued, open_pos_counter_operation, post_pos_settlement_draft, prepare_pos_save_queue_for_claim, release_stale_pos_save_processing_jobs, resolve_pos_settlement_default_date, resolve_pos_counter_warehouse, retry_pos_save_job, reverse_pos_settlement_gl_journal, settlement_tender_amounts_by_bill, update_pos_counter_row, verify_pos_settlement_draft, cancel_pos_settlement_draft, void_all_temp_bill, get_last_in_progress_bill, get_all_chart_of_accounts, get_pos_settlement_draft_detail, get_pos_settlement_account_defaults_from_tenders, get_pos_settlement_account_config, get_pos_tender_gl_by_code, upsert_pos_settlement_account_config, list_pos_tender_types, upsert_pos_tender_type_row, delete_pos_tender_type_row, list_pos_payment_tender_types, remove_cart_line_from_temp, get_item_by_alternate_barcode, get_item_by_code, get_item_by_manufacturer_id, get_item_alternate_uom_by_barcode, get_item_alternate_uoms, get_item_uom_pricing, is_item_weight_item, get_categories, get_items_list, get_location_info_by_dbkey, get_next_bill_no, peek_next_bill_no, billhdr_exists, get_customers_master_list, get_customer_loyalty_for_picker, peek_next_customer_loyalty_code, insert_customer_loyalty_row, hold_bill, save_sales_invoice, pos_payload_credit_delta, validate_pos_credit_customer_accounts, ensure_billhdr_pos_settlement_columns, update_billhdr_pos_settlement_posting, simulate_pos_sale_stock_impact, read_pos_stock_live_snapshot, set_active_db_key, set_held_bill_in_progress, sync_cart_to_temp, update_cart_line_qty_in_temp, update_cart_line_discount_in_temp, update_cart_line_rate_in_temp, void_bill, void_cart_line_in_temp, _fetch_billhdr_rows_by_billnos, _fetch_billhdr_rows_for_pos_settlement, _is_pos_shift_credit_tender, _safe_rows, _get_table_columns, _table_exists, _shift_code_from_header, parse_billno_from_request, billno_is_valid, coerce_billno
 from addons.document_numbering.document_numbering_db import DOC_TYPE_POS_INVOICE
+from addons.pos_billing.variable_weight_barcode import parse_variable_weight_barcode
 from ..pos_page_cache import apply_pos_page_no_cache_headers, get_pos_asset_version, is_pos_html_page_path
 from nexa_http import context as nexa_ctx
 from nexa_http.templates_m import register_context_processor
@@ -657,12 +658,14 @@ def _fetch_pos_settlement_candidate_bills(
     if scope not in ('all', 'pending', 'settled', 'cancelled'):
         scope = 'all'
     if 'POS_SETTLEMENT_STATUS' in cols_u:
+        st_expr = f"UPPER(TRIM(NVL({bh}POS_SETTLEMENT_STATUS, 'PENDING')))"
         if scope == 'pending':
-            where_parts.append(f"NVL({bh}POS_SETTLEMENT_STATUS, 'PENDING') = 'PENDING'")
+            # Treat NULL / blank / PENDING as unsettled (NVL alone misses empty strings).
+            where_parts.append(f"({st_expr} IN ('PENDING', '') OR {bh}POS_SETTLEMENT_STATUS IS NULL)")
         elif scope == 'settled':
-            where_parts.append(f"{bh}POS_SETTLEMENT_STATUS = 'SETTLED'")
+            where_parts.append(f"{st_expr} = 'SETTLED'")
         elif scope == 'cancelled':
-            where_parts.append(f"{bh}POS_SETTLEMENT_STATUS = 'CANCELLED'")
+            where_parts.append(f"{st_expr} = 'CANCELLED'")
     if 'BILLDATE' in cols_u:
         bill_date_col = f'NVL(pm_agg.POSDATE, {bh}BILLDATE)' if use_paymode_posdate else f'{bh}BILLDATE'
         from_clean = (from_dt or '').strip()[:10]
@@ -2668,8 +2671,8 @@ def _shift_preclose_to_plain_text(report: Dict[str, Any], design: Optional[Dict[
         out.append(two_col('Cashier', cashier))
     out.append(two_col('Check Time', str(report.get('check_time_display') or '')))
     out.append(rule())
-    out.append(two_col('Direct customer', amount(report.get('direct_customer'))))
-    out.append(two_col('Credit', amount(report.get('credit_sales'))))
+    out.append(two_col('Cash customer sale', amount(report.get('direct_customer'))))
+    out.append(two_col('Credit customer sale', amount(report.get('credit_sales'))))
     out.append(two_col('Total Sales', amount(report.get('total_sales'))))
     out.append(two_col('Total Discount', amount(report.get('total_discount') or report.get('discount_lines'))))
     out.append(two_col('Sales returns', amount(report.get('sales_returns'))))
@@ -2951,8 +2954,8 @@ def _shift_preclose_pdf_bytes(report: Dict[str, Any]) -> Optional[bytes]:
     story.extend([meta, Spacer(1, 8), Paragraph('<b>Sales summary</b>', section)])
 
     summary_rows = [
-        ['Direct customer', money(report.get('direct_customer'))],
-        ['Credit', money(report.get('credit_sales'))],
+        ['Cash customer sale', money(report.get('direct_customer'))],
+        ['Credit customer sale', money(report.get('credit_sales'))],
         ['Total sales', money(report.get('total_sales'))],
         ['Total discount', money(report.get('total_discount') or report.get('discount_lines'))],
         ['Sales returns', money(report.get('sales_returns'))],
@@ -4639,6 +4642,120 @@ def _pos_lookup_item_row(location_code_int: int, query: str) -> Optional[Dict[st
     return item_data
 
 
+def _pos_apply_weight_item_fields(item_data: Dict[str, Any], parsed: Dict[str, Any], scanned: str, location_code_int: int) -> Dict[str, Any]:
+    """Attach variable-weight scan metadata for POS cart (sold by KG)."""
+    weight_kg = float(parsed.get('weight_kg') or 0)
+    rate_per_kg = float(item_data.get('barcode_retail_price') or item_data.get('retailprice') or 0)
+    if rate_per_kg <= 0:
+        try:
+            ic = int(item_data.get('itemcode') or 0)
+        except (TypeError, ValueError):
+            ic = 0
+        if ic > 0:
+            pricing = get_item_uom_pricing(int(location_code_int), ic, 'KG', 'retail')
+            if pricing:
+                rate_per_kg = float(pricing.get('rate') or rate_per_kg or 0)
+    item_data['is_weight_item'] = True
+    item_data['weight_kg'] = round(weight_kg, 6)
+    item_data['rate_per_kg'] = round(rate_per_kg, 6)
+    item_data['weight_line_amount'] = round(weight_kg * rate_per_kg, 3)
+    item_data['scanned_barcode'] = scanned
+    item_data['barcode_uom'] = 'KG'
+    item_data['uom'] = 'KG'
+    item_data['manufacturerid'] = scanned
+    item_data['barcode'] = scanned
+    return item_data
+
+
+def _pos_resolve_weight_plu_item_code(location_code_int: int, parsed: Dict[str, Any]) -> Tuple[Optional[int], str]:
+    """
+    Map scale PLU from a variable-weight barcode to ITEMMASTER.ITEMCODE.
+
+    Lookup order:
+      1. ITEMMASTER.MANUFACTURERID = PLU (5-digit string, leading zeros preserved)
+      2. ITEMMASTER.MANUFACTURERID = prefix + PLU (e.g. 23 + 00001 → 2300001)
+      3. ITEMALTERNATEUOMMAP.MANUFACTURERID for same keys
+      4. ITEMMASTER.ITEMCODE (legacy / backward compatible)
+    """
+    plu_raw = str(parsed.get('plu') or '').strip()
+    plu_item_code = int(parsed.get('plu_item_code') or 0)
+    prefix = str(parsed.get('prefix') or '').strip()
+    display_plu = plu_raw or (str(plu_item_code) if plu_item_code > 0 else '')
+
+    candidates: List[str] = []
+    if plu_raw:
+        candidates.append(plu_raw)
+    if prefix and plu_raw:
+        candidates.append(prefix + plu_raw)
+    if plu_item_code > 0:
+        candidates.append(str(plu_item_code))
+
+    seen: set = set()
+    for plu_key in candidates:
+        key = plu_key.strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        row = get_item_by_manufacturer_id(key, location_code_int)
+        if row and row.get('itemcode') is not None:
+            try:
+                return int(row['itemcode']), display_plu or key
+            except (TypeError, ValueError):
+                pass
+        row = get_item_by_alternate_barcode(key, location_code_int)
+        if row and row.get('itemcode') is not None:
+            try:
+                return int(row['itemcode']), display_plu or key
+            except (TypeError, ValueError):
+                pass
+
+    if plu_item_code > 0:
+        row = get_item_by_code(plu_item_code, location_code_int)
+        if row and row.get('itemcode') is not None:
+            try:
+                return int(row['itemcode']), display_plu or str(plu_item_code)
+            except (TypeError, ValueError):
+                pass
+
+    return None, display_plu
+
+
+def _pos_resolve_scan_item(location_code_int: int, query: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """
+    Resolve POS scan: variable-weight barcodes (prefix 20–29) when item is flagged IS_WEIGHT_ITEM,
+    otherwise standard barcode / code / name lookup unchanged.
+    """
+    query = (query or '').strip()
+    if not query:
+        return None, 'Missing query'
+    parsed = parse_variable_weight_barcode(query)
+    if parsed and parsed.get('is_variable_weight_format'):
+        if not parsed.get('valid'):
+            return None, str(parsed.get('error') or 'Invalid variable-weight barcode.')
+        plu_item_code, plu_display = _pos_resolve_weight_plu_item_code(location_code_int, parsed)
+        if not plu_item_code or plu_item_code <= 0:
+            return None, (
+                f'Weight item PLU {plu_display or "?"} not found. '
+                'Set scale PLU on Item Master barcode (MANUFACTURERID) for this branch.'
+            )
+        if not is_item_weight_item(plu_item_code, location_code_int):
+            item_data = _pos_lookup_item_row(location_code_int, query)
+            if item_data:
+                return item_data, None
+            return None, (
+                f'Item {plu_item_code} (PLU {plu_display}) is not marked as a weight item. '
+                'Enable "Weight item" in Item Master (Inventory tab) to scan variable-weight barcodes.'
+            )
+        item_data = _pos_lookup_item_row(location_code_int, str(plu_item_code))
+        if not item_data:
+            return None, f'Weight item PLU {plu_display} (item {plu_item_code}) not found in item master for this branch.'
+        return _pos_apply_weight_item_fields(item_data, parsed, query, location_code_int), None
+    item_data = _pos_lookup_item_row(location_code_int, query)
+    if not item_data:
+        return None, 'Item not found'
+    return item_data, None
+
+
 def _pos_ai_fallback_lines_from_text(text: str) -> List[Dict[str, Any]]:
     """When the model returns [] or unparseable JSON, derive barcode lines from plain pasted text (e.g. ``12481``)."""
     t = (text or '').strip()
@@ -4766,9 +4883,12 @@ def pos_item_info():
         return jsonify({'success': False, 'error': 'Missing query'}, 400)
     location_code_int = _resolve_location_code()
     try:
-        item_data = _pos_lookup_item_row(location_code_int, query)
+        item_data, err = _pos_resolve_scan_item(location_code_int, query)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}, 500)
+    if err:
+        status = 404 if err == 'Item not found' else 400
+        return jsonify({'success': False, 'error': err}, status)
     if not item_data:
         return jsonify({'success': False, 'error': 'Item not found'}, 404)
     return jsonify({'success': True, 'item': item_data})

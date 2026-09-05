@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Warehouse Summary{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .wh-sum-page .co-table-wrap { overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; max-height: 68vh; }
+  .wh-sum-page .co-table { width: 100%; min-width: 720px; border-collapse: collapse; font-size: 13px; }
+  .wh-sum-page .co-table th, .wh-sum-page .co-table td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+  .wh-sum-page .co-table thead th { position: sticky; top: 0; z-index: 2; background: #f8fafc; font-size: 12px; font-weight: 700; color: #334155; }
+  .wh-sum-page .co-table td.num, .wh-sum-page .co-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .wh-sum-page .co-table tbody tr:hover { background: #f8fafc; }
+</style>
+
+<div class="page-po nexa-list-page nexa-setup-list-page wh-sum-page">
+  <section class="nexa-stat-grid" aria-label="Warehouse summary KPIs">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-building" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Warehouses</p>
+        <p class="nexa-stat-value">{{ summary.warehouse_count or 0 }}</p>
+        <p class="nexa-stat-sub">With stock</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-stack" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Total quantity</p>
+        <p class="nexa-stat-value">{{ '%.2f'|format(summary.total_qty or 0) }}</p>
+        <p class="nexa-stat-sub">On-hand units</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-currency-dollar" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Stock value</p>
+        <p class="nexa-stat-value">{{ '%.2f'|format(summary.total_value or 0) }}</p>
+        <p class="nexa-stat-sub">Qty × average cost</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-box-seam" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Item lines</p>
+        <p class="nexa-stat-value">{{ summary.total_item_lines or 0 }}</p>
+        <p class="nexa-stat-sub">Distinct SKUs</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title page-po__title--with-icon">
+        <span class="page-po__title-icon" aria-hidden="true"><i class="bi bi-building"></i></span>
+        Warehouse Summary
+      </h1>
+      <p class="page-po__muted">On-hand totals by warehouse for branch {{ location_code }}.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a class="page-po__btn page-po__btn-secondary" href="{{ url_for('reports.inventory_reports_hub') }}">All inventory reports</a>
+      <a class="page-po__btn page-po__btn-secondary" href="{{ export_url }}">Export CSV</a>
+    </div>
+  </div>
+
+  <form class="page-po__filters" method="get" action="{{ url_for('reports.warehouse_summary_report') }}">
+    <div class="page-po__filter-row">
+      <label class="page-po__field">
+        <span class="page-po__label">Search warehouse</span>
+        <input class="page-po__input" type="text" name="search" value="{{ search or '' }}" placeholder="Code or name…" />
+      </label>
+      <button class="page-po__btn page-po__btn-primary" type="submit">Run</button>
+      <a class="page-po__btn page-po__btn-secondary" href="{{ url_for('reports.warehouse_summary_report') }}">Clear</a>
+    </div>
+  </form>
+
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th>Warehouse</th>
+          <th>Name</th>
+          <th class="num">Items</th>
+          <th class="num">Quantity</th>
+          <th class="num">Stock value</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.warehouse_code or r.warehouse_id }}</td>
+          <td>{{ r.warehouse_name or '—' }}</td>
+          <td class="num">{{ r.item_count or 0 }}</td>
+          <td class="num">{{ '%.4f'|format(r.total_qty or 0) }}</td>
+          <td class="num">{{ '%.2f'|format(r.stock_value or 0) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5">No warehouse stock found for this branch.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

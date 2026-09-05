@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=5" />
+{% endblock %}
+{% block content %}
+<div class="page-po ec-dash">
+  <header class="ec-dash__header">
+    <div>
+      <h1 class="ec-dash__title">Ecommerce Dashboard</h1>
+      <p class="ec-dash__subtitle">Location <strong>{{ kpi.location_code }}</strong> · Storefront admin</p>
+    </div>
+    <div class="ec-dash__header-actions">
+      <a href="{{ url_for('ecommerce.reports') }}" class="ec-dash-btn ec-dash-btn--outline">
+        <i class="bi bi-graph-up" aria-hidden="true"></i> Reports
+      </a>
+      <a href="{{ url_for('ecommerce.settings') }}" class="ec-dash-btn ec-dash-btn--primary">
+        <i class="bi bi-gear" aria-hidden="true"></i> Settings
+      </a>
+    </div>
+  </header>
+
+  <section class="ec-dash-stats" aria-label="Store KPIs">
+    <article class="ec-stat-card">
+      <span class="ec-stat-icon ec-stat-icon--blue" aria-hidden="true"><i class="bi bi-tag"></i></span>
+      <div>
+        <p class="ec-stat-label">Products</p>
+        <p class="ec-stat-value">{{ '{:,}'.format(kpi.total_products) }}</p>
+      </div>
+    </article>
+    <article class="ec-stat-card">
+      <span class="ec-stat-icon ec-stat-icon--green" aria-hidden="true"><i class="bi bi-box-seam"></i></span>
+      <div>
+        <p class="ec-stat-label">In stock</p>
+        <p class="ec-stat-value">{{ '{:,}'.format(kpi.in_stock) }}</p>
+      </div>
+    </article>
+    <article class="ec-stat-card">
+      <span class="ec-stat-icon ec-stat-icon--amber" aria-hidden="true"><i class="bi bi-box"></i></span>
+      <div>
+        <p class="ec-stat-label">Out of stock</p>
+        <p class="ec-stat-value">{{ '{:,}'.format(kpi.out_of_stock) }}</p>
+      </div>
+    </article>
+    <article class="ec-stat-card">
+      <span class="ec-stat-icon ec-stat-icon--purple" aria-hidden="true"><i class="bi bi-cart3"></i></span>
+      <div>
+        <p class="ec-stat-label">Open orders</p>
+        <p class="ec-stat-value">{{ '{:,}'.format(kpi.open_orders) }}</p>
+      </div>
+    </article>
+    <article class="ec-stat-card">
+      <span class="ec-stat-icon ec-stat-icon--blue" aria-hidden="true"><i class="bi bi-calendar-event"></i></span>
+      <div>
+        <p class="ec-stat-label">Orders today</p>
+        <p class="ec-stat-value">{{ '{:,}'.format(kpi.orders_today) }}</p>
+      </div>
+    </article>
+    <article class="ec-stat-card">
+      <span class="ec-stat-icon ec-stat-icon--green" aria-hidden="true"><i class="bi bi-bag-check"></i></span>
+      <div>
+        <p class="ec-stat-label">Total orders</p>
+        <p class="ec-stat-value">{{ '{:,}'.format(kpi.total_orders) }}</p>
+      </div>
+    </article>
+    <article class="ec-stat-card">
+      <span class="ec-stat-icon ec-stat-icon--purple" aria-hidden="true"><i class="bi bi-image"></i></span>
+      <div>
+        <p class="ec-stat-label">Media assets</p>
+        <p class="ec-stat-value">{{ '{:,}'.format(kpi.active_media) }}</p>
+      </div>
+    </article>
+    <article class="ec-stat-card">
+      <span class="ec-stat-icon ec-stat-icon--amber" aria-hidden="true"><i class="bi bi-star"></i></span>
+      <div>
+        <p class="ec-stat-label">Pending reviews</p>
+        <p class="ec-stat-value">{{ '{:,}'.format(kpi.pending_reviews) }}</p>
+      </div>
+    </article>
+    <article class="ec-stat-card">
+      <span class="ec-stat-icon ec-stat-icon--pink" aria-hidden="true"><i class="bi bi-percent"></i></span>
+      <div>
+        <p class="ec-stat-label">Active promos</p>
+        <p class="ec-stat-value">{{ '{:,}'.format(kpi.active_promotions) }}</p>
+      </div>
+    </article>
+    <article class="ec-stat-card">
+      <span class="ec-stat-icon ec-stat-icon--blue" aria-hidden="true"><i class="bi bi-people"></i></span>
+      <div>
+        <p class="ec-stat-label">Customers</p>
+        <p class="ec-stat-value">{{ '{:,}'.format(kpi.total_customers) }}</p>
+      </div>
+    </article>
+    <article class="ec-stat-card ec-stat-card--wide">
+      <span class="ec-stat-icon ec-stat-icon--green" aria-hidden="true"><i class="bi bi-shop"></i></span>
+      <div>
+        <p class="ec-stat-label">Storefront status</p>
+        <p class="ec-stat-value ec-stat-value--status">{{ kpi.storefront_status }}</p>
+      </div>
+    </article>
+  </section>
+
+  <section class="ec-dash-main">
+    <article class="ec-panel ec-panel--chart">
+      <div class="ec-panel__head">
+        <h2 class="ec-panel__title">Orders overview</h2>
+        <span class="ec-panel__meta">Last 7 days</span>
+      </div>
+      <div class="ec-chart-wrap">
+        <canvas id="ecOrdersChart" aria-label="Orders over the last 7 days"></canvas>
+      </div>
+    </article>
+
+    <article class="ec-panel ec-panel--links">
+      <h2 class="ec-panel__title">Quick links</h2>
+      <nav class="ec-quick-links" aria-label="Quick navigation">
+        <a class="ec-quick-link" href="{{ url_for('ecommerce.products') }}">
+          <span class="ec-quick-link__icon ec-quick-link__icon--blue"><i class="bi bi-tag"></i></span>
+          <span class="ec-quick-link__label">Products</span>
+          <i class="bi bi-chevron-right ec-quick-link__chev" aria-hidden="true"></i>
+        </a>
+        <a class="ec-quick-link" href="{{ url_for('ecommerce.categories') }}">
+          <span class="ec-quick-link__icon ec-quick-link__icon--green"><i class="bi bi-grid"></i></span>
+          <span class="ec-quick-link__label">Categories</span>
+          <i class="bi bi-chevron-right ec-quick-link__chev" aria-hidden="true"></i>
+        </a>
+        <a class="ec-quick-link" href="{{ url_for('ecommerce.orders') }}">
+          <span class="ec-quick-link__icon ec-quick-link__icon--purple"><i class="bi bi-cart3"></i></span>
+          <span class="ec-quick-link__label">Orders</span>
+          <i class="bi bi-chevron-right ec-quick-link__chev" aria-hidden="true"></i>
+        </a>
+        <a class="ec-quick-link" href="{{ url_for('ecommerce.promotions') }}">
+          <span class="ec-quick-link__icon ec-quick-link__icon--pink"><i class="bi bi-gift"></i></span>
+          <span class="ec-quick-link__label">Promotions</span>
+          <i class="bi bi-chevron-right ec-quick-link__chev" aria-hidden="true"></i>
+        </a>
+        <a class="ec-quick-link" href="{{ url_for('ecommerce.media') }}">
+          <span class="ec-quick-link__icon ec-quick-link__icon--amber"><i class="bi bi-image"></i></span>
+          <span class="ec-quick-link__label">Media</span>
+          <i class="bi bi-chevron-right ec-quick-link__chev" aria-hidden="true"></i>
+        </a>
+        <a class="ec-quick-link" href="{{ url_for('ecommerce.cms') }}">
+          <span class="ec-quick-link__icon ec-quick-link__icon--green"><i class="bi bi-file-earmark-text"></i></span>
+          <span class="ec-quick-link__label">CMS pages</span>
+          <i class="bi bi-chevron-right ec-quick-link__chev" aria-hidden="true"></i>
+        </a>
+        <a class="ec-quick-link" href="{{ url_for('ecommerce.settings') }}">
+          <span class="ec-quick-link__icon ec-quick-link__icon--blue"><i class="bi bi-gear"></i></span>
+          <span class="ec-quick-link__label">Settings</span>
+          <i class="bi bi-chevron-right ec-quick-link__chev" aria-hidden="true"></i>
+        </a>
+      </nav>
+    </article>
+
+    <article class="ec-panel ec-panel--recent">
+      <div class="ec-panel__head">
+        <h2 class="ec-panel__title">Recent orders</h2>
+        <a href="{{ url_for('ecommerce.orders') }}" class="ec-panel__link">View all</a>
+      </div>
+      <ul class="ec-recent-list">
+        {% for row in recent_orders %}
+        {% set st = (row.order_status or '')|upper %}
+        <li class="ec-recent-item">
+          <a class="ec-recent-item__link" href="{{ url_for('ecommerce.order_detail', order_id=row.order_id) }}">
+            <span class="ec-recent-item__icon" aria-hidden="true"><i class="bi bi-bag"></i></span>
+            <span class="ec-recent-item__body">
+              <span class="ec-recent-item__title">{{ row.order_number }}</span>
+              <span class="ec-recent-item__meta">{{ (row.created_at|string)[:19].replace('T', ' ') if row.created_at else '—' }}</span>
+            </span>
+            {% if st in ('DELIVERED', 'COMPLETED') %}
+            <span class="ec-badge ec-badge--completed">Completed</span>
+            {% elif st in ('PROCESSING', 'PICKING', 'PACKED', 'OUT_FOR_DELIVERY') %}
+            <span class="ec-badge ec-badge--processing">Processing</span>
+            {% elif st == 'CANCELLED' %}
+            <span class="ec-badge ec-badge--cancelled">Cancelled</span>
+            {% else %}
+            <span class="ec-badge ec-badge--new">New</span>
+            {% endif %}
+          </a>
+        </li>
+        {% else %}
+        <li class="ec-recent-empty">No orders yet.</li>
+        {% endfor %}
+      </ul>
+    </article>
+  </section>
+
+  <aside class="ec-dash-cta">
+    <span class="ec-dash-cta__icon" aria-hidden="true"><i class="bi bi-bar-chart-line"></i></span>
+    <div class="ec-dash-cta__text">
+      <strong>Keep your store growing</strong>
+      <p>Monitor performance, manage inventory, and make data-driven decisions.</p>
+    </div>
+    <a href="{{ url_for('ecommerce.reports') }}" class="ec-dash-btn ec-dash-btn--primary">
+      <i class="bi bi-graph-up" aria-hidden="true"></i> View reports
+    </a>
+  </aside>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  var canvas = document.getElementById('ecOrdersChart');
+  if (!canvas || typeof Chart === 'undefined') return;
+
+  var labels = {{ weekly_orders|map(attribute='day_label')|list|tojson }};
+  var counts = {{ weekly_orders|map(attribute='order_count')|list|tojson }};
+  var maxY = {{ max_weekly_orders|tojson }};
+  var suggestedMax = Math.max(maxY, 5);
+
+  new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Orders',
+        data: counts,
+        borderColor: '#2563eb',
+        backgroundColor: 'rgba(37, 99, 235, 0.12)',
+        fill: true,
+        tension: 0.35,
+        pointRadius: 4,
+        pointBackgroundColor: '#2563eb',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function (ctx) {
+              return ctx.parsed.y + ' order' + (ctx.parsed.y === 1 ? '' : 's');
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: '#64748b', font: { size: 11 } },
+        },
+        y: {
+          beginAtZero: true,
+          suggestedMax: suggestedMax,
+          ticks: {
+            stepSize: 1,
+            color: '#64748b',
+            font: { size: 11 },
+            precision: 0,
+          },
+          grid: { color: 'rgba(148, 163, 184, 0.25)' },
+        },
+      },
+    },
+  });
+})();
+</script>
+{% endblock %}

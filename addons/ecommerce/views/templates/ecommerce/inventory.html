@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=5" />
+{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page ecommerce-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Inventory</h1>
+      <p class="page-po__muted">Stock snapshot for location {{ snap.location_code }}</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('itemmaster.productlist') }}" class="page-po__btn-primary">Item Master</a>
+      <a href="{{ url_for('ecommerce.dashboard') }}" class="page-po__btn-secondary">Dashboard</a>
+    </div>
+  </div>
+
+  <div class="ecommerce-kpi-grid">
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Total products</div>
+      <div class="ecommerce-kpi-val">{{ snap.total_products }}</div>
+    </div>
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Active</div>
+      <div class="ecommerce-kpi-val">{{ snap.active_products }}</div>
+    </div>
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Out of stock</div>
+      <div class="ecommerce-kpi-val">{{ snap.low_stock }}</div>
+    </div>
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Inventory value</div>
+      <div class="ecommerce-kpi-val ecommerce-kpi-val--sm">{{ '%.2f'|format(snap.inventory_value) }}</div>
+    </div>
+  </div>
+
+  <div class="page-po__section">
+    <div class="page-po__topbar" style="margin-bottom:12px;">
+      <h2 class="page-po__section-title" style="margin:0;">Low / out-of-stock items</h2>
+    </div>
+
+    <div class="ecommerce-tabs" style="margin-bottom:12px;">
+      <a class="ecommerce-tab {% if stock_filter == 'issues' %}active{% endif %}" href="{{ url_for('ecommerce.inventory', stock='issues', q=search or None) }}">All issues (≤10)</a>
+      <a class="ecommerce-tab {% if stock_filter == 'out' %}active{% endif %}" href="{{ url_for('ecommerce.inventory', stock='out', q=search or None) }}">Out of stock</a>
+      <a class="ecommerce-tab {% if stock_filter == 'low' %}active{% endif %}" href="{{ url_for('ecommerce.inventory', stock='low', q=search or None) }}">Low stock (1–10)</a>
+    </div>
+
+    <form method="get" class="nexa-list-toolbar">
+      <input type="hidden" name="stock" value="{{ stock_filter }}" />
+      <input type="text" name="q" value="{{ search }}" placeholder="Search code, barcode, name…"
+             class="input" style="min-width:220px; max-width:320px;" autocomplete="off" />
+      <button type="submit" class="page-po__btn-primary" style="padding:4px 12px; font-size:11px;">Search</button>
+      <a href="{{ url_for('ecommerce.inventory', stock=stock_filter) }}" class="page-po__btn-secondary" style="padding:4px 10px; font-size:11px;">Clear</a>
+      <span class="nexa-num">{{ total }} record{{ '' if total == 1 else 's' }}</span>
+    </form>
+
+    <div class="co-table-wrap">
+      <table class="co-table co-table--th-hint">
+        <thead>
+          <tr>
+            <th style="text-align:center; width:56px; cursor:default;">Sl.No</th>
+            <th style="text-align:center;">Code</th>
+            <th>Item</th>
+            <th style="text-align:center;">Stock</th>
+            <th style="text-align:right;">Retail</th>
+            <th style="text-align:center; cursor:default;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in items %}
+          <tr>
+            <td class="sl-no">{{ loop.index + (page - 1) * 50 }}</td>
+            <td style="text-align:center;"><strong>{{ row.item_code }}</strong></td>
+            <td>{{ row.item_name }}</td>
+            <td style="text-align:center;">
+              {% set qty = row.current_stock or 0 %}
+              <span class="ecommerce-flag {% if qty <= 0 %}ecommerce-flag-N{% else %}ecommerce-flag-M{% endif %}">
+                {{ qty }}
+              </span>
+            </td>
+            <td class="num">{{ '%.2f'|format(row.retail_price or 0) }}</td>
+            <td style="text-align:center; white-space:nowrap;">
+              <a href="{{ url_for('ecommerce.product_edit', item_code=row.item_code) }}" class="btn-view">Edit</a>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6" style="text-align:center;padding:20px;color:#64748b;">
+              No items match this stock filter.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if total_pages > 1 %}
+    <div class="nexa-list-pagination" style="margin-top:12px;">
+      {% if page > 1 %}
+      <a href="{{ url_for('ecommerce.inventory', page=page-1, stock=stock_filter, q=search or None) }}" class="page-po__btn-secondary">← Prev</a>
+      {% endif %}
+      <span class="page-po__muted">Page {{ page }} of {{ total_pages }}</span>
+      {% if page < total_pages %}
+      <a href="{{ url_for('ecommerce.inventory', page=page+1, stock=stock_filter, q=search or None) }}" class="page-po__btn-secondary">Next →</a>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <p class="page-po__muted" style="margin-top:16px;">
+      Use <a href="{{ url_for('itemmaster.productlist') }}">Item Master</a> for stock adjustments and warehouse updates.
+    </p>
+  </div>
+</div>
+{% endblock %}

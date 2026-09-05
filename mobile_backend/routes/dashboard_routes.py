@@ -14,17 +14,27 @@ _dash_perm = Depends(require_permission("dashboard.dashboard"))
 
 
 @router.get("/summary", dependencies=[_dash_perm])
-def dashboard_summary():
-    return success(get_dashboard_summary())
+def dashboard_summary(
+    date_from: str = Query("", max_length=20, description="YYYY-MM-DD (inclusive)"),
+    date_to: str = Query("", max_length=20, description="YYYY-MM-DD (inclusive); defaults to date_from"),
+):
+    return success(get_dashboard_summary(date_from=date_from or None, date_to=date_to or None))
 
 
 @router.get("/kpi/{kpi_id}", dependencies=[_dash_perm])
 def dashboard_kpi_detail(
     kpi_id: str,
     limit: int = Query(40, ge=1, le=100),
+    date_from: str = Query("", max_length=20, description="YYYY-MM-DD (inclusive)"),
+    date_to: str = Query("", max_length=20, description="YYYY-MM-DD (inclusive); defaults to date_from"),
 ):
     try:
-        data = get_kpi_detail(kpi_id, limit=limit)
+        data = get_kpi_detail(
+            kpi_id,
+            limit=limit,
+            date_from=date_from or None,
+            date_to=date_to or None,
+        )
     except ValueError as exc:
         return failure(str(exc), status_code=400)
     except Exception as exc:

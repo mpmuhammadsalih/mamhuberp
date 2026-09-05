@@ -205,10 +205,13 @@ def _je_reverse_release_session_lock() -> None:
     session.modified = True
 
 def _je_voucher_can_reverse(detail: Optional[Dict[str, Any]]) -> bool:
+    """Only Direct JV (MANUAL) and Cash Payment Voucher (CPV) may be reversed from GL."""
     if not detail or not detail.get('lines'):
         return False
     src = str(detail.get('source') or '').strip().upper()
     if src == 'JE_REV' or src.endswith('_REV'):
+        return False
+    if src not in ('MANUAL', 'CPV'):
         return False
     if get_gl_voucher_reversal_no(str(detail.get('voucher_no') or '')):
         return False
@@ -6816,8 +6819,24 @@ def _je_list_drafts(date_from: Optional[str]=None, date_to: Optional[str]=None) 
                 count += 1
             total_dr += max(dr, 0)
             total_cr += max(cr, 0)
-        out.append({'voucher_no': row.get('draft_id'), 'voucher_date': row.get('voucher_date'), 'reference_no': row.get('reference_no'), 'narration': row.get('narration'), 'source': 'DRAFT', 'created_by': row.get('created_by'), 'created_at': row.get('created_at'), 'total_debit': round(total_dr, 2), 'total_credit': round(total_cr, 2), 'line_count': count, 'status': 'DRAFT', 'draft_id': row.get('draft_id')})
+        out.append({'voucher_no': row.get('draft_id'), 'voucher_date': row.get('voucher_date'), 'reference_no': row.get('reference_no'), 'narration': row.get('narration'), 'source': 'DRAFT', 'created_by': row.get('created_by'), 'created_at': row.get('created_at'), 'total_debit': round(total_dr, 2), 'total_credit': round(total_cr, 2), 'line_count': count, 'status': 'DRAFT', 'draft_id': row.get('draft_id'), 'line_id': row.get('draft_id')})
     return out
+
+
+def _je_entry_sort_key(row: Dict[str, Any]) -> int:
+    """Latest vouchers/drafts first (LINE_ID or DRAFT_ID)."""
+    for key in ('line_id', 'draft_id', 'LINE_ID', 'DRAFT_ID'):
+        try:
+            val = int(row.get(key) or 0)
+            if val > 0:
+                return val
+        except (TypeError, ValueError):
+            continue
+    return 0
+
+
+def _je_sort_entries_latest_first(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return sorted(entries or [], key=_je_entry_sort_key, reverse=True)
 
 def _cpv_is_ora_955(exc: BaseException) -> bool:
     msg = str(exc).upper()
@@ -6881,6 +6900,37 @@ def _cpv_ensure_tables() -> None:
                     if not _cpv_is_ora_955(exc):
                         raise
         conn.commit()
+
+def _cpv_mark_reversed_for_gl(gl_voucher_no: str, user: str='', *, conn: Any=None) -> int:
+    """Mark Cash Payment Voucher(s) linked to *gl_voucher_no* as REVERSED. Returns rows updated."""
+    glv = str(gl_voucher_no or '').strip()
+    if not glv:
+        return 0
+    _cpv_ensure_tables()
+    params = {'glv': glv, 'usr': (user or '')[:50] or None}
+    sql = f"""
+        UPDATE {_CPV_HDR_TABLE}
+           SET STATUS = 'REVERSED',
+               UPDATED_BY = :usr,
+               UPDATED_AT = SYSTIMESTAMP
+         WHERE GL_VOUCHER_NO = :glv
+           AND UPPER(NVL(STATUS, 'DRAFT')) = 'POSTED'
+    """
+    if conn is not None:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            return int(cur.rowcount or 0)
+    with _get_connection() as own:
+        try:
+            with own.cursor() as cur:
+                cur.execute(sql, params)
+                n = int(cur.rowcount or 0)
+            own.commit()
+            return n
+        except Exception:
+            own.rollback()
+            raise
+
 
 def _cpv_next_voucher_no(voucher_date: str) -> str:
     _cpv_ensure_tables()
@@ -6984,7 +7034,7 @@ def _cpv_list_rows(search: str='', status: str='all', limit: int=500) -> List[Di
     _cpv_ensure_tables()
     q = (search or '').strip()
     st = (status or 'all').strip().upper()
-    if st not in {'ALL', 'DRAFT', 'POSTED'}:
+    if st not in {'ALL', 'DRAFT', 'POSTED', 'REVERSED'}:
         st = 'ALL'
     limit = max(1, min(int(limit or 500), 2000))
     where_parts: List[str] = []
@@ -7605,11 +7655,11 @@ def journal_entry():
     )
     draft_entries = _je_list_drafts(date_from=date_from or None, date_to=date_to or None)
     if source_filter == 'DRAFT':
-        entries = draft_entries[:500]
+        entries = _je_sort_entries_latest_first(draft_entries)[:500]
     elif source_filter != 'all':
-        entries = posted_entries[:500]
+        entries = _je_sort_entries_latest_first(posted_entries)[:500]
     else:
-        entries = (draft_entries + posted_entries)[:500]
+        entries = _je_sort_entries_latest_first(draft_entries + posted_entries)[:500]
     if status_filter in {'draft', 'posted'}:
         entries = [row for row in entries if (str(row.get('status') or 'POSTED').strip().lower() == status_filter)]
     else:
@@ -7793,6 +7843,9 @@ def journal_entry_reverse(voucher_no: str):
                     conn=conn,
                     commit=False,
                 )
+                # Keep Cash Payment Voucher in sync when its posted GL is reversed.
+                if str(detail.get('source') or '').strip().upper() == 'CPV':
+                    _cpv_mark_reversed_for_gl(orig, user, conn=conn)
                 conn.commit()
             flash(f'Journal reversed successfully. Reversal voucher: {rev_vno}', 'success')
             return redirect(url_for('accounts.journal_voucher_view', voucher_no=rev_vno, **redirect_kw))
@@ -8495,3 +8548,6 @@ _register_online_settlement_routes(bp)
 
 from addons.accounts.controllers.period_closing_routes import register as _register_period_closing_routes
 _register_period_closing_routes(bp)
+
+from addons.accounts.controllers.average_cost_adjustment_routes import register as _register_average_cost_adjustment_routes
+_register_average_cost_adjustment_routes(bp)

@@ -146,8 +146,10 @@
         });
         qzSecurityConfigured = true;
       }
-      if (!global.qz.websocket.isActive()) {
-        await global.qz.websocket.connect();
+      if (global.SalesQzPrint && typeof global.SalesQzPrint.connectQzWebsocket === 'function') {
+        await global.SalesQzPrint.connectQzWebsocket();
+      } else if (!global.qz.websocket.isActive()) {
+        await global.qz.websocket.connect({ retries: 3, delay: 1 });
       }
     }
 

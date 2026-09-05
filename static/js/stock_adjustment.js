@@ -57,6 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let inlinePickRow = null;
     let inlinePickStoreRow = null;
     const uomFactorCache = {};
+    const uomCostCache = {};
     const storeListCache = {};
 
     const SA_INLINE_COLS = {
@@ -428,18 +429,29 @@ document.addEventListener('DOMContentLoaded', () => {
         const code = String(itemCode || '').trim();
         if (!code) return;
         const m = {};
+        const costs = {};
         (uoms || []).forEach((u) => {
             const key = String(u.uom || '').trim().toUpperCase();
             if (!key) return;
             m[key] = Number(u.factor != null ? u.factor : 1) || 1;
+            const c = Number(u.cost != null ? u.cost : (u.costprice != null ? u.costprice : 0));
+            if (c > 0) costs[key] = c;
         });
         uomFactorCache[code] = m;
+        uomCostCache[code] = costs;
     };
 
     const getUomFactor = (itemCode, uom) => {
         const code = String(itemCode || '').trim();
         const key = String(uom || '').trim().toUpperCase();
         const m = uomFactorCache[code] || {};
+        return Object.prototype.hasOwnProperty.call(m, key) ? m[key] : null;
+    };
+
+    const getUomPackCost = (itemCode, uom) => {
+        const code = String(itemCode || '').trim();
+        const key = String(uom || '').trim().toUpperCase();
+        const m = uomCostCache[code] || {};
         return Object.prototype.hasOwnProperty.call(m, key) ? m[key] : null;
     };
 
@@ -508,6 +520,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 !ok,
                 ok ? '' : (`UOM "${uom}" is not defined for item ${code}. Allowed: ${Object.keys(m).join(', ') || 'none'}`),
             );
+            if (ok) {
+                const pack = getUomPackCost(code, uom);
+                if (pack != null && pack > 0) tr.dataset.cost = String(pack);
+                recalcDataRow(tr);
+            }
         };
         if (uomFactorCache[code]) {
             check();
@@ -1231,18 +1248,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }).catch((err) => alert(err.message || 'Failed to set warehouse'));
     };
 
-    const gatherLines = () => Array.from(body.querySelectorAll('tr.sa-data-row[data-line]')).map((r) => ({
-        item_code: Number(r.dataset.itemCode || 0),
-        item_name: r.dataset.itemName || '',
-        uom: r.dataset.uom || '',
-        store: r.dataset.store || '',
-        current_qty: Number(r.dataset.currentQty || 0),
-        adjust_qty: Number(r.dataset.adjustQty || 0),
-        new_qty: Number(r.dataset.newQty || 0),
-        base_qty: Number(r.dataset.baseQty || 0),
-        cost: Number(r.dataset.cost || 0),
-        lot_id: (r.dataset.lotId && String(r.dataset.lotId).trim()) ? r.dataset.lotId : undefined,
-    }));
+    const gatherLines = () => Array.from(body.querySelectorAll('tr.sa-data-row[data-line]')).map((r) => {
+        const adjustQty = Number(r.dataset.adjustQty || 0);
+        let baseQty = Number(r.dataset.baseQty || 0);
+        const factor = getUomFactor(r.dataset.itemCode, r.dataset.uom);
+        const resolvedFactor = factor != null ? (Number(factor) || 1) : (
+            Math.abs(adjustQty) > 1e-12 ? Math.abs(baseQty) / Math.abs(adjustQty) : 1
+        );
+        if (!(Math.abs(baseQty) > 1e-12) && Math.abs(adjustQty) > 1e-12) {
+            baseQty = adjustQty * resolvedFactor;
+        }
+        return {
+            item_code: Number(r.dataset.itemCode || 0),
+            item_name: r.dataset.itemName || '',
+            uom: r.dataset.uom || '',
+            store: r.dataset.store || '',
+            current_qty: Number(r.dataset.currentQty || 0),
+            adjust_qty: adjustQty,
+            new_qty: Number(r.dataset.newQty || 0),
+            base_qty: baseQty,
+            conversionfactor: resolvedFactor,
+            conversion_factor: resolvedFactor,
+            factor: resolvedFactor,
+            cost: Number(r.dataset.cost || 0),
+            lot_id: (r.dataset.lotId && String(r.dataset.lotId).trim()) ? r.dataset.lotId : undefined,
+        };
+    });
 
     const addLine = async () => {
         if (queryMode) return;
@@ -1264,7 +1295,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const newQty = Number(entryNewQty.value || 0);
         const stock = await fetchItemStock(itemCode, store);
         const cost = Number((currentItem && currentItem.costprice) || 0);
-        const baseQty = adjustQty;
+        // Ensure UOM factors are cached before computing base qty.
+        if (!uomFactorCache[String(itemCode)]) {
+            try {
+                const ur = await fetch(`/purchase/stock-adjustment/api/item-uoms/${encodeURIComponent(itemCode)}`);
+                const ud = await ur.json();
+                if (ud && ud.success && ud.uoms) cacheUomFactors(itemCode, ud.uoms);
+            } catch (e) { /* ignore */ }
+        }
+        const factor = getUomFactor(itemCode, uom);
+        const resolvedFactor = factor != null ? (Number(factor) || 1) : 1;
+        const baseQty = adjustQty * resolvedFactor;
         const lotRaw = (entryLotId && entryLotId.value || '').trim();
 
         const ln = {
@@ -1277,6 +1318,7 @@ document.addEventListener('DOMContentLoaded', () => {
             adjust_qty: adjustQty,
             new_qty: newQty,
             base_qty: baseQty,
+            conversionfactor: resolvedFactor,
             cost,
             lot_id: lotRaw || undefined,
         };

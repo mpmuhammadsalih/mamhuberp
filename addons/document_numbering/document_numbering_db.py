@@ -42,6 +42,13 @@ _PURCHASE_SERIES_DEFAULT_PREFIXES: Dict[str, Tuple[str, int]] = {
 }
 
 # Default series seeded on first open (company-wide, RESETNO=1).
+_DEFAULT_SERIES_SEED_DONE = False
+_SERIES_BY_TYPE_CACHE: Dict[Tuple[str, Optional[int], int], Optional[Dict[str, Any]]] = {}
+
+
+def invalidate_document_series_cache() -> None:
+    _SERIES_BY_TYPE_CACHE.clear()
+
 DEFAULT_DOCUMENT_SERIES: List[Dict[str, Any]] = [
     {'doc_type': DOC_TYPE_SALES_INVOICE, 'doc_label': 'Sales Invoice', 'module_name': 'Sales', 'prefix': 'SI-', 'padding': 6},
     {'doc_type': DOC_TYPE_SALES_ORDER, 'doc_label': 'Sales Order', 'module_name': 'Sales', 'prefix': 'SO-', 'padding': 6},
@@ -185,6 +192,9 @@ def _next_series_id(cur: Any) -> int:
 
 def seed_default_document_series(user: str = 'system') -> int:
     """Insert missing default rows; returns count inserted."""
+    global _DEFAULT_SERIES_SEED_DONE
+    if _DEFAULT_SERIES_SEED_DONE:
+        return 0
     ensure_doc_number_series_table()
     if not _table_exists(DOC_NUMBER_SERIES_TABLE):
         return 0
@@ -193,16 +203,17 @@ def seed_default_document_series(user: str = 'system') -> int:
     try:
         with _get_connection() as conn:
             with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    SELECT UPPER(DOC_TYPE)
+                    FROM {DOC_NUMBER_SERIES_TABLE}
+                    WHERE LOCATIONCODE IS NULL AND RESETNO = 1
+                    """
+                )
+                existing = {str(row[0] or '').upper() for row in cur.fetchall()}
                 for spec in DEFAULT_DOCUMENT_SERIES:
                     doc_type = str(spec['doc_type']).upper()
-                    cur.execute(
-                        f"""
-                        SELECT COUNT(*) FROM {DOC_NUMBER_SERIES_TABLE}
-                        WHERE DOC_TYPE = :dt AND LOCATIONCODE IS NULL AND RESETNO = 1
-                        """,
-                        {'dt': doc_type},
-                    )
-                    if int((cur.fetchone() or [0])[0] or 0) > 0:
+                    if doc_type in existing:
                         continue
                     sid = _next_series_id(cur)
                     cur.execute(
@@ -232,8 +243,10 @@ def seed_default_document_series(user: str = 'system') -> int:
                     )
                     inserted += 1
             conn.commit()
+        _DEFAULT_SERIES_SEED_DONE = True
     except Exception as ex:
         print(f'[seed_default_document_series] {ex}')
+        return inserted
     ensure_distinct_sales_series_prefixes()
     ensure_distinct_purchase_series_prefixes()
     return inserted
@@ -394,11 +407,25 @@ def get_document_series_by_type(
     reset_no: int = 1,
 ) -> Optional[Dict[str, Any]]:
     ensure_doc_number_series_table()
-    seed_default_document_series()
+    if not _DEFAULT_SERIES_SEED_DONE:
+        seed_default_document_series()
     dt = str(doc_type or '').strip().upper()
     if not dt:
         return None
-    params: Dict[str, Any] = {'dt': dt, 'rn': int(reset_no or 1)}
+    rn = int(reset_no or 1)
+    loc_key: Optional[int]
+    try:
+        loc_key = int(location_code) if location_code is not None else None
+    except (TypeError, ValueError):
+        loc_key = None
+    cache_key = (dt, loc_key, rn)
+    if cache_key in _SERIES_BY_TYPE_CACHE:
+        return _SERIES_BY_TYPE_CACHE[cache_key]
+    if loc_key is not None:
+        global_key = (dt, None, rn)
+        if global_key in _SERIES_BY_TYPE_CACHE:
+            return _SERIES_BY_TYPE_CACHE[global_key]
+    params: Dict[str, Any] = {'dt': dt, 'rn': rn}
     loc_clause = 'LOCATIONCODE IS NULL'
     if location_code is not None:
         loc_clause = '(LOCATIONCODE = :loc OR LOCATIONCODE IS NULL)'
@@ -419,9 +446,13 @@ def get_document_series_by_type(
         params,
     )
     if not rows:
+        _SERIES_BY_TYPE_CACHE[cache_key] = None
         return None
     row = _row_to_dict(rows[0])
     row['next_preview'] = format_document_no(row, row.get('next_no'))
+    _SERIES_BY_TYPE_CACHE[cache_key] = row
+    if row.get('locationcode') is None:
+        _SERIES_BY_TYPE_CACHE[(dt, None, rn)] = row
     return row
 
 
@@ -515,6 +546,7 @@ def save_document_series_bulk(
                     if cur.rowcount:
                         updated += 1
             conn.commit()
+        invalidate_document_series_cache()
         return (True, '', updated)
     except Exception as ex:
         return (False, str(ex), 0)
@@ -657,7 +689,8 @@ def bill_series_is_active(
     reset_no: int = 1,
 ) -> bool:
     ensure_doc_number_series_table()
-    seed_default_document_series()
+    if not _DEFAULT_SERIES_SEED_DONE:
+        seed_default_document_series()
     series = get_document_series_by_type(
         str(doc_type or BILLNO_DOC_TYPE).strip().upper(),
         location_code=location_code,
@@ -790,6 +823,7 @@ def allocate_document_no_cur(
         'date_format': str(row[7] or 'YYYYMMDD').strip() or 'YYYYMMDD',
     }
     formatted = format_document_no(series, next_no, doc_date=doc_date)
+    invalidate_document_series_cache()
     return (next_no, formatted, '')
 
 

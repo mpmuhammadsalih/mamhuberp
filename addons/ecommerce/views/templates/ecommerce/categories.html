@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=4" />
+{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page ecommerce-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Categories</h1>
+      <p class="page-po__muted">Main (M) → category (D) → micro (C) · location {{ location_code }}</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ itemmaster_categories_url }}" class="page-po__btn-primary">Edit in Category Master</a>
+      <a href="{{ url_for('ecommerce.dashboard') }}" class="page-po__btn-secondary">Dashboard</a>
+    </div>
+  </div>
+
+  <div class="ecommerce-tree-panel">
+    <div class="ecommerce-tree">
+      {% macro render_nodes(nodes) %}
+        <ul>
+          {% for node in nodes %}
+          <li>
+            <div class="ecommerce-tree-row">
+              <span class="ecommerce-flag ecommerce-flag-{{ node.flag or 'M' }}">{{ node.flag or 'M' }}</span>
+              <strong>{{ node.code }}</strong>
+              <span>{{ node.name }}</span>
+            </div>
+            {% if node.children %}
+              {{ render_nodes(node.children) }}
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      {% endmacro %}
+      {% if tree %}
+        {{ render_nodes(tree) }}
+      {% else %}
+        <p class="page-po__muted">No category rows found for this location.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

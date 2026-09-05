@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+import logging
+import re
 from datetime import datetime
+from difflib import SequenceMatcher
 from typing import Any
 
 from mobile_backend.operation_lock import mobile_operation_lock
 from mobile_backend.services.dashboard_service import _to_float
 from mobile_backend.services.stock_transfer_service import _erp_session_scope
+
+_log = logging.getLogger(__name__)
+
+_FUZZY_MIN_QUERY_LEN = 3
+_FUZZY_MAX_QUERY_LEN = 6  # longer queries are contains-only (keyword must appear inside)
+_FUZZY_SCORE_THRESHOLD = 0.78
 
 
 def _location_code() -> int:
@@ -139,6 +148,7 @@ def _normalize_item_row(item: dict[str, Any]) -> dict[str, Any]:
     retail = item.get("RETAILPRICE") or item.get("retailprice") or item.get("retail_price") or 0
     stock = item.get("CURRENTSTOCK") or item.get("currentstock") or item.get("current_stock") or 0
     cost = item.get("COSTPRICE") or item.get("costprice") or item.get("cost_price") or 0
+    avg = item.get("AVERAGECOST") or item.get("averagecost") or item.get("average_cost") or 0
     batch = item.get("BATCH_TRACKED") or item.get("batch_tracked") or "N"
     dwh = item.get("default_warehouse_id") or item.get("DEFAULT_WAREHOUSE_ID")
     dbin = item.get("default_bin_storage_id") or item.get("DEFAULT_BIN_STORAGE_ID")
@@ -148,6 +158,7 @@ def _normalize_item_row(item: dict[str, Any]) -> dict[str, Any]:
         "base_uom": str(base_uom or "").strip(),
         "retail_price": float(retail or 0),
         "cost_price": float(cost or 0),
+        "average_cost": float(avg or 0),
         "current_stock": float(stock or 0),
         "manufacturer_id": str(item.get("MANUFACTURERID") or item.get("manufacturer_id") or "").strip(),
         "batch_tracked": str(batch).strip().upper() == "Y",
@@ -177,18 +188,60 @@ def _is_billno_retry_error(err: Any) -> bool:
 
 
 def _resolve_billno_for_save(location_code: int, countercode: Any, requested: Any) -> tuple[Any, bool]:
-    """Pick bill number for save; allocate next if taken or not reserved (mobile peek-only)."""
+    """Pick bill number for save; allocate next if taken or not reserved (mobile peek-only).
+
+    Mobile opens with ``peek_next_bill_no`` (does not reserve). When BILLNOTABLE is off,
+    ``billno_is_reserved`` is true for any unused number — using that peek without
+    ``get_next_bill_no`` leaves DOC_NUMBER_SERIES stuck, so the next New shows the same no.
+    New invoices never edit an existing BILLHDR row.
+    """
     from addons.document_numbering.document_numbering_db import DOC_TYPE_SALES_INVOICE
-    from db import billhdr_exists, billno_is_reserved, coerce_billno, get_next_bill_no, parse_billno_from_request
+    from db import (
+        _use_billnotable,
+        billhdr_exists,
+        billno_is_reserved,
+        coerce_billno,
+        get_next_bill_no,
+        parse_billno_from_request,
+    )
 
     req = parse_billno_from_request(requested)
     if not req:
         return get_next_bill_no(location_code, countercode, doc_type=DOC_TYPE_SALES_INVOICE), False
+    # Already posted — never reuse (avoids fake "already_posted" success on New).
     if billhdr_exists(location_code, req):
-        return req, False
-    if not billno_is_reserved(req, location_code):
         return get_next_bill_no(location_code, countercode, doc_type=DOC_TYPE_SALES_INVOICE), True
-    return coerce_billno(req), False
+    # Real BILLNOTABLE reservation — keep peeked number; series advances after save.
+    if _use_billnotable() and billno_is_reserved(req, location_code):
+        return coerce_billno(req), False
+    # Peek-only: allocate so the series advances for the next New.
+    allocated = get_next_bill_no(location_code, countercode, doc_type=DOC_TYPE_SALES_INVOICE)
+    return allocated, str(coerce_billno(allocated)) != str(coerce_billno(req))
+
+
+def _fresh_peek_billno(location_code: int, doc_type: str, *, for_order: bool = False) -> Any:
+    """Peek next bill no; if already used, allocate past collisions so New shows a free number."""
+    from db import (
+        billhdr_exists,
+        get_next_bill_no,
+        get_sales_order_for_edit,
+        peek_next_bill_no,
+    )
+
+    billno = peek_next_bill_no(location_code, None, doc_type=doc_type)
+    for _ in range(40):
+        if not billno:
+            return get_next_bill_no(location_code, None, doc_type=doc_type)
+        used = (
+            bool(get_sales_order_for_edit(location_code, billno))
+            if for_order
+            else billhdr_exists(location_code, billno)
+        )
+        if not used:
+            return billno
+        # Consume past a stuck/used peek so subsequent opens move forward.
+        billno = get_next_bill_no(location_code, None, doc_type=doc_type)
+    return billno
 
 
 def _save_with_billno_retry(
@@ -205,10 +258,19 @@ def _save_with_billno_retry(
     billno, reassigned = _resolve_billno_for_save(
         location_code, header.get("countercode"), requested
     )
+    from mobile_backend.services.transaction_date_helper import resolve_doc_date
+
     header = dict(header)
     header["billno"] = billno
     header["use_existing_billno"] = True
-    header.setdefault("billdate", datetime.now().strftime("%Y-%m-%d"))
+    bill_date = resolve_doc_date(
+        "sales",
+        header.get("billdate") or header.get("bill_date"),
+        location_code=location_code,
+        snap_out_of_range=True,
+    )
+    header["billdate"] = bill_date
+    header["bill_date"] = bill_date
     header.setdefault("billtime", datetime.now().strftime("%H:%M:%S"))
     header.setdefault("createdby", username)
     header["location_code"] = location_code
@@ -311,16 +373,48 @@ def _normalize_invoice_save_lines(lines: list[dict[str, Any]]) -> list[dict[str,
         if cost > 0:
             ln["cost"] = cost
             ln["costprice"] = cost
+        # AVERAGECOST must stay base-UOM (ITEMMASTER). Never copy alt/pack cost into it.
         avg = float(ln.get("average_cost") or ln.get("averagecost") or 0)
-        if avg <= 0 and cost > 0:
-            avg = cost
+        if avg > 0:
+            # If client sent pack cost as averagecost (avg ≈ cost and factor>1), clear it
+            # so ERP resolves ITEMMASTER.AVERAGECOST.
+            try:
+                factor = float(
+                    ln.get("conversion_factor")
+                    or ln.get("conversionfactor")
+                    or ln.get("factor")
+                    or 0
+                )
+            except (TypeError, ValueError):
+                factor = 0.0
+            if factor <= 0:
+                try:
+                    bq = abs(float(ln.get("base_qty") or 0))
+                    q = abs(float(ln.get("quantity") or 0))
+                    if q > 1e-12 and bq > 0:
+                        factor = bq / q
+                except (TypeError, ValueError):
+                    factor = 0.0
+            if cost > 0 and factor > 1.0 + 1e-9 and abs(avg - cost) <= max(0.01, cost * 0.001):
+                avg = 0.0
         if avg > 0:
             ln["average_cost"] = avg
             ln["averagecost"] = avg
-        base_qty = ln.get("base_qty")
-        if base_qty is None or float(base_qty or 0) <= 0:
-            factor = float(ln.get("conversion_factor") or 1)
-            ln["base_qty"] = qty * factor
+        else:
+            ln.pop("average_cost", None)
+            ln.pop("averagecost", None)
+        # Prefer ERP UOM map; client conversion_factor / base_qty used only as fallback.
+        from mobile_backend.services.uom_factor import apply_line_stock_base, client_uom_factor
+
+        if client_uom_factor(ln) <= 0 and ln.get("base_qty") not in (None, ""):
+            try:
+                bq = abs(float(ln.get("base_qty") or 0))
+                if bq > 0 and abs(qty) > 1e-12:
+                    # Infer factor from client base when factor not sent
+                    ln["conversion_factor"] = bq / abs(qty)
+            except (TypeError, ValueError):
+                pass
+        apply_line_stock_base(ln, item_code=ln.get("item_code"), uom=str(ln.get("uom") or "NOS"), qty=qty)
         out.append(ln)
     return out
 
@@ -363,6 +457,8 @@ def _sales_gl_voucher_no(location_code: int, billno: int, *, is_return: bool = F
 
 def _sales_features() -> dict[str, bool]:
     from db import (
+        get_sales_direct_posting_enabled,
+        get_sales_minus_billing_invoice_enabled,
         get_sales_orderno_mandatory_invoice_enabled,
         is_location_batch_tracking_enabled,
         is_location_bin_tracking_enabled,
@@ -377,14 +473,42 @@ def _sales_features() -> dict[str, bool]:
         "batch_tracking_enabled": bool(is_location_batch_tracking_enabled(loc)),
         # Sales Accounts Configuration → Order No mandatory (invoice).
         "orderno_mandatory": bool(get_sales_orderno_mandatory_invoice_enabled()),
+        # Sales Accounts Configuration → minus billing (allow sell below stock).
+        "minus_billing_enabled": bool(get_sales_minus_billing_invoice_enabled()),
+        # Sales Accounts Configuration → cash direct post to tender Cash/Bank GL.
+        "direct_posting_enabled": bool(get_sales_direct_posting_enabled()),
     }
 
 
-def _default_warehouse_context(username: str) -> dict[str, Any]:
+def _default_warehouse_context(username: str, *, module: str = "sales") -> dict[str, Any]:
+    """User preference warehouse, or the only available warehouse for this module."""
     from db import get_warehouse_master_by_id
-    from db.user_warehouse_prefs import get_user_default_warehouse_id, warehouse_display_label
+    from db.user_warehouse_prefs import (
+        apply_user_warehouse_filter,
+        build_warehouse_picker_rows,
+        get_user_default_warehouse_id,
+        warehouse_display_label,
+    )
 
-    wid = get_user_default_warehouse_id(username, "sales")
+    mod = (module or "sales").strip() or "sales"
+    wid = get_user_default_warehouse_id(username, mod)
+    if not wid:
+        try:
+            loc = _location_code()
+            rows = build_warehouse_picker_rows(int(loc), search="", limit=50) or []
+            filtered = apply_user_warehouse_filter(username, mod, rows) or []
+            if len(filtered) == 1:
+                sole = filtered[0] or {}
+                raw = sole.get("code") if sole.get("code") is not None else sole.get("warehouse_id")
+                try:
+                    cand = int(float(str(raw).strip()))
+                    if cand > 0:
+                        wid = cand
+                except (TypeError, ValueError):
+                    wid = None
+        except Exception:
+            wid = None
+
     out: dict[str, Any] = {
         "default_warehouse_id": wid,
         "default_warehouse_code": "",
@@ -396,9 +520,25 @@ def _default_warehouse_context(username: str) -> dict[str, Any]:
             wh = get_warehouse_master_by_id(int(wid)) or {}
             out["default_warehouse_code"] = str(wh.get("warehouse_code") or "").strip()
             out["default_warehouse_name"] = str(wh.get("warehouse_name") or "").strip()
+            if not out["default_warehouse_label"]:
+                code = out["default_warehouse_code"]
+                name = out["default_warehouse_name"]
+                out["default_warehouse_label"] = (
+                    f"{code} — {name}" if code and name else (code or name or str(wid))
+                )
         except (TypeError, ValueError):
             pass
     return out
+
+
+def _invoice_list_sources(cur: Any) -> list[tuple[str, frozenset[str]]]:
+    """Live BILLHDR only (mobile sales source of truth)."""
+    from mobile_backend.services.dashboard_service import _billhdr_column_names
+
+    live_cols = _billhdr_column_names(cur)
+    if not live_cols:
+        return []
+    return [("billhdr b", live_cols)]
 
 
 def list_invoices(
@@ -411,14 +551,15 @@ def list_invoices(
     customer_code: str = "",
     billing_type: str = "",
 ) -> list[dict[str, Any]]:
-    """Recent sales invoices from BILLHDR / BILLHDRHISTORY (cash & credit)."""
+    """Recent sales invoices from live BILLHDR only (newest date first)."""
     from db.oracle_driver import cx_Oracle
 
+    from db import billno_is_valid, coerce_billno
     from mobile_backend.database.oracle_pool import get_connection
     from mobile_backend.request_context import get_jwt
     from mobile_backend.services.dashboard_service import _to_float
     from mobile_backend.services.inventory_service import _pick_existing
-    from mobile_backend.services.sales_service import _resolve_schema
+    from mobile_backend.services.sales_service import _amount_expr
 
     lim = max(1, min(int(limit or 50), 100))
     day_span = max(7, min(int(days or 90), 365))
@@ -435,133 +576,135 @@ def list_invoices(
         loc = _location_code()
         conn = get_connection(tenant_id=tenant_id)
         with conn.cursor() as cur:
-            schema = _resolve_schema(cur)
-            if not schema:
+            sources = _invoice_list_sources(cur)
+            if not sources:
                 return []
 
-            cols = schema["cols"]
-            fc = schema["from_clause"]
-            dc = schema["date_col"]
-            amt = schema["amt_expr"]
-            from db import billno_is_valid, coerce_billno
+            by_bill: dict[str, dict[str, Any]] = {}
+            fetch_lim = max(lim * 3, lim)
 
-            billno_col = schema["billno_col"]
-            cust_col = schema.get("cust_col")
-            cust_name_col = _pick_existing(
-                cols,
-                ["CUSTOMERNAME", "CUSTOMER_NAME", "CUSTNAME", "CUST_NAME"],
-            )
-            billtype_col = _pick_existing(cols, ["BILLTYPE", "BILL_TYPE"])
-            orderno_col = _pick_existing(cols, ["ORDERNO", "ORDER_NO"])
-            loc_col = _pick_existing(cols, ["LOCATIONCODE", "LOCATION_CODE"])
-            return_col = _pick_existing(cols, ["RETURNFLAG", "RETURN_FLAG"])
-            delflag_col = _pick_existing(cols, ["DELFLAG", "DEL_FLAG"])
-            status_col = _pick_existing(cols, ["BILLSTATUS", "BILL_STATUS"])
-
-            where: list[str] = []
-            params: dict[str, Any] = {"lim": lim}
-
-            # Match desktop invoice list: exclude voids/deletes and sales returns.
-            if delflag_col:
-                where.append(f"NVL(b.{delflag_col}, 'N') NOT IN ('Y', 'y')")
-            if status_col:
-                where.append(f"NVL(b.{status_col}, ' ') <> 'V'")
-            if return_col:
-                where.append(f"NVL(b.{return_col}, 'N') <> 'Y'")
-            where.append(f"({amt}) >= 0")
-
-            if df or dt:
-                if df:
-                    where.append(f"TRUNC(b.{dc}) >= TRUNC(TO_DATE(:date_from, 'YYYY-MM-DD'))")
-                    params["date_from"] = df
-                if dt:
-                    where.append(f"TRUNC(b.{dc}) <= TRUNC(TO_DATE(:date_to, 'YYYY-MM-DD'))")
-                    params["date_to"] = dt
-            else:
-                where.append(f"TRUNC(b.{dc}) >= TRUNC(SYSDATE) - :days + 1")
-                params["days"] = day_span
-
-            if billtype_col:
-                if bill_filter == "CREDIT":
-                    where.append(
-                        f"UPPER(SUBSTR(TRIM(TO_CHAR(b.{billtype_col})), 1, 1)) = 'R'"
-                    )
-                elif bill_filter in ("CASH", "CARD"):
-                    where.append(
-                        f"UPPER(SUBSTR(TRIM(TO_CHAR(b.{billtype_col})), 1, 1)) = 'C'"
-                    )
-                else:
-                    where.append(
-                        f"UPPER(SUBSTR(TRIM(TO_CHAR(b.{billtype_col})), 1, 1)) IN ('C', 'R')"
-                    )
-
-            if cust_filter and cust_col:
-                where.append(f"TRIM(TO_CHAR(b.{cust_col})) = :cust_code")
-                params["cust_code"] = cust_filter
-
-            if loc_col and loc:
-                where.append(f"b.{loc_col} = :loc")
-                params["loc"] = int(loc)
-
-            if q:
-                params["sw"] = f"%{q}%"
-                parts = [f"TO_CHAR(b.{billno_col}) LIKE :sw"]
-                if cust_col:
-                    parts.append(f"TO_CHAR(b.{cust_col}) LIKE :sw")
-                if cust_name_col:
-                    parts.append(f"UPPER(b.{cust_name_col}) LIKE UPPER(:sw)")
-                if orderno_col:
-                    parts.append(f"UPPER(b.{orderno_col}) LIKE UPPER(:sw)")
-                where.append(f"({' OR '.join(parts)})")
-
-            select_parts = [
-                f"b.{billno_col} AS billno",
-                f"TRUNC(b.{dc}) AS billdate",
-                f"{amt} AS net_amount",
-            ]
-            if cust_col:
-                select_parts.append(f"b.{cust_col} AS customer_code")
-            if cust_name_col:
-                select_parts.append(f"b.{cust_name_col} AS customer_name")
-            if billtype_col:
-                select_parts.append(f"b.{billtype_col} AS billtype")
-            if orderno_col:
-                select_parts.append(f"b.{orderno_col} AS orderno")
-
-            sql = f"""
-                SELECT * FROM (
-                    SELECT {", ".join(select_parts)}
-                      FROM {fc}
-                     WHERE {" AND ".join(where)}
-                     ORDER BY b.{dc} DESC, b.{billno_col} DESC
-                )
-                WHERE ROWNUM <= :lim
-            """
-
-            try:
-                cur.execute(sql, params)
-                rows = cur.fetchall() or []
-            except cx_Oracle.DatabaseError:
-                return []
-
-            col_names = [d[0].lower() for d in cur.description or []]
-            out: list[dict[str, Any]] = []
-            for row in rows:
-                raw = dict(zip(col_names, row))
-                billno = coerce_billno(raw.get("billno"))
-                if not billno_is_valid(billno):
+            for fc, cols in sources:
+                dc = _pick_existing(cols, ["BILLDATE", "BILL_DATE", "TXNDATE", "TRANSACTIONDATE", "DOCDATE"])
+                amt = _amount_expr(cols)
+                billno_col = _pick_existing(cols, ["BILLNO", "BILL_NO"])
+                if not dc or not amt or not billno_col:
                     continue
-                billdate = raw.get("billdate")
-                if hasattr(billdate, "strftime"):
-                    billdate_s = billdate.strftime("%Y-%m-%d")
+
+                cust_col = _pick_existing(
+                    cols, ["CUSTOMERCODE", "CUSTOMER_CODE", "CUSTCODE", "CUST_CODE"]
+                )
+                cust_name_col = _pick_existing(
+                    cols, ["CUSTOMERNAME", "CUSTOMER_NAME", "CUSTNAME", "CUST_NAME"]
+                )
+                billtype_col = _pick_existing(cols, ["BILLTYPE", "BILL_TYPE"])
+                orderno_col = _pick_existing(cols, ["ORDERNO", "ORDER_NO"])
+                loc_col = _pick_existing(cols, ["LOCATIONCODE", "LOCATION_CODE"])
+                return_col = _pick_existing(cols, ["RETURNFLAG", "RETURN_FLAG"])
+                delflag_col = _pick_existing(cols, ["DELFLAG", "DEL_FLAG"])
+                status_col = _pick_existing(cols, ["BILLSTATUS", "BILL_STATUS"])
+
+                where: list[str] = []
+                params: dict[str, Any] = {"lim": fetch_lim}
+
+                if delflag_col:
+                    where.append(f"NVL(b.{delflag_col}, 'N') NOT IN ('Y', 'y')")
+                if status_col:
+                    where.append(f"NVL(b.{status_col}, ' ') <> 'V'")
+                if return_col:
+                    where.append(f"NVL(b.{return_col}, 'N') <> 'Y'")
+                where.append(f"({amt}) >= 0")
+
+                if df or dt:
+                    if df:
+                        where.append(f"TRUNC(b.{dc}) >= TRUNC(TO_DATE(:date_from, 'YYYY-MM-DD'))")
+                        params["date_from"] = df
+                    if dt:
+                        where.append(f"TRUNC(b.{dc}) <= TRUNC(TO_DATE(:date_to, 'YYYY-MM-DD'))")
+                        params["date_to"] = dt
                 else:
-                    billdate_s = str(billdate or "")[:10]
+                    where.append(f"TRUNC(b.{dc}) >= TRUNC(SYSDATE) - :days + 1")
+                    params["days"] = day_span
 
-                bt = str(raw.get("billtype") or "").strip().upper()
-                billing = "CREDIT" if bt.startswith("R") else "CASH"
+                if billtype_col:
+                    if bill_filter == "CREDIT":
+                        where.append(
+                            f"UPPER(SUBSTR(TRIM(TO_CHAR(b.{billtype_col})), 1, 1)) = 'R'"
+                        )
+                    elif bill_filter in ("CASH", "CARD"):
+                        where.append(
+                            f"UPPER(SUBSTR(TRIM(TO_CHAR(b.{billtype_col})), 1, 1)) = 'C'"
+                        )
+                    else:
+                        where.append(
+                            f"UPPER(SUBSTR(TRIM(TO_CHAR(b.{billtype_col})), 1, 1)) IN ('C', 'R')"
+                        )
 
-                out.append(
-                    {
+                if cust_filter and cust_col:
+                    where.append(f"TRIM(TO_CHAR(b.{cust_col})) = :cust_code")
+                    params["cust_code"] = cust_filter
+
+                if loc_col and loc:
+                    where.append(f"b.{loc_col} = :loc")
+                    params["loc"] = int(loc)
+
+                if q:
+                    params["sw"] = f"%{q}%"
+                    parts = [f"TO_CHAR(b.{billno_col}) LIKE :sw"]
+                    if cust_col:
+                        parts.append(f"TO_CHAR(b.{cust_col}) LIKE :sw")
+                    if cust_name_col:
+                        parts.append(f"UPPER(b.{cust_name_col}) LIKE UPPER(:sw)")
+                    if orderno_col:
+                        parts.append(f"UPPER(b.{orderno_col}) LIKE UPPER(:sw)")
+                    where.append(f"({' OR '.join(parts)})")
+
+                select_parts = [
+                    f"b.{billno_col} AS billno",
+                    f"TRUNC(b.{dc}) AS billdate",
+                    f"{amt} AS net_amount",
+                ]
+                if cust_col:
+                    select_parts.append(f"b.{cust_col} AS customer_code")
+                if cust_name_col:
+                    select_parts.append(f"b.{cust_name_col} AS customer_name")
+                if billtype_col:
+                    select_parts.append(f"b.{billtype_col} AS billtype")
+                if orderno_col:
+                    select_parts.append(f"b.{orderno_col} AS orderno")
+
+                sql = f"""
+                    SELECT * FROM (
+                        SELECT {", ".join(select_parts)}
+                          FROM {fc}
+                         WHERE {" AND ".join(where)}
+                         ORDER BY TRUNC(b.{dc}) DESC, b.{billno_col} DESC
+                    )
+                    WHERE ROWNUM <= :lim
+                """
+                try:
+                    cur.execute(sql, params)
+                    rows = cur.fetchall() or []
+                except cx_Oracle.DatabaseError:
+                    continue
+
+                col_names = [d[0].lower() for d in cur.description or []]
+                for row in rows:
+                    raw = dict(zip(col_names, row))
+                    billno = coerce_billno(raw.get("billno"))
+                    if not billno_is_valid(billno):
+                        continue
+                    key = str(billno)
+                    if key in by_bill:
+                        continue  # prefer live BILLHDR row already stored
+                    billdate = raw.get("billdate")
+                    if hasattr(billdate, "strftime"):
+                        billdate_s = billdate.strftime("%Y-%m-%d")
+                    else:
+                        billdate_s = str(billdate or "")[:10]
+
+                    bt = str(raw.get("billtype") or "").strip().upper()
+                    billing = "CREDIT" if bt.startswith("R") else "CASH"
+                    by_bill[key] = {
                         "billno": billno,
                         "billdate": billdate_s,
                         "customer_code": str(raw.get("customer_code") or "").strip(),
@@ -571,8 +714,19 @@ def list_invoices(
                         "billtype": bt[:1] if bt else "C",
                         "billing_type": billing,
                     }
-                )
-            return out
+
+            def _sort_key(item: dict[str, Any]) -> tuple:
+                d = str(item.get("billdate") or "")
+                bn = str(item.get("billno") or "")
+                digits = "".join(ch for ch in bn if ch.isdigit())
+                try:
+                    bn_num = int(digits) if digits else 0
+                except ValueError:
+                    bn_num = 0
+                return (d, bn_num, bn)
+
+            out = sorted(by_bill.values(), key=_sort_key, reverse=True)
+            return out[:lim]
 
 
 def _bill_hdr_dtl_pairs(cur: Any) -> list[tuple[str, str]]:
@@ -788,16 +942,296 @@ def get_invoice_detail(billno: Any) -> dict[str, Any] | None:
     return None
 
 
+def get_customer_last_sale(*, customer_code: str, days: int = 365) -> dict[str, Any] | None:
+    """Most recent posted sales invoice for a customer, with line items (for reorder)."""
+    cust = (customer_code or "").strip()
+    if not cust or cust in ("0", "00"):
+        raise ValueError("A customer is required to reorder the last sale.")
+
+    rows = list_invoices(
+        customer_code=cust,
+        limit=1,
+        days=max(30, min(int(days or 365), 730)),
+    )
+    if not rows:
+        return None
+    billno = rows[0].get("billno")
+    if billno is None or str(billno).strip() == "":
+        return None
+    detail = get_invoice_detail(billno)
+    if not detail:
+        return None
+    lines = [
+        ln
+        for ln in (detail.get("lines") or [])
+        if str(ln.get("item_code") or "").strip() and _to_float(ln.get("qty")) > 0
+    ]
+    if not lines:
+        return None
+    return {
+        "billno": detail.get("billno"),
+        "billdate": detail.get("billdate"),
+        "customer_code": detail.get("customer_code") or cust,
+        "customer_name": detail.get("customer_name") or "",
+        "net_amount": detail.get("net_amount"),
+        "billing_type": detail.get("billing_type"),
+        "line_count": len(lines),
+        "lines": lines,
+    }
+
+
+def list_customer_previous_items(
+    *,
+    customer_code: str,
+    warehouse_id: str | None = None,
+    limit: int = 80,
+    days: int = 365,
+) -> list[dict[str, Any]]:
+    """Distinct items previously sold to a customer (newest activity first).
+
+    Used by Sales / Sales Order item picker \"Customer items\" tab.
+    """
+    from db.oracle_driver import cx_Oracle
+
+    from mobile_backend.database.oracle_pool import get_connection
+    from mobile_backend.request_context import get_jwt
+    from mobile_backend.services.inventory_service import _pick_existing
+    from mobile_backend.services.sales_service import _table_columns
+
+    cust = (customer_code or "").strip()
+    if not cust or cust in ("0", "00"):
+        return []
+
+    lim = max(1, min(int(limit or 80), 200))
+    day_span = max(30, min(int(days or 365), 730))
+    wh_raw = (warehouse_id or "").strip()
+    claims = get_jwt()
+    tenant_id = claims.get("tenant_id")
+
+    aggregated: dict[str, dict[str, Any]] = {}
+
+    with _erp_session_scope():
+        loc = _location_code()
+        conn = get_connection(tenant_id=tenant_id)
+        with conn.cursor() as cur:
+            pairs = _bill_hdr_dtl_pairs(cur)
+            if not pairs:
+                return []
+
+            for hdr_table, dtl_table in pairs:
+                hdr_cols = _table_columns(cur, hdr_table.upper())
+                dtl_cols = _table_columns(cur, dtl_table.upper())
+                if not hdr_cols or not dtl_cols:
+                    continue
+
+                billno_h = _pick_existing(hdr_cols, ["BILLNO", "BILL_NO"]) or "BILLNO"
+                billno_d = _pick_existing(dtl_cols, ["BILLNO", "BILL_NO"]) or "BILLNO"
+                date_col = _pick_existing(
+                    hdr_cols,
+                    ["BILLDATE", "BILL_DATE", "SALESDATE", "TRNDATE", "INVOICEDATE"],
+                )
+                cust_col = _pick_existing(hdr_cols, ["CUSTOMERCODE", "CUSTOMER_CODE", "CUSTCODE"])
+                loc_h = _pick_existing(hdr_cols, ["LOCATIONCODE", "LOCATION_CODE"])
+                loc_d = _pick_existing(dtl_cols, ["LOCATIONCODE", "LOCATION_CODE"])
+                item_col = _pick_existing(dtl_cols, ["ITEMCODE", "ITEM_CODE", "CODE"])
+                qty_col = _pick_existing(dtl_cols, ["QUANTITY", "QTY", "BILLQTY"])
+                rate_col = _pick_existing(dtl_cols, ["RATE", "SELLRATE", "PRICE", "UNITPRICE"])
+                uom_col = _pick_existing(
+                    dtl_cols,
+                    ["UNITOFMEASUREMENT", "UOM", "UOMCODE", "UNIT"],
+                )
+                delflag = _pick_existing(hdr_cols, ["DELFLAG", "DEL_FLAG"])
+                status_col = _pick_existing(hdr_cols, ["BILLSTATUS", "BILL_STATUS"])
+                return_col = _pick_existing(hdr_cols, ["RETURNFLAG", "RETURN_FLAG"])
+                if not cust_col or not item_col or not qty_col or not date_col:
+                    continue
+
+                join = [f"d.{billno_d} = h.{billno_h}"]
+                if loc_h and loc_d:
+                    join.append(f"d.{loc_d} = h.{loc_h}")
+
+                where = [
+                    f"TRIM(TO_CHAR(h.{cust_col})) = :cust",
+                    f"NVL(d.{qty_col}, 0) > 0",
+                    f"TRUNC(h.{date_col}) >= TRUNC(SYSDATE) - :days + 1",
+                ]
+                params: dict[str, Any] = {"cust": cust, "days": day_span, "lim": lim * 8}
+                if loc_h and loc:
+                    where.append(f"h.{loc_h} = :loc")
+                    params["loc"] = int(loc)
+                elif loc_d and loc:
+                    where.append(f"d.{loc_d} = :loc")
+                    params["loc"] = int(loc)
+                if delflag:
+                    where.append(f"NVL(h.{delflag}, 'N') NOT IN ('Y', 'y')")
+                if status_col:
+                    where.append(f"NVL(h.{status_col}, ' ') <> 'V'")
+                if return_col:
+                    where.append(f"NVL(h.{return_col}, 'N') <> 'Y'")
+
+                item_cols = _table_columns(cur, "ITEMMASTER")
+                ic = _pick_existing(item_cols, ["ITEMCODE", "ITEM_CODE"]) if item_cols else None
+                name_col = (
+                    _pick_existing(item_cols, ["ITEMNAME", "ITEMDESC", "ITEM_NAME", "NAME"])
+                    if item_cols
+                    else None
+                )
+                retail_col = (
+                    _pick_existing(item_cols, ["RETAILPRICE", "RETAIL_PRICE", "SELLPRICE"])
+                    if item_cols
+                    else None
+                )
+                base_uom_col = (
+                    _pick_existing(item_cols, ["BASEUOM", "BASE_UOM", "UOM"]) if item_cols else None
+                )
+                brand_col = _pick_existing(item_cols, ["BRAND", "MICRO"]) if item_cols else None
+                barcode_col = (
+                    _pick_existing(item_cols, ["MANUFACTURERID", "BARCODE", "MFRID"])
+                    if item_cols
+                    else None
+                )
+
+                if item_cols and ic and name_col:
+                    name_expr = f"NVL(i.{name_col}, TO_CHAR(d.{item_col}))"
+                    join_item = f"LEFT JOIN itemmaster i ON i.{ic} = d.{item_col}"
+                    if loc and _pick_existing(item_cols, ["LOCATIONCODE", "LOCATION_CODE"]):
+                        loc_i = _pick_existing(item_cols, ["LOCATIONCODE", "LOCATION_CODE"])
+                        join_item += f" AND i.{loc_i} = :iloc"
+                        params["iloc"] = int(loc)
+                    retail_expr = f"NVL(i.{retail_col}, 0)" if retail_col else "0"
+                    unit_fallback = f"NVL(i.{base_uom_col}, 'PCS')" if base_uom_col else "'PCS'"
+                    brand_expr = f"NVL(i.{brand_col}, '')" if brand_col else "''"
+                    barcode_expr = f"NVL(i.{barcode_col}, '')" if barcode_col else "''"
+                else:
+                    name_expr = f"TO_CHAR(d.{item_col})"
+                    join_item = ""
+                    retail_expr = "0"
+                    unit_fallback = "'PCS'"
+                    brand_expr = "''"
+                    barcode_expr = "''"
+
+                uom_expr = f"NVL(NULLIF(TRIM(d.{uom_col}), ''), {unit_fallback})" if uom_col else unit_fallback
+                rate_expr = f"NVL(d.{rate_col}, 0)" if rate_col else "0"
+
+                sql = f"""
+                    SELECT * FROM (
+                        SELECT d.{item_col} AS item_code,
+                               {name_expr} AS item_name,
+                               {uom_expr} AS unit,
+                               {rate_expr} AS last_rate,
+                               {retail_expr} AS retail_price,
+                               NVL(d.{qty_col}, 0) AS last_qty,
+                               TRUNC(h.{date_col}) AS billdate,
+                               h.{billno_h} AS billno,
+                               {brand_expr} AS brand,
+                               {barcode_expr} AS barcode
+                          FROM {dtl_table} d
+                         INNER JOIN {hdr_table} h ON {" AND ".join(join)}
+                          {join_item}
+                         WHERE {" AND ".join(where)}
+                         ORDER BY TRUNC(h.{date_col}) DESC, h.{billno_h} DESC
+                    ) WHERE ROWNUM <= :lim
+                """
+                try:
+                    cur.execute(sql, params)
+                    rows = cur.fetchall() or []
+                except cx_Oracle.DatabaseError:
+                    continue
+
+                cols = [d[0].lower() for d in cur.description or []]
+                for raw_row in rows:
+                    raw = dict(zip(cols, raw_row))
+                    code = str(raw.get("item_code") or "").strip()
+                    if not code:
+                        continue
+                    billdate = raw.get("billdate")
+                    if hasattr(billdate, "strftime"):
+                        billdate_s = billdate.strftime("%Y-%m-%d")
+                    else:
+                        billdate_s = str(billdate or "")[:10]
+                    existing = aggregated.get(code)
+                    if existing is None:
+                        rate = _to_float(raw.get("retail_price"))
+                        if rate <= 0:
+                            rate = _to_float(raw.get("last_rate"))
+                        aggregated[code] = {
+                            "item_code": code,
+                            "item_name": str(raw.get("item_name") or "").strip(),
+                            "unit": str(raw.get("unit") or "PCS").strip() or "PCS",
+                            "rate": rate,
+                            "stock": 0.0,
+                            "brand": str(raw.get("brand") or "").strip(),
+                            "barcode": str(raw.get("barcode") or "").strip(),
+                            "last_qty": _to_float(raw.get("last_qty")),
+                            "last_rate": _to_float(raw.get("last_rate")),
+                            "last_billdate": billdate_s,
+                            "last_billno": str(raw.get("billno") or "").strip(),
+                            "times_ordered": 1,
+                        }
+                    else:
+                        existing["times_ordered"] = int(existing.get("times_ordered") or 1) + 1
+                        # Keep newest bill fields (query is newest-first; first write wins).
+
+            # Overlay warehouse stock when requested.
+            if wh_raw.isdigit() and aggregated:
+                try:
+                    stock_map = _warehouse_stock_qty_map(int(wh_raw), int(loc or 0))
+                    for code, row in aggregated.items():
+                        row["stock"] = stock_map.get(code, 0.0)
+                except Exception:
+                    pass
+            elif aggregated:
+                # Fall back to item master current stock via catalog normalize when possible.
+                for code in list(aggregated.keys())[:lim]:
+                    try:
+                        item = None
+                        from db import get_item_by_code
+
+                        if code.isdigit():
+                            item = get_item_by_code(int(code), loc)
+                        if item:
+                            stk = item.get("CURRENTSTOCK") or item.get("currentstock") or 0
+                            retail = item.get("RETAILPRICE") or item.get("retailprice") or 0
+                            cost = item.get("COSTPRICE") or item.get("costprice") or 0
+                            avg = item.get("AVERAGECOST") or item.get("averagecost") or 0
+                            aggregated[code]["stock"] = _to_float(stk)
+                            if _to_float(retail) > 0:
+                                aggregated[code]["rate"] = _to_float(retail)
+                            aggregated[code]["cost_price"] = _to_float(cost)
+                            aggregated[code]["average_cost"] = _to_float(avg)
+                            name = item.get("ITEMNAME") or item.get("itemname")
+                            if name and not aggregated[code].get("item_name"):
+                                aggregated[code]["item_name"] = str(name).strip()
+                    except Exception:
+                        continue
+
+    out = list(aggregated.values())
+    out.sort(
+        key=lambda r: (
+            str(r.get("last_billdate") or ""),
+            int(r.get("times_ordered") or 0),
+        ),
+        reverse=True,
+    )
+    return out[:lim]
+
+
 def get_invoice_open_context(*, peek_billno: bool = True) -> dict[str, Any]:
     from addons.document_numbering.document_numbering_db import DOC_TYPE_SALES_INVOICE
-    from db import get_location_info_by_dbkey, get_next_bill_no, get_open_bill_date, peek_next_bill_no
+    from db import get_location_info_by_dbkey, get_next_bill_no
+    from mobile_backend.services.transaction_date_helper import (
+        missing_setup_date_message,
+        open_context as txn_open_context,
+    )
 
     with _erp_session_scope() as username:
         loc = _location_code()
-        open_dt = get_open_bill_date(loc)
-        bill_date = open_dt.strftime("%Y-%m-%d") if open_dt else datetime.now().strftime("%Y-%m-%d")
+        txn = txn_open_context("sales", location_code=loc)
+        bill_date = str(txn.get("preferred_date") or "")[:10]
+        if not bill_date:
+            raise ValueError(txn.get("transaction_date_error") or missing_setup_date_message("sales"))
         if peek_billno:
-            billno = peek_next_bill_no(loc, None, doc_type=DOC_TYPE_SALES_INVOICE)
+            billno = _fresh_peek_billno(loc, DOC_TYPE_SALES_INVOICE)
             reserved = False
         else:
             billno = get_next_bill_no(loc, None, doc_type=DOC_TYPE_SALES_INVOICE)
@@ -808,6 +1242,11 @@ def get_invoice_open_context(*, peek_billno: bool = True) -> dict[str, Any]:
         return {
             "billno": billno,
             "bill_date": bill_date,
+            "bill_date_from": str(txn.get("open_date_from") or bill_date)[:10],
+            "bill_date_to": str(txn.get("open_date_to") or bill_date)[:10],
+            "open_date_from": str(txn.get("open_date_from") or bill_date)[:10],
+            "open_date_to": str(txn.get("open_date_to") or bill_date)[:10],
+            "transaction_date_blocked": bool(txn.get("transaction_date_blocked")),
             "bill_time": datetime.now().strftime("%H:%M:%S"),
             "location_code": loc,
             "location_name": str(info.get("locationname") or "").strip(),
@@ -818,21 +1257,35 @@ def get_invoice_open_context(*, peek_billno: bool = True) -> dict[str, Any]:
         }
 
 
-def list_customers(*, search: str = "", limit: int = 50) -> list[dict[str, Any]]:
+def list_customers(
+    *,
+    search: str = "",
+    limit: int = 50,
+    billing_type: str = "",
+) -> list[dict[str, Any]]:
     """Customer picker rows — master data only; GL outstanding loaded on selection."""
-    from db import get_customers_master_list
+    from db import get_customers_master_list, normalize_customer_billing_type
 
     lim = max(1, min(int(limit or 50), 200))
     q = (search or "").strip()
+    bt_raw = (billing_type or "").strip().upper()
+    bt = normalize_customer_billing_type(bt_raw) if bt_raw else ""
+    if bt_raw and bt not in ("CASH", "CREDIT"):
+        bt = ""
     with _erp_session_scope():
         rows = get_customers_master_list(
             for_picker=True,
             picker_search=q,
             picker_limit=lim,
+            picker_billing_type=bt,
         )
         out: list[dict[str, Any]] = []
         for raw in rows or []:
-            out.append(_normalize_customer_row(dict(raw), include_gl=False))
+            row = _normalize_customer_row(dict(raw), include_gl=False)
+            # Safety net when schema has no billing column to filter in SQL.
+            if bt and str(row.get("billing_type") or "").strip().upper() != bt:
+                continue
+            out.append(row)
         return out
 
 
@@ -1103,6 +1556,20 @@ def _normalize_catalog_row(row: dict[str, Any], stock: float | None = None) -> d
     unit = row.get("unit") or row.get("baseuom") or row.get("BASEUOM") or "PCS"
     rate = row.get("retailprice") or row.get("RETAILPRICE") or row.get("rate") or 0
     stk = stock if stock is not None else row.get("stock") or row.get("STOCK") or row.get("qty") or 0
+    cost = (
+        row.get("costprice")
+        or row.get("COSTPRICE")
+        or row.get("cost_price")
+        or row.get("cost")
+        or 0
+    )
+    avg = (
+        row.get("averagecost")
+        or row.get("AVERAGECOST")
+        or row.get("average_cost")
+        or row.get("avgcost")
+        or 0
+    )
     return {
         "item_code": str(ic or "").strip(),
         "item_name": str(name or "").strip(),
@@ -1111,7 +1578,106 @@ def _normalize_catalog_row(row: dict[str, Any], stock: float | None = None) -> d
         "stock": _to_float(stk),
         "brand": str(row.get("brand") or row.get("micro") or "").strip(),
         "barcode": str(row.get("manufacturerid") or row.get("MANUFACTURERID") or "").strip(),
+        "cost_price": _to_float(cost),
+        "average_cost": _to_float(avg),
     }
+
+
+def _norm_alnum(s: str) -> str:
+    return re.sub(r"[^A-Z0-9]", "", (s or "").upper())
+
+
+def _catalog_fuzzy_score(query: str, *parts: str) -> float:
+    """Typo score for short queries only (e.g. ``chich`` → ``CHICKEN``).
+
+    Full keywords like ``chicken`` use contains-match elsewhere — they must appear
+    inside name/code/barcode, not merely share a ``CHI`` stem with CHILDREN/CHIPS.
+    """
+    q = _norm_alnum(query)
+    if not (_FUZZY_MIN_QUERY_LEN <= len(q) <= _FUZZY_MAX_QUERY_LEN):
+        return 0.0
+    hay = " ".join(str(p or "") for p in parts).upper()
+    words = re.findall(r"[A-Z0-9]+", hay)
+    if not words:
+        return 0.0
+    best = 0.0
+    stem3 = q[:3]
+    for word in words:
+        if len(word) < 3:
+            continue
+        # Keyword (or the item token) literally inside the other side.
+        if q in word or word in q:
+            best = max(best, 0.96 if q in word else 0.9)
+            continue
+        ratio = SequenceMatcher(None, q, word).ratio()
+        if len(word) >= len(q):
+            ratio = max(ratio, SequenceMatcher(None, q, word[: len(q) + 2]).ratio())
+        # Strong edit similarity (chcken↔chicken).
+        if ratio >= 0.85:
+            best = max(best, ratio)
+            continue
+        # Short typo with same 3-letter stem and similar length (chich↔chicken).
+        if (
+            word.startswith(stem3)
+            and abs(len(word) - len(q)) <= 2
+            and ratio >= 0.62
+        ):
+            best = max(best, 0.80)
+    return best
+
+
+def _catalog_fuzzy_seeds(query: str) -> list[str]:
+    """Seeds for broader LIKE pulls — only for short typo queries."""
+    q = _norm_alnum(query)
+    if not (_FUZZY_MIN_QUERY_LEN <= len(q) <= _FUZZY_MAX_QUERY_LEN):
+        return []
+    seeds: list[str] = []
+    for n in (4, 3):
+        if len(q) >= n:
+            s = q[:n]
+            if s not in seeds:
+                seeds.append(s)
+    return seeds
+
+
+def _should_fuzzy_fallback(query: str, exact_count: int) -> bool:
+    """Fuzzy only when contains-search found nothing and the query looks like a typo."""
+    if exact_count > 0:
+        return False
+    q = _norm_alnum(query)
+    return _FUZZY_MIN_QUERY_LEN <= len(q) <= _FUZZY_MAX_QUERY_LEN
+
+
+def _merge_exact_then_fuzzy(
+    exact: list[dict[str, Any]],
+    candidates: list[dict[str, Any]],
+    *,
+    query: str,
+    limit: int,
+) -> list[dict[str, Any]]:
+    if not _should_fuzzy_fallback(query, len(exact)):
+        return exact[:limit]
+    seen = {str(r.get("item_code") or "").strip() for r in exact}
+    scored: list[tuple[float, dict[str, Any]]] = []
+    for row in candidates:
+        code = str(row.get("item_code") or "").strip()
+        if not code or code in seen:
+            continue
+        score = _catalog_fuzzy_score(
+            query,
+            code,
+            str(row.get("item_name") or ""),
+            str(row.get("barcode") or ""),
+        )
+        if score >= _FUZZY_SCORE_THRESHOLD:
+            scored.append((score, row))
+    scored.sort(key=lambda x: (-x[0], str(x[1].get("item_name") or "").upper()))
+    out = list(exact)
+    for _, row in scored:
+        out.append(row)
+        if len(out) >= limit:
+            break
+    return out[:limit]
 
 
 def list_catalog_items(
@@ -1122,11 +1688,9 @@ def list_catalog_items(
     limit: int = 60,
     username: str = "mobile",
     for_return: bool = False,
+    for_order: bool = False,
 ) -> list[dict[str, Any]]:
     """E-commerce style product list — warehouse stock when warehouse selected, else ERP item popup."""
-    import logging
-
-    logger = logging.getLogger(__name__)
     try:
         return _list_catalog_items_impl(
             search=search,
@@ -1135,10 +1699,45 @@ def list_catalog_items(
             limit=limit,
             username=username,
             for_return=for_return,
+            for_order=for_order,
         )
     except Exception as exc:
-        logger.exception("list_catalog_items failed")
+        _log.exception("list_catalog_items failed")
         raise ValueError(f"Could not load product catalog: {exc}") from exc
+
+
+def _warehouse_stock_qty_map(
+    warehouse_id: int,
+    location_code: int,
+) -> dict[str, float]:
+    """item_code → qty for one warehouse (includes zero rows when present)."""
+    from db import get_warehouse_stock_list
+
+    out: dict[str, float] = {}
+    for ws in get_warehouse_stock_list(
+        warehouse_id, location_code, include_zero=True, limit=8000
+    ) or []:
+        ic = ws.get("itemcode") or ws.get("ITEMCODE")
+        if ic is None:
+            continue
+        try:
+            code = str(int(ic))
+        except (TypeError, ValueError):
+            continue
+        out[code] = _to_float(ws.get("qty") or ws.get("QTY"))
+    return out
+
+
+def _apply_warehouse_stock_overlay(
+    rows: list[dict[str, Any]],
+    stock_map: dict[str, float],
+) -> list[dict[str, Any]]:
+    for row in rows:
+        code = str(row.get("item_code") or "").strip()
+        if not code:
+            continue
+        row["stock"] = stock_map.get(code, 0.0)
+    return rows
 
 
 def _list_catalog_items_impl(
@@ -1149,35 +1748,52 @@ def _list_catalog_items_impl(
     limit: int = 60,
     username: str = "mobile",
     for_return: bool = False,
+    for_order: bool = False,
 ) -> list[dict[str, Any]]:
-    """E-commerce style product list — warehouse stock when warehouse selected, else ERP item popup."""
+    """Product catalog for Sales Invoice / Order / Return.
+
+    ERP Sales Accounts Configuration:
+    - Minus billing OFF → only items with stock (warehouse stock-first when WH selected)
+    - Minus billing ON  → full item master (zero / never-stocked included); WH qty is info only
+    - Sales Return      → always full item master
+    Invoice uses MINUSBILLING; Order uses MINUSBILLING_ORDER.
+    """
     from db import (
         get_item_by_code,
         get_item_popup_items,
-        get_location_info_by_dbkey,
+        get_sales_minus_billing_invoice_enabled,
+        get_sales_minus_billing_order_enabled,
         get_warehouse_stock_list,
     )
 
-    # Returns need the full master list (incl. zero stock); invoices keep a tighter cap.
-    lim = max(1, min(int(limit or 60), 500 if for_return else 100))
     features = _sales_features()
     wh_raw = (warehouse_id or "").strip()
-    search_tokens = [t for t in (search or "").upper().split() if t]
+    q_raw = (search or "").strip()
+    search_tokens = [t for t in q_raw.upper().split() if t]
 
     with _erp_session_scope() as user:
         loc = _location_code()
-        location_info = get_location_info_by_dbkey(None) or {}
-        minusbilling = str(location_info.get("minusbilling") or "").strip().upper()
-        # Sales return can bring stock back — never hide zero-stock items.
-        enforce = (minusbilling == "N") and not for_return
+        if for_return:
+            enforce = False
+        elif for_order:
+            enforce = not get_sales_minus_billing_order_enabled()
+        else:
+            enforce = not get_sales_minus_billing_invoice_enabled()
 
-        # Invoice + warehouse: stock-first list. Return: full item master (stock as info only).
-        if features["warehouse_enabled"] and wh_raw.isdigit() and not for_return:
-            wid = int(wh_raw)
+        # Full-master lists (return / minus billing) allow a higher cap.
+        lim = max(1, min(int(limit or 60), 500 if (for_return or not enforce) else 100))
+        uname = user or username
+        wh_id = int(wh_raw) if wh_raw.isdigit() else None
+
+        # Minus billing OFF + warehouse: stock-first list (in-stock items only).
+        if features["warehouse_enabled"] and wh_id is not None and enforce:
+            wid = wh_id
+            pool_cap = lim * 8 if search_tokens else lim * 4
             ws_rows = get_warehouse_stock_list(
-                wid, loc, include_zero=not enforce, limit=lim * 4
+                wid, loc, include_zero=False, limit=max(pool_cap, 80)
             )
-            out: list[dict[str, Any]] = []
+            exact: list[dict[str, Any]] = []
+            pool: list[dict[str, Any]] = []
             for ws in ws_rows or []:
                 ic = ws.get("itemcode") or ws.get("ITEMCODE")
                 if ic is None:
@@ -1187,49 +1803,102 @@ def _list_catalog_items_impl(
                 except (TypeError, ValueError):
                     continue
                 qty = _to_float(ws.get("qty") or ws.get("QTY"))
-                if enforce and qty <= 0.0001:
+                if qty <= 0.0001:
                     continue
                 item = get_item_by_code(ic_int, loc) or {}
                 name = str(
                     item.get("ITEMNAME") or item.get("itemname") or ws.get("itemname") or ""
                 ).strip()
-                barcode = str(item.get("MANUFACTURERID") or item.get("manufacturerid") or "")
+                barcode = str(
+                    item.get("MANUFACTURERID") or item.get("manufacturerid") or ""
+                ).strip()
+                row = {
+                    "item_code": str(ic_int),
+                    "item_name": name or f"Item {ic_int}",
+                    "unit": str(
+                        item.get("BASEUOM") or item.get("baseuom") or "PCS"
+                    ).strip(),
+                    "rate": _to_float(
+                        item.get("RETAILPRICE") or item.get("retailprice")
+                    ),
+                    "stock": qty,
+                    "brand": "",
+                    "barcode": barcode,
+                    "cost_price": _to_float(
+                        item.get("COSTPRICE") or item.get("costprice")
+                    ),
+                    "average_cost": _to_float(
+                        item.get("AVERAGECOST") or item.get("averagecost")
+                    ),
+                }
+                pool.append(row)
                 if search_tokens:
                     hay = f"{ic_int} {name} {barcode}".upper()
-                    if not all(t in hay for t in search_tokens):
-                        continue
-                out.append(
-                    {
-                        "item_code": str(ic_int),
-                        "item_name": name or f"Item {ic_int}",
-                        "unit": str(
-                            item.get("BASEUOM") or item.get("baseuom") or "PCS"
-                        ).strip(),
-                        "rate": _to_float(
-                            item.get("RETAILPRICE") or item.get("retailprice")
-                        ),
-                        "stock": qty,
-                        "brand": "",
-                        "barcode": barcode.strip(),
-                    }
-                )
-                if len(out) >= lim:
-                    break
-            return out
+                    if all(t in hay for t in search_tokens):
+                        exact.append(row)
+                        if len(exact) >= lim:
+                            break
+                else:
+                    exact.append(row)
+                    if len(exact) >= lim:
+                        break
+            if not search_tokens:
+                return exact[:lim]
+            if exact or not _should_fuzzy_fallback(q_raw, len(exact)):
+                return exact[:lim]
+            return _merge_exact_then_fuzzy(exact, pool, query=q_raw, limit=lim)
 
-        wh_id = int(wh_raw) if wh_raw.isdigit() else None
+        # Minus billing ON / return / no warehouse filter: full ITEMMASTER list.
+        # Do not pass warehouse_id into the popup query — that would hide items never
+        # stocked at the warehouse. Overlay WH qty afterward for display.
         rows = get_item_popup_items(
             location_code=loc,
             filter_key="all",
-            search=(search or "").strip(),
+            search=q_raw,
             price_mode="retail",
             customer_code=(customer_code or "").strip() or None,
             enforce_stock_positive=enforce,
             limit=lim,
-            user_id=user or username,
-            warehouse_id=wh_id if for_return else None,
+            user_id=uname,
+            warehouse_id=None,
         )
-        return [_normalize_catalog_row(dict(r)) for r in rows or []][:lim]
+        exact = [_normalize_catalog_row(dict(r)) for r in rows or []][:lim]
+        stock_map: dict[str, float] = {}
+        if features["warehouse_enabled"] and wh_id is not None and not enforce:
+            stock_map = _warehouse_stock_qty_map(wh_id, loc)
+            _apply_warehouse_stock_overlay(exact, stock_map)
+
+        if not q_raw or exact or not _should_fuzzy_fallback(q_raw, len(exact)):
+            return exact
+
+        cand_map: dict[str, dict[str, Any]] = {}
+        for seed in _catalog_fuzzy_seeds(q_raw):
+            if seed.upper() == q_raw.upper():
+                continue
+            seed_rows = get_item_popup_items(
+                location_code=loc,
+                filter_key="all",
+                search=seed,
+                price_mode="retail",
+                customer_code=(customer_code or "").strip() or None,
+                enforce_stock_positive=enforce,
+                limit=min(lim * 3, 180),
+                user_id=uname,
+                warehouse_id=None,
+            )
+            for raw in seed_rows or []:
+                row = _normalize_catalog_row(dict(raw))
+                code = str(row.get("item_code") or "").strip()
+                if code and code not in cand_map:
+                    cand_map[code] = row
+        if stock_map:
+            _apply_warehouse_stock_overlay(list(cand_map.values()), stock_map)
+        return _merge_exact_then_fuzzy(
+            exact,
+            list(cand_map.values()),
+            query=q_raw,
+            limit=lim,
+        )
 
 
 def list_warehouses(*, search: str = "", limit: int = 100) -> list[dict[str, Any]]:
@@ -1737,6 +2406,7 @@ def save_invoice(payload: dict[str, Any], *, username: str) -> dict[str, Any]:
     else:
         header["customercode"] = cc
 
+    # Amount / shape only — UOM factor resolved again inside ERP session below.
     lines = _normalize_invoice_save_lines(lines)
     line_err = _validate_sales_doc_save_lines(lines, doc_label="sales invoice")
     if line_err:
@@ -1754,22 +2424,36 @@ def save_invoice(payload: dict[str, Any], *, username: str) -> dict[str, Any]:
         net += qty * rate - disc
 
     doc = str(header.get("billno") or header.get("orderno") or "").strip()
+    from mobile_backend.services.transaction_date_helper import resolve_doc_date
+
     with mobile_operation_lock(
         "sales_invoice",
         doc,
         lock_seconds=180.0,
         busy_message="Sales invoice is already being saved. Please wait.",
     ), _erp_session_scope() as user:
+        # Re-apply factor with tenant location session (stock uses base_qty).
+        lines = _normalize_invoice_save_lines(lines)
         loc = _location_code()
         if not ensure_gl_tables():
             raise ValueError(
                 "General ledger is not configured. Sales invoice cannot post to accounts."
             )
+        bill_date = resolve_doc_date(
+            "sales",
+            header.get("billdate") or header.get("bill_date"),
+            location_code=loc,
+            snap_out_of_range=True,
+        )
+        header["billdate"] = bill_date
+        header["bill_date"] = bill_date
         header = _normalize_invoice_save_header(
             header,
             location_code=loc,
             username=user or username,
         )
+        header["billdate"] = bill_date
+        header["bill_date"] = bill_date
         _validate_customer_gl_before_save(
             loc,
             header.get("customercode"),
@@ -1783,6 +2467,7 @@ def save_invoice(payload: dict[str, Any], *, username: str) -> dict[str, Any]:
 def build_invoice_pdf(billno: Any) -> tuple[bytes, str]:
     """ERP cashbilldup invoice PDF (same layout as desktop Sales Invoice print)."""
     from addons.reports.controllers.routes import _generate_cashbilldup_pdf
+    from addons.reports.invoice_templates import get_saved_invoice_template
     from db import billno_is_valid, get_sales_print_data, parse_billno_from_request
 
     bn = parse_billno_from_request(billno)
@@ -1794,11 +2479,14 @@ def build_invoice_pdf(billno: Any) -> tuple[bytes, str]:
         header, lines = get_sales_print_data(bn, loc)
         if not header:
             raise ValueError("Invoice not found for PDF.")
+        if not header.get("locationcode"):
+            header["locationcode"] = loc
         pdf_bytes = _generate_cashbilldup_pdf(
             billno=bn,
             header=header,
             lines=lines or [],
             invoice_title="INVOICE",
+            template=get_saved_invoice_template(),
         )
         if not pdf_bytes:
             raise ValueError("Failed to generate invoice PDF. Check reportlab on the server.")

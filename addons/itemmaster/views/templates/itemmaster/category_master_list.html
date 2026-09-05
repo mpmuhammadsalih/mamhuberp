@@ -106,12 +106,14 @@
                 <span class="cat-tree-spacer" aria-hidden="true"></span>
                 {% endif %}
                 <span class="flag-badge flag-M">M</span>
-                <span class="cat-item-code">{{ m.code }}</span>
+                <span class="cat-item-code">{{ m.code if m.code else '—' }}</span>
                 <span class="cat-item-name">{{ m.name }}</span>
-                <span class="muted" style="font-size:12px;">ID {{ m.id }}</span>
+                <span class="muted" style="font-size:12px;">{% if m.id is not none %}ID {{ m.id }}{% else %}orphan bucket{% endif %}</span>
                 <div class="cat-item-actions">
+                  {% if m.code %}
                   <button type="button" class="btn-view" data-cat-action="edit" data-flag="M" data-code="{{ m.code }}" data-name="{{ m.name|e }}">Edit</button>
                   <button type="button" class="btn-view" data-cat-action="create-d" data-main-code="{{ m.code }}" style="margin-left:6px;">+ Category</button>
+                  {% endif %}
                 </div>
               </div>
               {% if m.children and m.children|length > 0 %}
@@ -125,12 +127,14 @@
                     <span class="cat-tree-spacer" aria-hidden="true"></span>
                     {% endif %}
                     <span class="flag-badge flag-D">D</span>
-                    <span class="cat-item-code">{{ d.code }}</span>
+                    <span class="cat-item-code">{{ d.code if d.code else '—' }}</span>
                     <span class="cat-item-name">{{ d.name }}</span>
-                    <span class="muted" style="font-size:12px;">ID {{ d.id }} · under main {{ m.code }}</span>
+                    <span class="muted" style="font-size:12px;">{% if d.id is not none %}ID {{ d.id }} · under main {{ m.code }}{% else %}unlinked micros{% endif %}</span>
                     <div class="cat-item-actions">
+                      {% if d.code %}
                       <button type="button" class="btn-view" data-cat-action="edit" data-flag="D" data-code="{{ d.code }}" data-name="{{ d.name|e }}" data-main-code="{{ m.code }}">Edit</button>
                       <button type="button" class="btn-view" data-cat-action="create-c" data-main-code="{{ m.code }}" data-d-code="{{ d.code }}" style="margin-left:6px;">+ Micro</button>
+                      {% endif %}
                     </div>
                   </div>
                   {% if d.children and d.children|length > 0 %}
@@ -553,25 +557,63 @@ function filterCat() {
   var q = (document.getElementById('searchCat').value || '').trim().toLowerCase();
   var treeLis = document.querySelectorAll('#catTreeContainer li[data-search]');
   var visTree = 0;
+  // First pass: match each node on its own text.
   for (var i = 0; i < treeLis.length; i++) {
     var li = treeLis[i];
     var hay = (li.getAttribute('data-search') || '').toLowerCase();
-    var show = !q || hay.indexOf(q) >= 0;
-    li.style.display = show ? '' : 'none';
-    if (show) visTree++;
+    var selfMatch = !q || hay.indexOf(q) >= 0;
+    li.setAttribute('data-self-match', selfMatch ? '1' : '0');
+    li.style.display = 'none';
+  }
+  // Second pass: show a node if it matches OR any descendant matches
+  // (so searching a micro still reveals its parents).
+  for (var j = 0; j < treeLis.length; j++) {
+    var node = treeLis[j];
+    var show = node.getAttribute('data-self-match') === '1';
+    if (!show && q) {
+      var kids = node.querySelectorAll('li[data-search]');
+      for (var k = 0; k < kids.length; k++) {
+        if (kids[k].getAttribute('data-self-match') === '1') {
+          show = true;
+          break;
+        }
+      }
+    }
+    if (!q) show = true;
+    node.style.display = show ? '' : 'none';
+    if (show) {
+      visTree++;
+      // Expand ancestors of matches while searching.
+      if (q && node.getAttribute('data-self-match') === '1') {
+        var p = node.parentElement;
+        while (p) {
+          if (p.classList && p.classList.contains('cat-children')) {
+            p.classList.remove('is-collapsed');
+            var tog = p.previousElementSibling
+              ? p.previousElementSibling.querySelector('[data-cat-caret]')
+              : null;
+            if (tog) {
+              tog.setAttribute('aria-expanded', 'true');
+              tog.textContent = '▼';
+            }
+          }
+          p = p.parentElement;
+        }
+      }
+    }
   }
   var rows = document.querySelectorAll('#catListBody tr.cat-row');
   var visList = 0;
-  for (var j = 0; j < rows.length; j++) {
-    var tr = rows[j];
+  for (var r = 0; r < rows.length; r++) {
+    var tr = rows[r];
     var h = (tr.getAttribute('data-search') || '').toLowerCase();
     var showRow = (!q || h.indexOf(q) >= 0);
     tr.style.display = showRow ? '' : 'none';
     if (showRow) visList++;
   }
   var ri = 1;
-  for (var k = 0; k < rows.length; k++) {
-    var trR = rows[k];
+  for (var s = 0; s < rows.length; s++) {
+    var trR = rows[s];
     if (trR.style.display === 'none') continue;
     var sl = trR.querySelector('.sl-no');
     if (sl) sl.textContent = ri++;

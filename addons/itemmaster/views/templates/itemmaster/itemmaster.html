@@ -1847,6 +1847,14 @@
 
             <div class="form-group">
               <label class="checkbox-label">
+                <input type="checkbox" id="is_weight_item" name="is_weight_item" value="Y"
+                  {% if item_data and ((item_data.is_weight_item)|default('N'))|upper == 'Y' %}checked{% endif %} />
+                <span>Weight item (variable-weight barcode, sold by KG)</span>
+              </label>
+            </div>
+
+            <div class="form-group">
+              <label class="checkbox-label">
                 <input type="checkbox" id="batch_tracked" name="batch_tracked" value="Y"
                   {% if item_data and ((item_data.batch_tracked)|default('N'))|upper == 'Y' %}checked{% endif %}
                   {% if not itemmaster_bin_panel.inv_batch_tracking_enabled %}disabled{% endif %} />

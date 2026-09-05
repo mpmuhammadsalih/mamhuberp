@@ -6,7 +6,12 @@ from fastapi.responses import Response
 from mobile_backend.deps_auth import require_access_claims, require_any_permission, require_permission
 from mobile_backend.deps_save import require_save_nonce, success_after_mutation
 from mobile_backend.mutation_errors import failure_from_mutation_exc
-from mobile_backend.services import grn_service, purchase_order_service, purchase_return_service
+from mobile_backend.services import (
+    grn_ai_service,
+    grn_service,
+    purchase_order_service,
+    purchase_return_service,
+)
 from mobile_backend.services.purchase_service import (
     create_goods_receipt,
     finalize_goods_receiving_without_formal_document,
@@ -101,6 +106,59 @@ def purchase_grn_next_no():
     return success({"receipt_no": str(grn_service.next_receipt_no())})
 
 
+@router.post("/grn/ai/extract", dependencies=[_po_receive])
+def purchase_grn_ai_extract(request: Request):
+    """
+    Multipart field ``file`` (invoice PDF/images) — same as ERP AI Extract & fill.
+    Long-running; client should use an elevated timeout.
+    """
+    try:
+        data = grn_ai_service.extract_invoice()
+    except Exception as exc:
+        return failure_from_mutation_exc(exc, fallback="AI invoice extract failed.")
+    return success(data, message="Invoice extracted")
+
+
+@router.get("/grn/ai/quick-item", dependencies=[_po_receive])
+def purchase_grn_ai_quick_item_lookups():
+    try:
+        data = grn_ai_service.quick_item_lookups()
+    except Exception as exc:
+        return failure(str(exc)[:300] or "Failed to load quick-item lookups.")
+    return success(data)
+
+
+@router.get("/grn/ai/quick-item/barcode-check", dependencies=[_po_receive])
+def purchase_grn_ai_quick_item_barcode_check(barcode: str = Query("")):
+    try:
+        data = grn_ai_service.barcode_check(barcode)
+    except Exception as exc:
+        return failure(str(exc)[:300] or "Barcode check failed.")
+    return success(data)
+
+
+@router.post("/grn/ai/quick-item/suggest", dependencies=[_po_receive])
+def purchase_grn_ai_quick_item_suggest(payload: dict[str, Any] = Body(default_factory=dict)):
+    """AI autofill for GRN quick-create (barcode web + similar-item template). Read-only."""
+    try:
+        data = grn_ai_service.suggest_item_fields(payload)
+    except Exception as exc:
+        return failure_from_mutation_exc(exc, fallback="AI item suggest failed.")
+    return success(data)
+
+
+@router.post("/grn/ai/quick-item", dependencies=[_po_write, require_save_nonce])
+def purchase_grn_ai_quick_item_create(
+    request: Request,
+    payload: dict[str, Any] = Body(default_factory=dict),
+):
+    try:
+        data = grn_ai_service.create_quick_item(payload)
+    except Exception as exc:
+        return failure_from_mutation_exc(exc, fallback="Failed to create item.")
+    return success_after_mutation(request, data, message="Item saved")
+
+
 @router.post("/grn/save", dependencies=[_po_write, require_save_nonce])
 def purchase_grn_save(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
     """ERP-aligned GRN save (draft or post stock)."""
@@ -143,6 +201,26 @@ def purchase_grn_cancel(request: Request, receipt_no: str):
         request,
         data,
         message=data.get("message") or "GRN canceled",
+    )
+
+
+@router.get(
+    "/grn/{receipt_no}/pdf",
+    dependencies=[Depends(require_permission("purchase.purchase_order_list"))],
+)
+def purchase_grn_pdf(receipt_no: str):
+    """Download ERP-style GRN PDF (same layout as desktop receipt print)."""
+    try:
+        pdf_bytes, filename = grn_service.build_receipt_pdf(receipt_no)
+    except ValueError as exc:
+        return failure(str(exc), status_code=404)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
     )
 
 
@@ -262,6 +340,23 @@ def purchase_order_catalog(
             )
         }
     )
+
+
+@router.get("/order/supplier-items", dependencies=[_po_list])
+def purchase_order_supplier_items(
+    supplier_code: str = Query(..., min_length=1),
+    q: str = Query(""),
+    limit: int = Query(80, ge=1, le=200),
+    days: int = Query(365, ge=30, le=730),
+):
+    """Supplier items tab — prior GRN purchases + master items linked to supplier."""
+    rows = purchase_order_service.list_supplier_items(
+        supplier_code=supplier_code,
+        search=q,
+        limit=limit,
+        days=days,
+    )
+    return success({"items": rows, "count": len(rows)})
 
 
 @router.get("/order/item-uoms", dependencies=[_po_list])

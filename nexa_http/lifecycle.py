@@ -56,6 +56,12 @@ def apply_tenant_and_location_from_session(request: Request) -> None:
     except Exception as e:
         print(f"[DEBUG ensure_location_in_session] Error: {e}")
     g.current_location_code = session.get("location_code")
+    try:
+        from db import warm_core_schema_cache
+
+        warm_core_schema_cache()
+    except Exception:
+        pass
 
 
 def _normalize_location_code(value: Any) -> Any:
@@ -78,7 +84,7 @@ def nexa_security_after_route_match(request: Request) -> None:
     if _is_database_setup_route():
         return
     path_n = request.url.path or ""
-    if path_n.startswith("/static"):
+    if path_n.startswith("/static") or "/static/" in path_n:
         return
     if path_n.startswith("/api/v1") or path_n == "/health":
         return

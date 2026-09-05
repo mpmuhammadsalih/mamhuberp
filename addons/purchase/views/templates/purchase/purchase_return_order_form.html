@@ -303,7 +303,7 @@
   <section class="itemmaster-container pro-form-body">
   {% if transaction_date_blocked|default(false) and not query_mode %}
   <div class="pr-order-txn-date-block">
-    {{ transaction_date_error or 'No open transaction date. Set it in Transaction Date Setup before posting.' }}
+    {{ transaction_date_error or 'Setup date is missing. No open From–To date range in Transaction Date Setup. Open a date range in General Setup → Transaction Date Setup before posting.' }}
     {% if transaction_date_setup_url %}
     <a href="{{ transaction_date_setup_url }}">Open Transaction Date Setup</a>
     {% endif %}
@@ -815,7 +815,7 @@
   proApplyTxnDateBounds();
   if (txnDateBlocked && !queryMode && btnSave) {
     btnSave.disabled = true;
-    btnSave.title = txnDateError || 'No open transaction date';
+    btnSave.title = txnDateError || 'Setup date is missing';
   }
 
   function normalizeWarehouseRow(w) {
@@ -2307,7 +2307,7 @@
   if (saveBtn) saveBtn.addEventListener('click', function () {
     if (queryMode || isCancelled) return;
     if (txnDateBlocked) {
-      alert(txnDateError || 'No open transaction date. Set it in Transaction Date Setup before posting.');
+      alert(txnDateError || 'Setup date is missing. No open From–To date range in Transaction Date Setup. Open a date range in General Setup → Transaction Date Setup before posting.');
       return;
     }
     if (isSaving) return;

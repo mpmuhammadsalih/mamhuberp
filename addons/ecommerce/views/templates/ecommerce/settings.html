@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=4" />
+{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page ecommerce-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Settings</h1>
+      <p class="page-po__muted">Storefront configuration · location {{ store.location_code }}</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('ecommerce.dashboard') }}" class="page-po__btn-secondary">Dashboard</a>
+    </div>
+  </div>
+
+  <div class="ecommerce-tabs">
+    <a class="ecommerce-tab {% if section == 'general' %}active{% endif %}" href="{{ url_for('ecommerce.settings', section='general') }}">General</a>
+    <a class="ecommerce-tab {% if section == 'delivery' %}active{% endif %}" href="{{ url_for('ecommerce.settings', section='delivery') }}">Delivery zones</a>
+    <a class="ecommerce-tab {% if section == 'slots' %}active{% endif %}" href="{{ url_for('ecommerce.settings', section='slots') }}">Delivery slots</a>
+    <a class="ecommerce-tab {% if section == 'pickup' %}active{% endif %}" href="{{ url_for('ecommerce.settings', section='pickup') }}">Pickup stores</a>
+    <a class="ecommerce-tab" href="{{ url_for('ecommerce.media') }}">Content &amp; media</a>
+    <a class="ecommerce-tab" href="{{ url_for('ecommerce.cms') }}">CMS pages</a>
+  </div>
+
+  {% if section == 'general' %}
+  <div class="ecommerce-form-panel">
+    <h2 class="page-po__section-title">General store settings</h2>
+    <form method="post" action="{{ url_for('ecommerce.settings_general') }}" class="ecommerce-form-grid">
+      <div class="form-group">
+        <label for="store_name">Store name</label>
+        <input id="store_name" name="store_name" required class="input" value="{{ store.store_name }}" />
+      </div>
+      <div class="form-group">
+        <label for="store_email">Store email</label>
+        <input id="store_email" name="store_email" type="email" class="input" value="{{ store.store_email }}" />
+      </div>
+      <div class="form-group">
+        <label for="store_phone">Store phone</label>
+        <input id="store_phone" name="store_phone" class="input" value="{{ store.store_phone }}" />
+      </div>
+      <div class="form-group">
+        <label for="currency_code">Currency</label>
+        <input id="currency_code" name="currency_code" class="input" value="{{ store.currency_code }}" />
+      </div>
+      <div class="form-group span-full">
+        <label for="store_address">Store address</label>
+        <input id="store_address" name="store_address" class="input" value="{{ store.store_address }}" />
+      </div>
+      <div class="form-group">
+        <label for="timezone">Timezone</label>
+        <input id="timezone" name="timezone" class="input" value="{{ store.timezone }}" />
+      </div>
+      <div class="form-group">
+        <label for="tax_rate">Tax rate (%)</label>
+        <input id="tax_rate" name="tax_rate" type="number" min="0" step="0.01" class="input" value="{{ store.tax_rate }}" />
+      </div>
+      <div class="form-group span-full" style="display:flex; flex-wrap:wrap; gap:16px;">
+        <label><input type="checkbox" name="checkout_enabled" value="1" {% if store.checkout_enabled %}checked{% endif %} /> Checkout enabled</label>
+        <label><input type="checkbox" name="pickup_enabled" value="1" {% if store.pickup_enabled %}checked{% endif %} /> Pickup enabled</label>
+        <label><input type="checkbox" name="delivery_enabled" value="1" {% if store.delivery_enabled %}checked{% endif %} /> Delivery enabled</label>
+        <label><input type="checkbox" name="coupons_enabled" value="1" {% if store.coupons_enabled %}checked{% endif %} /> Coupons enabled</label>
+      </div>
+      <div class="form-group span-full ecommerce-form-actions">
+        <button type="submit" class="page-po__btn-primary">Save changes</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  {% if section == 'delivery' %}
+  {% if delivery_warning %}
+  <div class="ecommerce-alert">{{ delivery_warning }}</div>
+  {% endif %}
+  <div class="ecommerce-form-panel" style="margin-bottom:20px;">
+    <h2 class="page-po__section-title">Add delivery zone</h2>
+    <form method="post" action="{{ url_for('ecommerce.settings_zone_new') }}" class="ecommerce-form-grid">
+      <div class="form-group">
+        <label for="zone_code">Zone code</label>
+        <input id="zone_code" name="zone_code" class="input" placeholder="WEST_DOHA" />
+      </div>
+      <div class="form-group">
+        <label for="zone_name">Zone name</label>
+        <input id="zone_name" name="zone_name" required class="input" placeholder="West Doha" />
+      </div>
+      <div class="form-group">
+        <label for="city">City</label>
+        <input id="city" name="city" required class="input" placeholder="Doha" />
+      </div>
+      <div class="form-group">
+        <label for="delivery_fee">Delivery fee</label>
+        <input id="delivery_fee" name="delivery_fee" type="number" min="0" step="0.01" class="input" value="0" />
+      </div>
+      <div class="form-group">
+        <label for="min_order_amount">Min order</label>
+        <input id="min_order_amount" name="min_order_amount" type="number" min="0" step="0.01" class="input" value="0" />
+      </div>
+      <div class="form-group">
+        <label for="free_delivery_threshold">Free delivery over</label>
+        <input id="free_delivery_threshold" name="free_delivery_threshold" type="number" min="0" step="0.01" class="input" />
+      </div>
+      <div class="form-group">
+        <label for="estimated_days">Est. days</label>
+        <input id="estimated_days" name="estimated_days" type="number" min="1" class="input" value="2" />
+      </div>
+      <div class="form-group span-full">
+        <label><input type="checkbox" name="is_active" value="1" checked /> Active</label>
+      </div>
+      <div class="form-group span-full ecommerce-form-actions">
+        <button type="submit" class="page-po__btn-primary">Add zone</button>
+      </div>
+    </form>
+  </div>
+  <div class="co-table-wrap">
+    <table class="co-table co-table--th-hint">
+      <thead>
+        <tr>
+          <th>Zone</th>
+          <th>City</th>
+          <th style="text-align:right;">Fee</th>
+          <th style="text-align:right;">Min order</th>
+          <th style="text-align:right;">Free over</th>
+          <th style="text-align:center;">Days</th>
+          <th style="text-align:center;">Active</th>
+          <th style="text-align:center; cursor:default;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for zone in delivery_zones %}
+        <tr>
+          <form method="post" action="{{ url_for('ecommerce.settings_zone', zone_id=zone.delivery_zone_id) }}" style="display:contents;">
+            <td><strong>{{ zone.zone_name }}</strong><br><code>{{ zone.zone_code }}</code></td>
+            <td>{{ zone.city }}</td>
+            <td><input name="delivery_fee" type="number" min="0" step="0.01" class="input" style="width:90px;" value="{{ zone.delivery_fee }}" /></td>
+            <td><input name="min_order_amount" type="number" min="0" step="0.01" class="input" style="width:90px;" value="{{ zone.min_order_amount }}" /></td>
+            <td><input name="free_delivery_threshold" type="number" min="0" step="0.01" class="input" style="width:90px;" value="{{ zone.free_delivery_threshold or '' }}" /></td>
+            <td style="text-align:center;"><input name="estimated_days" type="number" min="1" class="input" style="width:70px;" value="{{ zone.estimated_days }}" /></td>
+            <td style="text-align:center;"><input type="checkbox" name="is_active" value="1" {% if zone.is_active %}checked{% endif %} /></td>
+            <td style="text-align:center;"><button type="submit" class="btn-view" style="border:none; cursor:pointer;">Save</button></td>
+          </form>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" style="text-align:center;padding:20px;color:#64748b;">No delivery zones configured.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if section == 'slots' %}
+  <div class="ecommerce-form-panel" style="margin-bottom:20px;">
+    <h2 class="page-po__section-title">Add delivery slot</h2>
+    <form method="post" action="{{ url_for('ecommerce.settings_slot_new') }}" class="ecommerce-form-grid">
+      <div class="form-group">
+        <label for="slot_code">Slot code</label>
+        <input id="slot_code" name="slot_code" class="input" placeholder="MORNING" />
+      </div>
+      <div class="form-group">
+        <label for="slot_label">Slot label</label>
+        <input id="slot_label" name="slot_label" required class="input" placeholder="Morning delivery" />
+      </div>
+      <div class="form-group">
+        <label for="start_hour">Start hour</label>
+        <input id="start_hour" name="start_hour" type="number" min="0" max="23" class="input" value="9" />
+      </div>
+      <div class="form-group">
+        <label for="end_hour">End hour</label>
+        <input id="end_hour" name="end_hour" type="number" min="1" max="24" class="input" value="13" />
+      </div>
+      <div class="form-group">
+        <label for="max_orders">Max orders</label>
+        <input id="max_orders" name="max_orders" type="number" min="1" class="input" value="50" />
+      </div>
+      <div class="form-group span-full">
+        <label><input type="checkbox" name="is_active" value="1" checked /> Active</label>
+      </div>
+      <div class="form-group span-full ecommerce-form-actions">
+        <button type="submit" class="page-po__btn-primary">Add slot</button>
+      </div>
+    </form>
+  </div>
+  <div class="co-table-wrap">
+    <table class="co-table co-table--th-hint">
+      <thead>
+        <tr>
+          <th style="text-align:center; width:56px; cursor:default;">Sl.No</th>
+          <th>Slot</th>
+          <th>Hours</th>
+          <th style="text-align:center;">Max orders</th>
+          <th>Status</th>
+          <th style="text-align:center; cursor:default;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for slot in delivery_slots %}
+        <tr>
+          <td class="sl-no">{{ loop.index }}</td>
+          <td><strong>{{ slot.slot_label }}</strong><br><code>{{ slot.slot_code }}</code></td>
+          <td>{{ slot.start_hour }}:00 – {{ slot.end_hour }}:00</td>
+          <td style="text-align:center;">{{ slot.max_orders }}</td>
+          <td>
+            <span class="ecommerce-flag {% if slot.is_active %}ecommerce-flag-Y{% else %}ecommerce-flag-N{% endif %}">
+              {% if slot.is_active %}Active{% else %}Inactive{% endif %}
+            </span>
+          </td>
+          <td style="text-align:center;">
+            <form method="post" action="{{ url_for('ecommerce.settings_slot_toggle', slot_id=slot.delivery_slot_id) }}">
+              <button type="submit" class="btn-view" style="border:none; cursor:pointer;">
+                {% if slot.is_active %}Deactivate{% else %}Activate{% endif %}
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" style="text-align:center;padding:20px;color:#64748b;">No delivery slots configured.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if section == 'pickup' %}
+  <div class="ecommerce-form-panel" style="margin-bottom:20px;">
+    <h2 class="page-po__section-title">Add pickup store</h2>
+    <form method="post" action="{{ url_for('ecommerce.settings_pickup_new') }}" class="ecommerce-form-grid">
+      <div class="form-group">
+        <label for="store_code">Store code</label>
+        <input id="store_code" name="store_code" class="input" placeholder="MAIN_STORE" />
+      </div>
+      <div class="form-group">
+        <label for="store_name">Store name</label>
+        <input id="store_name" name="store_name" required class="input" placeholder="MamaHub Main Store" />
+      </div>
+      <div class="form-group span-full">
+        <label for="address_line">Address</label>
+        <input id="address_line" name="address_line" class="input" placeholder="Street, building, area" />
+      </div>
+      <div class="form-group">
+        <label for="pickup_city">City</label>
+        <input id="pickup_city" name="city" class="input" placeholder="Doha" />
+      </div>
+      <div class="form-group">
+        <label for="open_hour">Open hour</label>
+        <input id="open_hour" name="open_hour" type="number" min="0" max="23" class="input" value="9" />
+      </div>
+      <div class="form-group">
+        <label for="close_hour">Close hour</label>
+        <input id="close_hour" name="close_hour" type="number" min="1" max="24" class="input" value="21" />
+      </div>
+      <div class="form-group span-full">
+        <label><input type="checkbox" name="is_active" value="1" checked /> Active</label>
+      </div>
+      <div class="form-group span-full ecommerce-form-actions">
+        <button type="submit" class="page-po__btn-primary">Add pickup store</button>
+      </div>
+    </form>
+  </div>
+  <div class="co-table-wrap">
+    <table class="co-table co-table--th-hint">
+      <thead>
+        <tr>
+          <th style="text-align:center; width:56px; cursor:default;">Sl.No</th>
+          <th>Store</th>
+          <th>City</th>
+          <th>Hours</th>
+          <th>Status</th>
+          <th style="text-align:center; cursor:default;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for shop in pickup_stores %}
+        <tr>
+          <td class="sl-no">{{ loop.index }}</td>
+          <td><strong>{{ shop.store_name }}</strong><br><code>{{ shop.store_code }}</code></td>
+          <td>{{ shop.city or '—' }}<br><span class="page-po__muted">{{ shop.address_line or '' }}</span></td>
+          <td>{{ shop.open_hour }}:00 – {{ shop.close_hour }}:00</td>
+          <td>
+            <span class="ecommerce-flag {% if shop.is_active %}ecommerce-flag-Y{% else %}ecommerce-flag-N{% endif %}">
+              {% if shop.is_active %}Active{% else %}Inactive{% endif %}
+            </span>
+          </td>
+          <td style="text-align:center;">
+            <form method="post" action="{{ url_for('ecommerce.settings_pickup_toggle', store_id=shop.pickup_store_id) }}">
+              <button type="submit" class="btn-view" style="border:none; cursor:pointer;">
+                {% if shop.is_active %}Deactivate{% else %}Activate{% endif %}
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" style="text-align:center;padding:20px;color:#64748b;">No pickup stores configured.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

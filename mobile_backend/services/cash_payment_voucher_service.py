@@ -100,6 +100,85 @@ def list_expense_children(parent_code: str) -> list[dict[str, Any]]:
         return out
 
 
+def create_expense_sub_account(payload: dict[str, Any]) -> dict[str, Any]:
+    """Create a postable EXPENSE child under the selected parent (ERP Chart of Accounts)."""
+    from db import (
+        chart_of_account_code_exists,
+        create_chart_of_account,
+        get_chart_of_account_by_code,
+        normalize_coa_code,
+        suggest_next_chart_of_account_code,
+        suggest_next_chart_of_account_code_after,
+    )
+
+    parent_code = normalize_coa_code(
+        (payload or {}).get("parent_code") or (payload or {}).get("parentCode") or ""
+    )
+    name = str((payload or {}).get("name") or (payload or {}).get("account_name") or "").strip()
+    code_in = normalize_coa_code((payload or {}).get("code") or (payload or {}).get("account_code") or "")
+
+    if not parent_code:
+        raise ValueError("Expense parent account is required.")
+    if not name:
+        raise ValueError("Sub-account name is required.")
+    if len(name) > 200:
+        name = name[:200]
+
+    with mobile_operation_lock(
+        "coa_expense_sub_create",
+        parent_code,
+        lock_seconds=60.0,
+        busy_message="A sub-account is already being saved. Please wait.",
+    ), _erp_session_scope():
+        _acc_scope()
+        parent = get_chart_of_account_by_code(parent_code)
+        if not parent:
+            raise ValueError(f"Parent account {parent_code} was not found.")
+        parent_type = str(parent.get("type") or "").strip().upper()
+        if parent_type and parent_type != "EXPENSE":
+            raise ValueError("Parent must be an EXPENSE account.")
+        try:
+            parent_id = int(parent.get("account_id"))
+        except (TypeError, ValueError):
+            parent_id = None
+        if parent_id is None:
+            raise ValueError("Parent account id is missing.")
+
+        account_type = "EXPENSE"
+        code = code_in
+        if not code:
+            code = suggest_next_chart_of_account_code(account_type, parent_id) or ""
+        if not code:
+            raise ValueError("Could not suggest a next account code.")
+        if chart_of_account_code_exists(code):
+            bumped = suggest_next_chart_of_account_code_after(code, account_type, parent_id)
+            if code_in and bumped != code_in:
+                # User typed a taken code — reject rather than silently changing their code.
+                raise ValueError(f"Account code {code} already exists. Suggested: {bumped or ''}".strip())
+            code = bumped or code
+        if chart_of_account_code_exists(code):
+            raise ValueError(f"Account code {code} already exists.")
+
+        account_id = create_chart_of_account(
+            code=code,
+            name=name,
+            account_type=account_type,
+            parent_id=parent_id,
+            is_postable=True,
+            status="ACTIVE",
+        )
+        created = get_chart_of_account_by_code(code) or {}
+        return {
+            "account_id": int(created.get("account_id") or account_id or 0) or account_id,
+            "code": str(created.get("code") or code).strip(),
+            "name": str(created.get("name") or name).strip(),
+            "type": "EXPENSE",
+            "parent_code": parent_code,
+            "parent_id": parent_id,
+            "message": f"Sub-account {code} created",
+        }
+
+
 def list_vouchers(
     *,
     search: str = "",
@@ -108,6 +187,8 @@ def list_vouchers(
 ) -> dict[str, Any]:
     with _erp_session_scope():
         a = _acc_scope()
+        from db import get_gl_voucher_reversal_no
+
         rows = a._cpv_list_rows(
             search=(search or "").strip(),
             status=(status or "all").strip().lower(),
@@ -116,6 +197,13 @@ def list_vouchers(
         out: list[dict[str, Any]] = []
         for r in rows or []:
             st = str(r.get("status") or "DRAFT").strip().upper()
+            glv = str(r.get("gl_voucher_no") or "").strip()
+            if st == "POSTED" and glv and get_gl_voucher_reversal_no(glv):
+                try:
+                    a._cpv_mark_reversed_for_gl(glv, "")
+                except Exception:
+                    pass
+                st = "REVERSED"
             out.append(
                 {
                     "voucher_no": str(r.get("voucher_no") or "").strip(),
@@ -124,7 +212,7 @@ def list_vouchers(
                     "reference_no": str(r.get("reference_no") or "").strip(),
                     "narration": str(r.get("narration") or "").strip(),
                     "status": st,
-                    "gl_voucher_no": str(r.get("gl_voucher_no") or "").strip(),
+                    "gl_voucher_no": glv,
                     "total_amount": _to_float(r.get("total_amount")),
                     "line_count": int(r.get("line_count") or 0),
                     "created_by": str(r.get("created_by") or "").strip(),
@@ -142,9 +230,19 @@ def get_detail(voucher_no: str) -> dict[str, Any] | None:
         hdr = a._cpv_get_voucher(vno)
         if not hdr:
             return None
+        from db import get_gl_voucher_reversal_no
+
         ctx = a._cpv_account_context()
         by_code = {str(x.get("code") or "").strip(): x for x in (ctx.get("accounts") or [])}
         status = str(hdr.get("status") or "DRAFT").strip().upper()
+        gl_voucher_no = str(hdr.get("gl_voucher_no") or "").strip()
+        # Sync status if GL was reversed outside the CPV screen (e.g. petrol reverse via Journal).
+        if status == "POSTED" and gl_voucher_no and get_gl_voucher_reversal_no(gl_voucher_no):
+            try:
+                a._cpv_mark_reversed_for_gl(gl_voucher_no, "")
+                status = "REVERSED"
+            except Exception:
+                status = "REVERSED"
         lines: list[dict[str, Any]] = []
         total = 0.0
         for ln in hdr.get("lines") or []:

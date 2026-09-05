@@ -111,7 +111,15 @@
             {% elif st == 'DISPOSED' %}<span class="fa-status-badge fa-status-badge--inactive">Disposed</span>
             {% else %}<span class="fa-status-badge fa-status-badge--active">Active</span>{% endif %}
           </td>
-          <td style="text-align:center;"><a class="btn-view" href="{{ url_for('fixed_assets.fa_asset_form', id=r.asset_id) }}">Edit</a></td>
+          <td style="text-align:center;">
+            <a class="btn-view" href="{{ url_for('fixed_assets.fa_asset_form', id=r.asset_id) }}">Edit</a>
+            {% if not posted %}
+            <form method="post" action="{{ url_for('fixed_assets.fa_asset_post_acquisition') }}" style="display:inline;" onsubmit="return confirm('Post acquisition to GL for {{ r.asset_no or r.name }}?');">
+              <input type="hidden" name="asset_id" value="{{ r.asset_id }}" />
+              <button type="submit" class="btn-view" style="border:none;background:none;cursor:pointer;padding:0;margin-left:6px;">Post</button>
+            </form>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
         {% endif %}

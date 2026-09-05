@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Inventory Reports{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .inv-hub-page { max-width: 1100px; margin: 0 auto; padding: 12px 16px 28px; }
+  .inv-hub-page .page-po__title { margin-bottom: 4px; }
+  .inv-hub-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 18px;
+  }
+  .inv-hub-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 92px;
+    padding: 16px 18px;
+    border: 1px solid #e5eaf2;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, .06);
+    text-decoration: none;
+    color: inherit;
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  }
+  .inv-hub-card:hover {
+    transform: translateY(-2px);
+    border-color: #bfdbfe;
+    box-shadow: 0 12px 24px rgba(37, 99, 235, .12);
+  }
+  .inv-hub-card:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+  }
+  .inv-hub-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
+    border-radius: 12px;
+    font-size: 22px;
+    color: #fff;
+  }
+  .inv-hub-icon--blue { background: linear-gradient(135deg, #2563eb, #38bdf8); }
+  .inv-hub-icon--green { background: linear-gradient(135deg, #16a34a, #22c55e); }
+  .inv-hub-icon--purple { background: linear-gradient(135deg, #7c3aed, #a78bfa); }
+  .inv-hub-icon--orange { background: linear-gradient(135deg, #ea580c, #fb923c); }
+  .inv-hub-icon--cyan { background: linear-gradient(135deg, #0891b2, #22d3ee); }
+  .inv-hub-icon--teal { background: linear-gradient(135deg, #0d9488, #2dd4bf); }
+  .inv-hub-title { margin: 0 0 4px; font-size: 16px; font-weight: 800; color: #0f172a; }
+  .inv-hub-sub { margin: 0; font-size: 12px; color: #64748b; line-height: 1.35; }
+  @media (max-width: 900px) { .inv-hub-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 560px) { .inv-hub-grid { grid-template-columns: 1fr; } }
+</style>
+
+<div class="page-po nexa-list-page inv-hub-page">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title page-po__title--with-icon">
+        <span class="page-po__title-icon" aria-hidden="true"><i class="bi bi-boxes"></i></span>
+        Inventory Reports
+      </h1>
+      <p class="page-po__muted">Stock, warehouse, and supplier analytics for branch {{ session_location_code }}.</p>
+    </div>
+  </div>
+
+  <div class="inv-hub-grid" role="navigation" aria-label="Inventory reports">
+    {% if has_menu_permission('reports.stock_report_datewise') or has_menu_permission('reports.stock_report') or allow_all_permissions %}
+    <a class="inv-hub-card" href="{{ url_for('reports.stock_report_datewise', report_mode='detail') }}">
+      <span class="inv-hub-icon inv-hub-icon--blue"><i class="bi bi-journal-text" aria-hidden="true"></i></span>
+      <div>
+        <p class="inv-hub-title">Stock Ledger</p>
+        <p class="inv-hub-sub">Item-wise stock movements</p>
+      </div>
+    </a>
+    {% endif %}
+
+    {% if has_menu_permission('purchase.inventory_valuation') or allow_all_permissions %}
+    <a class="inv-hub-card" href="{{ url_for('purchase.inventory_valuation') }}">
+      <span class="inv-hub-icon inv-hub-icon--green"><i class="bi bi-pie-chart" aria-hidden="true"></i></span>
+      <div>
+        <p class="inv-hub-title">Stock Summary</p>
+        <p class="inv-hub-sub">On-hand by warehouse</p>
+      </div>
+    </a>
+    {% endif %}
+
+    {% if has_menu_permission('purchase.item_journal_list') or allow_all_permissions %}
+    <a class="inv-hub-card" href="{{ url_for('purchase.item_journal_list') }}">
+      <span class="inv-hub-icon inv-hub-icon--purple"><i class="bi bi-clock-history" aria-hidden="true"></i></span>
+      <div>
+        <p class="inv-hub-title">Inventory History</p>
+        <p class="inv-hub-sub">Transaction history</p>
+      </div>
+    </a>
+    {% endif %}
+
+    {% if has_menu_permission('reports.stock_aging_report') or allow_all_permissions %}
+    <a class="inv-hub-card" href="{{ url_for('reports.stock_aging_report') }}">
+      <span class="inv-hub-icon inv-hub-icon--orange"><i class="bi bi-hourglass-split" aria-hidden="true"></i></span>
+      <div>
+        <p class="inv-hub-title">Inventory Aging</p>
+        <p class="inv-hub-sub">Slow &amp; aged stock</p>
+      </div>
+    </a>
+    {% endif %}
+
+    {% if has_menu_permission('reports.warehouse_summary_report') or allow_all_permissions %}
+    <a class="inv-hub-card" href="{{ url_for('reports.warehouse_summary_report') }}">
+      <span class="inv-hub-icon inv-hub-icon--cyan"><i class="bi bi-building" aria-hidden="true"></i></span>
+      <div>
+        <p class="inv-hub-title">Warehouse Summary</p>
+        <p class="inv-hub-sub">Warehouse totals</p>
+      </div>
+    </a>
+    {% endif %}
+
+    {% if has_menu_permission('reports.supplier_balance_report') or has_menu_permission('accounts.accounts_payable') or allow_all_permissions %}
+    <a class="inv-hub-card" href="{{ url_for('reports.supplier_balance_report') }}">
+      <span class="inv-hub-icon inv-hub-icon--teal"><i class="bi bi-people" aria-hidden="true"></i></span>
+      <div>
+        <p class="inv-hub-title">Supplier Balance</p>
+        <p class="inv-hub-sub">Outstanding payables</p>
+      </div>
+    </a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

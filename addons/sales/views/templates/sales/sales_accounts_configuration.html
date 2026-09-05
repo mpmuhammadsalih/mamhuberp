@@ -156,6 +156,45 @@
       </div>
     </div>
 
+    <div class="sac-card">
+      <h2>Direct posting (cash)</h2>
+      <p>
+        When enabled, cash / walk-in documents post the cash side straight to the Cash or Bank
+        (card) GL account mapped on each payment method (POS Tender Types), instead of Customer
+        Receivable. Credit documents always post to Receivable.
+      </p>
+
+      <label class="sac-toggle">
+        <input type="checkbox" name="direct_posting_invoice" value="Y" {% if direct_posting_invoice_enabled %}checked{% endif %} />
+        <span>
+          <strong>Enable direct posting in Sales Invoice</strong>
+          (cash sale → Cash / Bank by payment method)
+          <span class="sac-status {% if direct_posting_invoice_enabled %}sac-status--on{% else %}sac-status--off{% endif %}">
+            {% if direct_posting_invoice_enabled %}Enabled{% else %}Disabled{% endif %}
+          </span>
+        </span>
+      </label>
+
+      <label class="sac-toggle" style="margin-top:12px;">
+        <input type="checkbox" name="direct_posting_return" value="Y" {% if direct_posting_return_enabled %}checked{% endif %} />
+        <span>
+          <strong>Enable direct posting in Sales Return</strong>
+          (cash refund → Cash / Bank by payment method)
+          <span class="sac-status {% if direct_posting_return_enabled %}sac-status--on{% else %}sac-status--off{% endif %}">
+            {% if direct_posting_return_enabled %}Enabled{% else %}Disabled{% endif %}
+          </span>
+        </span>
+      </label>
+
+      <div class="sac-note">
+        Stored in <code>LOCATIONMASTER.SALES_DIRECT_POST</code> (invoice) and
+        <code>SALES_DIRECT_POST_RETURN</code> (return) for all branches.
+        Tender GL accounts come from <strong>POS Tender Types</strong>
+        (e.g. CASH → cash account, CARD / VISA → bank account).
+        Invoice: Dr Cash/Bank, Cr Sales. Return: Dr Sales, Cr Cash/Bank.
+      </div>
+    </div>
+
     <div class="sac-actions">
       <button type="submit" class="sac-btn-primary">Save</button>
     </div>

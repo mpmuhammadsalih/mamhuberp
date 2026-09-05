@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=4" />
+{% endblock %}
+{% block content %}
+{% set st = (order.order_status or '')|upper %}
+{% set pay = (order.payment_status or '')|upper %}
+{% set created_display = (order.created_at|string)[:19].replace('T', ' ') if order.created_at else '—' %}
+<div class="page-po nexa-list-page ecommerce-order-detail" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">{{ order.order_number }}</h1>
+      <p class="page-po__muted">Online order · {{ created_display }}</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('ecommerce.orders') }}" class="page-po__btn-secondary">← Back to orders</a>
+      <span class="ecommerce-flag ecommerce-flag-{% if st in ('CONFIRMED', 'DELIVERED', 'COMPLETED') %}Y{% elif st in ('CANCELLED', 'REFUNDED') %}N{% else %}M{% endif %} ecommerce-order-detail__status-badge">
+        {{ order.order_status or '—' }}
+      </span>
+    </div>
+  </div>
+
+  <div class="ecommerce-order-meta">
+    <div class="ecommerce-order-meta__chip">
+      <span class="ecommerce-order-meta__label">Customer</span>
+      <span class="ecommerce-order-meta__value">{% if order.customer_first_name or order.customer_last_name %}{{ order.customer_first_name or '' }} {{ order.customer_last_name or '' }}{% else %}{{ order.customer_email or 'Guest' }}{% endif %}</span>
+    </div>
+    {% if order.customer_email %}
+    <div class="ecommerce-order-meta__chip">
+      <span class="ecommerce-order-meta__label">Email</span>
+      <span class="ecommerce-order-meta__value">{{ order.customer_email }}</span>
+    </div>
+    {% endif %}
+    <div class="ecommerce-order-meta__chip">
+      <span class="ecommerce-order-meta__label">Payment</span>
+      <span class="ecommerce-order-meta__value">
+        <span class="ecommerce-flag ecommerce-flag-{% if pay == 'PAID' %}Y{% elif pay in ('FAILED', 'REFUNDED') %}N{% else %}M{% endif %}">
+          {{ order.payment_status or '—' }}
+        </span>
+      </span>
+    </div>
+    <div class="ecommerce-order-meta__chip">
+      <span class="ecommerce-order-meta__label">Fulfillment</span>
+      <span class="ecommerce-order-meta__value">{{ order.fulfillment_type or '—' }}</span>
+    </div>
+    {% if order.location_code %}
+    <div class="ecommerce-order-meta__chip">
+      <span class="ecommerce-order-meta__label">Location</span>
+      <span class="ecommerce-order-meta__value">{{ order.location_code }}</span>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="ecommerce-kpi-grid ecommerce-order-summary">
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Subtotal</div>
+      <div class="ecommerce-kpi-val ecommerce-kpi-val--sm">{{ order.currency_code or 'QAR' }} {{ '%.2f'|format(order.subtotal or 0) }}</div>
+    </div>
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Discount</div>
+      <div class="ecommerce-kpi-val ecommerce-kpi-val--sm">{{ order.currency_code or 'QAR' }} {{ '%.2f'|format(order.discount_total or 0) }}</div>
+    </div>
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Tax</div>
+      <div class="ecommerce-kpi-val ecommerce-kpi-val--sm">{{ order.currency_code or 'QAR' }} {{ '%.2f'|format(order.tax_total or 0) }}</div>
+    </div>
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Delivery</div>
+      <div class="ecommerce-kpi-val ecommerce-kpi-val--sm">{{ order.currency_code or 'QAR' }} {{ '%.2f'|format(order.delivery_fee or 0) }}</div>
+    </div>
+    <div class="ecommerce-kpi-card ecommerce-kpi-card--total">
+      <div class="ecommerce-kpi-label">Grand total</div>
+      <div class="ecommerce-kpi-val">{{ order.currency_code or 'QAR' }} {{ '%.2f'|format(order.grand_total or 0) }}</div>
+    </div>
+  </div>
+
+  {% if order.coupon_code or order.customer_notes %}
+  <div class="ecommerce-order-notes">
+    {% if order.coupon_code %}
+    <div class="ecommerce-order-notes__item">
+      <span class="ecommerce-order-meta__label">Coupon</span>
+      <span class="ecommerce-order-meta__value"><code>{{ order.coupon_code }}</code></span>
+    </div>
+    {% endif %}
+    {% if order.customer_notes %}
+    <div class="ecommerce-order-notes__item ecommerce-order-notes__item--wide">
+      <span class="ecommerce-order-meta__label">Customer notes</span>
+      <span class="ecommerce-order-meta__value">{{ order.customer_notes }}</span>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="page-po__section" style="margin-bottom:16px;">
+    <div class="page-po__section-title">Line items</div>
+    <div class="co-table-wrap">
+      <table class="co-table">
+        <thead>
+          <tr>
+            <th style="text-align:center; width:56px; cursor:default;">Sl.No</th>
+            <th>Code</th>
+            <th>Item</th>
+            <th style="text-align:center;">Qty</th>
+            <th style="text-align:right;">Unit price</th>
+            <th style="text-align:right;">Line total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in order.line_items %}
+          <tr>
+            <td class="sl-no">{{ loop.index }}</td>
+            <td>{{ item.item_code }}</td>
+            <td>{{ item.item_name }}</td>
+            <td style="text-align:center;">{{ item.quantity }}</td>
+            <td class="num">{{ '%.2f'|format(item.unit_price or 0) }}</td>
+            <td class="num">{{ '%.2f'|format(item.line_total or 0) }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6" style="text-align:center;padding:20px;color:#64748b;">No line items on this order.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        {% if order.line_items %}
+        <tfoot>
+          <tr>
+            <td colspan="5" style="text-align:right;font-weight:600;">Grand total</td>
+            <td class="num">{{ order.currency_code or 'QAR' }} {{ '%.2f'|format(order.grand_total or 0) }}</td>
+          </tr>
+        </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+
+  <div class="ecommerce-order-panels">
+    <div class="ecommerce-order-panel">
+      <div class="page-po__section-title">Update status</div>
+      <form method="post" action="{{ url_for('ecommerce.order_status', order_id=order.order_id) }}" class="ecommerce-order-form">
+        <div class="form-group">
+          <label for="status">Order status</label>
+          <select id="status" name="status" class="input" style="width:100%; max-width:320px;">
+            {% for s in status_options %}
+            <option value="{{ s }}" {% if s == order.order_status %}selected{% endif %}>{{ s.replace('_', ' ') }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="notes">Notes (optional)</label>
+          <textarea id="notes" name="notes" class="input ecommerce-order-form__textarea" rows="3" placeholder="Add a note for the status change…"></textarea>
+        </div>
+        <button type="submit" class="page-po__btn-primary">Save status</button>
+      </form>
+    </div>
+
+    <div class="ecommerce-order-panel">
+      <div class="page-po__section-title">Status history</div>
+      <div class="co-table-wrap">
+        <table class="co-table">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Notes</th>
+              <th>When</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for h in order.status_history %}
+            <tr>
+              <td>
+                {% set hs = (h.order_status or '')|upper %}
+                <span class="ecommerce-flag ecommerce-flag-{% if hs in ('CONFIRMED', 'DELIVERED', 'COMPLETED') %}Y{% elif hs in ('CANCELLED', 'REFUNDED') %}N{% else %}M{% endif %}">
+                  {{ h.order_status }}
+                </span>
+              </td>
+              <td>{{ h.status_notes or '—' }}</td>
+              <td>{{ (h.created_at|string)[:19].replace('T', ' ') if h.created_at else '—' }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="3" style="text-align:center;padding:16px;color:#64748b;">No status history yet.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

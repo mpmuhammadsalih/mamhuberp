@@ -7,7 +7,7 @@
 {% set doc_label = 'sale' if sale_mode else 'disposal' %}
 {% block title %}{% if sale_mode %}{{ 'Sale' if edit_mode else 'New' }} Fixed Asset Sale{% else %}{{ 'Disposal' if edit_mode else 'New' }} Fixed Asset Disposal{% endif %}{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/fixed_assets_pages.css') }}?v=4" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/fixed_assets_pages.css') }}?v=8" />
 
 <div class="fa-form-page">
   {% include 'fixed_assets/_fa_nav.html' %}
@@ -20,7 +20,12 @@
       </h1>
       <div class="fa-actions">
         {% if not posted %}
-        <button type="submit" form="faDisposalForm" class="fa-btn-save">Save</button>
+        <button type="submit" form="faDisposalForm" name="save_action" value="draft" class="fa-btn-save">Save draft</button>
+        <button type="submit" form="faDisposalForm" name="save_action" value="post" class="fa-btn-secondary" id="faDispBtnSavePost">Save &amp; post</button>
+        {% if edit_mode and row.disposal_id %}
+        <button type="submit" form="faDisposalPostForm" class="fa-btn-secondary"
+          onclick="return confirm('Post {{ doc_label }} to GL? Asset will be marked disposed.');">Post</button>
+        {% endif %}
         {% endif %}
         <a href="{{ url_for(list_endpoint) }}" class="fa-btn-secondary">List</a>
         {% if not edit_mode and not posted %}
@@ -31,6 +36,7 @@
   </div>
 
   <form id="faDisposalForm" method="post" action="{{ url_for(form_endpoint) }}" class="fa-form-shell">
+    <input type="hidden" name="save_nonce" value="{{ global_save_nonce | default('') }}" />
     {% if row.disposal_id %}<input type="hidden" name="disposal_id" value="{{ row.disposal_id }}" />{% endif %}
     <input type="hidden" id="faProceedsPartyType" name="proceeds_party_type" value="{{ row.proceeds_party_type or '' }}" />
     <input type="hidden" id="faProceedsPartyCode" name="proceeds_party_code" value="{{ row.proceeds_party_code or '' }}" />
@@ -120,11 +126,12 @@
     {% if not posted %}
     <section class="form-section">
       <h2 class="form-section-title">GL posting</h2>
-      <div class="fa-post-panel">
-        <p style="margin:0 0 10px; font-size:13px; color:#495057;">Set gain/loss accounts on the asset category. Post removes asset cost, clears accumulated depreciation, and records gain or loss.</p>
-        <label class="checkbox-inline" style="margin-bottom:0;">
-          <input type="checkbox" name="post_disposal" value="1" /> Post {{ doc_label }} to GL on save
-        </label>
+      <div class="fa-post-panel fa-post-panel--info">
+        <strong>Draft vs post</strong>
+        <p style="margin:6px 0 0; font-size:13px; color:#64748b; line-height:1.5;">
+          <strong>Save draft</strong> keeps the {% if sale_mode %}sale{% else %}disposal{% endif %} as <em>Draft</em> — post later with the <strong>Post</strong> button (when editing) or from the list.
+          <strong>Save &amp; post</strong> saves and posts to GL immediately (clears cost / accum. dep., records gain or loss).
+        </p>
       </div>
     </section>
     {% else %}
@@ -140,9 +147,8 @@
   </form>
 
   {% if edit_mode and not posted and row.disposal_id %}
-  <form method="post" action="{{ url_for(post_endpoint) }}" class="fa-form-shell" style="padding-top:0;">
+  <form id="faDisposalPostForm" method="post" action="{{ url_for(post_endpoint) }}" style="display:none;">
     <input type="hidden" name="disposal_id" value="{{ row.disposal_id }}" />
-    <button type="submit" class="fa-btn-secondary" onclick="return confirm('Post {{ doc_label }} to GL? Asset will be marked disposed.');">Post {{ doc_label }}</button>
   </form>
   {% endif %}
 </div>
@@ -195,6 +201,29 @@
         partyType.value = '';
         partyCode.value = '';
       }
+    });
+  }
+
+  var dispForm = document.getElementById('faDisposalForm');
+  if (dispForm) {
+    var dispSubmitting = false;
+    dispForm.addEventListener('submit', function (e) {
+      if (dispSubmitting) {
+        e.preventDefault();
+        return;
+      }
+      var submitter = e.submitter;
+      if (submitter && submitter.name === 'save_action' && submitter.value === 'post') {
+        var label = {{ doc_label|tojson }};
+        if (!window.confirm('Save and post ' + label + ' to GL? Asset will be marked disposed.')) {
+          e.preventDefault();
+          return;
+        }
+      }
+      dispSubmitting = true;
+      document.querySelectorAll('[form="faDisposalForm"], #faDisposalForm button[type="submit"]').forEach(function (btn) {
+        btn.disabled = true;
+      });
     });
   }
 })();

@@ -83,6 +83,21 @@
   .im-form-shell-page.si-form-page .si-print-head--topbar .si-ai-switch input:checked + .si-ai-switch-slider::before {
     transform: translateY(-50%) translateX(22px);
   }
+  .im-form-shell-page.si-form-page .si-print-template-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .im-form-shell-page.si-form-page .si-invoice-template-select {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 8px;
+    max-width: 140px;
+  }
   .im-form-shell-page.si-form-page .si-ai-head--topbar .si-ai-switch {
     width: 52px;
     height: 30px;
@@ -419,6 +434,17 @@
             <input type="checkbox" id="siPrintPdfOnSave" autocomplete="off" role="switch" aria-labelledby="siPrintSwitchLabel" checked />
             <span class="si-ai-switch-slider"></span>
           </label>
+          <label class="si-print-template-wrap" for="siInvoiceTemplate" title="PDF layout">
+            <span class="si-print-switch-label">Template</span>
+            <select id="siInvoiceTemplate" class="si-invoice-template-select" autocomplete="off">
+              <option value="classic">Classic Blue</option>
+              <option value="modern">Modern Teal</option>
+              <option value="compact">Compact Gray</option>
+              <option value="slate">Slate Banner</option>
+              <option value="gulfnova">Gulf Nova Retail</option>
+            </select>
+          </label>
+          <a href="{{ url_for('sales.sales_invoice_templates') }}" class="im-link" style="font-size:12px;" title="Browse invoice templates">Gallery</a>
         </div>
         {% endif %}
         {% if save_base|default('') == '/sales-order' %}
@@ -458,7 +484,7 @@
   <section class="itemmaster-container si-form-body">
   {% if transaction_date_blocked|default(false) %}
   <div class="si-txn-date-block" id="siTxnDateBlock">
-    {{ transaction_date_error or 'No open transaction date. Set it in Transaction Date Setup before posting.' }}
+    {{ transaction_date_error or 'Setup date is missing. No open From–To date range in Transaction Date Setup. Open a date range in General Setup → Transaction Date Setup before posting.' }}
     {% if transaction_date_setup_url %}
     <a href="{{ transaction_date_setup_url }}">Open Transaction Date Setup</a>
     {% endif %}
@@ -735,7 +761,7 @@
                 <input type="number" id="discount" name="discount" class="input" step="0.01" min="0" placeholder="0.00" />
               </td>
               <td class="po-line-form-cell si-col-amount">
-                <input type="number" id="line_amount" name="line_amount" class="input" step="0.01" min="0" placeholder="0.00" />
+                <input type="number" id="line_amount" name="line_amount" class="input" step="{% if save_base|default('') == '/sales-order' %}0.001{% else %}0.01{% endif %}" min="0" placeholder="{% if save_base|default('') == '/sales-order' %}0.000{% else %}0.00{% endif %}" />
               </td>
               <td class="po-line-form-cell si-col-action">
                 <button type="button" id="btnAddLine" class="po-add-line-icon" title="Add a line (Enter)" aria-label="Add a line" tabindex="0">+</button>

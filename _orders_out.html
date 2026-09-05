@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nexus Erp</title>
+    <link rel="stylesheet" href="/static/vendor/bootstrap-icons/font/bootstrap-icons.min.css?v=1.11.3" />
+    <link rel="stylesheet" href="/static/css/style.css?v=29" />
+    <link rel="stylesheet" href="/static/css/nexa_list_page.css?v=6" />
+    
+  </head>
+  <body>
+    <script>
+      (function () {
+        function nexaScrollbarPxFromEl(el) {
+          if (!el) return 0;
+          return Math.max(0, el.offsetWidth - el.clientWidth);
+        }
+        function nexaSyncScrollbarWidth() {
+          try {
+            var content = document.querySelector(".layout .content");
+            var w = nexaScrollbarPxFromEl(content);
+            if (!w) {
+              var root = document.documentElement;
+              w = Math.max(0, window.innerWidth - root.clientWidth);
+            }
+            document.documentElement.style.setProperty("--nexa-scrollbar-width", w + "px");
+          } catch (e) {}
+        }
+        nexaSyncScrollbarWidth();
+        window.addEventListener("resize", nexaSyncScrollbarWidth);
+        document.addEventListener("visibilitychange", function () {
+          if (!document.hidden) nexaSyncScrollbarWidth();
+        });
+        if (typeof requestAnimationFrame === "function") {
+          requestAnimationFrame(function () {
+            nexaSyncScrollbarWidth();
+          });
+        }
+        document.addEventListener("DOMContentLoaded", function () {
+          nexaSyncScrollbarWidth();
+          var content = document.querySelector(".layout .content");
+          if (content && typeof ResizeObserver !== "undefined") {
+            var ro = new ResizeObserver(function () {
+              nexaSyncScrollbarWidth();
+            });
+            ro.observe(content);
+          }
+        });
+      })();
+    </script>
+    
+    
+    
+    <script>
+      window.nexaToggleSidebar = function (ev) {
+        if (ev) {
+          if (ev.preventDefault) ev.preventDefault();
+          if (ev.stopPropagation) ev.stopPropagation();
+        }
+        var s = document.getElementById("sidebar");
+        if (!s) return;
+        var l = s.closest(".layout");
+        if (!l) l = document.querySelector(".layout");
+        if (!l) return;
+        s.classList.toggle("collapsed");
+        l.classList.toggle("sidebar-collapsed");
+      };
+    </script>
+    <!-- Global loading overlay (use showLoadingOverlay() / hideLoadingOverlay() from any page) -->
+    <div id="globalLoadingOverlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 99999; align-items: center; justify-content: center; flex-direction: column; gap: 16px;">
+      <div id="globalLoadingSpinner" class="global-loading-spinner" style="width: 56px; height: 56px; border: 4px solid #e2e8f0; border-top-color: #3b82f6; border-radius: 50%; animation: global-loading-spin 0.8s linear infinite;"></div>
+      <p id="globalLoadingOverlayText" style="margin: 0; color: #fff; font-weight: 600; font-size: 16px;">Loading…</p>
+      <div id="globalLoadingProgressWrap" style="display: none; width: min(420px, 88vw);">
+        <div style="background: #334155; border-radius: 999px; height: 10px; overflow: hidden;">
+          <div id="globalLoadingProgressBar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #3b82f6, #22c55e); transition: width 0.25s ease;"></div>
+        </div>
+        <p id="globalLoadingProgressDetail" style="margin: 8px 0 0; color: #e2e8f0; font-size: 13px; text-align: center;"></p>
+      </div>
+    </div>
+    <style>
+      @keyframes global-loading-spin { to { transform: rotate(360deg); } }
+    </style>
+    <script>
+      window.showLoadingOverlay = function(message, opts) {
+        opts = opts || {};
+        var el = document.getElementById('globalLoadingOverlay');
+        var text = document.getElementById('globalLoadingOverlayText');
+        var progressWrap = document.getElementById('globalLoadingProgressWrap');
+        var bar = document.getElementById('globalLoadingProgressBar');
+        var detail = document.getElementById('globalLoadingProgressDetail');
+        var spinner = document.getElementById('globalLoadingSpinner');
+        if (text) text.textContent = message || 'Loading…';
+        if (opts.progress && progressWrap && bar) {
+          var cur = Number(opts.progress.current) || 0;
+          var tot = Number(opts.progress.total) || 0;
+          var pct = tot > 0 ? Math.min(100, Math.round((cur * 100) / tot)) : 0;
+          progressWrap.style.display = 'block';
+          bar.style.width = pct + '%';
+          if (detail) detail.textContent = (opts.progress.detail || (cur + ' of ' + tot + ' items'));
+          if (spinner) spinner.style.display = 'none';
+        } else {
+          if (progressWrap) progressWrap.style.display = 'none';
+          if (bar) bar.style.width = '0%';
+          if (detail) detail.textContent = '';
+          if (spinner) spinner.style.display = 'block';
+        }
+        if (el) el.style.display = 'flex';
+      };
+      window.updateLoadingOverlayProgress = function(current, total, message, phase) {
+        var cur = Number(current) || 0;
+        var tot = Number(total) || 0;
+        var phaseLabel = phase ? String(phase) : 'Processing';
+        var msg = message || (phaseLabel + '…');
+        var detail = phaseLabel + ': ' + cur + ' of ' + tot + ' items';
+        window.showLoadingOverlay(msg, { progress: { current: cur, total: tot, detail: detail } });
+      };
+      window.hideLoadingOverlay = function() {
+        var el = document.getElementById('globalLoadingOverlay');
+        var progressWrap = document.getElementById('globalLoadingProgressWrap');
+        var bar = document.getElementById('globalLoadingProgressBar');
+        var detail = document.getElementById('globalLoadingProgressDetail');
+        var spinner = document.getElementById('globalLoadingSpinner');
+        if (progressWrap) progressWrap.style.display = 'none';
+        if (bar) bar.style.width = '0%';
+        if (detail) detail.textContent = '';
+        if (spinner) spinner.style.display = 'block';
+        if (el) el.style.display = 'none';
+      };
+    </script>
+
+    
+
+    <div class="layout layout--auth">
+      
+
+      <div class="content">
+        
+        <main class="container">
+      
+        
+      
+
+      
+<style>
+  /* Match dashboard main canvas: static/css/style.css → .layout:not(.layout--auth) .content */
+  body {
+    background:
+      radial-gradient(circle at top right, rgba(22, 183, 255, 0.12), transparent 30%),
+      #f5f8fd !important;
+    min-height: 100vh;
+  }
+  .login-po {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 24px;
+  }
+  .login-po__card {
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 20px;
+  }
+  .login-po__form-panel {
+    min-width: 0;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    text-align: center;
+  }
+  .login-po__form-panel .form {
+    text-align: left;
+  }
+  .login-po__logo-panel {
+    min-width: 0;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 8px 4px;
+    background: transparent;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+  }
+  .login-po__brand {
+    text-align: center;
+    width: 100%;
+    max-width: 100%;
+  }
+  .login-po__brand-logo {
+    display: block;
+    width: auto;
+    max-width: min(220px, 92%);
+    max-height: 140px;
+    height: auto;
+    margin: 0 auto;
+    border: none;
+    outline: none;
+    box-shadow: none;
+    vertical-align: middle;
+    object-fit: contain;
+  }
+  .login-po__title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #212529;
+    margin: 0;
+    padding-bottom: 4px;
+    border-bottom: 2px solid #007bff;
+    display: inline-block;
+  }
+  .login-po__muted {
+    font-size: 12px;
+    color: #6c757d;
+    margin: 0 0 8px 0;
+  }
+  .login-po .form label {
+    display: block;
+    font-size: 13px;
+    color: #495057;
+    margin-bottom: 0;
+    line-height: 1.15;
+  }
+  .login-po .form input[type="text"],
+  .login-po .form input[type="password"] {
+    width: 100%;
+    font-size: 14px;
+    padding: 3px 0 2px 0;
+    border: none;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 0;
+    background: transparent;
+    margin-bottom: 4px;
+  }
+  .login-po .form input:focus {
+    outline: none;
+    border-bottom-color: var(--nexa-focus-color);
+  }
+  .login-po .form button[type="submit"] {
+    width: 100%;
+    background: linear-gradient(135deg, #061a4d 0%, #0057d9 58%, #16b7ff 100%);
+    color: #fff;
+    border: none;
+    padding: 8px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 0;
+  }
+  .login-po .form button[type="submit"]:hover {
+    filter: brightness(1.06);
+  }
+  .login-po .flash-list { margin-bottom: 8px; }
+  @media (max-width: 480px) {
+    .login-po__card {
+      max-width: 100%;
+      gap: 16px;
+    }
+    .login-po__logo-panel {
+      padding: 8px 4px 0;
+    }
+    .login-po__brand-logo {
+      max-width: min(190px, 88%);
+      max-height: 118px;
+    }
+  }
+</style>
+<div class="login-po">
+  <div class="login-po__card">
+    <div class="login-po__logo-panel">
+      <div class="login-po__brand">
+        <img class="login-po__brand-logo" src="/static/img/nexus-erp-logo.png?v=1779032104" alt="Nexus ERP" />
+      </div>
+    </div>
+    <div class="login-po__form-panel">
+
+      <div class="login-po__title">Sign in</div>
+      <p class="login-po__muted">Use your credentials to continue</p>
+
+      
+        
+      
+
+      <form method="post" action="/auth/login" class="form" autocomplete="off">
+        
+        <label for="login-username">Username</label>
+        <input type="text" id="login-username" name="username" required autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" autofocus />
+
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" name="password" required autocomplete="off" />
+
+        <button type="submit">Login</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+        </main>
+      </div>
+    </div>
+
+    <!-- DBKey Switch Popup Modal -->
+    
+
+    
+    <script src="/static/js/list_data_refresh.js"></script>
+    <script>
+      (function () {
+        function bootListRefresh() {
+          try {
+            if (typeof ListDataRefresh !== 'undefined' && typeof ListDataRefresh.bootstrapReloadToolbars === 'function') {
+              ListDataRefresh.bootstrapReloadToolbars();
+            }
+          } catch (e) { /* non-list pages */ }
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootListRefresh);
+        else bootListRefresh();
+      })();
+    </script>
+    
+    <script src="/static/js/dropdown-search.js?v=2"></script>
+    <script src="/static/js/odoo-lookup.js?v=6"></script>
+    <script src="/static/js/prevent-double-submit.js"></script>
+    <script src="/static/js/form-enter-focus-only.js"></script>
+    <script src="/static/js/ctrl-s-save.js?v=1"></script>
+    <script>
+      (function () {
+        function disableAutocompleteProjectWide() {
+          document.querySelectorAll('form').forEach(function (form) {
+            if (form.hasAttribute('data-allow-autocomplete')) return;
+            form.setAttribute('autocomplete', 'off');
+          });
+          document.querySelectorAll('input, textarea, select').forEach(function (el) {
+            if (el.hasAttribute('data-allow-autocomplete')) return;
+            el.setAttribute('autocomplete', 'off');
+          });
+        }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', disableAutocompleteProjectWide);
+        } else {
+          disableAutocompleteProjectWide();
+        }
+      })();
+    </script>
+    <script>
+      (function () {
+        // Block browser-level F1 help page everywhere in the app.
+        function blockBrowserF1(event) {
+          if (!event) return;
+          if (event.key === 'F1' || event.keyCode === 112) {
+            event.preventDefault();
+          }
+        }
+        window.addEventListener('keydown', blockBrowserF1, true);
+        document.addEventListener('keydown', blockBrowserF1, true);
+      })();
+    </script>
+    
+    
+
+    
+  </body>
+</html>

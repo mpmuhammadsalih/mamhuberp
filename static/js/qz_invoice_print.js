@@ -73,6 +73,49 @@
     await qzScriptInflight;
   }
 
+  function formatQzConnectError(err) {
+    const raw = String((err && (err.message || err)) || err || 'Unknown error');
+    if (/establish connection|connection refused|ECONNREFUSED|WebSocket|websocket|closed before/i.test(raw)) {
+      return (
+        'Cannot connect to QZ Tray on this PC.\n\n' +
+        'Checklist:\n' +
+        '• QZ Tray is installed (https://qz.io/download/) and running (system tray icon visible)\n' +
+        '• You use Chrome or Edge on the same PC where QZ Tray runs (not a remote desktop session on another machine)\n' +
+        '• From Reports → Printer Setup: download the QZ certificate and trust/allow it in QZ Tray\n' +
+        '• Windows firewall/antivirus is not blocking localhost ports 8181/8182\n\n' +
+        'Technical detail: ' + raw
+      );
+    }
+    if (/Certificate HTTP|Signature failed|Sign HTTP|certificate/i.test(raw)) {
+      return (
+        'QZ security setup failed (certificate or signing).\n\n' +
+        '• Stay logged in to Nova in this browser tab\n' +
+        '• Open Reports → Printer Setup and download/trust the QZ certificate\n' +
+        '• On cloud hosting: ensure the server keeps the same QZ cert files across restarts\n\n' +
+        'Technical detail: ' + raw
+      );
+    }
+    return raw;
+  }
+
+  /**
+   * Open WebSocket to local QZ Tray (localhost — works with cloud-hosted Nova too).
+   */
+  async function connectQzWebsocket() {
+    if (!global.qz || !global.qz.websocket) {
+      throw new Error('QZ Tray library not loaded.');
+    }
+    if (global.qz.websocket.isActive()) {
+      return;
+    }
+    const connectOpts = { retries: 3, delay: 1 };
+    try {
+      await global.qz.websocket.connect(connectOpts);
+    } catch (err) {
+      throw new Error(formatQzConnectError(err));
+    }
+  }
+
   /**
    * @param {{ certificate: string, sign: string }} urls
    */
@@ -115,9 +158,7 @@
       );
       securityConfigured = true;
     }
-    if (!qz.websocket.isActive()) {
-      await qz.websocket.connect();
-    }
+    await connectQzWebsocket();
   }
 
   /**
@@ -293,6 +334,7 @@
 
   global.SalesQzPrint = {
     loadQzTrayLibrary,
+    connectQzWebsocket,
     ensureQzSecurity,
     printCashBillToDefaultPrinter,
     printPosReceiptViaQz,

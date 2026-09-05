@@ -311,17 +311,39 @@ def _journal_lines_from_save_lines(lines: List[Dict[str, Any]]) -> List[Dict[str
         if item_int <= 0:
             continue
         try:
+            adjust_qty = float(ln.get('adjust_qty') or 0)
+        except (TypeError, ValueError):
+            adjust_qty = 0.0
+        try:
             base_qty = float(
                 ln.get('base_qty')
                 if ln.get('base_qty') is not None
-                else ln.get('adjust_qty') or 0
+                else adjust_qty
             )
         except (TypeError, ValueError):
             base_qty = 0.0
         if abs(base_qty) < 1e-09:
             continue
+        try:
+            factor = float(
+                ln.get('conversionfactor')
+                or ln.get('conversion_factor')
+                or ln.get('factor')
+                or ln.get('uomfactor')
+                or 0
+            )
+        except (TypeError, ValueError):
+            factor = 0.0
+        if factor <= 0 and abs(adjust_qty) > 1e-12:
+            factor = abs(base_qty) / abs(adjust_qty)
+        if factor <= 0:
+            factor = 1.0
         store = str(ln.get('store') or '').strip()
+        # Line cost from UI is often alt/pack COSTPRICE — convert to base unit for GL.
         line_cost = float(ln.get('cost') or 0)
+        base_unit_cost = line_cost
+        if line_cost > 0 and factor > 1.0 + 1e-9:
+            base_unit_cost = round(line_cost / factor, 6)
         row: Dict[str, Any] = {
             'lineno': idx,
             'slno': idx,
@@ -330,13 +352,18 @@ def _journal_lines_from_save_lines(lines: List[Dict[str, Any]]) -> List[Dict[str
             'uom': str(ln.get('uom') or 'NOS').strip() or 'NOS',
             'store': store,
             'warehouse_code': store,
+            'quantity': adjust_qty,
+            'adjust_qty': adjust_qty,
             'base_qty': base_qty,
-            'adjust_qty': float(ln.get('adjust_qty') or 0),
+            'conversionfactor': factor,
+            'conversion_factor': factor,
+            'factor': factor,
             'cost': line_cost,
             'costprice': line_cost,
         }
-        if line_cost > 0:
-            row['averagecost'] = line_cost
+        if base_unit_cost > 0:
+            row['averagecost'] = base_unit_cost
+            row['average_cost'] = base_unit_cost
         lot_raw = ln.get('lot_id') or ln.get('lotid')
         if lot_raw is not None and str(lot_raw).strip():
             row['lot_id'] = lot_raw

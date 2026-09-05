@@ -104,9 +104,8 @@
   /**
    * Print every .bc-print-label child IN ORDER.
    *
-   * Labels are sent as ONE QZ job (one page per label, page-break between them)
-   * so the spooler cannot reorder or interleave them — each barcode finishes
-   * before the next one prints, and a second print run waits for this one.
+   * When there is more than one label, each is sent as its own QZ job (sequential)
+   * because many thermal label printers ignore page-breaks inside one HTML job.
    *
    * @param {HTMLElement} areaEl
    * @param {{ betweenMs?: number, perLabelJob?: boolean }} [opts]
@@ -133,8 +132,9 @@
         labels.push(areaEl.children[i]);
       }
 
-      // Default: single ordered job (one page per label). Most reliable for order.
-      if (!opts || !opts.perLabelJob) {
+      var usePerLabelJob = labels.length > 1 || !!(opts && opts.perLabelJob);
+
+      if (!usePerLabelJob) {
         var parts = [];
         for (var k = 0; k < labels.length; k++) {
           var el = labels[k].cloneNode(true);
@@ -151,7 +151,6 @@
         return labels.length;
       }
 
-      // Fallback: one job per label, strictly sequential (await each before the next).
       var gap = opts && opts.betweenMs != null ? opts.betweenMs : BETWEEN_LABEL_MS;
       for (var j = 0; j < labels.length; j++) {
         var html = buildLabelDocument(wrapLabelPage(labels[j].outerHTML));

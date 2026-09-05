@@ -582,17 +582,18 @@ def delete_fa_category(category_id: int) -> Tuple[bool, str]:
         return False, str(e)
 
 
-def _next_asset_no() -> str:
+def _next_asset_no_cur(cur) -> str:
     year = datetime.now().strftime('%Y')
     prefix = f'FA-{year}-'
-    rows = _safe_rows(
+    cur.execute(
         f"""
         SELECT MAX(ASSET_NO) AS mx FROM {ASSET_TABLE}
         WHERE ASSET_NO LIKE :pfx || '%'
         """,
         {'pfx': prefix},
     )
-    mx = str((rows[0].get('mx') or rows[0].get('MX') or '') if rows else '').strip()
+    row = cur.fetchone()
+    mx = str(row[0] if row and row[0] is not None else '').strip()
     seq = 1
     if mx.startswith(prefix):
         try:
@@ -600,6 +601,12 @@ def _next_asset_no() -> str:
         except ValueError:
             seq = 1
     return f'{prefix}{seq:04d}'
+
+
+def _next_asset_no() -> str:
+    with _get_connection() as conn:
+        with conn.cursor() as cur:
+            return _next_asset_no_cur(cur)
 
 
 def list_fa_assets(*, status: Optional[str] = None, category_id: Optional[int] = None) -> List[Dict[str, Any]]:
@@ -780,23 +787,26 @@ def save_fa_asset(
         return False, str(e), None
 
 
-def post_fa_acquisition(asset_id: int, *, user: str = 'web') -> Tuple[bool, str, Optional[str]]:
-    ensure_fixed_assets_tables()
-    asset = get_fa_asset(int(asset_id))
-    if not asset:
-        return False, 'Asset not found.', None
+def _post_fa_acquisition_tx(
+    conn,
+    cur,
+    asset_id: int,
+    asset: Dict[str, Any],
+    *,
+    user: str = 'web',
+) -> str:
     if str(asset.get('posted_acq') or 'N').upper() == 'Y':
-        return False, 'Acquisition already posted.', asset.get('gl_acq_voucher')
+        raise ValueError('Acquisition already posted.')
     credit = _norm_gl_account_code(asset.get('credit_account'))
     if not credit:
-        return False, 'Credit account is required to post acquisition.', None
+        raise ValueError('Credit account is required to post acquisition.')
     err = _validate_account(credit, 'Credit account')
     if err:
-        return False, err, None
+        raise ValueError(err)
     asset_ac = _norm_gl_account_code(asset.get('asset_account'))
     err = _validate_account(asset_ac, 'Asset account')
     if err:
-        return False, err, None
+        raise ValueError(err)
     cost = round(float(asset.get('acquisition_cost') or 0), 2)
     acq_date = asset.get('acquisition_date')
     if hasattr(acq_date, 'strftime'):
@@ -820,30 +830,167 @@ def post_fa_acquisition(asset_id: int, *, user: str = 'web') -> Tuple[bool, str,
         {'account_code': asset_ac, 'debit': cost, 'credit': 0, 'remarks': ref},
         credit_line,
     ]
+    vno = create_gl_journal_entry(
+        acq_date,
+        ref,
+        narration,
+        lines,
+        created_by=(user or 'web')[:50],
+        source='FA_ACQ',
+        conn=conn,
+        commit=False,
+    )
+    cur.execute(
+        f"""
+        UPDATE {ASSET_TABLE}
+        SET POSTED_ACQ = 'Y', GL_ACQ_VOUCHER = :vno,
+            UPDATED_BY = :usr, UPDATED_AT = SYSTIMESTAMP
+        WHERE ASSET_ID = :id
+        """,
+        {'vno': vno, 'usr': (user or 'web')[:50], 'id': int(asset_id)},
+    )
+    return vno
+
+
+def post_fa_acquisition(asset_id: int, *, user: str = 'web') -> Tuple[bool, str, Optional[str]]:
+    ensure_fixed_assets_tables()
+    asset = get_fa_asset(int(asset_id))
+    if not asset:
+        return False, 'Asset not found.', None
+    if str(asset.get('posted_acq') or 'N').upper() == 'Y':
+        return False, 'Acquisition already posted.', asset.get('gl_acq_voucher')
     try:
-        vno = create_gl_journal_entry(
-            acq_date,
-            ref,
-            narration,
-            lines,
-            created_by=(user or 'web')[:50],
-            source='FA_ACQ',
-        )
         with _get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    f"""
-                    UPDATE {ASSET_TABLE}
-                    SET POSTED_ACQ = 'Y', GL_ACQ_VOUCHER = :vno,
-                        UPDATED_BY = :usr, UPDATED_AT = SYSTIMESTAMP
-                    WHERE ASSET_ID = :id
-                    """,
-                    {'vno': vno, 'usr': (user or 'web')[:50], 'id': int(asset_id)},
-                )
+                vno = _post_fa_acquisition_tx(conn, cur, int(asset_id), asset, user=user)
             conn.commit()
         return True, '', vno
     except Exception as e:
         return False, str(e), None
+
+
+def save_fa_asset_register_batch(
+    *,
+    lines: List[Dict[str, Any]],
+    acquisition_date: str,
+    location_code: Optional[int] = None,
+    remarks: Optional[str] = None,
+    credit_account: Optional[str] = None,
+    credit_party_type: Optional[str] = None,
+    credit_party_code: Optional[str] = None,
+    post_acq: bool = False,
+    user: str = 'web',
+) -> Tuple[bool, str, List[int]]:
+    """Save multiple new assets in one transaction; optionally post all acquisitions."""
+    ensure_fixed_assets_tables()
+    if not lines:
+        return False, 'Add at least one asset line.', []
+    acq_date = str(acquisition_date or '').strip()[:10]
+    if len(acq_date) < 10:
+        return False, 'Acquisition date is required.', []
+    credit_account = _norm_gl_account_code(credit_account) if credit_account else None
+    cpt, cpc = _normalize_credit_party(credit_party_type, credit_party_code)
+    if post_acq and not credit_account:
+        return False, 'Credit account is required to post acquisition.', []
+    if post_acq:
+        err = _validate_account(credit_account, 'Credit account')
+        if err:
+            return False, err, []
+
+    validated: List[Dict[str, Any]] = []
+    for idx, ln in enumerate(lines, start=1):
+        name = str(ln.get('name') or '').strip()[:200]
+        if not name:
+            return False, f'Line {idx}: asset name is required.', []
+        try:
+            category_id = int(ln.get('category_id') or 0)
+        except (TypeError, ValueError):
+            return False, f'Line {idx}: category is required.', []
+        cat = get_fa_category(category_id)
+        if not cat:
+            return False, f'Line {idx}: category not found.', []
+        try:
+            cost = round(float(ln.get('acquisition_cost') or 0), 2)
+        except (TypeError, ValueError):
+            return False, f'Line {idx}: invalid acquisition cost.', []
+        if cost <= 0:
+            return False, f'Line {idx}: acquisition cost must be greater than zero.', []
+        try:
+            salvage = round(float(ln.get('salvage_value') or 0), 2)
+        except (TypeError, ValueError):
+            salvage = 0.0
+        if salvage < 0 or salvage >= cost:
+            return False, f'Line {idx}: salvage value must be zero or less than acquisition cost.', []
+        if post_acq:
+            asset_ac = _norm_gl_account_code(cat.get('asset_account'))
+            err = _validate_account(asset_ac, f'Line {idx}: asset account')
+            if err:
+                return False, err, []
+        validated.append({
+            'name': name,
+            'category_id': category_id,
+            'acquisition_cost': cost,
+            'salvage_value': salvage,
+            'custodian': (ln.get('custodian') or '')[:100] or None,
+            'serial_no': (ln.get('serial_no') or '')[:100] or None,
+            'asset_account': _norm_gl_account_code(cat.get('asset_account')),
+        })
+
+    try:
+        saved_ids: List[int] = []
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                for vl in validated:
+                    cur.execute(f'SELECT {ASSET_SEQ}.NEXTVAL FROM DUAL')
+                    aid = int(cur.fetchone()[0])
+                    asset_no = _next_asset_no_cur(cur)
+                    cur.execute(
+                        f"""
+                        INSERT INTO {ASSET_TABLE}
+                            (ASSET_ID, ASSET_NO, NAME, CATEGORY_ID, ACQUISITION_DATE,
+                             ACQUISITION_COST, SALVAGE_VALUE, LOCATION_CODE, CUSTODIAN,
+                             SERIAL_NO, REMARKS, CREDIT_ACCOUNT, CREDIT_PARTY_TYPE, CREDIT_PARTY_CODE,
+                             STATUS, POSTED_ACQ, CREATED_BY)
+                        VALUES
+                            (:id, :no, :name, :cid, TO_DATE(:ad, 'YYYY-MM-DD'),
+                             :cost, :salvage, :loc, :cust, :sn, :rm, :cr, :cpt, :cpc, 'ACTIVE', 'N', :usr)
+                        """,
+                        {
+                            'id': aid,
+                            'no': asset_no,
+                            'name': vl['name'],
+                            'cid': int(vl['category_id']),
+                            'ad': acq_date,
+                            'cost': vl['acquisition_cost'],
+                            'salvage': vl['salvage_value'],
+                            'loc': location_code,
+                            'cust': vl['custodian'],
+                            'sn': vl['serial_no'],
+                            'rm': (remarks or '')[:500] or None,
+                            'cr': credit_account,
+                            'cpt': cpt,
+                            'cpc': cpc,
+                            'usr': (user or 'web')[:50],
+                        },
+                    )
+                    saved_ids.append(aid)
+                    if post_acq:
+                        asset_row = {
+                            'posted_acq': 'N',
+                            'credit_account': credit_account,
+                            'asset_account': vl['asset_account'],
+                            'acquisition_cost': vl['acquisition_cost'],
+                            'acquisition_date': acq_date,
+                            'asset_no': asset_no,
+                            'name': vl['name'],
+                            'credit_party_type': cpt,
+                            'credit_party_code': cpc,
+                        }
+                        _post_fa_acquisition_tx(conn, cur, aid, asset_row, user=user)
+            conn.commit()
+        return True, '', saved_ids
+    except Exception as e:
+        return False, str(e), []
 
 
 def _asset_dep_line(asset: Dict[str, Any], period_yyyymm: str) -> Optional[Dict[str, Any]]:
@@ -1252,7 +1399,201 @@ def get_fa_disposal(disposal_id: int) -> Optional[Dict[str, Any]]:
     return _row_keys(rows[0]) if rows else None
 
 
-def save_fa_disposal(
+def _fetch_fa_disposal_cur(cur, disposal_id: int) -> Optional[Dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT d.DISPOSAL_ID, d.DISPOSAL_NO, d.ASSET_ID, a.ASSET_NO, a.NAME AS ASSET_NAME,
+               c.CODE AS CATEGORY_CODE, c.GAIN_ON_DISPOSAL_ACCOUNT, c.LOSS_ON_DISPOSAL_ACCOUNT,
+               c.ASSET_ACCOUNT, c.ACCUM_DEP_ACCOUNT,
+               d.DISPOSAL_DATE, d.DISPOSAL_TYPE, d.PROCEEDS_AMOUNT, d.PROCEEDS_ACCOUNT,
+               d.PROCEEDS_PARTY_TYPE, d.PROCEEDS_PARTY_CODE,
+               d.ACQUISITION_COST, d.ACCUM_DEP, d.NBV, d.GAIN_LOSS_AMOUNT,
+               d.STATUS, d.GL_VOUCHER_NO, d.REMARKS,
+               d.CREATED_BY, d.CREATED_AT, d.POSTED_BY, d.POSTED_AT
+        FROM {DISPOSAL_TABLE} d
+        JOIN {ASSET_TABLE} a ON a.ASSET_ID = d.ASSET_ID
+        JOIN {CATEGORY_TABLE} c ON c.CATEGORY_ID = a.CATEGORY_ID
+        WHERE d.DISPOSAL_ID = :id
+        """,
+        {'id': int(disposal_id)},
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    cols = [d[0].lower() for d in cur.description]
+    return _row_keys(dict(zip(cols, row)))
+
+
+def _post_fa_disposal_tx(conn, cur, disposal_id: int, *, user: str = 'web') -> str:
+    disp = _fetch_fa_disposal_cur(cur, int(disposal_id))
+    if not disp:
+        raise ValueError('Disposal not found.')
+    if str(disp.get('status') or '').upper() == DISPOSAL_POSTED:
+        raise ValueError('Disposal already posted.')
+    asset_id = int(disp.get('asset_id') or 0)
+    cur.execute(
+        f"SELECT STATUS FROM {ASSET_TABLE} WHERE ASSET_ID = :aid",
+        {'aid': asset_id},
+    )
+    asset_row = cur.fetchone()
+    if not asset_row or str(asset_row[0] or '').upper() == STATUS_DISPOSED:
+        raise ValueError('Asset is not eligible for disposal.')
+    cost = round(float(disp.get('acquisition_cost') or 0), 2)
+    accum = round(float(disp.get('accum_dep') or 0), 2)
+    gain_loss = round(float(disp.get('gain_loss_amount') or 0), 2)
+    asset_ac = _norm_gl_account_code(disp.get('asset_account'))
+    accum_ac = _norm_gl_account_code(disp.get('accum_dep_account'))
+    gain_ac = _norm_gl_account_code(disp.get('gain_on_disposal_account'))
+    loss_ac = _norm_gl_account_code(disp.get('loss_on_disposal_account'))
+    proceeds = round(float(disp.get('proceeds_amount') or 0), 2)
+    proceeds_ac = _norm_gl_account_code(disp.get('proceeds_account'))
+    if gain_loss > 0.005 and not gain_ac:
+        raise ValueError('Set gain on disposal account on the asset category before posting.')
+    if gain_loss < -0.005 and not loss_ac:
+        raise ValueError('Set loss on disposal account on the asset category before posting.')
+    ref = str(disp.get('disposal_no') or '')
+    asset_no = str(disp.get('asset_no') or '')
+    disp_date = disp.get('disposal_date')
+    if hasattr(disp_date, 'strftime'):
+        vdate = disp_date.strftime('%Y-%m-%d')
+    else:
+        vdate = str(disp_date or '')[:10]
+    gl_lines: List[Dict[str, Any]] = []
+    if accum > 0:
+        gl_lines.append({'account_code': accum_ac, 'debit': accum, 'credit': 0, 'remarks': asset_no})
+    if proceeds > 0 and proceeds_ac:
+        pline: Dict[str, Any] = {'account_code': proceeds_ac, 'debit': proceeds, 'credit': 0, 'remarks': asset_no}
+        ppt = str(disp.get('proceeds_party_type') or '').strip().upper()
+        ppc = str(disp.get('proceeds_party_code') or '').strip()
+        if ppt in ('SUPPLIER', 'CUSTOMER') and ppc:
+            pline['party_type'] = ppt
+            pline['party_code'] = ppc
+        gl_lines.append(pline)
+    if gain_loss < -0.005 and loss_ac:
+        loss_amt = round(abs(gain_loss), 2)
+        gl_lines.append({'account_code': loss_ac, 'debit': loss_amt, 'credit': 0, 'remarks': asset_no})
+    gl_lines.append({'account_code': asset_ac, 'debit': 0, 'credit': cost, 'remarks': asset_no})
+    if gain_loss > 0.005 and gain_ac:
+        gl_lines.append({'account_code': gain_ac, 'debit': 0, 'credit': gain_loss, 'remarks': asset_no})
+    narration = f"FA disposal — {disp.get('asset_name') or asset_no}"
+    vno = create_gl_journal_entry(
+        vdate,
+        ref,
+        narration,
+        gl_lines,
+        created_by=(user or 'web')[:50],
+        source='FA_DIS',
+        conn=conn,
+        commit=False,
+    )
+    cur.execute(
+        f"""
+        UPDATE {DISPOSAL_TABLE}
+        SET STATUS = :st, GL_VOUCHER_NO = :vno,
+            POSTED_BY = :usr, POSTED_AT = SYSTIMESTAMP
+        WHERE DISPOSAL_ID = :id
+        """,
+        {'st': DISPOSAL_POSTED, 'vno': vno, 'usr': (user or 'web')[:50], 'id': int(disposal_id)},
+    )
+    cur.execute(
+        f"""
+        UPDATE {ASSET_TABLE}
+        SET STATUS = :st, DISPOSAL_ID = :did, DISPOSED_DATE = TO_DATE(:dd, 'YYYY-MM-DD'),
+            UPDATED_BY = :usr, UPDATED_AT = SYSTIMESTAMP
+        WHERE ASSET_ID = :aid
+        """,
+        {
+            'st': STATUS_DISPOSED,
+            'did': int(disposal_id),
+            'dd': vdate,
+            'usr': (user or 'web')[:50],
+            'aid': asset_id,
+        },
+    )
+    return vno
+
+
+def _persist_fa_disposal_cur(
+    cur,
+    *,
+    disposal_id: Optional[int],
+    asset_id: int,
+    disp_date: str,
+    disp_type: str,
+    proceeds: float,
+    proceeds_account: Optional[str],
+    ppt: Optional[str],
+    ppc: Optional[str],
+    cost: float,
+    accum: float,
+    nbv: float,
+    gain_loss: float,
+    remarks: Optional[str],
+    user: str,
+) -> int:
+    if disposal_id:
+        cur.execute(
+            f"""
+            UPDATE {DISPOSAL_TABLE}
+            SET DISPOSAL_DATE = TO_DATE(:dd, 'YYYY-MM-DD'),
+                DISPOSAL_TYPE = :dt, PROCEEDS_AMOUNT = :pr,
+                PROCEEDS_ACCOUNT = :pa, PROCEEDS_PARTY_TYPE = :ppt, PROCEEDS_PARTY_CODE = :ppc,
+                ACQUISITION_COST = :cost, ACCUM_DEP = :acc, NBV = :nbv,
+                GAIN_LOSS_AMOUNT = :gl, REMARKS = :rm
+            WHERE DISPOSAL_ID = :id
+            """,
+            {
+                'id': int(disposal_id),
+                'dd': disp_date,
+                'dt': disp_type,
+                'pr': proceeds,
+                'pa': proceeds_account,
+                'ppt': ppt,
+                'ppc': ppc,
+                'cost': cost,
+                'acc': accum,
+                'nbv': nbv,
+                'gl': gain_loss,
+                'rm': (remarks or '')[:500] or None,
+            },
+        )
+        return int(disposal_id)
+    cur.execute(f'SELECT {DISPOSAL_SEQ}.NEXTVAL FROM DUAL')
+    did = int(cur.fetchone()[0])
+    disp_no = _next_doc_no('FADIS', DISPOSAL_TABLE, 'DISPOSAL_NO')
+    cur.execute(
+        f"""
+        INSERT INTO {DISPOSAL_TABLE}
+            (DISPOSAL_ID, DISPOSAL_NO, ASSET_ID, DISPOSAL_DATE, DISPOSAL_TYPE,
+             PROCEEDS_AMOUNT, PROCEEDS_ACCOUNT, PROCEEDS_PARTY_TYPE, PROCEEDS_PARTY_CODE,
+             ACQUISITION_COST, ACCUM_DEP, NBV, GAIN_LOSS_AMOUNT, STATUS, REMARKS, CREATED_BY)
+        VALUES
+            (:id, :no, :aid, TO_DATE(:dd, 'YYYY-MM-DD'), :dt,
+             :pr, :pa, :ppt, :ppc, :cost, :acc, :nbv, :gl, :st, :rm, :usr)
+        """,
+        {
+            'id': did,
+            'no': disp_no,
+            'aid': int(asset_id),
+            'dd': disp_date,
+            'dt': disp_type,
+            'pr': proceeds,
+            'pa': proceeds_account,
+            'ppt': ppt,
+            'ppc': ppc,
+            'cost': cost,
+            'acc': accum,
+            'nbv': nbv,
+            'gl': gain_loss,
+            'st': DISPOSAL_DRAFT,
+            'rm': (remarks or '')[:500] or None,
+            'usr': (user or 'web')[:50],
+        },
+    )
+    return did
+
+
+def _validate_fa_disposal_inputs(
     *,
     disposal_id: Optional[int],
     asset_id: int,
@@ -1262,10 +1603,7 @@ def save_fa_disposal(
     proceeds_account: Optional[str],
     proceeds_party_type: Optional[str] = None,
     proceeds_party_code: Optional[str] = None,
-    remarks: Optional[str] = None,
-    user: str = 'web',
-) -> Tuple[bool, str, Optional[int]]:
-    ensure_fixed_assets_tables()
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     asset = get_fa_asset(int(asset_id))
     if not asset:
         return False, 'Asset not found.', None
@@ -1317,73 +1655,131 @@ def save_fa_disposal(
         )
         if draft:
             return False, 'A draft disposal already exists for this asset.', None
+    return True, '', {
+        'asset_id': int(asset_id),
+        'disp_date': disp_date,
+        'disp_type': disp_type,
+        'proceeds': proceeds,
+        'proceeds_account': proceeds_account,
+        'ppt': ppt,
+        'ppc': ppc,
+        'cost': cost,
+        'accum': accum,
+        'nbv': nbv,
+        'gain_loss': gain_loss,
+        'gain_ac': _norm_gl_account_code(asset.get('gain_on_disposal_account')),
+        'loss_ac': _norm_gl_account_code(asset.get('loss_on_disposal_account')),
+    }
+
+
+def save_fa_disposal(
+    *,
+    disposal_id: Optional[int],
+    asset_id: int,
+    disposal_date: str,
+    disposal_type: str,
+    proceeds_amount: float,
+    proceeds_account: Optional[str],
+    proceeds_party_type: Optional[str] = None,
+    proceeds_party_code: Optional[str] = None,
+    remarks: Optional[str] = None,
+    user: str = 'web',
+) -> Tuple[bool, str, Optional[int]]:
+    ensure_fixed_assets_tables()
+    ok, err, fields = _validate_fa_disposal_inputs(
+        disposal_id=disposal_id,
+        asset_id=asset_id,
+        disposal_date=disposal_date,
+        disposal_type=disposal_type,
+        proceeds_amount=proceeds_amount,
+        proceeds_account=proceeds_account,
+        proceeds_party_type=proceeds_party_type,
+        proceeds_party_code=proceeds_party_code,
+    )
+    if not ok or not fields:
+        return False, err, None
     try:
         with _get_connection() as conn:
             with conn.cursor() as cur:
-                if disposal_id:
-                    cur.execute(
-                        f"""
-                        UPDATE {DISPOSAL_TABLE}
-                        SET DISPOSAL_DATE = TO_DATE(:dd, 'YYYY-MM-DD'),
-                            DISPOSAL_TYPE = :dt, PROCEEDS_AMOUNT = :pr,
-                            PROCEEDS_ACCOUNT = :pa, PROCEEDS_PARTY_TYPE = :ppt, PROCEEDS_PARTY_CODE = :ppc,
-                            ACQUISITION_COST = :cost, ACCUM_DEP = :acc, NBV = :nbv,
-                            GAIN_LOSS_AMOUNT = :gl, REMARKS = :rm
-                        WHERE DISPOSAL_ID = :id
-                        """,
-                        {
-                            'id': int(disposal_id),
-                            'dd': disp_date,
-                            'dt': disp_type,
-                            'pr': proceeds,
-                            'pa': proceeds_account,
-                            'ppt': ppt,
-                            'ppc': ppc,
-                            'cost': cost,
-                            'acc': accum,
-                            'nbv': nbv,
-                            'gl': gain_loss,
-                            'rm': (remarks or '')[:500] or None,
-                        },
-                    )
-                    did = int(disposal_id)
-                else:
-                    cur.execute(f'SELECT {DISPOSAL_SEQ}.NEXTVAL FROM DUAL')
-                    did = cur.fetchone()[0]
-                    disp_no = _next_doc_no('FADIS', DISPOSAL_TABLE, 'DISPOSAL_NO')
-                    cur.execute(
-                        f"""
-                        INSERT INTO {DISPOSAL_TABLE}
-                            (DISPOSAL_ID, DISPOSAL_NO, ASSET_ID, DISPOSAL_DATE, DISPOSAL_TYPE,
-                             PROCEEDS_AMOUNT, PROCEEDS_ACCOUNT, PROCEEDS_PARTY_TYPE, PROCEEDS_PARTY_CODE,
-                             ACQUISITION_COST, ACCUM_DEP, NBV, GAIN_LOSS_AMOUNT, STATUS, REMARKS, CREATED_BY)
-                        VALUES
-                            (:id, :no, :aid, TO_DATE(:dd, 'YYYY-MM-DD'), :dt,
-                             :pr, :pa, :ppt, :ppc, :cost, :acc, :nbv, :gl, :st, :rm, :usr)
-                        """,
-                        {
-                            'id': did,
-                            'no': disp_no,
-                            'aid': int(asset_id),
-                            'dd': disp_date,
-                            'dt': disp_type,
-                            'pr': proceeds,
-                            'pa': proceeds_account,
-                            'ppt': ppt,
-                            'ppc': ppc,
-                            'cost': cost,
-                            'acc': accum,
-                            'nbv': nbv,
-                            'gl': gain_loss,
-                            'st': DISPOSAL_DRAFT,
-                            'rm': (remarks or '')[:500] or None,
-                            'usr': (user or 'web')[:50],
-                        },
-                    )
+                did = _persist_fa_disposal_cur(
+                    cur,
+                    disposal_id=disposal_id,
+                    asset_id=fields['asset_id'],
+                    disp_date=fields['disp_date'],
+                    disp_type=fields['disp_type'],
+                    proceeds=fields['proceeds'],
+                    proceeds_account=fields['proceeds_account'],
+                    ppt=fields['ppt'],
+                    ppc=fields['ppc'],
+                    cost=fields['cost'],
+                    accum=fields['accum'],
+                    nbv=fields['nbv'],
+                    gain_loss=fields['gain_loss'],
+                    remarks=remarks,
+                    user=user,
+                )
             conn.commit()
         return True, '', did
     except Exception as e:
         return False, str(e), None
+
+
+def save_fa_disposal_and_post(
+    *,
+    disposal_id: Optional[int],
+    asset_id: int,
+    disposal_date: str,
+    disposal_type: str,
+    proceeds_amount: float,
+    proceeds_account: Optional[str],
+    proceeds_party_type: Optional[str] = None,
+    proceeds_party_code: Optional[str] = None,
+    remarks: Optional[str] = None,
+    user: str = 'web',
+) -> Tuple[bool, str, Optional[int], Optional[str]]:
+    ensure_fixed_assets_tables()
+    ok, err, fields = _validate_fa_disposal_inputs(
+        disposal_id=disposal_id,
+        asset_id=asset_id,
+        disposal_date=disposal_date,
+        disposal_type=disposal_type,
+        proceeds_amount=proceeds_amount,
+        proceeds_account=proceeds_account,
+        proceeds_party_type=proceeds_party_type,
+        proceeds_party_code=proceeds_party_code,
+    )
+    if not ok or not fields:
+        return False, err, None, None
+    gain_loss = fields['gain_loss']
+    if gain_loss > 0.005 and not fields['gain_ac']:
+        return False, 'Set gain on disposal account on the asset category before posting.', None, None
+    if gain_loss < -0.005 and not fields['loss_ac']:
+        return False, 'Set loss on disposal account on the asset category before posting.', None, None
+    try:
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                did = _persist_fa_disposal_cur(
+                    cur,
+                    disposal_id=disposal_id,
+                    asset_id=fields['asset_id'],
+                    disp_date=fields['disp_date'],
+                    disp_type=fields['disp_type'],
+                    proceeds=fields['proceeds'],
+                    proceeds_account=fields['proceeds_account'],
+                    ppt=fields['ppt'],
+                    ppc=fields['ppc'],
+                    cost=fields['cost'],
+                    accum=fields['accum'],
+                    nbv=fields['nbv'],
+                    gain_loss=fields['gain_loss'],
+                    remarks=remarks,
+                    user=user,
+                )
+                vno = _post_fa_disposal_tx(conn, cur, did, user=user)
+            conn.commit()
+        return True, '', did, vno
+    except Exception as e:
+        return False, str(e), None, None
 
 
 def post_fa_disposal(disposal_id: int, *, user: str = 'web') -> Tuple[bool, str, Optional[str]]:
@@ -1393,84 +1789,10 @@ def post_fa_disposal(disposal_id: int, *, user: str = 'web') -> Tuple[bool, str,
         return False, 'Disposal not found.', None
     if str(disp.get('status') or '').upper() == DISPOSAL_POSTED:
         return False, 'Disposal already posted.', disp.get('gl_voucher_no')
-    asset_id = int(disp.get('asset_id') or 0)
-    asset = get_fa_asset(asset_id)
-    if not asset or str(asset.get('status') or '').upper() == STATUS_DISPOSED:
-        return False, 'Asset is not eligible for disposal.', None
-    cost = round(float(disp.get('acquisition_cost') or 0), 2)
-    accum = round(float(disp.get('accum_dep') or 0), 2)
-    nbv = round(float(disp.get('nbv') or 0), 2)
-    proceeds = round(float(disp.get('proceeds_amount') or 0), 2)
-    gain_loss = round(float(disp.get('gain_loss_amount') or 0), 2)
-    asset_ac = _norm_gl_account_code(disp.get('asset_account'))
-    accum_ac = _norm_gl_account_code(disp.get('accum_dep_account'))
-    gain_ac = _norm_gl_account_code(disp.get('gain_on_disposal_account'))
-    loss_ac = _norm_gl_account_code(disp.get('loss_on_disposal_account'))
-    proceeds_ac = _norm_gl_account_code(disp.get('proceeds_account'))
-    if gain_loss > 0.005 and not gain_ac:
-        return False, 'Set gain on disposal account on the asset category before posting.', None
-    if gain_loss < -0.005 and not loss_ac:
-        return False, 'Set loss on disposal account on the asset category before posting.', None
-    ref = str(disp.get('disposal_no') or '')
-    asset_no = str(disp.get('asset_no') or '')
-    disp_date = disp.get('disposal_date')
-    if hasattr(disp_date, 'strftime'):
-        vdate = disp_date.strftime('%Y-%m-%d')
-    else:
-        vdate = str(disp_date or '')[:10]
-    gl_lines: List[Dict[str, Any]] = []
-    if accum > 0:
-        gl_lines.append({'account_code': accum_ac, 'debit': accum, 'credit': 0, 'remarks': asset_no})
-    if proceeds > 0 and proceeds_ac:
-        pline: Dict[str, Any] = {'account_code': proceeds_ac, 'debit': proceeds, 'credit': 0, 'remarks': asset_no}
-        ppt = str(disp.get('proceeds_party_type') or '').strip().upper()
-        ppc = str(disp.get('proceeds_party_code') or '').strip()
-        if ppt in ('SUPPLIER', 'CUSTOMER') and ppc:
-            pline['party_type'] = ppt
-            pline['party_code'] = ppc
-        gl_lines.append(pline)
-    if gain_loss < -0.005 and loss_ac:
-        loss_amt = round(abs(gain_loss), 2)
-        gl_lines.append({'account_code': loss_ac, 'debit': loss_amt, 'credit': 0, 'remarks': asset_no})
-    gl_lines.append({'account_code': asset_ac, 'debit': 0, 'credit': cost, 'remarks': asset_no})
-    if gain_loss > 0.005 and gain_ac:
-        gl_lines.append({'account_code': gain_ac, 'debit': 0, 'credit': gain_loss, 'remarks': asset_no})
-    narration = f"FA disposal — {disp.get('asset_name') or asset_no}"
     try:
-        vno = create_gl_journal_entry(
-            vdate,
-            ref,
-            narration,
-            gl_lines,
-            created_by=(user or 'web')[:50],
-            source='FA_DIS',
-        )
         with _get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    f"""
-                    UPDATE {DISPOSAL_TABLE}
-                    SET STATUS = :st, GL_VOUCHER_NO = :vno,
-                        POSTED_BY = :usr, POSTED_AT = SYSTIMESTAMP
-                    WHERE DISPOSAL_ID = :id
-                    """,
-                    {'st': DISPOSAL_POSTED, 'vno': vno, 'usr': (user or 'web')[:50], 'id': int(disposal_id)},
-                )
-                cur.execute(
-                    f"""
-                    UPDATE {ASSET_TABLE}
-                    SET STATUS = :st, DISPOSAL_ID = :did, DISPOSED_DATE = TO_DATE(:dd, 'YYYY-MM-DD'),
-                        UPDATED_BY = :usr, UPDATED_AT = SYSTIMESTAMP
-                    WHERE ASSET_ID = :aid
-                    """,
-                    {
-                        'st': STATUS_DISPOSED,
-                        'did': int(disposal_id),
-                        'dd': vdate,
-                        'usr': (user or 'web')[:50],
-                        'aid': asset_id,
-                    },
-                )
+                vno = _post_fa_disposal_tx(conn, cur, int(disposal_id), user=user)
             conn.commit()
         return True, '', vno
     except Exception as e:
@@ -1527,19 +1849,16 @@ def get_fa_sale(sale_id: int) -> Optional[Dict[str, Any]]:
     return hdr
 
 
-def save_fa_sale(
+def _prepare_fa_sale_save(
     *,
     sale_id: Optional[int],
     sale_date: str,
     proceeds_account: Optional[str],
     proceeds_party_type: Optional[str] = None,
     proceeds_party_code: Optional[str] = None,
-    remarks: Optional[str] = None,
     lines: Optional[List[Dict[str, Any]]] = None,
-    user: str = 'web',
-) -> Tuple[bool, str, Optional[int]]:
-    """Save a multi-asset sale draft (header + lines)."""
-    ensure_fixed_assets_tables()
+    for_post: bool = False,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     sdate = str(sale_date or '').strip()[:10]
     if len(sdate) < 10:
         return False, 'Sale date is required.', None
@@ -1583,7 +1902,6 @@ def save_fa_sale(
             return False, f'Line {idx}: acquisition must be posted ({asset.get("asset_no")}).', None
         if str(asset.get('status') or '').upper() == STATUS_DISPOSED:
             return False, f'Line {idx}: asset already disposed ({asset.get("asset_no")}).', None
-        # Block if on another draft sale (allow same sale when editing)
         if sale_id:
             busy = _safe_rows(
                 f"""
@@ -1614,6 +1932,20 @@ def save_fa_sale(
         accum = round(float(asset.get('accum_dep') or 0), 2)
         nbv = round(cost - accum, 2)
         gain_loss = _compute_disposal_gain_loss(nbv, proceeds)
+        if for_post:
+            asset_no = str(asset.get('asset_no') or '')
+            gain_ac = _norm_gl_account_code(asset.get('gain_on_disposal_account'))
+            loss_ac = _norm_gl_account_code(asset.get('loss_on_disposal_account'))
+            asset_ac = _norm_gl_account_code(asset.get('asset_account'))
+            accum_ac = _norm_gl_account_code(asset.get('accum_dep_account'))
+            if gain_loss > 0.005 and not gain_ac:
+                return False, f'Set gain account on category for {asset_no}.', None
+            if gain_loss < -0.005 and not loss_ac:
+                return False, f'Set loss account on category for {asset_no}.', None
+            if not asset_ac:
+                return False, f'Missing asset GL account for {asset_no}.', None
+            if accum > 0 and not accum_ac:
+                return False, f'Missing accum. dep. account for {asset_no}.', None
         built.append({
             'asset_id': aid,
             'proceeds_amount': proceeds,
@@ -1626,117 +1958,206 @@ def save_fa_sale(
         total_cost += cost
         total_accum += accum
         total_nbv += nbv
-    total_gain_loss = round(total_proceeds - total_nbv, 2)
-
     if sale_id:
         existing = get_fa_sale(int(sale_id))
         if not existing:
             return False, 'Sale not found.', None
         if str(existing.get('status') or '').upper() == SALE_POSTED:
             return False, 'Posted sale cannot be edited.', None
+    return True, '', {
+        'sdate': sdate,
+        'proceeds_account': proceeds_account,
+        'ppt': ppt,
+        'ppc': ppc,
+        'built': built,
+        'total_proceeds': round(total_proceeds, 2),
+        'total_cost': round(total_cost, 2),
+        'total_accum': round(total_accum, 2),
+        'total_nbv': round(total_nbv, 2),
+        'total_gain_loss': round(total_proceeds - total_nbv, 2),
+    }
 
+
+def _persist_fa_sale_cur(
+    cur,
+    *,
+    sale_id: Optional[int],
+    prep: Dict[str, Any],
+    remarks: Optional[str],
+    user: str,
+) -> int:
+    if sale_id:
+        sid = int(sale_id)
+        cur.execute(
+            f"""
+            UPDATE {SALE_HDR_TABLE}
+            SET SALE_DATE = TO_DATE(:sd, 'YYYY-MM-DD'),
+                PROCEEDS_ACCOUNT = :pa, PROCEEDS_PARTY_TYPE = :ppt, PROCEEDS_PARTY_CODE = :ppc,
+                TOTAL_PROCEEDS = :tp, TOTAL_COST = :tc, TOTAL_ACCUM = :ta,
+                TOTAL_NBV = :tn, TOTAL_GAIN_LOSS = :tg, REMARKS = :rm
+            WHERE SALE_ID = :id
+            """,
+            {
+                'id': sid,
+                'sd': prep['sdate'],
+                'pa': prep['proceeds_account'],
+                'ppt': prep['ppt'],
+                'ppc': prep['ppc'],
+                'tp': prep['total_proceeds'],
+                'tc': prep['total_cost'],
+                'ta': prep['total_accum'],
+                'tn': prep['total_nbv'],
+                'tg': prep['total_gain_loss'],
+                'rm': (remarks or '')[:500] or None,
+            },
+        )
+        cur.execute(f'DELETE FROM {SALE_LINE_TABLE} WHERE SALE_ID = :id', {'id': sid})
+    else:
+        cur.execute(f'SELECT {SALE_HDR_SEQ}.NEXTVAL FROM DUAL')
+        sid = int(cur.fetchone()[0])
+        sale_no = _next_doc_no('FASALE', SALE_HDR_TABLE, 'SALE_NO')
+        cur.execute(
+            f"""
+            INSERT INTO {SALE_HDR_TABLE}
+                (SALE_ID, SALE_NO, SALE_DATE, PROCEEDS_ACCOUNT, PROCEEDS_PARTY_TYPE, PROCEEDS_PARTY_CODE,
+                 TOTAL_PROCEEDS, TOTAL_COST, TOTAL_ACCUM, TOTAL_NBV, TOTAL_GAIN_LOSS,
+                 STATUS, REMARKS, CREATED_BY)
+            VALUES
+                (:id, :no, TO_DATE(:sd, 'YYYY-MM-DD'), :pa, :ppt, :ppc,
+                 :tp, :tc, :ta, :tn, :tg, :st, :rm, :usr)
+            """,
+            {
+                'id': sid,
+                'no': sale_no,
+                'sd': prep['sdate'],
+                'pa': prep['proceeds_account'],
+                'ppt': prep['ppt'],
+                'ppc': prep['ppc'],
+                'tp': prep['total_proceeds'],
+                'tc': prep['total_cost'],
+                'ta': prep['total_accum'],
+                'tn': prep['total_nbv'],
+                'tg': prep['total_gain_loss'],
+                'st': SALE_DRAFT,
+                'rm': (remarks or '')[:500] or None,
+                'usr': (user or 'web')[:50],
+            },
+        )
+    for i, ln in enumerate(prep['built'], start=1):
+        cur.execute(f'SELECT {SALE_LINE_SEQ}.NEXTVAL FROM DUAL')
+        lid = int(cur.fetchone()[0])
+        cur.execute(
+            f"""
+            INSERT INTO {SALE_LINE_TABLE}
+                (LINE_ID, SALE_ID, LINE_NO, ASSET_ID, PROCEEDS_AMOUNT,
+                 ACQUISITION_COST, ACCUM_DEP, NBV, GAIN_LOSS_AMOUNT)
+            VALUES
+                (:lid, :sid, :lno, :aid, :pr, :cost, :acc, :nbv, :gl)
+            """,
+            {
+                'lid': lid,
+                'sid': sid,
+                'lno': i,
+                'aid': ln['asset_id'],
+                'pr': ln['proceeds_amount'],
+                'cost': ln['acquisition_cost'],
+                'acc': ln['accum_dep'],
+                'nbv': ln['nbv'],
+                'gl': ln['gain_loss_amount'],
+            },
+        )
+    return sid
+
+
+def save_fa_sale(
+    *,
+    sale_id: Optional[int],
+    sale_date: str,
+    proceeds_account: Optional[str],
+    proceeds_party_type: Optional[str] = None,
+    proceeds_party_code: Optional[str] = None,
+    remarks: Optional[str] = None,
+    lines: Optional[List[Dict[str, Any]]] = None,
+    user: str = 'web',
+) -> Tuple[bool, str, Optional[int]]:
+    """Save a multi-asset sale draft (header + lines)."""
+    ensure_fixed_assets_tables()
+    ok, err, prep = _prepare_fa_sale_save(
+        sale_id=sale_id,
+        sale_date=sale_date,
+        proceeds_account=proceeds_account,
+        proceeds_party_type=proceeds_party_type,
+        proceeds_party_code=proceeds_party_code,
+        lines=lines,
+    )
+    if not ok or not prep:
+        return False, err, None
     try:
         with _get_connection() as conn:
             with conn.cursor() as cur:
-                if sale_id:
-                    sid = int(sale_id)
-                    cur.execute(
-                        f"""
-                        UPDATE {SALE_HDR_TABLE}
-                        SET SALE_DATE = TO_DATE(:sd, 'YYYY-MM-DD'),
-                            PROCEEDS_ACCOUNT = :pa, PROCEEDS_PARTY_TYPE = :ppt, PROCEEDS_PARTY_CODE = :ppc,
-                            TOTAL_PROCEEDS = :tp, TOTAL_COST = :tc, TOTAL_ACCUM = :ta,
-                            TOTAL_NBV = :tn, TOTAL_GAIN_LOSS = :tg, REMARKS = :rm
-                        WHERE SALE_ID = :id
-                        """,
-                        {
-                            'id': sid,
-                            'sd': sdate,
-                            'pa': proceeds_account,
-                            'ppt': ppt,
-                            'ppc': ppc,
-                            'tp': round(total_proceeds, 2),
-                            'tc': round(total_cost, 2),
-                            'ta': round(total_accum, 2),
-                            'tn': round(total_nbv, 2),
-                            'tg': total_gain_loss,
-                            'rm': (remarks or '')[:500] or None,
-                        },
-                    )
-                    cur.execute(f'DELETE FROM {SALE_LINE_TABLE} WHERE SALE_ID = :id', {'id': sid})
-                else:
-                    cur.execute(f'SELECT {SALE_HDR_SEQ}.NEXTVAL FROM DUAL')
-                    sid = cur.fetchone()[0]
-                    sale_no = _next_doc_no('FASALE', SALE_HDR_TABLE, 'SALE_NO')
-                    cur.execute(
-                        f"""
-                        INSERT INTO {SALE_HDR_TABLE}
-                            (SALE_ID, SALE_NO, SALE_DATE, PROCEEDS_ACCOUNT, PROCEEDS_PARTY_TYPE, PROCEEDS_PARTY_CODE,
-                             TOTAL_PROCEEDS, TOTAL_COST, TOTAL_ACCUM, TOTAL_NBV, TOTAL_GAIN_LOSS,
-                             STATUS, REMARKS, CREATED_BY)
-                        VALUES
-                            (:id, :no, TO_DATE(:sd, 'YYYY-MM-DD'), :pa, :ppt, :ppc,
-                             :tp, :tc, :ta, :tn, :tg, :st, :rm, :usr)
-                        """,
-                        {
-                            'id': sid,
-                            'no': sale_no,
-                            'sd': sdate,
-                            'pa': proceeds_account,
-                            'ppt': ppt,
-                            'ppc': ppc,
-                            'tp': round(total_proceeds, 2),
-                            'tc': round(total_cost, 2),
-                            'ta': round(total_accum, 2),
-                            'tn': round(total_nbv, 2),
-                            'tg': total_gain_loss,
-                            'st': SALE_DRAFT,
-                            'rm': (remarks or '')[:500] or None,
-                            'usr': (user or 'web')[:50],
-                        },
-                    )
-                for i, ln in enumerate(built, start=1):
-                    cur.execute(f'SELECT {SALE_LINE_SEQ}.NEXTVAL FROM DUAL')
-                    lid = cur.fetchone()[0]
-                    cur.execute(
-                        f"""
-                        INSERT INTO {SALE_LINE_TABLE}
-                            (LINE_ID, SALE_ID, LINE_NO, ASSET_ID, PROCEEDS_AMOUNT,
-                             ACQUISITION_COST, ACCUM_DEP, NBV, GAIN_LOSS_AMOUNT)
-                        VALUES
-                            (:lid, :sid, :lno, :aid, :pr, :cost, :acc, :nbv, :gl)
-                        """,
-                        {
-                            'lid': lid,
-                            'sid': sid,
-                            'lno': i,
-                            'aid': ln['asset_id'],
-                            'pr': ln['proceeds_amount'],
-                            'cost': ln['acquisition_cost'],
-                            'acc': ln['accum_dep'],
-                            'nbv': ln['nbv'],
-                            'gl': ln['gain_loss_amount'],
-                        },
-                    )
+                sid = _persist_fa_sale_cur(
+                    cur,
+                    sale_id=sale_id,
+                    prep=prep,
+                    remarks=remarks,
+                    user=user,
+                )
             conn.commit()
         return True, '', sid
     except Exception as e:
         return False, str(e), None
 
 
-def post_fa_sale(sale_id: int, *, user: str = 'web') -> Tuple[bool, str, Optional[str]]:
-    ensure_fixed_assets_tables()
-    sale = get_fa_sale(int(sale_id))
+def _fetch_fa_sale_cur(cur, sale_id: int) -> Optional[Dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT h.SALE_ID, h.SALE_NO, h.SALE_DATE, h.PROCEEDS_ACCOUNT,
+               h.PROCEEDS_PARTY_TYPE, h.PROCEEDS_PARTY_CODE,
+               h.TOTAL_PROCEEDS, h.TOTAL_COST, h.TOTAL_ACCUM, h.TOTAL_NBV, h.TOTAL_GAIN_LOSS,
+               h.STATUS, h.GL_VOUCHER_NO, h.REMARKS,
+               h.CREATED_BY, h.CREATED_AT, h.POSTED_BY, h.POSTED_AT
+        FROM {SALE_HDR_TABLE} h
+        WHERE h.SALE_ID = :id
+        """,
+        {'id': int(sale_id)},
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    cols = [d[0].lower() for d in cur.description]
+    hdr = _row_keys(dict(zip(cols, row)))
+    cur.execute(
+        f"""
+        SELECT l.LINE_ID, l.SALE_ID, l.LINE_NO, l.ASSET_ID, a.ASSET_NO, a.NAME AS ASSET_NAME,
+               c.CODE AS CATEGORY_CODE, c.ASSET_ACCOUNT, c.ACCUM_DEP_ACCOUNT,
+               c.GAIN_ON_DISPOSAL_ACCOUNT, c.LOSS_ON_DISPOSAL_ACCOUNT,
+               l.PROCEEDS_AMOUNT, l.ACQUISITION_COST, l.ACCUM_DEP, l.NBV, l.GAIN_LOSS_AMOUNT
+        FROM {SALE_LINE_TABLE} l
+        JOIN {ASSET_TABLE} a ON a.ASSET_ID = l.ASSET_ID
+        JOIN {CATEGORY_TABLE} c ON c.CATEGORY_ID = a.CATEGORY_ID
+        WHERE l.SALE_ID = :id
+        ORDER BY l.LINE_NO, l.LINE_ID
+        """,
+        {'id': int(sale_id)},
+    )
+    line_rows = cur.fetchall()
+    line_cols = [d[0].lower() for d in cur.description]
+    hdr['lines'] = [_row_keys(dict(zip(line_cols, lr))) for lr in line_rows or []]
+    return hdr
+
+
+def _post_fa_sale_tx(conn, cur, sale_id: int, *, user: str = 'web') -> str:
+    sale = _fetch_fa_sale_cur(cur, int(sale_id))
     if not sale:
-        return False, 'Sale not found.', None
+        raise ValueError('Sale not found.')
     if str(sale.get('status') or '').upper() == SALE_POSTED:
-        return False, 'Sale already posted.', sale.get('gl_voucher_no')
+        raise ValueError('Sale already posted.')
     lines = sale.get('lines') or []
     if not lines:
-        return False, 'Sale has no asset lines.', None
+        raise ValueError('Sale has no asset lines.')
     proceeds_ac = _norm_gl_account_code(sale.get('proceeds_account'))
     if not proceeds_ac:
-        return False, 'Proceeds account is required.', None
+        raise ValueError('Proceeds account is required.')
     sdate = sale.get('sale_date')
     if hasattr(sdate, 'strftime'):
         vdate = sdate.strftime('%Y-%m-%d')
@@ -1746,9 +2167,13 @@ def post_fa_sale(sale_id: int, *, user: str = 'web') -> Tuple[bool, str, Optiona
     gl_lines: List[Dict[str, Any]] = []
     for ln in lines:
         asset_id = int(ln.get('asset_id') or 0)
-        asset = get_fa_asset(asset_id)
-        if not asset or str(asset.get('status') or '').upper() == STATUS_DISPOSED:
-            return False, f'Asset {ln.get("asset_no") or asset_id} is not eligible.', None
+        cur.execute(
+            f"SELECT STATUS FROM {ASSET_TABLE} WHERE ASSET_ID = :aid",
+            {'aid': asset_id},
+        )
+        asset_row = cur.fetchone()
+        if not asset_row or str(asset_row[0] or '').upper() == STATUS_DISPOSED:
+            raise ValueError(f'Asset {ln.get("asset_no") or asset_id} is not eligible.')
         cost = round(float(ln.get('acquisition_cost') or 0), 2)
         accum = round(float(ln.get('accum_dep') or 0), 2)
         proceeds = round(float(ln.get('proceeds_amount') or 0), 2)
@@ -1759,13 +2184,13 @@ def post_fa_sale(sale_id: int, *, user: str = 'web') -> Tuple[bool, str, Optiona
         loss_ac = _norm_gl_account_code(ln.get('loss_on_disposal_account'))
         asset_no = str(ln.get('asset_no') or '')
         if gain_loss > 0.005 and not gain_ac:
-            return False, f'Set gain account on category for {asset_no}.', None
+            raise ValueError(f'Set gain account on category for {asset_no}.')
         if gain_loss < -0.005 and not loss_ac:
-            return False, f'Set loss account on category for {asset_no}.', None
+            raise ValueError(f'Set loss account on category for {asset_no}.')
         if not asset_ac:
-            return False, f'Missing asset GL account for {asset_no}.', None
+            raise ValueError(f'Missing asset GL account for {asset_no}.')
         if accum > 0 and not accum_ac:
-            return False, f'Missing accum. dep. account for {asset_no}.', None
+            raise ValueError(f'Missing accum. dep. account for {asset_no}.')
         if accum > 0:
             gl_lines.append({'account_code': accum_ac, 'debit': accum, 'credit': 0, 'remarks': asset_no})
         if proceeds > 0:
@@ -1788,42 +2213,95 @@ def post_fa_sale(sale_id: int, *, user: str = 'web') -> Tuple[bool, str, Optiona
                 'account_code': gain_ac, 'debit': 0, 'credit': gain_loss, 'remarks': asset_no,
             })
     narration = f"FA asset sale — {ref} ({len(lines)} asset(s))"
-    try:
-        vno = create_gl_journal_entry(
-            vdate,
-            ref,
-            narration,
-            gl_lines,
-            created_by=(user or 'web')[:50],
-            source='FA_SALE',
+    vno = create_gl_journal_entry(
+        vdate,
+        ref,
+        narration,
+        gl_lines,
+        created_by=(user or 'web')[:50],
+        source='FA_SALE',
+        conn=conn,
+        commit=False,
+    )
+    cur.execute(
+        f"""
+        UPDATE {SALE_HDR_TABLE}
+        SET STATUS = :st, GL_VOUCHER_NO = :vno,
+            POSTED_BY = :usr, POSTED_AT = SYSTIMESTAMP
+        WHERE SALE_ID = :id
+        """,
+        {'st': SALE_POSTED, 'vno': vno, 'usr': (user or 'web')[:50], 'id': int(sale_id)},
+    )
+    for ln in lines:
+        cur.execute(
+            f"""
+            UPDATE {ASSET_TABLE}
+            SET STATUS = :st, SALE_ID = :sid, DISPOSED_DATE = TO_DATE(:dd, 'YYYY-MM-DD'),
+                UPDATED_BY = :usr, UPDATED_AT = SYSTIMESTAMP
+            WHERE ASSET_ID = :aid
+            """,
+            {
+                'st': STATUS_DISPOSED,
+                'sid': int(sale_id),
+                'dd': vdate,
+                'usr': (user or 'web')[:50],
+                'aid': int(ln.get('asset_id') or 0),
+            },
         )
+    return vno
+
+
+def save_fa_sale_and_post(
+    *,
+    sale_id: Optional[int],
+    sale_date: str,
+    proceeds_account: Optional[str],
+    proceeds_party_type: Optional[str] = None,
+    proceeds_party_code: Optional[str] = None,
+    remarks: Optional[str] = None,
+    lines: Optional[List[Dict[str, Any]]] = None,
+    user: str = 'web',
+) -> Tuple[bool, str, Optional[int], Optional[str]]:
+    ensure_fixed_assets_tables()
+    ok, err, prep = _prepare_fa_sale_save(
+        sale_id=sale_id,
+        sale_date=sale_date,
+        proceeds_account=proceeds_account,
+        proceeds_party_type=proceeds_party_type,
+        proceeds_party_code=proceeds_party_code,
+        lines=lines,
+        for_post=True,
+    )
+    if not ok or not prep:
+        return False, err, None, None
+    try:
         with _get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    f"""
-                    UPDATE {SALE_HDR_TABLE}
-                    SET STATUS = :st, GL_VOUCHER_NO = :vno,
-                        POSTED_BY = :usr, POSTED_AT = SYSTIMESTAMP
-                    WHERE SALE_ID = :id
-                    """,
-                    {'st': SALE_POSTED, 'vno': vno, 'usr': (user or 'web')[:50], 'id': int(sale_id)},
+                sid = _persist_fa_sale_cur(
+                    cur,
+                    sale_id=sale_id,
+                    prep=prep,
+                    remarks=remarks,
+                    user=user,
                 )
-                for ln in lines:
-                    cur.execute(
-                        f"""
-                        UPDATE {ASSET_TABLE}
-                        SET STATUS = :st, SALE_ID = :sid, DISPOSED_DATE = TO_DATE(:dd, 'YYYY-MM-DD'),
-                            UPDATED_BY = :usr, UPDATED_AT = SYSTIMESTAMP
-                        WHERE ASSET_ID = :aid
-                        """,
-                        {
-                            'st': STATUS_DISPOSED,
-                            'sid': int(sale_id),
-                            'dd': vdate,
-                            'usr': (user or 'web')[:50],
-                            'aid': int(ln.get('asset_id') or 0),
-                        },
-                    )
+                vno = _post_fa_sale_tx(conn, cur, sid, user=user)
+            conn.commit()
+        return True, '', sid, vno
+    except Exception as e:
+        return False, str(e), None, None
+
+
+def post_fa_sale(sale_id: int, *, user: str = 'web') -> Tuple[bool, str, Optional[str]]:
+    ensure_fixed_assets_tables()
+    sale = get_fa_sale(int(sale_id))
+    if not sale:
+        return False, 'Sale not found.', None
+    if str(sale.get('status') or '').upper() == SALE_POSTED:
+        return False, 'Sale already posted.', sale.get('gl_voucher_no')
+    try:
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                vno = _post_fa_sale_tx(conn, cur, int(sale_id), user=user)
             conn.commit()
         return True, '', vno
     except Exception as e:

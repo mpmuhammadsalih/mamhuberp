@@ -17,7 +17,8 @@
         <span class="status-badge" style="margin-left:8px;background:#ecfdf5;color:#15803d;">New batch</span>
       </h1>
       <div class="im-actions">
-        <button type="submit" form="faRegisterForm" class="im-btn-save" id="farBtnSave">Save</button>
+        <button type="submit" form="faRegisterForm" name="save_action" value="draft" class="im-btn-save" id="farBtnSaveDraft">Save draft</button>
+        <button type="submit" form="faRegisterForm" name="save_action" value="post" class="im-btn-secondary" id="farBtnSavePost">Save &amp; post</button>
         <a href="{{ url_for('fixed_assets.fa_asset_list') }}" class="im-btn-secondary">List</a>
       </div>
     </div>
@@ -25,6 +26,7 @@
 
   <section class="itemmaster-container si-form-body">
     <form id="faRegisterForm" method="post" action="{{ url_for('fixed_assets.fa_asset_form') }}" class="form" autocomplete="off">
+      <input type="hidden" name="save_nonce" value="{{ global_save_nonce | default('') }}" />
       <input type="hidden" id="faCreditPartyType" name="credit_party_type" value="{{ row.credit_party_type or '' }}" />
       <input type="hidden" id="faCreditPartyCode" name="credit_party_code" value="{{ row.credit_party_code or '' }}" />
       <div id="farHiddenLines"></div>
@@ -71,7 +73,7 @@
             </div>
           </div>
         </div>
-        <p class="field-hint" style="margin:8px 0 0;">Shared for all lines — on post: Dr asset category account / Cr credit account (with supplier party when applicable).</p>
+        <p class="field-hint" style="margin:8px 0 0;">Shared for all lines — default location applies to every asset. On post: Dr asset category account / Cr credit account (with supplier party when applicable).</p>
 
         <div class="si-summary-strip far-summary-strip">
           <div class="sf"><label>Lines</label><input type="text" id="farLineCount" readonly value="{{ lines|length }}" /></div>
@@ -113,15 +115,6 @@
               <label for="farEntryCustodian">Custodian</label>
               <input type="text" id="farEntryCustodian" class="input" maxlength="100" />
             </div>
-            <div class="far-field">
-              <label for="farEntryLocation">Location</label>
-              <select id="farEntryLocation" class="input">
-                <option value="">— Default —</option>
-                {% for loc in locations %}
-                <option value="{{ loc.code }}">{{ loc.code }} — {{ loc.name }}</option>
-                {% endfor %}
-              </select>
-            </div>
             <button type="button" class="im-btn-save" id="farBtnAddLine">+ Add line</button>
           </div>
         </div>
@@ -138,17 +131,15 @@
                   <th style="width:90px; text-align:right;">Salvage</th>
                   <th style="width:110px;">Serial</th>
                   <th style="width:110px;">Custodian</th>
-                  <th style="width:120px;">Location</th>
                   <th style="width:56px; text-align:center;">Action</th>
                 </tr>
               </thead>
               <tbody id="farLinesBody">
                 {% if not lines %}
-                <tr class="far-empty-row"><td colspan="9" style="text-align:center;color:#64748b;padding:16px;">No asset lines yet. Fill the entry row above and click + Add line.</td></tr>
+                <tr class="far-empty-row"><td colspan="8" style="text-align:center;color:#64748b;padding:16px;">No asset lines yet. Fill the entry row above and click + Add line.</td></tr>
                 {% else %}
                 {% for ln in lines %}
                 <tr data-category-id="{{ ln.category_id }}"
-                    data-location-code="{{ ln.location_code or '' }}"
                     data-name="{{ ln.name or '' }}"
                     data-cost="{{ ln.acquisition_cost }}"
                     data-salvage="{{ ln.salvage_value or 0 }}"
@@ -161,7 +152,6 @@
                   <td class="far-num far-salvage">{{ '%.2f'|format((ln.salvage_value or 0)|float) }}</td>
                   <td class="far-serial">{{ ln.serial_no or '' }}</td>
                   <td class="far-custodian">{{ ln.custodian or '' }}</td>
-                  <td class="far-loc-label">{{ ln.location_label or '—' }}</td>
                   <td style="text-align:center;"><button type="button" class="im-link far-remove-line" title="Remove">×</button></td>
                 </tr>
                 {% endfor %}
@@ -171,12 +161,12 @@
           </div>
         </div>
 
-        <div class="far-post-bar">
-          <label class="checkbox-inline">
-            <input type="checkbox" name="post_acq" value="1" {% if row.post_acq %}checked{% endif %} />
-            Post acquisition to GL on save
-          </label>
-          <span class="far-post-hint">Creates one asset per line; posts a separate acquisition voucher for each asset when checked.</span>
+        <div class="far-post-bar far-post-bar--info">
+          <strong>Draft vs post</strong>
+          <span class="far-post-hint">
+            <strong>Save draft</strong> creates one asset per line with GL status <em>Draft</em> — post later from the asset register (Edit → Post acquisition).
+            <strong>Save &amp; post</strong> creates the assets and posts a separate acquisition voucher for each line immediately.
+          </span>
         </div>
       </div>
     </form>
@@ -187,7 +177,6 @@
 {% block scripts %}
 <script>
 window.__FA_REGISTER_CATEGORIES__ = {{ category_options|tojson }};
-window.__FA_REGISTER_LOCATIONS__ = {{ location_options|tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/fa_asset_register.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/fa_asset_register.js') }}?v=5"></script>
 {% endblock %}

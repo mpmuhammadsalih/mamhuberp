@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=4" />
+{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page ecommerce-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Review moderation</h1>
+      <p class="page-po__muted">Approve or reject customer product reviews · {{ total }} total</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('ecommerce.dashboard') }}" class="page-po__btn-secondary">Dashboard</a>
+    </div>
+  </div>
+
+  {% if warning %}
+  <div class="ecommerce-alert">{{ warning }}</div>
+  {% endif %}
+
+  <form method="get" class="nexa-list-toolbar">
+    <select name="status" class="input" style="width:160px;">
+      <option value="">All statuses</option>
+      {% for s in status_options %}
+      <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+    <input type="text" name="q" value="{{ request.args.get('q', '') }}" placeholder="Search item, title, reviewer…"
+           class="input" style="min-width:220px; max-width:320px;" autocomplete="off" />
+    <button type="submit" class="page-po__btn-primary" style="padding:4px 12px; font-size:11px;">Filter</button>
+    <a href="{{ url_for('ecommerce.reviews') }}" class="page-po__btn-secondary" style="padding:4px 10px; font-size:11px;">Clear</a>
+    <span class="nexa-num">{{ total }} record{{ '' if total == 1 else 's' }}</span>
+  </form>
+
+  <div class="co-table-wrap">
+    <table class="co-table co-table--th-hint">
+      <thead>
+        <tr>
+          <th style="text-align:center; width:56px; cursor:default;">Sl.No</th>
+          <th>Item</th>
+          <th style="text-align:center;">Rating</th>
+          <th>Reviewer</th>
+          <th>Review</th>
+          <th>Status</th>
+          <th>Date</th>
+          <th style="text-align:center; cursor:default;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in reviews %}
+        {% set rev_st = (row.status or '')|upper %}
+        <tr>
+          <td class="sl-no">{{ loop.index + (page - 1) * page_size }}</td>
+          <td>
+            <strong>{{ row.item_code }}</strong>
+            {% if row.item_name %}<br><span class="page-po__muted">{{ row.item_name }}</span>{% endif %}
+          </td>
+          <td style="text-align:center;">
+            <span class="ecommerce-rating" title="{{ row.rating or 0 }} / 5">
+              {% for i in range(row.rating or 0) %}★{% endfor %}{% for i in range(5 - (row.rating or 0)) %}☆{% endfor %}
+            </span>
+          </td>
+          <td>
+            {{ row.reviewer_name or '—' }}
+            {% if row.is_verified_purchase %}<br><span class="page-po__muted">Verified purchase</span>{% endif %}
+          </td>
+          <td>
+            {% if row.title %}<strong>{{ row.title }}</strong><br>{% endif %}
+            {% if row.review_text %}<span class="ecommerce-review-text" title="{{ row.review_text }}">{{ row.review_text }}</span>{% else %}—{% endif %}
+          </td>
+          <td>
+            <span class="ecommerce-flag ecommerce-flag-{% if rev_st == 'APPROVED' %}Y{% elif rev_st == 'REJECTED' %}N{% else %}M{% endif %}">
+              {{ row.status or '—' }}
+            </span>
+          </td>
+          <td>{{ (row.created_at|string)[:19].replace('T', ' ') if row.created_at else '—' }}</td>
+          <td style="text-align:center; white-space:nowrap;">
+            {% if row.status == 'PENDING' %}
+            <form method="post" action="{{ url_for('ecommerce.review_status', review_id=row.review_id) }}" style="display:inline;">
+              <input type="hidden" name="status" value="APPROVED" />
+              <button type="submit" class="btn-view" style="border:none; cursor:pointer;">Approve</button>
+            </form>
+            <form method="post" action="{{ url_for('ecommerce.review_status', review_id=row.review_id) }}" style="display:inline;">
+              <input type="hidden" name="status" value="REJECTED" />
+              <button type="submit" class="btn-view" style="border:none; cursor:pointer; color:#991b1b;">Reject</button>
+            </form>
+            {% else %}
+            {% if row.status != 'APPROVED' %}
+            <form method="post" action="{{ url_for('ecommerce.review_status', review_id=row.review_id) }}" style="display:inline;">
+              <input type="hidden" name="status" value="APPROVED" />
+              <button type="submit" class="btn-view" style="border:none; cursor:pointer;">Approve</button>
+            </form>
+            {% endif %}
+            {% if row.status != 'HIDDEN' %}
+            <form method="post" action="{{ url_for('ecommerce.review_status', review_id=row.review_id) }}" style="display:inline;">
+              <input type="hidden" name="status" value="HIDDEN" />
+              <button type="submit" class="btn-view" style="border:none; cursor:pointer;">Hide</button>
+            </form>
+            {% endif %}
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" style="text-align:center;padding:20px;color:#64748b;">
+            {% if tables_ready %}No reviews found for this filter.{% else %}Review table not available.{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if total_pages > 1 %}
+  <div class="nexa-list-toolbar ecommerce-pagination">
+    <div style="display:flex; gap:6px; align-items:center;">
+      {% if page > 1 %}
+      <a href="{{ url_for('ecommerce.reviews', page=page-1, status=status_filter, q=request.args.get('q','')) }}" class="btn-view">← Previous</a>
+      {% endif %}
+      {% if page < total_pages %}
+      <a href="{{ url_for('ecommerce.reviews', page=page+1, status=status_filter, q=request.args.get('q','')) }}" class="btn-view">Next →</a>
+      {% endif %}
+    </div>
+    <span class="nexa-num">Page {{ page }} of {{ total_pages }}</span>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

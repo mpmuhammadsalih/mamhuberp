@@ -1415,6 +1415,7 @@ function cfSwitchTab(name) {
     var chk = document.getElementById('countersaleChk');
     var csHidden = document.getElementById('countersale');
     var isCredit = (String(code) === '2');
+    var isCash = (String(code) === '1');
     if (chk) {
       if (isCredit) {
         chk.checked = false;
@@ -1463,11 +1464,6 @@ function cfSwitchTab(name) {
     row.addEventListener('click', function() {
       setInvoiceCode(row.getAttribute('data-code'), row.getAttribute('data-name'));
     });
-    });
-  }
-  if (clearBtn) {
-    clearBtn.addEventListener('click', function() {
-      setInvoiceCode('', '');
     });
   }
   // Counter sale: Credit → off & disabled. Cash → optional.

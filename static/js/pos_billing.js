@@ -2547,14 +2547,90 @@
 
     async function lookupItem(query) {
         const cacheKey = String(query || '').trim().toUpperCase();
+        lookupItem.lastError = null;
         if (cacheKey && _posItemLookupCache.has(cacheKey)) {
             return _posItemLookupCache.get(cacheKey);
         }
         const res = await fetch(`/pos-billing/item-info?query=${encodeURIComponent(query)}`);
         const data = await res.json();
-        if (!data.success) return null;
+        if (!data.success) {
+            lookupItem.lastError = data.error || 'Item not found';
+            return null;
+        }
         if (cacheKey) _posItemLookupCache.set(cacheKey, data.item);
         return data.item;
+    }
+    lookupItem.lastError = null;
+
+    function isPosWeightScanItem(item) {
+        if (!item) return false;
+        const flagged = item.is_weight_item === true
+            || String(item.is_weight_item || '').toUpperCase() === 'Y';
+        return flagged && Number(item.weight_kg) > 0;
+    }
+
+    async function addWeightLineFromScan(item, scannedBarcode) {
+        const weightKg = Number(item.weight_kg) || 0;
+        let ratePerKg = Number(item.rate_per_kg ?? item.barcode_retail_price ?? item.retailprice) || 0;
+        if (ratePerKg <= 0) {
+            const pricing = await getUomPricing(item.itemcode, 'KG');
+            if (pricing) ratePerKg = Number(pricing.rate) || ratePerKg;
+        }
+        if (weightKg <= 0 || ratePerKg <= 0) {
+            showPosMessagePopup('Weight item', 'Could not resolve weight or price per KG for this scan.');
+            return false;
+        }
+        const scanQty = salesReturnEnabled ? -weightKg : weightKg;
+        const itemCode = item.itemcode;
+        const itemName = (item.itemname || '').trim() || String(itemCode);
+        const store = (item.store || item.default_store || '').toString().trim() || 'STORE1';
+        const defaultBinStorageId = item.default_bin_storage_id || item.defaultBinStorageId || null;
+        const itemFactor = Number((item.item_factor ?? item.conversion_factor) ?? 1) || 1;
+        const costprice = Number(item.costprice) || 0;
+        const averagecost = Number((item.averagecost ?? item.average_cost) ?? 0) || 0;
+        const cost = costprice;
+        const discount = 0;
+        const amount = scanQty * ratePerKg - discount;
+        const scanCode = (scannedBarcode || item.scanned_barcode || item.barcode || '').toString().trim();
+        const newLine = {
+            item_code: itemCode,
+            barcode: scanCode,
+            manufacturerid: scanCode,
+            scanned_barcode: scanCode,
+            item_name: itemName,
+            uom: 'KG',
+            quantity: scanQty,
+            rate: ratePerKg,
+            old_price: ratePerKg,
+            discount,
+            amount,
+            base_qty: scanQty * itemFactor,
+            cost,
+            costprice,
+            averagecost,
+            item_factor: itemFactor,
+            store,
+            default_bin_storage_id: defaultBinStorageId,
+            bin_storage_id: defaultBinStorageId,
+            is_weight_item: true,
+            weight_kg: weightKg,
+            voided: false,
+        };
+        cart.push(newLine);
+        renderCart();
+        const slno = await apiCartLineAdd(newLine);
+        if (slno != null) {
+            newLine.slno = slno;
+            finishOneShotSalesReturnAfterScan();
+            renderCart();
+            scrollCartToLatestLine();
+            if (barcodeInput) barcodeInput.focus();
+            return true;
+        }
+        const idx = cart.indexOf(newLine);
+        if (idx >= 0) cart.splice(idx, 1);
+        renderCart();
+        return false;
     }
 
     async function getUomPricing(itemCode, uomCode) {
@@ -2576,7 +2652,15 @@
         }
         const item = await lookupItem(query);
         if (!item) {
-            showPosMessagePopup('Item not found', 'No matching item for this barcode or code.');
+            const errMsg = lookupItem.lastError || 'No matching item for this barcode or code.';
+            const errTitle = errMsg.toLowerCase().includes('variable-weight') || errMsg.toLowerCase().includes('weight barcode')
+                ? 'Invalid weight barcode'
+                : 'Item not found';
+            showPosMessagePopup(errTitle, errMsg);
+            return;
+        }
+        if (isPosWeightScanItem(item)) {
+            await addWeightLineFromScan(item, query);
             return;
         }
         const itemCode = item.itemcode;
@@ -2684,6 +2768,10 @@
     /** Add line(s) from resolved ``item-info`` payload with explicit quantity (AI screenshot, etc.). */
     async function addLineFromItemWithQty(item, qtyRaw) {
         if (!item || item.itemcode == null) return false;
+        if (isPosWeightScanItem(item)) {
+            const scanCode = (item.scanned_barcode || item.barcode || item.manufacturerid || '').toString().trim();
+            return addWeightLineFromScan(item, scanCode);
+        }
         const qtyAbs = Math.max(0.0001, Math.abs(Number(qtyRaw) || 1));
         const scanQty = salesReturnEnabled ? -qtyAbs : qtyAbs;
         if (!(billNo && billNo.value && String(billNo.value).trim())) {
@@ -3426,6 +3514,8 @@
                 const barcode = (line.manufacturerid || line.barcode || '').toString();
                 const qty = Number(line.quantity) || 0;
                 const rate = Number(line.rate) || 0;
+                const isWeightLine = line.is_weight_item === true
+                    || String(line.is_weight_item || '').toUpperCase() === 'Y';
                 const catalog = lineCatalogPrice(line, rate);
                 const priceEdited = isLinePriceEdited(line);
                 const discAmt = Number(line.discount) || 0;
@@ -3441,11 +3531,15 @@
                     : ' col-price pos-price-clickable';
                 const qtyCellClass = line.voided
                     ? ' col-qty'
-                    : ' col-qty pos-qty-clickable';
-                const qtyTitle = line.voided ? ' title="Voided line"' : ' title="Click to change quantity"';
+                    : (isWeightLine ? ' col-qty' : ' col-qty pos-qty-clickable');
+                const qtyTitle = line.voided
+                    ? ' title="Voided line"'
+                    : (isWeightLine ? ' title="Weight (KG)"' : ' title="Click to change quantity"');
                 const priceTitle = line.voided
                     ? ' title="Voided line"'
-                    : (priceEdited ? ` title="Catalog ${formatNum(catalog)} — click to change price"` : ' title="Click to change price"');
+                    : (isWeightLine
+                        ? (priceEdited ? ` title="Price/KG (catalog ${formatNum(catalog)}) — click to change"` : ' title="Price per KG — click to change"')
+                        : (priceEdited ? ` title="Catalog ${formatNum(catalog)} — click to change price"` : ' title="Click to change price"'));
                 const amountTitle = line.voided
                     ? ' title="Voided line"'
                     : ' title="Click to change amount (adjusts price)"';
@@ -3455,7 +3549,10 @@
                 const priceDisplay = priceEdited
                     ? `${formatNum(rate)} <span class="pos-price-edited-mark" aria-hidden="true">*</span>`
                     : formatNum(rate);
-                const barcodeSub = (barcode || String(line.item_code || '')).trim();
+                const barcodeSub = isWeightLine
+                    ? `KG · ${(line.scanned_barcode || line.manufacturerid || line.barcode || String(line.item_code || '')).trim()}`
+                    : (barcode || String(line.item_code || '')).trim();
+                const qtyDisplay = isWeightLine ? formatNum(Math.abs(qty), 3) : formatNum(qty);
                 const showCost = isPosShowCostEnabled();
                 const unitCost = lineUnitCost(line);
                 const costCell = showCost
@@ -3464,7 +3561,7 @@
                 rowsHtml += `<tr class="pos-order-line${selectedClass}${voidedClass}${belowCostClass}" data-line="${i}" data-item-code="${line.item_code}" data-uom="${line.uom}" data-quantity="${line.quantity}" data-rate="${line.rate}" data-discount="${line.discount}" data-amount="${amt}">
                     <td class="col-slno">${i + 1}</td>
                     <td class="col-name"><div class="col-name-text">${name}</div><div class="col-name-barcode">${barcodeSub}</div></td>
-                    <td class="${qtyCellClass}" data-line-qty="${i}"${qtyTitle}>${formatNum(qty)}</td>
+                    <td class="${qtyCellClass}" data-line-qty="${i}"${qtyTitle}>${qtyDisplay}</td>
                     ${costCell}
                     <td class="${priceCellClass}" data-line-price="${i}"${priceTitle}>${priceDisplay}</td>
                     <td class="col-disc">${discPct}%</td>
@@ -5317,7 +5414,7 @@
         const priceEl = document.getElementById('itemDetailsRetailPrice');
         if (!item) {
             if (itemDetailsError) {
-                itemDetailsError.textContent = 'Item not found.';
+                itemDetailsError.textContent = lookupItem.lastError || 'Item not found.';
                 itemDetailsError.style.display = 'block';
             }
             if (placeholderDiv) placeholderDiv.style.display = 'block';
@@ -5329,9 +5426,14 @@
         if (codeEl) codeEl.textContent = item.itemcode != null ? String(item.itemcode) : '-';
         if (barcodeEl) barcodeEl.textContent = barcode;
         if (nameEl) nameEl.textContent = (item.itemname || '').trim() || '-';
-        const uom = (item.barcode_uom != null && item.barcode_uom !== '') ? item.barcode_uom : (item.baseuom || 'PCS');
+        const uom = isPosWeightScanItem(item)
+            ? 'KG'
+            : ((item.barcode_uom != null && item.barcode_uom !== '') ? item.barcode_uom : (item.baseuom || 'PCS'));
         if (uomEl) uomEl.textContent = uom;
-        const price = item.barcode_retail_price != null ? Number(item.barcode_retail_price) : (item.retailprice != null ? Number(item.retailprice) : 0);
+        let price = item.barcode_retail_price != null ? Number(item.barcode_retail_price) : (item.retailprice != null ? Number(item.retailprice) : 0);
+        if (isPosWeightScanItem(item)) {
+            price = Number(item.rate_per_kg ?? item.barcode_retail_price ?? item.retailprice) || 0;
+        }
         if (priceEl) priceEl.textContent = formatNum(price);
         if (itemDetailsResult) itemDetailsResult.style.display = 'block';
     }

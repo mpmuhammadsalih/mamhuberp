@@ -22,7 +22,7 @@ from config.settings import is_multi_db_mode
 from master_activity_log import append_master_activity, fetch_master_activity_log
 from save_nonce import GLOBAL_SAVE_NONCE_SESSION_KEY, commit_form_save_nonce, extract_submitted_save_nonce, get_or_issue_global_save_nonce, issue_save_nonce, json_response_rotate_global, reject_invalid_form_save_nonce, replay_blocked_response_global, verify_consume_save_nonce
 from addons.itemmaster.db_branch_item_store import save_itemmaster_with_alternate_uoms
-from db import get_items_list, get_items_kpis, get_categories, get_category_lookup_label, get_category_master_tree, get_category_master_flat, update_category_master_name, insert_category_main, insert_brand, insert_category_lookup, insert_category_dept, insert_category_micro, get_suppliers, get_supplier_by_code, get_units, get_all_unit_of_measurement, get_units_for_itemmaster_dropdown, get_uom_lookup_display, insert_unit_of_measurement, update_unit_of_measurement, delete_unit_of_measurement, get_item_properties, get_item_origins, get_item_property_lookup_display, get_item_origin_lookup_display, insert_item_property_row, update_item_property_row, insert_item_origin_row, update_item_origin_row, get_item_by_code, try_get_itemmaster_detail_view, get_item_by_manufacturer_id, get_item_by_alternate_barcode, get_item_alternate_uom, get_item_alternate_uom_by_barcode, get_item_alternate_uoms, get_next_alternate_barcode, get_next_item_code, get_tenant_locationcode_from_auth, get_location_info_by_dbkey, get_all_chart_of_accounts, get_chart_of_account_by_code, get_all_item_accounts, get_category_pricepercentage_by_code, get_item_store_inventory, get_item_ledger_tab, get_item_costing_method_details, get_itemmaster_bin_tracking_panel_data, list_warehouse_picker_bins, get_warehouse_storage_rows, ensure_itemmaster_inventory_extension_columns, ensure_itemmaster_image_path_column, set_item_batch_tracked, set_item_default_bin_storage_id, set_item_staging_bin_storage_id, set_item_image_path, is_location_batch_tracking_enabled, is_location_warehouse_enabled, is_location_bin_tracking_enabled, CHART_OF_ACCOUNTS_TABLE, _detect_table, _detect_column, resolve_warehouse_master_table, resolve_legacy_store_table, list_warehouse_master_rows, get_warehouse_master_by_id, _fetch_rows, _get_connection, _safe_rows, _table_exists, ensure_chart_of_accounts_table, import_category_master_from_excel_rows, import_itemmaster_from_excel_rows, import_itemmaster_prices_from_excel_rows, import_itemmaster_costprice_from_excel_rows, count_itemmaster_missing_itemnameara, fetch_itemmaster_missing_itemnameara_batch, update_itemmaster_itemnameara_if_empty, count_itemmaster_missing_base_alternate, bulk_sync_itemmaster_base_alternate_batch, _im_import_row_dict, format_location_prefix_item_barcode, suggest_location_prefix_item_barcode, barcode_taken_in_location
+from db import get_items_list, get_items_kpis, get_categories, get_category_lookup_label, get_category_master_tree, get_category_master_flat, update_category_master_name, insert_category_main, insert_brand, insert_category_lookup, insert_category_dept, insert_category_micro, get_suppliers, get_supplier_by_code, get_units, get_all_unit_of_measurement, get_units_for_itemmaster_dropdown, get_uom_lookup_display, insert_unit_of_measurement, update_unit_of_measurement, delete_unit_of_measurement, get_item_properties, get_item_origins, get_item_property_lookup_display, get_item_origin_lookup_display, insert_item_property_row, update_item_property_row, insert_item_origin_row, update_item_origin_row, get_item_by_code, try_get_itemmaster_detail_view, get_item_by_manufacturer_id, get_item_by_alternate_barcode, get_item_alternate_uom, get_item_alternate_uom_by_barcode, get_item_alternate_uoms, get_next_alternate_barcode, get_next_item_code, get_tenant_locationcode_from_auth, get_location_info_by_dbkey, get_all_chart_of_accounts, get_chart_of_account_by_code, get_all_item_accounts, get_category_pricepercentage_by_code, get_item_store_inventory, get_item_ledger_tab, get_item_costing_method_details, get_itemmaster_bin_tracking_panel_data, list_warehouse_picker_bins, get_warehouse_storage_rows, ensure_itemmaster_inventory_extension_columns, ensure_itemmaster_image_path_column, set_item_batch_tracked, set_item_weight_item, set_item_default_bin_storage_id, set_item_staging_bin_storage_id, set_item_image_path, is_location_batch_tracking_enabled, is_location_warehouse_enabled, is_location_bin_tracking_enabled, CHART_OF_ACCOUNTS_TABLE, _detect_table, _detect_column, resolve_warehouse_master_table, resolve_legacy_store_table, list_warehouse_master_rows, get_warehouse_master_by_id, _fetch_rows, _get_connection, _safe_rows, _table_exists, ensure_chart_of_accounts_table, import_category_master_from_excel_rows, import_itemmaster_from_excel_rows, import_itemmaster_prices_from_excel_rows, import_itemmaster_costprice_from_excel_rows, count_itemmaster_missing_itemnameara, fetch_itemmaster_missing_itemnameara_batch, update_itemmaster_itemnameara_if_empty, count_category_missing_nameara, fetch_category_missing_nameara_batch, update_category_nameara_if_empty, ensure_category_nameara_column, count_itemmaster_missing_base_alternate, bulk_sync_itemmaster_base_alternate_batch, _im_import_row_dict, format_location_prefix_item_barcode, suggest_location_prefix_item_barcode, barcode_taken_in_location
 _IM_AI_ARABIC_BATCH_DEFAULT = 25
 _IM_AI_ARABIC_BATCH_MAX = 100
 _IM_BASE_ALT_BATCH_DEFAULT = 50
@@ -1335,25 +1335,54 @@ def _fetch_web_product_by_barcode(barcode: str) -> Tuple[bool, str, Optional[Dic
 
 def _translate_item_name_to_arabic(item_name: str) -> Tuple[str, str]:
     """Return (arabic_text, source) using OpenAI when configured, else term-map fallback."""
-    src = str(item_name or '').strip()
+    return _translate_text_to_arabic(item_name, context='product')
+
+
+def _translate_category_name_to_arabic(category_name: str) -> Tuple[str, str]:
+    """Return (arabic_text, source) for retail category names."""
+    return _translate_text_to_arabic(category_name, context='category')
+
+
+def _translate_text_to_arabic(text: str, *, context: str = 'product') -> Tuple[str, str]:
+    src = str(text or '').strip()
     if not src:
         return ('', 'empty')
-    ai_text = _ai_arabic_suggest(src)
+    ai_text = _ai_arabic_suggest(src, context=context)
     if ai_text:
         return (ai_text, 'ai')
-    fallback = _basic_arabic_suggest(src)
+    if context == 'category':
+        fallback = _basic_arabic_suggest(src)
+    else:
+        fallback = _basic_arabic_suggest(src)
     if fallback:
         return (fallback, 'fallback')
     return ('', 'none')
 
 
-def _ai_arabic_suggest(item_name: str) -> str:
+def _ai_arabic_suggest(text: str, *, context: str = 'product') -> str:
     """Optional AI translation using OpenAI when API key is configured."""
     api_key = (os.environ.get('OPENAI_API_KEY') or '').strip()
     if not api_key or requests is None:
         return ''
+    if context == 'category':
+        system = (
+            'You translate retail product category names (toy store departments) to natural Arabic. '
+            'Return ONLY Arabic text, no explanation.'
+        )
+    elif context == 'product_description':
+        system = (
+            'You translate e-commerce product descriptions to natural Arabic for Qatar. '
+            'Keep the same tone and line breaks. Return ONLY Arabic text, no explanation.'
+        )
+    elif context == 'product_specs':
+        system = (
+            'You translate product specification text to Arabic. Preserve line breaks and '
+            'Label: value format on each line. Keep emoji characters. Return ONLY Arabic text.'
+        )
+    else:
+        system = 'You translate item names to natural retail Arabic. Return ONLY Arabic text, no explanation.'
     try:
-        resp = requests.post('https://api.openai.com/v1/chat/completions', headers={'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}, json={'model': os.environ.get('OPENAI_ITEMMASTER_MODEL', 'gpt-4o-mini'), 'temperature': 0.2, 'messages': [{'role': 'system', 'content': 'You translate item names to natural retail Arabic. Return ONLY Arabic text, no explanation.'}, {'role': 'user', 'content': str(item_name or '').strip()}]}, timeout=10)
+        resp = requests.post('https://api.openai.com/v1/chat/completions', headers={'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}, json={'model': os.environ.get('OPENAI_ITEMMASTER_MODEL', 'gpt-4o-mini'), 'temperature': 0.2, 'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': str(text or '').strip()}]}, timeout=10)
         if resp.status_code >= 400:
             return ''
         data = resp.json()
@@ -1367,6 +1396,10 @@ def _ai_arabic_suggest(item_name: str) -> str:
         return ''
     except Exception:
         return ''
+
+
+def _ai_arabic_suggest_item_name(item_name: str) -> str:
+    return _ai_arabic_suggest(item_name, context='product')
 
 def _normalize_item_name_for_match(text: str) -> str:
     cleaned = re.sub('[^A-Za-z0-9]+', ' ', str(text or '').upper()).strip()
@@ -2082,6 +2115,15 @@ def itemmaster_data_config():
         ai_arabic_missing_count = count_itemmaster_missing_itemnameara(cfg_loc)
     except Exception:
         ai_arabic_missing_count = 0
+    cat_ai_arabic_missing_count = 0
+    has_category_nameara = False
+    try:
+        has_category_nameara = ensure_category_nameara_column()
+        if has_category_nameara:
+            cat_ai_arabic_missing_count = count_category_missing_nameara(cfg_loc)
+    except Exception:
+        cat_ai_arabic_missing_count = 0
+        has_category_nameara = False
     has_openai = bool((os.environ.get('OPENAI_API_KEY') or '').strip())
     base_alt_missing_count = 0
     try:
@@ -2113,6 +2155,8 @@ def itemmaster_data_config():
         exec_rows=exec_rows if exec_rows is not None else [],
         last_execute=last_execute,
         ai_arabic_missing_count=ai_arabic_missing_count,
+        cat_ai_arabic_missing_count=cat_ai_arabic_missing_count,
+        has_category_nameara=has_category_nameara,
         has_openai=has_openai,
         ai_arabic_batch_default=_IM_AI_ARABIC_BATCH_DEFAULT,
         base_alt_missing_count=base_alt_missing_count,
@@ -2264,6 +2308,102 @@ def itemmaster_data_config_ai_arabic_bulk():
             if len(errors) < 30:
                 errors.append(f'Item {ic}: {exc}')
     remaining = count_itemmaster_missing_itemnameara(loc)
+    next_offset = offset + len(rows)
+    done = len(rows) < batch_size or remaining <= 0
+    return jsonify({
+        'ok': True,
+        'location_code': loc,
+        'processed': len(rows),
+        'updated': updated,
+        'skipped': skipped,
+        'failed': failed,
+        'errors': errors,
+        'samples': samples,
+        'remaining': remaining,
+        'next_offset': next_offset,
+        'done': done,
+        'has_openai': bool((os.environ.get('OPENAI_API_KEY') or '').strip()),
+    })
+
+
+@bp.route('/itemmaster/data-config/ai-category-arabic-missing-count', methods=['GET'])
+def itemmaster_data_config_ai_category_arabic_missing_count():
+    """Count CATEGORY rows with empty NAMEARA for the branch."""
+    denied = _itemmaster_data_config_admin_json_guard()
+    if denied is not None:
+        return denied
+    try:
+        loc = int((request.args.get('location_code') or _resolve_itemmaster_location_code()))
+    except (TypeError, ValueError):
+        loc = _resolve_itemmaster_location_code()
+    ready = ensure_category_nameara_column()
+    cnt = count_category_missing_nameara(loc) if ready else 0
+    return jsonify({
+        'ok': True,
+        'location_code': loc,
+        'missing_count': cnt,
+        'has_nameara_column': ready,
+        'has_openai': bool((os.environ.get('OPENAI_API_KEY') or '').strip()),
+    })
+
+
+@bp.route('/itemmaster/data-config/ai-category-arabic-bulk', methods=['POST'])
+def itemmaster_data_config_ai_category_arabic_bulk():
+    """Translate CATEGORY.NAME → NAMEARA (AI/fallback) where Arabic is null/empty."""
+    denied = _itemmaster_data_config_admin_json_guard()
+    if denied is not None:
+        return denied
+    if not ensure_category_nameara_column():
+        return jsonify({'ok': False, 'error': 'CATEGORY.NAMEARA column is not available.'}, 500)
+    payload = request.get_json(silent=True) or {}
+    try:
+        loc = int(payload.get('location_code') or _resolve_itemmaster_location_code())
+    except (TypeError, ValueError):
+        loc = _resolve_itemmaster_location_code()
+    try:
+        offset = max(0, int(payload.get('offset') or 0))
+    except (TypeError, ValueError):
+        offset = 0
+    try:
+        batch_size = int(payload.get('batch_size') or _IM_AI_ARABIC_BATCH_DEFAULT)
+    except (TypeError, ValueError):
+        batch_size = _IM_AI_ARABIC_BATCH_DEFAULT
+    batch_size = max(1, min(batch_size, _IM_AI_ARABIC_BATCH_MAX))
+    rows = fetch_category_missing_nameara_batch(loc, offset, batch_size)
+    updated = skipped = failed = 0
+    errors: List[str] = []
+    samples: List[Dict[str, Any]] = []
+    for row in rows:
+        code = int(row.get('code') or 0)
+        flag = str(row.get('flag') or '').strip().upper()[:1]
+        name = str(row.get('name') or '').strip()
+        if not code or not name or flag not in ('M', 'D', 'C'):
+            skipped += 1
+            continue
+        ara, src = _translate_category_name_to_arabic(name)
+        if not ara:
+            failed += 1
+            if len(errors) < 30:
+                errors.append(f'{flag}/{code}: could not translate "{name[:60]}".')
+            continue
+        try:
+            if update_category_nameara_if_empty(loc, code, flag, ara):
+                updated += 1
+                if len(samples) < 8:
+                    samples.append({
+                        'code': code,
+                        'flag': flag,
+                        'name': name[:80],
+                        'nameara': ara[:80],
+                        'source': src,
+                    })
+            else:
+                skipped += 1
+        except Exception as exc:
+            failed += 1
+            if len(errors) < 30:
+                errors.append(f'{flag}/{code}: {exc}')
+    remaining = count_category_missing_nameara(loc)
     next_offset = offset + len(rows)
     done = len(rows) < batch_size or remaining <= 0
     return jsonify({
@@ -3588,8 +3728,8 @@ def itemmaster():
                     alternate_uom = get_item_alternate_uom(location_code_int, int(item_data.get('itemcode')))
             except (ValueError, TypeError):
                 alternate_uom = None
-        # View-only: variants load lazily via /itemmaster/api/variants when the Variant tab is shown.
-        if (not edit_mode) and (not itemmaster_view_only):
+        # Load all alternate UOM rows for existing items (edit, view, and prefill).
+        if item_data.get('itemcode'):
             try:
                 alternate_uoms = get_item_alternate_uoms(location_code_int, int(item_data.get('itemcode')))
             except (ValueError, TypeError):
@@ -3785,7 +3925,7 @@ def itemmaster_save():
             'success': False,
             'error': 'Barcode already exists in Itemmaster or alternate UOM. Please use another barcode.',
         }, 400)
-    item_data = {'location_code': location_code_int, 'item_code': item_code, 'manufacturer_id': manufacturer_id, 'item_name': _clean_none_text(request.form.get('item_name')).upper(), 'main_category': request.form.get('main_category'), 'department_code': request.form.get('department_code'), 'category_code': request.form.get('category_code'), 'brand_code': request.form.get('brand_code'), 'size_code': request.form.get('size_code'), 'color_code': request.form.get('color_code'), 'base_uom': request.form.get('base_uom'), 'sup_code': request.form.get('sup_code'), 'cost_price': request.form.get('cost_price'), 'retail_price': request.form.get('retail_price'), 'wholesale_price': request.form.get('wholesale_price'), 'third_price': request.form.get('third_price'), 'branch_price': request.form.get('branch_price'), 'maximum_level': request.form.get('maximum_level'), 'reorder_level': request.form.get('reorder_level'), 'company_code': request.form.get('company_code'), 'item_name_ara': request.form.get('item_name_ara'), 'description': request.form.get('description'), 'vat_percent': request.form.get('vat_percent'), 'discount_flag': 'Y' if request.form.get('discount_flag') else 'N', 'item_flag': 'Y' if request.form.get('item_active') else 'N', 'property_code': request.form.get('property_code'), 'origin_code': request.form.get('origin_code'), 'quantity_limit': request.form.get('quantity_limit'), 'packing': request.form.get('packing'), 'ministry_factor': request.form.get('ministry_factor'), 'ministry_unit': request.form.get('ministry_unit'), 'rebate': request.form.get('rebate'), 'sales_account': request.form.get('sales_account'), 'purchase_account': request.form.get('purchase_account'), 'inventory_account': request.form.get('inventory_account'), 'cogs_account': request.form.get('cogs_account'), 'daily_limit': request.form.get('daily_limit'), 'slow_moving': 'Y' if request.form.get('slow_moving') else 'N', 'own_product': 'Y' if request.form.get('own_product') else 'N', 'special_item': 'Y' if request.form.get('special_item') else 'N', 'below_cost': 'Y' if request.form.get('below_cost') else 'N', 'market_item': 'Y' if request.form.get('market_item') else 'N', 'row_material': 'Y' if request.form.get('row_material') else 'N', 'discount_limit': request.form.get('discount_limit'), 'margin_limit_percent': request.form.get('margin_limit_percent'), 'below_cost_reason': request.form.get('below_cost_reason'), 'default_warehouse_id': request.form.get('default_warehouse_id')}
+    item_data = {'location_code': location_code_int, 'item_code': item_code, 'manufacturer_id': manufacturer_id, 'item_name': _clean_none_text(request.form.get('item_name')).upper(), 'main_category': request.form.get('main_category'), 'department_code': request.form.get('department_code'), 'category_code': request.form.get('category_code'), 'brand_code': request.form.get('brand_code'), 'size_code': request.form.get('size_code'), 'color_code': request.form.get('color_code'), 'base_uom': request.form.get('base_uom'), 'sup_code': request.form.get('sup_code'), 'cost_price': request.form.get('cost_price'), 'retail_price': request.form.get('retail_price'), 'wholesale_price': request.form.get('wholesale_price'), 'third_price': request.form.get('third_price'), 'branch_price': request.form.get('branch_price'), 'maximum_level': request.form.get('maximum_level'), 'reorder_level': request.form.get('reorder_level'), 'company_code': request.form.get('company_code'), 'item_name_ara': request.form.get('item_name_ara'), 'description': request.form.get('description'), 'vat_percent': request.form.get('vat_percent'), 'discount_flag': 'Y' if request.form.get('discount_flag') else 'N', 'item_flag': 'Y' if request.form.get('item_active') else 'N', 'property_code': request.form.get('property_code'), 'origin_code': request.form.get('origin_code'), 'quantity_limit': request.form.get('quantity_limit'), 'packing': request.form.get('packing'), 'ministry_factor': request.form.get('ministry_factor'), 'ministry_unit': request.form.get('ministry_unit'), 'rebate': request.form.get('rebate'), 'sales_account': request.form.get('sales_account'), 'purchase_account': request.form.get('purchase_account'), 'inventory_account': request.form.get('inventory_account'), 'cogs_account': request.form.get('cogs_account'), 'daily_limit': request.form.get('daily_limit'), 'slow_moving': 'Y' if request.form.get('slow_moving') else 'N', 'own_product': 'Y' if request.form.get('own_product') else 'N', 'special_item': 'Y' if request.form.get('special_item') else 'N', 'below_cost': 'Y' if request.form.get('below_cost') else 'N', 'market_item': 'Y' if request.form.get('market_item') else 'N', 'row_material': 'Y' if request.form.get('row_material') else 'N', 'discount_limit': request.form.get('discount_limit'), 'margin_limit_percent': request.form.get('margin_limit_percent'), 'below_cost_reason': request.form.get('below_cost_reason'), 'default_warehouse_id': request.form.get('default_warehouse_id'), 'is_weight_item': 'Y' if request.form.get('is_weight_item') else 'N'}
     item_data = _clean_none_in_dict(item_data)
     old_row_for_log: Optional[Dict[str, Any]] = None
     alts_before_log: List[Dict[str, Any]] = []
@@ -3917,6 +4057,8 @@ def itemmaster_save():
         except (TypeError, ValueError):
             _sic = 0
         if _sic > 0:
+            _weight_item = (request.form.get('is_weight_item') or '').strip().upper() == 'Y'
+            set_item_weight_item(_sic, location_code_int, _weight_item)
             if is_location_batch_tracking_enabled(location_code_int):
                 _tracked = (request.form.get('batch_tracked') or '').strip().upper() == 'Y'
                 set_item_batch_tracked(_sic, location_code_int, _tracked)

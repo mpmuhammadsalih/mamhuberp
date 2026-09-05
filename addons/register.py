@@ -44,9 +44,15 @@ def register_addon_routers(app: "FastAPI") -> List[Tuple[str, str]]:
             # FastAPI ``include_router`` does not copy ``Mount`` children; promote static mounts to the app.
             # Critical: remove Mounts from the router first. Leaving ``Mount("/static")`` on a prefixed
             # router still matches app-root ``/static/...`` and 404s before the real static mount.
-            addon_mounts = [(r.path, r.app) for r in list(router.routes) if isinstance(r, Mount)]
-            if addon_mounts:
-                router.routes[:] = [r for r in router.routes if not isinstance(r, Mount)]
+            # Cache mount list on the router so a second ``create_app()`` (e.g. tests) can re-mount.
+            cached_mounts = getattr(router, "_nexa_promoted_static_mounts", None)
+            if cached_mounts is not None:
+                addon_mounts = list(cached_mounts)
+            else:
+                addon_mounts = [(r.path, r.app) for r in list(router.routes) if isinstance(r, Mount)]
+                if addon_mounts:
+                    router.routes[:] = [r for r in router.routes if not isinstance(r, Mount)]
+                    router._nexa_promoted_static_mounts = list(addon_mounts)
             app.include_router(router)
             for mi, (mpath, subapp) in enumerate(addon_mounts):
                 mpath = (mpath or "/static").rstrip("/") or "/static"

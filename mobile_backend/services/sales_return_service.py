@@ -17,6 +17,7 @@ def _location_code() -> int:
 
 def _return_features() -> dict[str, bool]:
     from db import (
+        get_sales_direct_posting_return_enabled,
         get_sales_orderno_mandatory_return_enabled,
         is_location_batch_tracking_enabled,
         is_location_bin_tracking_enabled,
@@ -30,28 +31,16 @@ def _return_features() -> dict[str, bool]:
         "bin_tracking_enabled": wh and bool(is_location_bin_tracking_enabled(loc)),
         "batch_tracking_enabled": bool(is_location_batch_tracking_enabled(loc)),
         "orderno_mandatory": bool(get_sales_orderno_mandatory_return_enabled()),
+        # Returns bring stock back — always allow adding zero-stock items.
+        "minus_billing_enabled": True,
+        # Sales Accounts Configuration → cash return direct post to tender Cash/Bank GL.
+        "direct_posting_enabled": bool(get_sales_direct_posting_return_enabled()),
     }
 
 
 def _default_warehouse_context(username: str) -> dict[str, Any]:
-    from db import get_warehouse_master_by_id
-    from db.user_warehouse_prefs import get_user_default_warehouse_id, warehouse_display_label
-
-    wid = get_user_default_warehouse_id(username, "sales_return")
-    out: dict[str, Any] = {
-        "default_warehouse_id": wid,
-        "default_warehouse_code": "",
-        "default_warehouse_name": "",
-        "default_warehouse_label": warehouse_display_label(wid) if wid else "",
-    }
-    if wid:
-        try:
-            wh = get_warehouse_master_by_id(int(wid)) or {}
-            out["default_warehouse_code"] = str(wh.get("warehouse_code") or "").strip()
-            out["default_warehouse_name"] = str(wh.get("warehouse_name") or "").strip()
-        except (TypeError, ValueError):
-            pass
-    return out
+    """Sales-return warehouse default (user pref, else sole available warehouse)."""
+    return inv._default_warehouse_context(username, module="sales_return")
 
 
 def list_returns(
@@ -237,14 +226,24 @@ def get_return_detail(billno: Any) -> dict[str, Any] | None:
 
 def get_return_open_context(*, peek_billno: bool = True) -> dict[str, Any]:
     from addons.document_numbering.document_numbering_db import DOC_TYPE_SALES_RETURN
-    from db import get_location_info_by_dbkey, get_next_bill_no, get_open_bill_date, peek_next_bill_no
+    from db import get_location_info_by_dbkey, get_next_bill_no
+    from mobile_backend.services.transaction_date_helper import (
+        missing_setup_date_message,
+        open_context as txn_open_context,
+    )
 
     with _erp_session_scope() as username:
         loc = _location_code()
-        open_dt = get_open_bill_date(loc)
-        bill_date = open_dt.strftime("%Y-%m-%d") if open_dt else datetime.now().strftime("%Y-%m-%d")
+        txn = txn_open_context("sales_return", location_code=loc)
+        bill_date = str(txn.get("preferred_date") or "")[:10]
+        if not bill_date:
+            raise ValueError(
+                txn.get("transaction_date_error") or missing_setup_date_message("sales_return")
+            )
         if peek_billno:
-            billno = peek_next_bill_no(loc, None, doc_type=DOC_TYPE_SALES_RETURN)
+            from mobile_backend.services.sales_invoice_service import _fresh_peek_billno
+
+            billno = _fresh_peek_billno(loc, DOC_TYPE_SALES_RETURN)
             reserved = False
         else:
             billno = get_next_bill_no(loc, None, doc_type=DOC_TYPE_SALES_RETURN)
@@ -255,6 +254,11 @@ def get_return_open_context(*, peek_billno: bool = True) -> dict[str, Any]:
         return {
             "billno": billno,
             "bill_date": bill_date,
+            "bill_date_from": str(txn.get("open_date_from") or bill_date)[:10],
+            "bill_date_to": str(txn.get("open_date_to") or bill_date)[:10],
+            "open_date_from": str(txn.get("open_date_from") or bill_date)[:10],
+            "open_date_to": str(txn.get("open_date_to") or bill_date)[:10],
+            "transaction_date_blocked": bool(txn.get("transaction_date_blocked")),
             "bill_time": datetime.now().strftime("%H:%M:%S"),
             "location_code": loc,
             "location_name": str(info.get("locationname") or "").strip(),
@@ -312,16 +316,24 @@ def _negate_return_lines(lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _resolve_return_billno(location_code: int, countercode: Any, requested: Any) -> tuple[Any, bool]:
     from addons.document_numbering.document_numbering_db import DOC_TYPE_SALES_RETURN
-    from db import billhdr_exists, billno_is_reserved, coerce_billno, get_next_bill_no, parse_billno_from_request
+    from db import (
+        _use_billnotable,
+        billhdr_exists,
+        billno_is_reserved,
+        coerce_billno,
+        get_next_bill_no,
+        parse_billno_from_request,
+    )
 
     req = parse_billno_from_request(requested)
     if not req:
         return get_next_bill_no(location_code, countercode, doc_type=DOC_TYPE_SALES_RETURN), False
     if billhdr_exists(location_code, req):
-        return req, False
-    if not billno_is_reserved(req, location_code):
         return get_next_bill_no(location_code, countercode, doc_type=DOC_TYPE_SALES_RETURN), True
-    return coerce_billno(req), False
+    if _use_billnotable() and billno_is_reserved(req, location_code):
+        return coerce_billno(req), False
+    allocated = get_next_bill_no(location_code, countercode, doc_type=DOC_TYPE_SALES_RETURN)
+    return allocated, str(coerce_billno(allocated)) != str(coerce_billno(req))
 
 
 def _save_return_with_billno_retry(
@@ -338,11 +350,20 @@ def _save_return_with_billno_retry(
     billno, reassigned = _resolve_return_billno(
         location_code, header.get("countercode"), requested
     )
+    from mobile_backend.services.transaction_date_helper import resolve_doc_date
+
     header = dict(header)
     header["billno"] = billno
     header["use_existing_billno"] = True
     header["is_sales_return"] = True
-    header.setdefault("billdate", datetime.now().strftime("%Y-%m-%d"))
+    bill_date = resolve_doc_date(
+        "sales_return",
+        header.get("billdate") or header.get("bill_date"),
+        location_code=location_code,
+        snap_out_of_range=True,
+    )
+    header["billdate"] = bill_date
+    header["bill_date"] = bill_date
     header.setdefault("billtime", datetime.now().strftime("%H:%M:%S"))
     header.setdefault("createdby", username)
     header["location_code"] = location_code
@@ -452,22 +473,43 @@ def save_return(payload: dict[str, Any], *, username: str) -> dict[str, Any]:
         net_mag += qty * rate - disc
 
     doc = str(header.get("billno") or header.get("orderno") or "").strip()
+    from mobile_backend.services.transaction_date_helper import resolve_doc_date
+
     with mobile_operation_lock(
         "sales_return",
         doc,
         lock_seconds=180.0,
         busy_message="Sales return is already being saved. Please wait.",
     ), _erp_session_scope() as user:
+        # Re-resolve UOM factor under tenant session, then re-apply return signs.
+        positive = []
+        for ln in lines:
+            row = dict(ln)
+            row["quantity"] = abs(float(row.get("quantity") or 0))
+            row["base_qty"] = abs(float(row.get("base_qty") or row.get("baseqty") or 0))
+            positive.append(row)
+        lines = inv._normalize_invoice_save_lines(positive)
+        lines = _negate_return_lines(lines)
         loc = _location_code()
         if not ensure_gl_tables():
             raise ValueError(
                 "General ledger is not configured. Sales return cannot post to accounts."
             )
+        bill_date = resolve_doc_date(
+            "sales_return",
+            header.get("billdate") or header.get("bill_date"),
+            location_code=loc,
+            snap_out_of_range=True,
+        )
+        header["billdate"] = bill_date
+        header["bill_date"] = bill_date
         header = inv._normalize_invoice_save_header(
             header,
             location_code=loc,
             username=user or username,
         )
+        header["billdate"] = bill_date
+        header["bill_date"] = bill_date
         header["is_sales_return"] = True
         # Returns reverse receivable — skip credit-limit block.
         if billing != "CREDIT" and cc > 0:
@@ -610,6 +652,7 @@ def load_from_invoice(invoice_billno: Any) -> dict[str, Any]:
 def build_return_pdf(billno: Any) -> tuple[bytes, str]:
     """ERP cashbilldup PDF titled as sales return."""
     from addons.reports.controllers.routes import _generate_cashbilldup_pdf
+    from addons.reports.invoice_templates import get_saved_invoice_template
     from db import billno_is_valid, get_sales_print_data, parse_billno_from_request
 
     bn = parse_billno_from_request(billno)
@@ -621,11 +664,14 @@ def build_return_pdf(billno: Any) -> tuple[bytes, str]:
         header, lines = get_sales_print_data(bn, loc)
         if not header:
             raise ValueError("Sales return not found for PDF.")
+        if not header.get("locationcode"):
+            header["locationcode"] = loc
         pdf_bytes = _generate_cashbilldup_pdf(
             billno=bn,
             header=header,
             lines=lines or [],
             invoice_title="SALES RETURN",
+            template=get_saved_invoice_template(),
         )
         if not pdf_bytes:
             raise ValueError("Failed to generate sales return PDF. Check reportlab on the server.")

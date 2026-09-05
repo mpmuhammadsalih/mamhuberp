@@ -1155,6 +1155,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (pricing.cost_price != null) {
             row.dataset.cost = String(Number(pricing.cost_price || 0));
         }
+        if (pricing.average_cost != null || pricing.averagecost != null) {
+            row.dataset.averageCost = String(Number(pricing.average_cost || pricing.averagecost || 0));
+        } else if (factor > 1 && Number(row.dataset.cost || 0) > 0) {
+            row.dataset.averageCost = String(Number(row.dataset.cost || 0) / factor);
+        }
         const lineNo = Number(row.dataset.line || 0) || 1;
         row.innerHTML = buildLineRowHtml(lineNo, lineRowHtmlDataFromDataset(row));
     };
@@ -1356,6 +1361,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             applyLineRowPricing(tr, pricing);
             tr.dataset.baseQty = String(Number(tr.dataset.quantity || 0) * (Number(pricing.conversion_factor || 1) || 1));
             if (pricing.cost_price != null) tr.dataset.cost = String(Number(pricing.cost_price || 0));
+            const fac = Number(pricing.conversion_factor || 1) || 1;
+            const avg = Number(pricing.average_cost || pricing.averagecost || 0);
+            if (avg > 0) tr.dataset.averageCost = String(avg);
+            else if (fac > 1 && Number(tr.dataset.cost || 0) > 0) {
+                tr.dataset.averageCost = String(Number(tr.dataset.cost || 0) / fac);
+            }
         } else {
             siRecalcDataRow(tr);
         }
@@ -1375,6 +1386,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             applyLineRowPricing(tr, pricing);
             tr.dataset.baseQty = String(Number(tr.dataset.quantity || 0) * (Number(pricing.conversion_factor || 1) || 1));
             if (pricing.cost_price != null) tr.dataset.cost = String(Number(pricing.cost_price || 0));
+            const fac = Number(pricing.conversion_factor || 1) || 1;
+            const avg = Number(pricing.average_cost || pricing.averagecost || 0);
+            if (avg > 0) tr.dataset.averageCost = String(avg);
+            else if (fac > 1 && Number(tr.dataset.cost || 0) > 0) {
+                tr.dataset.averageCost = String(Number(tr.dataset.cost || 0) / fac);
+            }
         } else {
             siRecalcDataRow(tr);
         }
@@ -1822,6 +1839,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             amount: Number(row.dataset.amount || 0),
             base_qty: Number(row.dataset.baseQty || 0),
             cost: Number(row.dataset.cost || 0),
+            averagecost: Number(row.dataset.averageCost || 0),
+            average_cost: Number(row.dataset.averageCost || 0),
             lot_id: row.dataset.lotId || '',
             lot_label: row.dataset.lotLabel || '',
         }));
@@ -2685,6 +2704,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             const pricing = data.pricing;
             currentItem.factor = Number(pricing.conversion_factor || 1);
             currentItem.cost = Number(pricing.cost_price || currentItem.cost || 0);
+            currentItem.averageCost = Number(pricing.average_cost || pricing.averagecost || 0);
+            if (!(currentItem.averageCost > 0) && currentItem.factor > 1 && currentItem.cost > 0) {
+                currentItem.averageCost = currentItem.cost / currentItem.factor;
+            }
             setValue(rate, formatRate(pricing.rate || 0));
         } catch (e) {
             console.error('Failed to fetch UOM pricing', e);
@@ -2714,6 +2737,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             currentItem.third = Number(item.thirdprice || 0);
             currentItem.branch = Number(item.branchprice || 0);
             currentItem.cost = Number(item.costprice || 0);
+            currentItem.averageCost = Number(item.averagecost || item.average_cost || item.costprice || 0);
             currentItem.factor = 1;
 
             setValue(barcodeInput, currentItem.barcode || barcode);
@@ -2787,6 +2811,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         const lotLabelVal = String(spec.lotLabel || '').trim();
         const lineCost = Number(spec.cost || 0);
         const lineFactor = Number(spec.factor || 1) || 1;
+        let lineAvgCost = Number(spec.averageCost || spec.average_cost || 0);
+        if (!(lineAvgCost > 0) && lineFactor > 1 && lineCost > 0) {
+            lineAvgCost = lineCost / lineFactor;
+        }
 
         if (warehouseEnabled && !(parseInt(whIdVal, 10) > 0)) return false;
         if (binEnabled && !(parseInt(storageIdVal, 10) > 0)) return false;
@@ -2881,6 +2909,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         row.dataset.amount = amount;
         row.dataset.baseQty = baseQty;
         row.dataset.cost = lineCost;
+        row.dataset.averageCost = lineAvgCost;
         row.dataset.lotId = lotIdVal;
         row.dataset.lotLabel = lotIdVal ? lotLabelVal : '';
 
@@ -2940,6 +2969,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             rate: rate.value,
             discount: discount.value,
             cost: currentItem.cost || 0,
+            averageCost: currentItem.averageCost || 0,
             factor: currentItem.factor || 1,
             store: warehouseEnabled ? (lineWarehouseCode?.value || '') : (inventoryLocation?.value || ''),
             warehouseId: lineWarehouseId?.value,
@@ -2976,6 +3006,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 amount: Number(row.dataset.amount || 0),
                 base_qty: Number(row.dataset.baseQty || 0),
                 cost: Number(row.dataset.cost || 0),
+                averagecost: Number(row.dataset.averageCost || 0),
+                average_cost: Number(row.dataset.averageCost || 0),
                 lot_id: row.dataset.lotId || '',
             };
             const whId = parseInt(row.dataset.warehouseId, 10) || 0;
@@ -2993,7 +3025,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const saveInvoice = async () => {
         if (saveInFlight) return;
         if (txnDateBlocked) {
-            alert(txnDateError || 'No open transaction date. Set it in Transaction Date Setup before posting.');
+            alert(txnDateError || 'Setup date is missing. No open From–To date range in Transaction Date Setup. Open a date range in General Setup → Transaction Date Setup before posting.');
             return;
         }
         const lines = gatherLines();

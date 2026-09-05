@@ -464,6 +464,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const panel = t.closest('.im-form-panel[id^="tab-"]');
             if (panel && panel.id && panel.id.startsWith('tab-')) {
                 itemmasterActiveSection = panel.id.slice(4);
+                if (panel.id === 'tab-variant') loadLazyTabData('variant');
+                else if (panel.id === 'tab-inventory') loadLazyTabData('inventory');
             }
         });
     }

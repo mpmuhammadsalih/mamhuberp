@@ -347,8 +347,83 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         return payload;
     };
-    const siPrintPdfOnSave = document.getElementById('siPrintPdfOnSave');
     const SALES_PRINT_PDF_LS_KEY = 'sales_print_pdf_on_save';
+    const SALES_INVOICE_TEMPLATE_KEY = 'nexa_sales_invoice_template';
+    const siPrintPdfOnSave = document.getElementById('siPrintPdfOnSave');
+    const siInvoiceTemplate = document.getElementById('siInvoiceTemplate');
+    const SALES_INVOICE_TEMPLATE_PREFER_URL = '/sales/invoice-templates/prefer';
+
+    function readSalesInvoiceTemplate() {
+        try {
+            const v = (localStorage.getItem(SALES_INVOICE_TEMPLATE_KEY) || 'classic').trim().toLowerCase();
+            if (['classic', 'modern', 'compact', 'slate', 'gulfnova'].includes(v)) return v;
+        } catch (e) { /* ignore */ }
+        return 'classic';
+    }
+
+    function writeSalesInvoiceTemplate(v) {
+        try { localStorage.setItem(SALES_INVOICE_TEMPLATE_KEY, v); } catch (e) { /* ignore */ }
+    }
+
+    function persistSalesInvoiceTemplate(v) {
+        const id = (v || 'classic').trim().toLowerCase();
+        writeSalesInvoiceTemplate(id);
+        try {
+            fetch(SALES_INVOICE_TEMPLATE_PREFER_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ template: id }),
+            }).then((r) => r.json()).then((res) => {
+                if (res && res.template) writeSalesInvoiceTemplate(res.template);
+            }).catch(() => { /* keep local */ });
+        } catch (e) { /* ignore */ }
+    }
+
+    function syncSalesInvoiceTemplateFromServer() {
+        try {
+            fetch(SALES_INVOICE_TEMPLATE_PREFER_URL, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+                credentials: 'same-origin',
+            }).then((r) => r.json()).then((res) => {
+                if (!res || !res.success) return;
+                const local = readSalesInvoiceTemplate();
+                // First-time migrate: browser had a choice but company setting not saved yet.
+                if (!res.saved && local && local !== 'classic') {
+                    persistSalesInvoiceTemplate(local);
+                    return;
+                }
+                if (!res.template) return;
+                writeSalesInvoiceTemplate(res.template);
+                if (siInvoiceTemplate) siInvoiceTemplate.value = res.template;
+            }).catch(() => { /* ignore */ });
+        } catch (e) { /* ignore */ }
+    }
+
+    function appendInvoiceTemplateParam(url) {
+        const tmpl = readSalesInvoiceTemplate();
+        if (!url) return url;
+        try {
+            const u = new URL(url, window.location.origin);
+            u.searchParams.set('template', tmpl);
+            if (!/^https?:\/\//i.test(url)) {
+                return u.pathname + u.search + u.hash;
+            }
+            return u.toString();
+        } catch (e) {
+            const sep = url.includes('?') ? '&' : '?';
+            return `${url}${sep}template=${encodeURIComponent(tmpl)}`;
+        }
+    }
+
+    if (siInvoiceTemplate) {
+        siInvoiceTemplate.value = readSalesInvoiceTemplate();
+        siInvoiceTemplate.addEventListener('change', () => {
+            persistSalesInvoiceTemplate(siInvoiceTemplate.value || 'classic');
+        });
+        syncSalesInvoiceTemplateFromServer();
+    }
 
     function readSalesPrintPdfPref() {
         try {
@@ -380,13 +455,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function openSavedInvoicePdf(billno, pdfUrlFromServer) {
         if (!isSalesPrintPdfOnSaveEnabled() || billno == null) return;
-        const printUrl = (
+        let printUrl = (
             pdfUrlFromServer ||
             (saveBase === '/sales-order'
                 ? `/sales-order/pdf/${encodeURIComponent(billno)}`
                 : `/reports/crystal-reports/open/cashbilldup?billno=${encodeURIComponent(billno)}`)
         ).trim();
         if (!printUrl) return;
+        printUrl = appendInvoiceTemplateParam(printUrl);
         try {
             window.open(printUrl, '_blank');
         } catch (e) {
@@ -400,7 +476,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             alert('Save the order first to print PDF.');
             return;
         }
-        const printUrl = `${printBase}/pdf/${encodeURIComponent(bno)}`;
+        let printUrl = `${printBase}/pdf/${encodeURIComponent(bno)}`;
+        printUrl = appendInvoiceTemplateParam(printUrl);
         try {
             window.open(printUrl, '_blank');
         } catch (e) {
@@ -457,7 +534,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     : 'Invoiced orders cannot be changed.';
             } else if (txnDateBlocked) {
                 saveDisabled = true;
-                saveTitle = txnDateError || 'No open transaction date.';
+                saveTitle = txnDateError || 'Setup date is missing. Open a From–To date range in Transaction Date Setup before posting.';
             }
             if (soCancelledBanner) {
                 soCancelledBanner.style.display = cancelled ? '' : 'none';
@@ -812,7 +889,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const SI_QTY_DECIMALS = 3;
     const SI_RATE_DECIMALS = 3;
-    const SI_AMT_DECIMALS = 2;
+    const SI_AMT_DECIMALS = isSalesOrderScreen ? 3 : 2;
 
     const formatNumber = (value, decimals = SI_AMT_DECIMALS) => {
         const num = Number(value);
@@ -917,7 +994,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const fetchNextBillNo = async (retrying = false) => {
         // Peek on open (no BILLNOTABLE lock/insert). Save allocates/reserves the final number.
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 10000);
+        const timer = setTimeout(() => controller.abort(), 45000);
         try {
             const sep = String(nextBillBase || '').includes('?') ? '&' : '?';
             const res = await fetch(`${nextBillBase}/next-billno${sep}peek=1`, { signal: controller.signal });
@@ -1991,6 +2068,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (pricing.cost_price != null) {
             row.dataset.cost = String(Number(pricing.cost_price || 0));
         }
+        if (pricing.average_cost != null || pricing.averagecost != null) {
+            row.dataset.averageCost = String(Number(pricing.average_cost || pricing.averagecost || 0));
+        } else if (factor > 1 && Number(row.dataset.cost || 0) > 0) {
+            row.dataset.averageCost = String(Number(row.dataset.cost || 0) / factor);
+        }
         const lineNo = Number(row.dataset.line || 0) || 1;
         row.innerHTML = buildLineRowHtml(lineNo, lineRowHtmlDataFromDataset(row));
     };
@@ -2202,6 +2284,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             applyLineRowPricing(tr, pricing);
             tr.dataset.baseQty = String(Number(tr.dataset.quantity || 0) * (Number(pricing.conversion_factor || 1) || 1));
             if (pricing.cost_price != null) tr.dataset.cost = String(Number(pricing.cost_price || 0));
+            const fac = Number(pricing.conversion_factor || 1) || 1;
+            const avg = Number(pricing.average_cost || pricing.averagecost || 0);
+            if (avg > 0) tr.dataset.averageCost = String(avg);
+            else if (fac > 1 && Number(tr.dataset.cost || 0) > 0) {
+                tr.dataset.averageCost = String(Number(tr.dataset.cost || 0) / fac);
+            }
         } else {
             siRecalcDataRow(tr);
         }
@@ -2236,6 +2324,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             applyLineRowPricing(tr, pricing);
             tr.dataset.baseQty = String(Number(tr.dataset.quantity || 0) * (Number(pricing.conversion_factor || 1) || 1));
             if (pricing.cost_price != null) tr.dataset.cost = String(Number(pricing.cost_price || 0));
+            const fac = Number(pricing.conversion_factor || 1) || 1;
+            const avg = Number(pricing.average_cost || pricing.averagecost || 0);
+            if (avg > 0) tr.dataset.averageCost = String(avg);
+            else if (fac > 1 && Number(tr.dataset.cost || 0) > 0) {
+                tr.dataset.averageCost = String(Number(tr.dataset.cost || 0) / fac);
+            }
         } else if (payload.fallbackRate != null && Number(payload.fallbackRate) >= 0) {
             tr.dataset.rate = String(Number(payload.fallbackRate || 0));
             siRecalcDataRow(tr);
@@ -2698,6 +2792,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             amount: Number(row.dataset.amount || 0),
             base_qty: Number(row.dataset.baseQty || 0),
             cost: Number(row.dataset.cost || 0),
+            averagecost: Number(row.dataset.averageCost || 0),
+            average_cost: Number(row.dataset.averageCost || 0),
             lot_id: row.dataset.lotId || '',
             lot_label: row.dataset.lotLabel || '',
         }));
@@ -3600,6 +3696,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             const pricing = data.pricing;
             currentItem.factor = Number(pricing.conversion_factor || 1);
             currentItem.cost = Number(pricing.cost_price || currentItem.cost || 0);
+            currentItem.averageCost = Number(
+                pricing.average_cost || pricing.averagecost || 0
+            );
+            if (!(currentItem.averageCost > 0) && currentItem.factor > 1 && currentItem.cost > 0) {
+                currentItem.averageCost = currentItem.cost / currentItem.factor;
+            }
             setValue(rate, formatRate(pricing.rate || 0));
             updateLineAmount();
         } catch (e) {
@@ -3644,6 +3746,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             currentItem.third = Number(item.thirdprice || 0);
             currentItem.branch = Number(item.branchprice || 0);
             currentItem.cost = Number(item.costprice || 0);
+            currentItem.averageCost = Number(item.averagecost || item.average_cost || item.costprice || 0);
             currentItem.factor = 1;
 
             setValue(barcodeInput, currentItem.barcode || barcode);
@@ -3721,6 +3824,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         const lotLabelVal = String(spec.lotLabel || '').trim();
         const lineCost = Number(spec.cost || 0);
         const lineFactor = Number(spec.factor || 1) || 1;
+        let lineAvgCost = Number(spec.averageCost || spec.average_cost || 0);
+        if (!(lineAvgCost > 0) && lineFactor > 1 && lineCost > 0) {
+            lineAvgCost = lineCost / lineFactor;
+        }
 
         if (warehouseEnabled && !(parseInt(whIdVal, 10) > 0) && !String(spec.warehouseCode || '').trim()) return false;
         if (binEnabled && !(parseInt(storageIdVal, 10) > 0)) return false;
@@ -3809,6 +3916,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         row.dataset.amount = amount;
         row.dataset.baseQty = baseQty;
         row.dataset.cost = lineCost;
+        row.dataset.averageCost = lineAvgCost;
         row.dataset.lotId = lotIdVal;
         row.dataset.lotLabel = lotIdVal ? lotLabelVal : '';
 
@@ -3867,6 +3975,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             rate: rate?.value,
             discount: discount?.value,
             cost: currentItem.cost || 0,
+            averageCost: currentItem.averageCost || 0,
             factor: currentItem.factor || 1,
             store: warehouseEnabled ? (lineWarehouseCode?.value || hdr.code || '') : (inventoryLocation?.value || ''),
             warehouseId: lineWarehouseId?.value || hdr.id || '',
@@ -4003,6 +4112,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 amount: Number(row.dataset.amount || 0),
                 base_qty: Number(row.dataset.baseQty || 0),
                 cost: Number(row.dataset.cost || 0),
+                averagecost: Number(row.dataset.averageCost || 0),
+                average_cost: Number(row.dataset.averageCost || 0),
                 lot_id: row.dataset.lotId || '',
             };
             const whId = parseInt(row.dataset.warehouseId, 10) || 0;
@@ -4028,7 +4139,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
         if (txnDateBlocked) {
-            alert(txnDateError || 'No open transaction date. Set it in Transaction Date Setup before posting.');
+            alert(txnDateError || 'Setup date is missing. No open From–To date range in Transaction Date Setup. Open a date range in General Setup → Transaction Date Setup before posting.');
             return;
         }
         const lines = gatherLines();
@@ -5485,6 +5596,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             let uom = String(item.barcode_uom || '').trim() || baseUom || 'PCS';
             let rate = 0;
             let factor = 1;
+            let averageCost = 0;
             if (item.barcode_uom != null && item.barcode_retail_price != null) {
                 rate = Number(item.barcode_retail_price) || 0;
             } else {
@@ -5492,10 +5604,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (pricing) {
                     rate = Number(pricing.rate || 0);
                     factor = Number(pricing.conversion_factor || 1) || 1;
+                    if (pricing.cost_price != null) cost = Number(pricing.cost_price || 0);
+                    averageCost = Number(pricing.average_cost || pricing.averagecost || 0);
                 } else {
                     rate = Number(item.retailprice || 0);
                 }
             }
+            if (!(averageCost > 0) && factor > 1 && cost > 0) averageCost = cost / factor;
+            else if (!(averageCost > 0)) averageCost = cost;
 
             const whFields = await resolveWarehouseFieldsForItem(itemCode);
             if (warehouseEnabled && !(parseInt(whFields.warehouseId, 10) > 0)) {
@@ -5520,6 +5636,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 rate,
                 discount: 0,
                 cost,
+                averageCost,
                 factor,
                 store,
                 warehouseId: whFields.warehouseId,

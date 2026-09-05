@@ -36,7 +36,11 @@ class NexaHttpMiddleware(BaseHTTPMiddleware):
                 except Exception:
                     request.state._nexa_json = None
         apply_tenant_and_location_from_session(request)
+        from nexa_http.oracle_request_scope import close_scope, init_scope
+
+        init_scope(request)
         try:
             return await call_next(request)
         finally:
+            close_scope(request)
             ctx.reset_request(token)

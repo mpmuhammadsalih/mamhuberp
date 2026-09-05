@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=4" />
+{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page ecommerce-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Promotions &amp; coupons</h1>
+      <p class="page-po__muted">Discount campaigns from MH_PROMOTION · {{ promotions|length }} shown</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('ecommerce.promotion_new') }}" class="page-po__btn-primary">New promotion</a>
+      <a href="{{ url_for('ecommerce.dashboard') }}" class="page-po__btn-secondary">Dashboard</a>
+    </div>
+  </div>
+
+  {% if warning %}
+  <div class="ecommerce-alert">{{ warning }}</div>
+  {% endif %}
+
+  <form method="get" class="nexa-list-toolbar">
+    <input type="text" name="q" value="{{ request.args.get('q', '') }}" placeholder="Search code or name…"
+           class="input" style="min-width:220px; max-width:320px;" autocomplete="off" />
+    <button type="submit" class="page-po__btn-primary" style="padding:4px 12px; font-size:11px;">Search</button>
+    <a href="{{ url_for('ecommerce.promotions') }}" class="page-po__btn-secondary" style="padding:4px 10px; font-size:11px;">Clear</a>
+    <span class="nexa-num">{{ promotions|length }} record{{ '' if promotions|length == 1 else 's' }}</span>
+  </form>
+
+  <div class="co-table-wrap">
+    <table class="co-table co-table--th-hint">
+      <thead>
+        <tr>
+          <th style="text-align:center; width:56px; cursor:default;">Sl.No</th>
+          <th>Coupon</th>
+          <th>Promotion</th>
+          <th>Type</th>
+          <th style="text-align:right;">Discount</th>
+          <th style="text-align:right;">Min order</th>
+          <th>Period</th>
+          <th style="text-align:center;">Usage</th>
+          <th>Status</th>
+          <th style="text-align:center; cursor:default;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in promotions %}
+        <tr>
+          <td class="sl-no">{{ loop.index }}</td>
+          <td><strong style="font-family:monospace;">{{ row.coupon_code }}</strong></td>
+          <td>{{ row.promotion_name }}</td>
+          <td>{{ row.promotion_type.replace('_', ' ') if row.promotion_type else '—' }}</td>
+          <td class="num">{{ row.discount_value }}{% if row.promotion_type == 'PERCENTAGE' %}%{% else %} QAR{% endif %}</td>
+          <td class="num">{{ '%.2f'|format(row.min_order_amount or 0) }}</td>
+          <td>{{ (row.start_date|string)[:10] if row.start_date else '—' }} → {{ (row.end_date|string)[:10] if row.end_date else '—' }}</td>
+          <td style="text-align:center;">
+            {% if row.usage_limit is not none %}{{ row.usage_count or 0 }} / {{ row.usage_limit }}{% else %}{{ row.usage_count or 0 }}{% endif %}
+          </td>
+          <td>
+            <span class="ecommerce-flag {% if row.is_live %}ecommerce-flag-Y{% else %}ecommerce-flag-N{% endif %}">
+              {% if row.is_live %}Active{% else %}Inactive{% endif %}
+            </span>
+          </td>
+          <td style="text-align:center; white-space:nowrap;">
+            <a href="{{ url_for('ecommerce.promotion_edit', promotion_id=row.promotion_id) }}" class="btn-view">Edit</a>
+            <form method="post" action="{{ url_for('ecommerce.promotion_toggle', promotion_id=row.promotion_id) }}" style="display:inline; margin-left:4px;">
+              <button type="submit" class="btn-view" style="border:none; cursor:pointer;">
+                {% if row.is_live %}Deactivate{% else %}Activate{% endif %}
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="10" style="text-align:center;padding:20px;color:#64748b;">
+            {% if tables_ready %}No promotions yet. Create your first coupon campaign.{% else %}Promotion tables not available.{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

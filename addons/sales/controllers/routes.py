@@ -16,7 +16,7 @@ from addons.document_numbering.document_numbering_db import (
     DOC_TYPE_SALES_ORDER,
     DOC_TYPE_SALES_RETURN,
 )
-from db import get_sales_minus_billing_invoice_enabled, get_sales_minus_billing_order_enabled, set_sales_minus_billing, get_sales_orderno_mandatory_invoice_enabled, get_sales_orderno_mandatory_return_enabled, get_sales_orderno_mandatory_order_enabled, set_sales_orderno_mandatory, _resolve_sales_header_billtype, get_company_profile, get_customers_master_list, get_customer_loyalty_for_picker, get_item_by_alternate_barcode, get_item_by_code, get_item_by_manufacturer_id, get_item_alternate_uoms, get_item_popup_items, get_item_store_inventory, get_item_store_rows_from_itemmaster, get_customer_item_history, get_item_history, get_customer_category, get_item_uom_pricing, get_location_info_by_dbkey, get_next_bill_no, get_next_quatation_bill_no, peek_next_bill_no, get_sales_order_for_edit, get_sales_invoice_for_edit, get_sales_orders_list, get_sales_invoices_list, get_sales_returns_list, get_invoice_type_flag, get_sessions, get_tenant_by_id, get_item_lot_stock_list, save_sales_invoice, save_sales_order, cancel_sales_order, mark_sales_order_invoiced, find_invoice_billno_for_source_sales_order, _validate_sales_doc_save_lines, get_location_sales_feature_flags, is_location_warehouse_enabled, is_location_bin_tracking_enabled, is_location_batch_tracking_enabled, list_warehouse_master_rows, list_warehouse_picker_bins, get_bin_stock_list, resolve_warehouse_master_table, get_warehouse_master_store_picker_rows, billhdr_exists, billno_is_reserved, coerce_billno, billno_is_valid, billno_equal, parse_billno_from_request
+from db import get_sales_minus_billing_invoice_enabled, get_sales_minus_billing_order_enabled, set_sales_minus_billing, get_sales_orderno_mandatory_invoice_enabled, get_sales_orderno_mandatory_return_enabled, get_sales_orderno_mandatory_order_enabled, set_sales_orderno_mandatory, get_sales_direct_posting_enabled, get_sales_direct_posting_return_enabled, set_sales_direct_posting, _resolve_sales_header_billtype, get_company_profile, get_customers_master_list, get_customer_loyalty_for_picker, get_item_by_alternate_barcode, get_item_by_code, get_item_by_manufacturer_id, get_item_alternate_uoms, get_item_popup_items, get_item_store_inventory, get_item_store_rows_from_itemmaster, get_customer_item_history, get_item_history, get_customer_category, get_item_uom_pricing, get_location_info_by_dbkey, get_next_bill_no, get_next_quatation_bill_no, peek_next_bill_no, get_sales_order_for_edit, get_sales_invoice_for_edit, get_sales_orders_list, get_sales_invoices_list, get_sales_returns_list, get_invoice_type_flag, get_sessions, get_tenant_by_id, get_item_lot_stock_list, save_sales_invoice, save_sales_order, cancel_sales_order, mark_sales_order_invoiced, find_invoice_billno_for_source_sales_order, _validate_sales_doc_save_lines, get_location_sales_feature_flags, is_location_warehouse_enabled, is_location_bin_tracking_enabled, is_location_batch_tracking_enabled, list_warehouse_master_rows, list_warehouse_picker_bins, get_bin_stock_list, resolve_warehouse_master_table, get_warehouse_master_store_picker_rows, billhdr_exists, billno_is_reserved, coerce_billno, billno_is_valid, billno_equal, parse_billno_from_request
 from save_nonce import GLOBAL_SAVE_NONCE_SESSION_KEY, extract_submitted_save_nonce, issue_save_nonce, json_response_keep_global_nonce, json_response_rotate_global, replay_blocked_response_global, verify_consume_save_nonce
 from addons.sales.controllers import credit_note_ops as _scn_ops
 from addons.sales.controllers.sales_invoice_summary_pdf import (
@@ -145,8 +145,9 @@ def _sales_transaction_date_block_message(*, is_return: bool = False) -> str:
     except Exception:
         setup_url = '/setup/transaction-date'
     return (
-        f'No open transaction date range for {doc}. '
-        f'Open a From–To range in Transaction Date Setup ({setup_url}) before posting.'
+        f'Setup date is missing for {doc}. '
+        f'No open From–To date range in Transaction Date Setup ({setup_url}). '
+        f'Open a date range before posting.'
     )
 
 
@@ -1107,6 +1108,45 @@ def sales_load_from_order(billno: str):
         'source_order_billnos': [bn],
     })
 
+@bp.route('/sales/invoice-templates', methods=['GET'])
+def sales_invoice_templates():
+    """Gallery of selectable sales invoice PDF layouts."""
+    if not session.get('user'):
+        return redirect(url_for('auth.login'))
+    from addons.reports.invoice_templates import get_saved_invoice_template, list_invoice_templates
+
+    return render_template(
+        'sales/invoice_templates.html',
+        page_title='Invoice Templates',
+        templates=list_invoice_templates(),
+        current_template=get_saved_invoice_template(),
+        preview_url=url_for('reports.invoice_template_preview'),
+        prefer_url=url_for('sales.sales_invoice_template_prefer'),
+    )
+
+
+@bp.route('/sales/invoice-templates/prefer', methods=['GET', 'POST'])
+def sales_invoice_template_prefer():
+    """Get or set the tenant-wide sales invoice PDF template (web + mobile)."""
+    if not session.get('user'):
+        return jsonify({'success': False, 'message': 'Login required'}), 401
+    from addons.reports.invoice_templates import get_saved_invoice_template_info, set_saved_invoice_template
+
+    if request.method == 'GET':
+        info = get_saved_invoice_template_info()
+        return jsonify({'success': True, 'template': info['template'], 'saved': bool(info.get('saved'))})
+
+    data = request.get_json(silent=True) or {}
+    raw = data.get('template') if isinstance(data, dict) else None
+    if raw is None:
+        raw = request.form.get('template') or request.args.get('template')
+    try:
+        key = set_saved_invoice_template(raw)
+    except Exception as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 500
+    return jsonify({'success': True, 'template': key, 'saved': True})
+
+
 @bp.route('/sales/accounts-configuration', methods=['GET', 'POST'])
 def sales_accounts_configuration():
     if not session.get('user'):
@@ -1117,6 +1157,8 @@ def sales_accounts_configuration():
         orderno_mandatory_invoice = str(request.form.get('orderno_mandatory_invoice') or '').strip() == 'Y'
         orderno_mandatory_return = str(request.form.get('orderno_mandatory_return') or '').strip() == 'Y'
         orderno_mandatory_order = str(request.form.get('orderno_mandatory_order') or '').strip() == 'Y'
+        direct_posting_invoice = str(request.form.get('direct_posting_invoice') or '').strip() == 'Y'
+        direct_posting_return = str(request.form.get('direct_posting_return') or '').strip() == 'Y'
         ok_mb, err_mb = set_sales_minus_billing(
             invoice_enabled, order_enabled, updated_by=session.get('user') or 'web',
         )
@@ -1124,10 +1166,15 @@ def sales_accounts_configuration():
             orderno_mandatory_invoice, orderno_mandatory_return, orderno_mandatory_order,
             updated_by=session.get('user') or 'web',
         )
-        if ok_mb and ok_on:
+        ok_dp, err_dp = set_sales_direct_posting(
+            direct_posting_invoice,
+            return_enabled=direct_posting_return,
+            updated_by=session.get('user') or 'web',
+        )
+        if ok_mb and ok_on and ok_dp:
             flash('Sales accounts configuration saved.', 'success')
         else:
-            parts = [p for p in (err_mb, err_on) if p]
+            parts = [p for p in (err_mb, err_on, err_dp) if p]
             flash(f'Save failed: {"; ".join(parts) or "Unknown error"}', 'error')
         return redirect(url_for('sales.sales_accounts_configuration'))
     return render_template(
@@ -1138,6 +1185,8 @@ def sales_accounts_configuration():
         orderno_mandatory_invoice_enabled=get_sales_orderno_mandatory_invoice_enabled(),
         orderno_mandatory_return_enabled=get_sales_orderno_mandatory_return_enabled(),
         orderno_mandatory_order_enabled=get_sales_orderno_mandatory_order_enabled(),
+        direct_posting_invoice_enabled=get_sales_direct_posting_enabled(),
+        direct_posting_return_enabled=get_sales_direct_posting_return_enabled(),
     )
 
 @bp.route('/sales/list')
@@ -1201,9 +1250,9 @@ def sales_invoice_export():
     writer = csv.writer(output)
     include_doc = tab == 'all'
     if include_doc:
-        writer.writerow(['Doc Type', 'Bill No', 'Bill Date', 'Customer Code', 'Customer Name', 'Order No', 'Net Amount', 'Status', 'Pay Type', 'Created By', 'Remarks'])
+        writer.writerow(['Doc Type', 'Bill No', 'Bill Date', 'Customer Code', 'Customer Name', 'Order No', 'Total Amount', 'Discount Amount', 'Net Amount', 'Status', 'Pay Type', 'Created By', 'Remarks'])
     else:
-        writer.writerow(['Bill No', 'Bill Date', 'Customer Code', 'Customer Name', 'Order No', 'Net Amount', 'Status', 'Bill Type', 'Created By', 'Remarks'])
+        writer.writerow(['Bill No', 'Bill Date', 'Customer Code', 'Customer Name', 'Order No', 'Total Amount', 'Discount Amount', 'Net Amount', 'Status', 'Bill Type', 'Created By', 'Remarks'])
     for row in rows:
         billdate = row.get('billdate')
         if hasattr(billdate, 'strftime'):
@@ -1217,13 +1266,25 @@ def sales_invoice_export():
             amt_raw = float(row.get('netbillamount') or 0)
         except (TypeError, ValueError):
             amt_raw = 0.0
+        try:
+            disc_raw = float(row.get('discountamount') or 0)
+        except (TypeError, ValueError):
+            disc_raw = 0.0
+        try:
+            total_raw = float(row.get('totalamount') if row.get('totalamount') is not None else (amt_raw + disc_raw))
+        except (TypeError, ValueError):
+            total_raw = amt_raw + disc_raw
         amt = abs(amt_raw) if row_is_return else amt_raw
+        disc = abs(disc_raw) if row_is_return else disc_raw
+        total_amt = abs(total_raw) if row_is_return else total_raw
         base = [
             row.get('billno') or '',
             billdate,
             row.get('customercode') or '',
             row.get('customername') or '',
             row.get('orderno') or '',
+            total_amt,
+            disc,
             amt,
             row.get('billstatus') or '',
             _sales_billtype_label(row.get('billtype')),
@@ -2174,8 +2235,7 @@ def sales_order_pdf(billno: str):
             'itdisc': ln.get('discount') or 0,
             'amount': ln.get('amount'),
         })
-    # Round exactly like save_sales_order / save_sales_invoice so the SO PDF,
-    # the posted invoice, and the invoice PDF all show the identical net amount.
+    # Sales order PDF displays amounts to 3 decimals (list + form use 3 as well).
     header = {
         'customercode': hdr.get('customercode'),
         'customername': hdr.get('customername'),
@@ -2185,10 +2245,16 @@ def sales_order_pdf(billno: str):
         'address': hdr.get('address') or '',
         'locationcode': location_code_int,
         'orderno': hdr.get('orderno') or '',
-        'discountamount': round(total_discount, 2),
-        'netbillamount': round(total_amount, 2),
+        'discountamount': round(total_discount, 3),
+        'netbillamount': round(total_amount, 3),
     }
-    pdf_bytes = _generate_cashbilldup_pdf(billno=bn, header=header, lines=lines, invoice_title='SALES ORDER')
+    pdf_bytes = _generate_cashbilldup_pdf(
+        billno=bn,
+        header=header,
+        lines=lines,
+        invoice_title='SALES ORDER',
+        template=request.args.get('template') or 'classic',
+    )
     if not pdf_bytes:
         return jsonify({'success': False, 'error': 'Failed to generate PDF'}, 400)
     return send_file(

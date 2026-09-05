@@ -1,8 +1,13 @@
 """Generate and optionally run Oracle TRUNCATE scripts for an empty-schema / new-company scenario."""
 from __future__ import annotations
+import os
 from typing import Any, Dict, List, Sequence, Tuple
 from addons.db_sync.services.ddl_mirror import connect
 DEFAULT_PROTECTED_TABLES = frozenset({'LOGIN_USERS', 'ROLES', 'ROLE_PERMISSIONS', 'TENANT_DATABASES'})
+
+
+def _use_billnotable_enabled() -> bool:
+    return str(os.getenv('USE_BILLNOTABLE', '0') or '0').strip().lower() in ('1', 'true', 'yes', 'y')
 
 # Masters kept when clearing business data for a new company (fixed — no UI table picker).
 NEW_COMPANY_DEFAULT_MASTER_TABLES: Tuple[str, ...] = (
@@ -456,14 +461,18 @@ def build_reset_sequences_and_counters_script(cur: Any) -> Tuple[List[str], List
     script_lines.append('-- Reset document counters & Oracle sequences (new company / fresh numbering)')
     counter_tables: List[str] = []
     for name in DOCUMENT_COUNTER_TABLES:
+        if name == 'BILLNOTABLE' and not _use_billnotable_enabled():
+            continue
         actual = schema_map.get(name.upper())
         if actual:
             counter_tables.append(actual)
             script_lines.append(f'TRUNCATE TABLE {quoted_ident(actual)};')
     if counter_tables:
         messages.append('Document counter tables to clear: %s' % ', '.join(counter_tables))
-    else:
+    elif _use_billnotable_enabled():
         messages.append('No BILLNOTABLE/BILLNOTIME in schema (skipped counter table truncate).')
+    else:
+        messages.append('No BILLNOTIME in schema (skipped counter table truncate; BILLNOTABLE disabled).')
     seqs = list_user_sequences(cur)
     skipped_identity = 0
     try:

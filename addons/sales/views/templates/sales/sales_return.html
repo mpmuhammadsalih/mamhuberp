@@ -341,7 +341,7 @@
   {% endif %}
   {% if transaction_date_blocked|default(false) %}
   <div class="si-txn-date-block" id="siTxnDateBlock">
-    {{ transaction_date_error or 'No open transaction date. Set it in Transaction Date Setup before posting.' }}
+    {{ transaction_date_error or 'Setup date is missing. No open From–To date range in Transaction Date Setup. Open a date range in General Setup → Transaction Date Setup before posting.' }}
     {% if transaction_date_setup_url %}
     <a href="{{ transaction_date_setup_url }}">Open Transaction Date Setup</a>
     {% endif %}

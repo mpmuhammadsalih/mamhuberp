@@ -28,17 +28,31 @@ def get_open_context() -> dict[str, Any]:
     with _erp_session_scope() as username:
         p = _purchase()
         p._apply_db()
-        lpono = p._lpo_next_no()
+        from mobile_backend.services.doc_peek import fresh_doc_no
+
+        lpono = fresh_doc_no(
+            peek_fn=p._lpo_next_no,
+            exists_fn=lambda n: bool(p._lpo_no_exists_in_hdr(n) or p._get_lpo_header(n)),
+            allocate_fn=lambda n: p._allocate_next_free_lpo_no(n),
+        )
         # Must use Transaction Date Setup open date (not calendar today).
         txn = p._purchase_txn_date_context("purchase")
         open_date = str(
             txn.get("open_transaction_date")
             or p._purchase_open_transaction_date("purchase")
-            or datetime.now().strftime("%Y-%m-%d")
+            or ""
         ).strip()[:10]
+        if not open_date:
+            from mobile_backend.services.transaction_date_helper import missing_setup_date_message
+
+            raise ValueError(
+                txn.get("transaction_date_error")
+                or missing_setup_date_message("purchase")
+            )
         wh_enabled = bool(p._po_warehouse_enabled())
         wh_rows = p._get_lpo_warehouse_picker_rows(doc_kind="purchase") if wh_enabled else []
-        default_wh = wh_rows[0] if wh_rows else {}
+        # Auto-select only when exactly one warehouse is available.
+        default_wh = wh_rows[0] if len(wh_rows) == 1 else {}
         return {
             "lpono": str(lpono or "").strip(),
             "lpo_date": open_date,
@@ -198,18 +212,22 @@ def list_suppliers(*, search: str = "", limit: int = 80) -> list[dict[str, Any]]
 def list_catalog_items(*, search: str = "", limit: int = 60, supplier_code: str = "") -> list[dict[str, Any]]:
     """List one row per ITEMMASTER item (base UOM) for the PO catalog.
 
-    Alternate UOMs are chosen after tap via ``list_item_uoms``. ``supplier_code`` is
-    accepted for API compatibility but ignored (ITEMMASTER.SUPCODE is sparse).
+    Alternate UOMs are chosen after tap via ``list_item_uoms``.
+    When ``supplier_code`` is set, filters to that supplier's items (ITEMMASTER SUPCODE) —
+    same as ERP PO/GRN ``supplier_items_only`` tab.
     """
     lim = max(1, min(int(limit or 60), 200))
+    try:
+        sup_i = int(float(str(supplier_code or "").strip() or "0"))
+    except (TypeError, ValueError):
+        sup_i = 0
     with _erp_session_scope():
         p = _purchase()
         p._apply_db()
-        # Prefer ITEMMASTER directly — alternate-UOM map expands one item into many rows.
         rows = p._get_items_for_location_filtered(
             search=(search or "").strip() or None,
             limit=lim,
-            supplier_code=None,
+            supplier_code=sup_i if sup_i > 0 else None,
         ) or []
         out: list[dict[str, Any]] = []
         seen: set[str] = set()
@@ -218,12 +236,23 @@ def list_catalog_items(*, search: str = "", limit: int = 60, supplier_code: str 
             if not code or code in seen:
                 continue
             seen.add(code)
+            avg = _to_float(r.get("averagecost") or r.get("AVERAGECOST"))
+            cprice = _to_float(r.get("costprice") or r.get("COSTPRICE"))
+            cost = _to_float(r.get("cost") or r.get("costprice") or r.get("rate"))
+            if avg <= 0:
+                avg = cost
+            if cprice <= 0:
+                cprice = cost if cost > 0 else avg
+            # Default add rate = cost price.
+            rate = cprice if cprice > 0 else avg
             out.append(
                 {
                     "item_code": code,
                     "item_name": str(r.get("name") or r.get("itemname") or "").strip(),
                     "uom": str(r.get("uom") or "NOS").strip() or "NOS",
-                    "rate": _to_float(r.get("cost") or r.get("costprice") or r.get("rate")),
+                    "rate": rate,
+                    "average_cost": avg,
+                    "cost_price": cprice,
                     "barcode": str(r.get("barcode") or "").strip(),
                     "current_stock": _to_float(
                         r.get("currentstock")
@@ -235,6 +264,257 @@ def list_catalog_items(*, search: str = "", limit: int = 60, supplier_code: str 
             if len(out) >= lim:
                 break
         return out
+
+
+def list_supplier_items(
+    *,
+    supplier_code: str,
+    search: str = "",
+    limit: int = 80,
+    days: int = 365,
+) -> list[dict[str, Any]]:
+    """Items for the Supplier items tab (Sales Customer items counterpart).
+
+    Prefers items previously purchased from the supplier (GRN RECEIPT*), then
+    fills with ITEMMASTER rows linked to the supplier (ERP SUPCODE filter).
+    """
+    from db.oracle_driver import cx_Oracle
+
+    from mobile_backend.database.oracle_pool import get_connection
+    from mobile_backend.request_context import get_jwt
+    from mobile_backend.services.inventory_service import _pick_existing
+    from mobile_backend.services.sales_service import _table_columns
+
+    try:
+        sup_i = int(float(str(supplier_code or "").strip() or "0"))
+    except (TypeError, ValueError):
+        sup_i = 0
+    if sup_i <= 0:
+        return []
+
+    lim = max(1, min(int(limit or 80), 200))
+    day_span = max(30, min(int(days or 365), 730))
+    q = (search or "").strip().lower()
+    claims = get_jwt()
+    tenant_id = claims.get("tenant_id")
+    aggregated: dict[str, dict[str, Any]] = {}
+
+    with _erp_session_scope():
+        p = _purchase()
+        p._apply_db()
+        loc = int(p._resolve_location_code() or 0)
+
+        # 1) Previous GRN lines for this supplier (newest first).
+        conn = get_connection(tenant_id=tenant_id)
+        with conn.cursor() as cur:
+            hdr = "RECEIPTHDR" if _table_columns(cur, "RECEIPTHDR") else ""
+            dtl = "RECEIPTDTL" if _table_columns(cur, "RECEIPTDTL") else ""
+            if hdr and dtl:
+                hdr_cols = _table_columns(cur, hdr)
+                dtl_cols = _table_columns(cur, dtl)
+                rno_h = _pick_existing(hdr_cols, ["RECEIPTNO", "RECEIPT_NO", "GRNNO", "GRN_NO"])
+                rno_d = _pick_existing(dtl_cols, ["RECEIPTNO", "RECEIPT_NO", "GRNNO", "GRN_NO"])
+                date_col = _pick_existing(
+                    hdr_cols, ["RECEIPTDATE", "RECEIPT_DATE", "GRNDATE", "TRNDATE", "INVOICEDATE"]
+                )
+                sup_col = _pick_existing(hdr_cols, ["SUPPLIERCODE", "SUPPLIER_CODE", "SUPCODE"])
+                loc_h = _pick_existing(hdr_cols, ["LOCATIONCODE", "LOCATION_CODE"])
+                loc_d = _pick_existing(dtl_cols, ["LOCATIONCODE", "LOCATION_CODE"])
+                item_col = _pick_existing(dtl_cols, ["ITEMCODE", "ITEM_CODE", "CODE"])
+                qty_col = _pick_existing(dtl_cols, ["QUANTITY", "QTY", "RECEIPTQTY"])
+                rate_col = _pick_existing(dtl_cols, ["RATE", "COSTPRICE", "COST", "UNITPRICE"])
+                uom_col = _pick_existing(
+                    dtl_cols, ["UNITOFMEASUREMENT", "UOM", "UOMCODE", "UNIT"]
+                )
+                if rno_h and rno_d and date_col and sup_col and item_col and qty_col:
+                    join = [f"d.{rno_d} = h.{rno_h}"]
+                    if loc_h and loc_d:
+                        join.append(f"d.{loc_d} = h.{loc_h}")
+                    where = [
+                        f"h.{sup_col} = :sup",
+                        f"NVL(d.{qty_col}, 0) > 0",
+                        f"TRUNC(h.{date_col}) >= TRUNC(SYSDATE) - :days + 1",
+                    ]
+                    params: dict[str, Any] = {"sup": sup_i, "days": day_span, "lim": lim * 8}
+                    if loc_h and loc:
+                        where.append(f"h.{loc_h} = :loc")
+                        params["loc"] = loc
+                    elif loc_d and loc:
+                        where.append(f"d.{loc_d} = :loc")
+                        params["loc"] = loc
+
+                    item_cols = _table_columns(cur, "ITEMMASTER")
+                    ic = _pick_existing(item_cols, ["ITEMCODE", "ITEM_CODE"]) if item_cols else None
+                    name_col = (
+                        _pick_existing(item_cols, ["ITEMNAME", "ITEMDESC", "ITEM_NAME", "NAME"])
+                        if item_cols
+                        else None
+                    )
+                    cost_col = (
+                        _pick_existing(item_cols, ["COSTPRICE", "COST_PRICE", "COST"])
+                        if item_cols
+                        else None
+                    )
+                    avg_col = (
+                        _pick_existing(
+                            item_cols, ["AVERAGECOST", "AVERAGE_COST", "AVGCOST", "avgcost"]
+                        )
+                        if item_cols
+                        else None
+                    )
+                    base_uom_col = (
+                        _pick_existing(item_cols, ["BASEUOM", "BASE_UOM", "UOM"]) if item_cols else None
+                    )
+                    barcode_col = (
+                        _pick_existing(item_cols, ["MANUFACTURERID", "BARCODE", "MFRID"])
+                        if item_cols
+                        else None
+                    )
+                    if item_cols and ic and name_col:
+                        name_expr = f"NVL(i.{name_col}, TO_CHAR(d.{item_col}))"
+                        join_item = f"LEFT JOIN itemmaster i ON i.{ic} = d.{item_col}"
+                        loc_i = _pick_existing(item_cols, ["LOCATIONCODE", "LOCATION_CODE"])
+                        if loc and loc_i:
+                            join_item += f" AND i.{loc_i} = :iloc"
+                            params["iloc"] = loc
+                        if avg_col:
+                            avg_expr = f"NVL(i.{avg_col}, 0)"
+                        else:
+                            avg_expr = "0"
+                        if cost_col:
+                            cprice_expr = f"NVL(i.{cost_col}, 0)"
+                        else:
+                            cprice_expr = "0"
+                        unit_fb = f"NVL(i.{base_uom_col}, 'NOS')" if base_uom_col else "'NOS'"
+                        bc_expr = f"NVL(i.{barcode_col}, '')" if barcode_col else "''"
+                    else:
+                        name_expr = f"TO_CHAR(d.{item_col})"
+                        join_item = ""
+                        avg_expr = "0"
+                        cprice_expr = "0"
+                        unit_fb = "'NOS'"
+                        bc_expr = "''"
+                    uom_expr = (
+                        f"NVL(NULLIF(TRIM(d.{uom_col}), ''), {unit_fb})" if uom_col else unit_fb
+                    )
+                    rate_expr = f"NVL(d.{rate_col}, 0)" if rate_col else "0"
+                    qty_expr = f"NVL(d.{qty_col}, 0)"
+                    sql = f"""
+                        SELECT * FROM (
+                            SELECT d.{item_col} AS item_code,
+                                   {name_expr} AS item_name,
+                                   {uom_expr} AS uom,
+                                   {qty_expr} AS last_qty,
+                                   {rate_expr} AS last_rate,
+                                   {avg_expr} AS avg_cost,
+                                   {cprice_expr} AS cost_price,
+                                   {bc_expr} AS barcode,
+                                   TRUNC(h.{date_col}) AS receipt_date,
+                                   h.{rno_h} AS receipt_no
+                              FROM {dtl} d
+                             INNER JOIN {hdr} h ON {" AND ".join(join)}
+                              {join_item}
+                             WHERE {" AND ".join(where)}
+                             ORDER BY TRUNC(h.{date_col}) DESC, h.{rno_h} DESC
+                        ) WHERE ROWNUM <= :lim
+                    """
+                    try:
+                        cur.execute(sql, params)
+                        rows = cur.fetchall() or []
+                        cols = [d[0].lower() for d in cur.description or []]
+                        for raw_row in rows:
+                            raw = dict(zip(cols, raw_row))
+                            code = str(raw.get("item_code") or "").strip()
+                            if not code or code in aggregated:
+                                continue
+                            avg = _to_float(raw.get("avg_cost"))
+                            cprice = _to_float(raw.get("cost_price"))
+                            last_rate = _to_float(raw.get("last_rate"))
+                            if avg <= 0:
+                                avg = last_rate if last_rate > 0 else cprice
+                            if cprice <= 0:
+                                cprice = last_rate if last_rate > 0 else avg
+                            # Default add rate = cost price.
+                            rate = cprice if cprice > 0 else avg
+                            receipt_date = raw.get("receipt_date")
+                            if hasattr(receipt_date, "strftime"):
+                                receipt_date_s = receipt_date.strftime("%Y-%m-%d")
+                            else:
+                                receipt_date_s = str(receipt_date or "")[:10]
+                            aggregated[code] = {
+                                "item_code": code,
+                                "item_name": str(raw.get("item_name") or "").strip(),
+                                "uom": str(raw.get("uom") or "NOS").strip() or "NOS",
+                                "rate": rate,
+                                "average_cost": avg,
+                                "cost_price": cprice,
+                                "barcode": str(raw.get("barcode") or "").strip(),
+                                "current_stock": 0.0,
+                                "last_qty": _to_float(raw.get("last_qty")),
+                                "last_rate": last_rate,
+                                "last_receiptdate": receipt_date_s,
+                                "last_receiptno": str(raw.get("receipt_no") or "").strip(),
+                            }
+                    except cx_Oracle.DatabaseError:
+                        pass
+
+        # 2) ERP supplier-linked master items (SUPCODE) to fill gaps.
+        if len(aggregated) < lim:
+            master_rows = p._get_items_for_location_filtered(
+                search=(search or "").strip() or None,
+                limit=lim,
+                supplier_code=sup_i,
+            ) or []
+            for r in master_rows:
+                code = str(r.get("code") or r.get("itemcode") or "").strip()
+                if not code or code in aggregated:
+                    continue
+                avg = _to_float(r.get("averagecost") or r.get("AVERAGECOST"))
+                cprice = _to_float(r.get("costprice") or r.get("COSTPRICE"))
+                cost = _to_float(r.get("cost") or r.get("costprice") or r.get("rate"))
+                if avg <= 0:
+                    avg = cost
+                if cprice <= 0:
+                    cprice = cost if cost > 0 else avg
+                rate = cprice if cprice > 0 else avg
+                aggregated[code] = {
+                    "item_code": code,
+                    "item_name": str(r.get("name") or r.get("itemname") or "").strip(),
+                    "uom": str(r.get("uom") or "NOS").strip() or "NOS",
+                    "rate": rate,
+                    "average_cost": avg,
+                    "cost_price": cprice,
+                    "barcode": str(r.get("barcode") or "").strip(),
+                    "current_stock": _to_float(
+                        r.get("currentstock")
+                        if r.get("currentstock") is not None
+                        else r.get("CURRENTSTOCK") or r.get("stock")
+                    ),
+                    "last_qty": 0.0,
+                    "last_rate": 0.0,
+                    "last_receiptdate": "",
+                    "last_receiptno": "",
+                }
+                if len(aggregated) >= lim:
+                    break
+
+        out = list(aggregated.values())
+        out.sort(
+            key=lambda r: (
+                str(r.get("last_receiptdate") or ""),
+                _to_float(r.get("last_qty")),
+            ),
+            reverse=True,
+        )
+        if q:
+            out = [
+                r
+                for r in out
+                if q in str(r.get("item_name") or "").lower()
+                or q in str(r.get("item_code") or "").lower()
+                or q in str(r.get("barcode") or "").lower()
+            ]
+        return out[:lim]
 
 
 def list_item_uoms(item_code: str) -> list[dict[str, Any]]:
@@ -387,14 +667,13 @@ def save_order(payload: dict[str, Any], *, username: str) -> dict[str, Any]:
         if p._get_lpo_header(lpo_no) and p._po_has_receipt_for_lpo(lpo_no):
             raise ValueError("This purchase order has a GRN and cannot be changed.")
 
-        lpo_date = str(header.get("lpo_date") or header.get("lpodate") or "")[:10]
-        open_date, txn_err = p._enforce_purchase_open_date(lpo_date, "purchase")
-        if txn_err:
-            # Mobile may send calendar today / old edit date — snap to preferred open date.
-            open_date, txn_err = p._enforce_purchase_open_date("", "purchase")
-        if txn_err:
-            raise ValueError(txn_err)
-        lpo_date = open_date or lpo_date or datetime.now().strftime("%Y-%m-%d")
+        from mobile_backend.services.transaction_date_helper import resolve_doc_date
+
+        lpo_date = resolve_doc_date(
+            "purchase",
+            header.get("lpo_date") or header.get("lpodate"),
+            snap_out_of_range=True,
+        )
 
         try:
             supplier_code = int(float(str(header.get("supplier_code") or header.get("suppliercode") or 0)))
@@ -434,26 +713,39 @@ def save_order(payload: dict[str, Any], *, username: str) -> dict[str, Any]:
             rate = _to_float(ln.get("rate"))
             disc = _to_float(ln.get("discount"))
             amount = _to_float(ln.get("amount"), qty * rate - disc)
+            from mobile_backend.services.uom_factor import apply_line_stock_base
+
             uom = str(ln.get("uom") or "NOS").strip() or "NOS"
-            lines.append(
-                {
-                    "itemcode": ic,
-                    "item_code": ic,
-                    "quantity": qty,
-                    "rate": rate,
-                    "discount": disc,
-                    "amount": amount,
-                    "uom": uom,
-                    "barcode": str(ln.get("barcode") or "").strip(),
-                    "warehouse_id": ln.get("warehouse_id") or warehouse_id,
-                    "baseqty": _to_float(ln.get("base_qty") or ln.get("baseqty") or qty, qty),
-                }
-            )
+            row: dict[str, Any] = {
+                "itemcode": ic,
+                "item_code": ic,
+                "quantity": qty,
+                "rate": rate,
+                "discount": disc,
+                "amount": amount,
+                "uom": uom,
+                "barcode": str(ln.get("barcode") or "").strip(),
+                "warehouse_id": ln.get("warehouse_id") or warehouse_id,
+                "factor": ln.get("factor") or ln.get("conversionfactor") or ln.get("conversion_factor"),
+                "conversionfactor": ln.get("conversionfactor")
+                or ln.get("conversion_factor")
+                or ln.get("factor"),
+            }
+            apply_line_stock_base(row, item_code=ic, uom=uom, qty=qty, st=p)
+            lines.append(row)
         if not lines:
             raise ValueError("Add at least one valid line item.")
 
         requested = lpo_no
-        lpo_no, lpo_reassigned = p._resolve_lpo_no_for_save(requested)
+        # Mobile New must not silently overwrite an existing PO when the peeked number
+        # is already used (stuck series). Re-save/edit keeps the same LPO when header exists
+        # and there is no GRN (blocked above).
+        existing_hdr = p._get_lpo_header(lpo_no)
+        if existing_hdr is None and p._lpo_no_exists_in_hdr(lpo_no):
+            lpo_no = p._allocate_next_free_lpo_no(lpo_no)
+            lpo_reassigned = True
+        else:
+            lpo_no, lpo_reassigned = p._resolve_lpo_no_for_save(requested)
         err = None
         for _ in range(8):
             try:

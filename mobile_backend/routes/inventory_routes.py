@@ -85,6 +85,33 @@ def inventory_lookup_item(
     return success({"item": item, "query": query.strip()})
 
 
+_barcode_print_perm = Depends(
+    require_any_permission(
+        "itemmaster.productlist",
+        "mobile.stock_lookup",
+        "mobile.barcode_scanning",
+        "barcode_management.product",
+        "barcode_management.shelf",
+        "warehouse.warehouse_stock_counting",
+        "warehouse.warehouse_stock_counting_mobile",
+    )
+)
+
+
+@router.get("/storage-lookup", dependencies=[_barcode_print_perm])
+def inventory_lookup_storage(
+    query: str = Query(..., min_length=1, max_length=120),
+    locationcode: int | None = Query(None, ge=0),
+):
+    """Shelf / bin / rack lookup by STORAGE_BARCODE or CODE for label reprint."""
+    try:
+        loc = None if locationcode in (None, 0) else locationcode
+        storage = barcode_lookup_service.lookup_storage_row(query, locationcode=loc)
+    except ValueError as exc:
+        return failure(str(exc), status_code=404)
+    return success({"storage": storage, "query": query.strip()})
+
+
 @router.get("/label-scan/status", dependencies=[_scan_perm])
 def inventory_label_scan_status():
     return success({"openai_configured": label_ai_service.openai_configured()})

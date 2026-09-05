@@ -150,7 +150,8 @@ def _normalize_list_row(row: dict[str, Any], *, status: str) -> dict[str, Any]:
         "line_count": int(row.get("line_count") or row.get("LINE_COUNT") or 0),
         "can_edit": st == "DRAFT" or (st == "POSTED" and source == "MANUAL"),
         "can_post": st == "DRAFT",
-        "can_reverse": st == "POSTED",
+        # Align with ERP: only Direct JV (MANUAL) and Cash Payment Voucher (CPV).
+        "can_reverse": st == "POSTED" and source in ("MANUAL", "CPV"),
     }
 
 
@@ -636,6 +637,8 @@ def reverse_journal(
                         conn=conn,
                         commit=False,
                     )
+                    if str(detail.get("source") or "").strip().upper() == "CPV":
+                        a._cpv_mark_reversed_for_gl(vno, user or username, conn=conn)
             return {
                 "voucher_no": vno,
                 "reversal_voucher_no": rev_no,

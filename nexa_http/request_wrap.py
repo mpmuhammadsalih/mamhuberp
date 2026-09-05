@@ -36,6 +36,67 @@ class _UploadAdapter:
         return self._upload.file.read(size)
 
 
+class _FormView:
+    """Flask ``request.form``-compatible view with ``to_dict()`` for Starlette ``FormData``."""
+
+    __slots__ = ("_form",)
+
+    def __init__(self, form: Union[FormData, ImmutableMultiDict[str, str], MultiDict[str, str], None]) -> None:
+        self._form = form
+
+    def get(self, key: str, default: Any = None) -> Any:
+        if self._form is None or not hasattr(self._form, "get"):
+            return default
+        val = self._form.get(key, default)
+        if isinstance(val, UploadFile):
+            return default
+        return val
+
+    def getlist(self, key: str) -> List[Any]:
+        if self._form is None:
+            return []
+        if hasattr(self._form, "getlist"):
+            return [v for v in self._form.getlist(key) if not isinstance(v, UploadFile)]
+        one = self.get(key)
+        return [one] if one is not None else []
+
+    def __getitem__(self, key: str) -> Any:
+        val = self.get(key)
+        if val is None:
+            raise KeyError(key)
+        return val
+
+    def __iter__(self) -> Iterator[str]:
+        if self._form is None or not hasattr(self._form, "keys"):
+            return iter(())
+        return iter(self._form.keys())
+
+    def keys(self):
+        if self._form is None or not hasattr(self._form, "keys"):
+            return []
+        return self._form.keys()
+
+    def to_dict(self, flat: bool = True) -> Dict[str, Any]:
+        if self._form is None:
+            return {}
+        if hasattr(self._form, "to_dict"):
+            raw = self._form.to_dict(flat=flat)
+            return {k: v for k, v in raw.items() if not isinstance(v, UploadFile)}
+        out: Dict[str, Any] = {}
+        if hasattr(self._form, "multi_items"):
+            for key, value in self._form.multi_items():
+                if isinstance(value, UploadFile):
+                    continue
+                if flat and key in out:
+                    continue
+                out[key] = value
+            return out
+        try:
+            return dict(self._form)
+        except (TypeError, ValueError):
+            return {}
+
+
 class _FilesView:
     """Flask ``request.files``-like mapping: only ``UploadFile`` values are exposed."""
 
@@ -84,6 +145,52 @@ class _FilesView:
         if val is None:
             raise KeyError(key)
         return val
+
+
+class _ArgsView:
+    """Flask-compatible query string view (supports ``type=`` on ``get``)."""
+
+    __slots__ = ("_params",)
+
+    def __init__(self, params: ImmutableMultiDict[str, str]) -> None:
+        self._params = params
+
+    def get(self, key: str, default: Any = None, type: Any = None) -> Any:  # noqa: A002
+        if key not in self._params:
+            return default
+        val = self._params.get(key, default)
+        if val is None:
+            return default
+        if type is not None:
+            try:
+                return type(val)
+            except (TypeError, ValueError):
+                return default
+        return val
+
+    def getlist(self, key: str) -> List[str]:
+        return list(self._params.getlist(key))
+
+    def __getitem__(self, key: str) -> str:
+        return self._params[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._params)
+
+    def __len__(self) -> int:
+        return len(self._params)
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._params
+
+    def keys(self):
+        return self._params.keys()
+
+    def values(self):
+        return self._params.values()
+
+    def items(self):
+        return self._params.items()
 
 
 class _CombinedMulti(Mapping[str, Any]):
@@ -138,16 +245,14 @@ class RequestProxy:
         return str(self._req.url)
 
     @property
-    def args(self) -> ImmutableMultiDict[str, str]:
-        return self._req.query_params
+    def args(self) -> _ArgsView:
+        return _ArgsView(self._req.query_params)
 
     @property
-    def form(self) -> Union[FormData, ImmutableMultiDict[str, str], MultiDict[str, str]]:
+    def form(self) -> _FormView:
         st = self._req.state
         f = getattr(st, "_nexa_form", None)
-        if f is None:
-            return ImmutableMultiDict()
-        return f
+        return _FormView(f)
 
     @property
     def files(self) -> _FilesView:
@@ -157,7 +262,7 @@ class RequestProxy:
 
     @property
     def values(self) -> _CombinedMulti:
-        return _CombinedMulti(self._req.query_params, dict(self.form))
+        return _CombinedMulti(self._req.query_params, self.form.to_dict())
 
     @property
     def is_json(self) -> bool:

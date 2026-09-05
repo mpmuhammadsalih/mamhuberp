@@ -1,0 +1,379 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=5" />
+{% endblock %}
+{% block content %}
+{% set placement_display = placement_labels.get(form.placement, form.placement) if form.placement else 'Hero slides' %}
+<div class="page-po nexa-list-page ecommerce-page" style="max-width:960px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">{{ title }}</h1>
+      <p class="page-po__muted">Hero slides, banners, and storefront imagery</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('ecommerce.media') }}" class="page-po__btn-secondary">← Back to media</a>
+    </div>
+  </div>
+
+  <div class="ecommerce-form-panel">
+    <form method="post" enctype="multipart/form-data" class="ecommerce-form-grid">
+      {% if form.media_id %}
+      <input type="hidden" name="media_id" value="{{ form.media_id }}" />
+      {% endif %}
+
+      <div class="form-group">
+        <label for="placementDisplay">Placement</label>
+        <div
+          data-ec-list-picker
+      data-modal="mediaPlacementModal"
+      data-display="placementDisplay"
+      data-hidden="placement"
+      data-picker="placementPicker"
+    >
+          <span class="search-field search-field--popup">
+            <input
+              type="text"
+              id="placementDisplay"
+              value="{{ placement_display }}"
+              placeholder="Click to select placement..."
+              readonly
+              autocomplete="off"
+            />
+            <button type="button" class="search-picker" id="placementPicker" aria-label="Open placement list">▾</button>
+          </span>
+          <input type="hidden" id="placement" name="placement" value="{{ form.placement or 'hero' }}" required />
+        </div>
+      </div>
+
+      <div class="form-group" id="refKeyField">
+        <label for="ref_key">Ref key</label>
+        <input id="ref_key" name="ref_key" class="input" value="{{ form.ref_key }}" placeholder="e.g. new-arrivals, pink, lego" />
+        <p class="page-po__muted" id="refKeyHint" style="margin-top:6px;display:none;">
+          For <strong>Showcase banners</strong>, use ref key <code>new-arrivals</code> for the New Arrivals side panel on the homepage.
+          Upload a portrait image <strong>560 × 720 px</strong> (or MP4 video with optional <code>poster_url</code> in meta).
+          Title = headline text (e.g. Discover toys they'll love). Link URL = e.g. <code>/new-arrivals</code>.
+          For <strong>Promo tiles</strong>, use LuLu-style movable banner groups:
+          ref keys <code>strip-1</code> (top bar carousel),
+          <code>slide-1-main</code> + <code>slide-1-side</code> (first slide),
+          <code>slide-2-main</code> + <code>slide-2-side</code> (second slide), etc.
+          Or set meta <code>slide</code> + <code>slot</code> (<code>main</code>/<code>side</code>/<code>strip</code>).
+          Upload full banner images or use title/subtitle for text overlays.
+          <br /><br />
+          <strong>Recommended image sizes (px):</strong>
+          <code>strip-*</code> → 1560 × 72 (wide thin bar) ·
+          <code>slide-*-main</code> → 1040 × 220 (large left) ·
+          <code>slide-*-side</code> → 520 × 220 (right panel).
+          JPG, PNG, WebP, or SVG. Use 2× resolution for retina if needed.
+          For <strong>Age group images</strong>, use the age slug: <code>0-12-months</code>, <code>1-2-years</code>, <code>3-5-years</code>, <code>6-8-years</code>, etc.
+          For <strong>Category images</strong>, use the category <code>code</code> number (e.g. <code>42</code> for a department or micro category).
+          For <strong>Explore category tiles</strong>, use slugs like <code>outdoor</code>, <code>lego</code>, <code>baby</code>, <code>games</code>, or <code>gifts</code>. Set the title and link URL for each tile.
+          For <strong>Storefront logo</strong>, use ref key <code>header</code> (shown in site header and footer). Upload PNG or SVG with transparent background.
+          For <strong>Product gallery images</strong>, use the item code as ref key (e.g. <code>12345</code>). Upload square images <strong>800 × 800 px</strong>; use sort order for thumbnail sequence on the product page.
+        </p>
+      </div>
+
+      <div class="form-group span-full">
+        <label for="title">Title</label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input id="title" name="title" class="input" value="{{ form.title }}" style="flex:1;min-width:220px;" />
+          <button type="button" id="fetchMediaFromWebBtn" class="page-po__btn-secondary">Search web images</button>
+        </div>
+        <p id="fetchMediaFromWebStatus" class="page-po__muted" style="margin-top:6px;"></p>
+        <div id="mediaWebCandidates" style="display:none;margin-top:12px;">
+          <p class="page-po__muted" style="margin-bottom:8px;">Choose an image:</p>
+          <div id="mediaWebCandidatesGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;"></div>
+        </div>
+      </div>
+
+      <div class="form-group span-full">
+        <label for="subtitle">Subtitle</label>
+        <input id="subtitle" name="subtitle" class="input" value="{{ form.subtitle }}" />
+      </div>
+
+      <div class="form-group span-full">
+        <label for="title_ar">Title (Arabic)</label>
+        <input id="title_ar" name="title_ar" class="input" value="{{ form.title_ar }}" dir="rtl" lang="ar" />
+      </div>
+
+      <div class="form-group span-full">
+        <label for="subtitle_ar">Subtitle (Arabic)</label>
+        <input id="subtitle_ar" name="subtitle_ar" class="input" value="{{ form.subtitle_ar }}" dir="rtl" lang="ar" />
+      </div>
+
+      <div class="form-group span-full">
+        <label for="image_url">Media URL or path</label>
+        <input id="image_url" name="image_url" class="input" value="{{ form.image_url }}" placeholder="/media/files/... or https://..." />
+        <div id="mediaPreviewWrap" style="margin-top:10px;{% if not form.image_url %}display:none;{% endif %}">
+          <img id="mediaPreviewImg" src="{% if form.image_url and '/media/files/' in form.image_url %}{{ url_for('ecommerce.media_file', filename=form.image_url.split('/media/files/')[-1]) }}{% elif form.image_url %}{{ form.image_url }}{% endif %}" alt="Preview" style="max-width:240px;max-height:160px;border-radius:12px;border:1px solid #eee;" />
+        </div>
+        <p class="page-po__muted" style="margin-top:6px;" id="mediaUploadHint">
+          Upload an image (JPG, PNG, WebP, AVIF, GIF, SVG · max 5 MB) or MP4/WebM/MOV video (max 50 MB).
+        </p>
+        <p class="page-po__muted" style="margin-top:6px;display:none;" id="promoSizeHint">
+          <strong>Promo banner sizes:</strong>
+          top strip <code>strip-*</code> → <strong>1560 × 72</strong> ·
+          main <code>slide-*-main</code> → <strong>1040 × 220</strong> ·
+          side <code>slide-*-side</code> → <strong>520 × 220</strong>.
+        </p>
+        <input id="image_file" name="image_file" type="file" accept="image/*,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v,.avif" class="input" style="margin-top:6px;" />
+      </div>
+
+      <div class="form-group span-full" id="heroPosterField" style="display:none;">
+        <label for="poster_file">Poster image (optional, for video backgrounds)</label>
+        <p class="page-po__muted" style="margin-top:0;margin-bottom:6px;">Shown while the video loads. Stored in meta as <code>poster_url</code>.</p>
+        <input id="poster_file" name="poster_file" type="file" accept="image/*" class="input" />
+      </div>
+
+      <div class="form-group">
+        <label for="link_url">Link URL</label>
+        <input id="link_url" name="link_url" class="input" value="{{ form.link_url }}" />
+      </div>
+
+      <div class="form-group">
+        <label for="sort_order">Sort order</label>
+        <input id="sort_order" name="sort_order" type="number" class="input" value="{{ form.sort_order }}" />
+      </div>
+
+      <div class="form-group span-full">
+        <label for="alt_text">Alt text</label>
+        <input id="alt_text" name="alt_text" class="input" value="{{ form.alt_text }}" />
+      </div>
+
+      <div class="form-group span-full">
+        <label for="meta_json">Meta JSON (overlay, colors, CTAs)</label>
+        <textarea id="meta_json" name="meta_json" rows="6" class="input" style="font-family:monospace;font-size:12px;">{{ form.meta_json }}</textarea>
+      </div>
+
+      <div class="form-group span-full">
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="is_active" value="1" {% if form.is_active %}checked{% endif %} />
+          Active on storefront
+        </label>
+      </div>
+
+      <div class="form-group span-full ecommerce-form-actions">
+        <button type="submit" class="page-po__btn-primary">Save media</button>
+        <a href="{{ url_for('ecommerce.media') }}" class="page-po__btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% with modal_id='mediaPlacementModal', include_all=false %}
+  {% include 'ecommerce/_placement_picker_modal.html' %}
+{% endwith %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('ecommerce.static', filename='js/ecommerce-list-picker.js') }}?v=1"></script>
+<script>
+(function () {
+  var placementInput = document.getElementById('placement');
+  var posterField = document.getElementById('heroPosterField');
+  var refKeyHint = document.getElementById('refKeyHint');
+  var promoSizeHint = document.getElementById('promoSizeHint');
+  var refKeyInput = document.getElementById('ref_key');
+  function syncPlacementFields() {
+    var placement = placementInput ? placementInput.value : '';
+    if (posterField) {
+      posterField.style.display = placement === 'hero_bg' || placement === 'showcase_banner' ? '' : 'none';
+    }
+    if (refKeyHint) {
+      refKeyHint.style.display = placement === 'showcase_banner' || placement === 'promo' || placement === 'age_group' || placement === 'category' || placement === 'explore_category' || placement === 'storefront_logo' || placement === 'product' ? '' : 'none';
+    }
+    if (promoSizeHint) {
+      promoSizeHint.style.display = placement === 'promo' ? '' : 'none';
+    }
+    if (refKeyInput && placement === 'showcase_banner' && !refKeyInput.value.trim()) {
+      refKeyInput.placeholder = 'new-arrivals';
+    }
+    if (refKeyInput && placement === 'promo' && !refKeyInput.value.trim()) {
+      refKeyInput.placeholder = 'strip-1, slide-1-main, slide-1-side';
+    }
+    if (refKeyInput && placement === 'age_group' && !refKeyInput.value.trim()) {
+      refKeyInput.placeholder = '0-12-months, 1-2-years, 3-5-years, 6-8-years';
+    }
+    if (refKeyInput && placement === 'category' && !refKeyInput.value.trim()) {
+      refKeyInput.placeholder = 'category code, e.g. 42';
+    }
+    if (refKeyInput && placement === 'storefront_logo' && !refKeyInput.value.trim()) {
+      refKeyInput.placeholder = 'header';
+    }
+    if (refKeyInput && placement === 'product' && !refKeyInput.value.trim()) {
+      refKeyInput.placeholder = 'item code, e.g. 12345';
+    }
+  }
+  if (placementInput) {
+    placementInput.addEventListener('change', syncPlacementFields);
+    syncPlacementFields();
+  }
+
+  var fetchBtn = document.getElementById('fetchMediaFromWebBtn');
+  var fetchStatus = document.getElementById('fetchMediaFromWebStatus');
+  var titleInput = document.getElementById('title');
+  var subtitleInput = document.getElementById('subtitle');
+  var refKeyInputEl = document.getElementById('ref_key');
+  var imageUrlInput = document.getElementById('image_url');
+  var previewWrap = document.getElementById('mediaPreviewWrap');
+  var previewImg = document.getElementById('mediaPreviewImg');
+  var candidatesWrap = document.getElementById('mediaWebCandidates');
+  var candidatesGrid = document.getElementById('mediaWebCandidatesGrid');
+
+  function setFetchStatus(message, isError) {
+    if (!fetchStatus) return;
+    fetchStatus.textContent = message || '';
+    fetchStatus.style.color = isError ? '#b91c1c' : '#64748b';
+  }
+
+  function updatePreview(url) {
+    if (!previewWrap || !previewImg || !url) return;
+    var previewUrl = url;
+    if (url.indexOf('/media/files/') !== -1) {
+      previewUrl = '/ecommerce/media/files/' + url.split('/media/files/').pop();
+    }
+    previewImg.src = previewUrl;
+    previewWrap.style.display = '';
+  }
+
+  function clearCandidates() {
+    if (candidatesGrid) candidatesGrid.innerHTML = '';
+    if (candidatesWrap) candidatesWrap.style.display = 'none';
+  }
+
+  function renderCandidates(candidates) {
+    if (!candidatesGrid || !candidatesWrap) return;
+    candidatesGrid.innerHTML = '';
+    candidates.forEach(function (candidate, index) {
+      var url = candidate && candidate.url ? candidate.url : '';
+      if (!url) return;
+      var card = document.createElement('div');
+      card.style.cssText = 'border:1px solid #eee;border-radius:12px;overflow:hidden;background:#fff;';
+      var img = document.createElement('img');
+      img.src = url;
+      img.alt = 'Option ' + (index + 1);
+      img.referrerPolicy = 'no-referrer';
+      img.loading = 'lazy';
+      img.style.cssText = 'display:block;width:100%;height:96px;object-fit:cover;background:#f8fafc;';
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = 'Use this';
+      btn.className = 'page-po__btn-secondary';
+      btn.style.cssText = 'width:100%;border-radius:0;border:none;border-top:1px solid #eee;padding:8px;font-size:12px;';
+      btn.addEventListener('click', function () {
+        downloadCandidate(url, btn);
+      });
+      card.appendChild(img);
+      card.appendChild(btn);
+      candidatesGrid.appendChild(card);
+    });
+    candidatesWrap.style.display = candidates.length ? '' : 'none';
+  }
+
+  async function downloadCandidate(sourceUrl, buttonEl) {
+    var title = titleInput ? titleInput.value.trim() : '';
+    if (!sourceUrl) return;
+    var prevLabel = buttonEl ? buttonEl.textContent : 'Use this';
+    if (buttonEl) {
+      buttonEl.disabled = true;
+      buttonEl.textContent = 'Saving…';
+    }
+    setFetchStatus('Downloading selected image…', false);
+    try {
+      var resp = await fetch('{{ url_for("ecommerce.media_fetch_from_web") }}', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({
+          title: title,
+          subtitle: subtitleInput ? subtitleInput.value.trim() : '',
+          ref_key: refKeyInputEl ? refKeyInputEl.value.trim() : '',
+          placement: placementInput ? placementInput.value.trim() : '',
+          source_url: sourceUrl,
+        }),
+      });
+      var data = {};
+      try {
+        data = await resp.json();
+      } catch (parseErr) {
+        throw new Error('Unexpected server response.');
+      }
+      if (!resp.ok || !data.ok) {
+        throw new Error(data.error || data.message || 'Could not save selected image.');
+      }
+      if (imageUrlInput && data.image_url) {
+        imageUrlInput.value = data.image_url;
+        updatePreview(data.image_url);
+      }
+      clearCandidates();
+      setFetchStatus(data.message || 'Image saved.', false);
+    } catch (err) {
+      setFetchStatus((err && err.message) ? err.message : 'Save failed.', true);
+    } finally {
+      if (buttonEl) {
+        buttonEl.disabled = false;
+        buttonEl.textContent = prevLabel;
+      }
+    }
+  }
+
+  if (fetchBtn) {
+    fetchBtn.addEventListener('click', async function () {
+      var title = titleInput ? titleInput.value.trim() : '';
+      if (title.length < 2) {
+        setFetchStatus('Enter a title first (at least 2 characters).', true);
+        return;
+      }
+      var prevLabel = fetchBtn.textContent;
+      fetchBtn.disabled = true;
+      fetchBtn.textContent = 'Searching…';
+      clearCandidates();
+      setFetchStatus('Searching the web for images…', false);
+      try {
+        var resp = await fetch('{{ url_for("ecommerce.media_search_from_web") }}', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: JSON.stringify({
+            title: title,
+            subtitle: subtitleInput ? subtitleInput.value.trim() : '',
+            ref_key: refKeyInputEl ? refKeyInputEl.value.trim() : '',
+            placement: placementInput ? placementInput.value.trim() : '',
+          }),
+        });
+        var data = {};
+        try {
+          data = await resp.json();
+        } catch (parseErr) {
+          throw new Error('Unexpected server response.');
+        }
+        if (!resp.ok || !data.ok) {
+          throw new Error(data.error || data.message || 'Could not search for images.');
+        }
+        var candidates = data.candidates || [];
+        renderCandidates(candidates);
+        setFetchStatus(
+          candidates.length
+            ? 'Found ' + candidates.length + ' options — click Use this on your favorite.'
+            : 'No images found.',
+          !candidates.length,
+        );
+      } catch (err) {
+        setFetchStatus((err && err.message) ? err.message : 'Search failed.', true);
+      } finally {
+        fetchBtn.disabled = false;
+        fetchBtn.textContent = prevLabel;
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=13" />
+{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page ecommerce-page ecommerce-products-page">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Products</h1>
+      <p class="page-po__muted">ITEMMASTER catalog for location {{ location_code }} · {{ total }} items</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <button type="button" class="page-po__btn-secondary" id="productConfigOpen" aria-haspopup="dialog" aria-controls="productConfigModal">
+        Product config
+      </button>
+      <a href="{{ url_for('itemmaster.productlist') }}" class="page-po__btn-primary">Open Item Master</a>
+      <a href="{{ url_for('ecommerce.dashboard') }}" class="page-po__btn-secondary">Dashboard</a>
+    </div>
+  </div>
+
+  <form method="get" class="nexa-list-toolbar">
+    <input type="text" name="q" value="{{ search }}" placeholder="Search code, barcode, name…"
+           class="input" style="min-width:220px; max-width:320px;" autocomplete="off" />
+    {% if sort_column %}<input type="hidden" name="sort" value="{{ sort_column }}" />{% endif %}
+    {% if sort_order %}<input type="hidden" name="order" value="{{ sort_order }}" />{% endif %}
+    <button type="submit" class="page-po__btn-primary" style="padding:4px 12px; font-size:11px;">Search</button>
+    <a href="{{ url_for('ecommerce.products') }}" class="page-po__btn-secondary" style="padding:4px 10px; font-size:11px;">Clear</a>
+    <span class="nexa-num">{{ total }} record{{ '' if total == 1 else 's' }}</span>
+  </form>
+
+  <p class="page-po__muted ecommerce-products-page__hint">
+    Click <strong>Edit</strong> to update description, specifications, and images. Set <strong>Offer</strong> lower than <strong>Retail</strong> to show a sale price on the app.
+  </p>
+
+  <div class="co-table-wrap ecommerce-products-table-wrap">
+    <table class="co-table ecommerce-products-table ecommerce-products-table--compact">
+      <colgroup>
+        <col class="ecommerce-products-table__col-sl" />
+        <col class="ecommerce-products-table__col-image" />
+        <col class="ecommerce-products-table__col-code" />
+        <col class="ecommerce-products-table__col-name" />
+        <col class="ecommerce-products-table__col-category" />
+        <col class="ecommerce-products-table__col-stock" />
+        <col class="ecommerce-products-table__col-price" />
+        <col class="ecommerce-products-table__col-offer" />
+        <col class="ecommerce-products-table__col-actions" />
+      </colgroup>
+      <thead>
+        <tr>
+          <th class="ecommerce-products-table__th ecommerce-products-table__th--center" style="cursor:default;">#</th>
+          <th class="ecommerce-products-table__th ecommerce-products-table__th--center" style="cursor:default;">Image</th>
+          <th class="sortable ecommerce-products-table__th ecommerce-products-table__th--center{% if sort_column == 'itemcode' and sort_order %} sort-{{ sort_order }}{% endif %}" data-sort="itemcode">Code<span class="sort-arrow"></span></th>
+          <th class="sortable ecommerce-products-table__th{% if sort_column == 'itemname' and sort_order %} sort-{{ sort_order }}{% endif %}" data-sort="itemname">Name<span class="sort-arrow"></span></th>
+          <th class="sortable ecommerce-products-table__th{% if sort_column == 'categoryname' and sort_order %} sort-{{ sort_order }}{% endif %}" data-sort="categoryname">Category<span class="sort-arrow"></span></th>
+          <th class="sortable ecommerce-products-table__th ecommerce-products-table__th--center{% if sort_column == 'currentstock' and sort_order %} sort-{{ sort_order }}{% endif %}" data-sort="currentstock">Stock<span class="sort-arrow"></span></th>
+          <th class="sortable ecommerce-products-table__th ecommerce-products-table__th--right{% if sort_column == 'retailprice' and sort_order %} sort-{{ sort_order }}{% endif %}" data-sort="retailprice">Retail<span class="sort-arrow"></span></th>
+          <th class="ecommerce-products-table__th ecommerce-products-table__th--right">Offer</th>
+          <th class="ecommerce-products-table__th ecommerce-products-table__th--center" style="cursor:default;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in items %}
+        {% set item_code = row.itemcode or row.ITEMCODE or row.code %}
+        {% set edit_qs = '' %}
+        {% if search %}{% set edit_qs = edit_qs ~ ('&' if edit_qs else '?') ~ 'q=' ~ (search|urlencode) %}{% endif %}
+        {% if page and page > 1 %}{% set edit_qs = edit_qs ~ ('&' if edit_qs else '?') ~ 'page=' ~ page %}{% endif %}
+        {% if sort_column %}{% set edit_qs = edit_qs ~ ('&' if edit_qs else '?') ~ 'sort=' ~ (sort_column|urlencode) %}{% endif %}
+        {% if sort_order in ('asc', 'desc') %}{% set edit_qs = edit_qs ~ ('&' if edit_qs else '?') ~ 'order=' ~ sort_order %}{% endif %}
+        {% set edit_url = '/ecommerce/products/' ~ item_code ~ edit_qs %}
+        {% set form_id = 'product-row-' ~ item_code %}
+        {% set image_url = row.image_url %}
+        {% set has_details = (row.description_text or row.specifications_text) %}
+        <tr>
+          <td class="sl-no ecommerce-products-table__cell ecommerce-products-table__cell--center">{{ loop.index + (page - 1) * 50 if page else loop.index }}</td>
+          <td class="ecommerce-products-table__image-cell ecommerce-products-table__cell ecommerce-products-table__cell--center">
+            <form id="{{ form_id }}" method="post" action="/ecommerce/products/{{ item_code }}/update" enctype="multipart/form-data"></form>
+            <input type="hidden" form="{{ form_id }}" name="q" value="{{ search }}" />
+            <input type="hidden" form="{{ form_id }}" name="page" value="{{ page }}" />
+            <input type="hidden" form="{{ form_id }}" name="sort" value="{{ sort_column }}" />
+            <input type="hidden" form="{{ form_id }}" name="order" value="{{ sort_order }}" />
+            <a
+              href="{{ edit_url }}"
+              class="ecommerce-products-table__thumb-link"
+              title="Edit images and details"
+            >
+              <div class="ecommerce-products-table__thumb ecommerce-products-table__thumb--compact">
+                {% if image_url %}
+                <img src="{{ image_url }}" alt="" loading="lazy" width="48" height="48" />
+                {% else %}
+                <span class="ecommerce-products-table__thumb-empty">No image</span>
+                {% endif %}
+              </div>
+            </a>
+          </td>
+          <td class="ecommerce-products-table__code ecommerce-products-table__cell ecommerce-products-table__cell--center">{{ item_code }}</td>
+          <td class="ecommerce-products-table__cell ecommerce-products-table__name-cell">
+            <input
+              type="text"
+              form="{{ form_id }}"
+              name="item_name"
+              class="ecommerce-products-table__input"
+              value="{{ row.itemname or row.ITEMNAME or row.name or '' }}"
+              maxlength="200"
+              required
+            />
+            {% if has_details %}
+            <span class="ecommerce-products-table__details-badge" title="Has description or specifications">Details</span>
+            {% endif %}
+          </td>
+          <td class="ecommerce-products-table__meta ecommerce-products-table__cell" title="{{ row.categoryname or row.CATEGORYNAME or row.category_name or '' }}">{{ row.categoryname or row.CATEGORYNAME or row.category_name or '—' }}</td>
+          <td class="ecommerce-products-table__cell ecommerce-products-table__cell--center">{{ row.currentstock or row.CURRENTSTOCK or 0 }}</td>
+          <td class="ecommerce-products-table__cell ecommerce-products-table__cell--right">
+            <input
+              type="text"
+              inputmode="decimal"
+              form="{{ form_id }}"
+              name="retail_price"
+              class="ecommerce-products-table__price num"
+              value="{{ row.retailprice or row.RETAILPRICE or 0 }}"
+            />
+          </td>
+          <td class="ecommerce-products-table__cell ecommerce-products-table__cell--right">
+            <input
+              type="text"
+              inputmode="decimal"
+              form="{{ form_id }}"
+              name="offer_price"
+              class="ecommerce-products-table__price num"
+              value="{{ row.wholesaleprice or row.WHOLESALEPRICE or '' }}"
+              placeholder="—"
+            />
+          </td>
+          <td class="ecommerce-products-table__actions ecommerce-products-table__cell ecommerce-products-table__cell--center">
+            <div class="ecommerce-products-table__action-stack">
+              <a
+                href="{{ edit_url }}"
+                class="page-po__btn-secondary ecommerce-products-table__edit"
+              >Edit</a>
+              <button type="submit" form="{{ form_id }}" class="page-po__btn-primary ecommerce-products-table__save">Save</button>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" style="text-align:center;padding:20px;color:#64748b;">No products found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if total > 50 %}
+  <div class="ecommerce-pagination nexa-list-toolbar">
+    <span class="nexa-num">Showing page {{ page }} · {{ total }} total · use Item Master for full filters.</span>
+  </div>
+  {% endif %}
+</div>
+
+<div class="modal hidden" id="productConfigModal" role="dialog" aria-modal="true" aria-labelledby="productConfigModalTitle">
+  <div class="modal__overlay" data-close="productConfigModal"></div>
+  <div class="modal__content ecommerce-product-config-modal">
+    <div class="modal__header">
+      <h3 id="productConfigModalTitle">Product config</h3>
+      <button type="button" class="modal__close" data-close="productConfigModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body ecommerce-product-config-modal__body">
+      <form method="post" action="{{ url_for('ecommerce.products_web_catalog') }}" class="ecommerce-web-catalog-panel ecommerce-product-config-section">
+        <input type="hidden" name="q" value="{{ search }}" />
+        <div class="ecommerce-web-catalog-panel__copy">
+          <p class="ecommerce-web-catalog-panel__title">Show all items on web</p>
+          <p class="ecommerce-web-catalog-panel__hint">
+            {% if show_all_items_on_web %}
+            Showing every product in the catalog on the storefront, including out of stock.
+            {% else %}
+            Showing in-stock items only on the storefront (default).
+            {% endif %}
+          </p>
+        </div>
+        <label class="ecommerce-web-catalog-panel__toggle">
+          <input type="checkbox" name="show_all_items_on_web" value="1" {% if show_all_items_on_web %}checked{% endif %} />
+          Show all items
+        </label>
+        <button type="submit" class="page-po__btn-primary ecommerce-web-catalog-panel__save">Save</button>
+      </form>
+
+      <section class="ecommerce-web-fetch-panel ecommerce-product-config-section">
+        <div class="ecommerce-web-fetch-panel__copy">
+          <p class="ecommerce-web-fetch-panel__title">Fetch missing images from web</p>
+          <p class="ecommerce-web-fetch-panel__hint">
+            For products with <strong>no image</strong> in Item Master, search the web by product name
+            (Bing Images — good for toys, balloons, party items) and barcode (Open Food Facts / UPCItemDB),
+            then download and save the best match.
+          </p>
+        </div>
+        <form method="post" action="{{ url_for('ecommerce.products_image_fetch_web') }}" class="ecommerce-web-fetch-panel__form">
+          <input type="hidden" name="q" value="{{ search }}" />
+          <label class="ecommerce-web-fetch-panel__field">
+            <span>Max products per run</span>
+            <input type="number" name="limit" value="25" min="1" max="100" class="input" style="max-width:120px;" />
+          </label>
+          <label class="ecommerce-web-fetch-panel__checkbox">
+            <input type="checkbox" name="download_images" value="1" checked />
+            Download image and save to Item Master
+          </label>
+          <button type="submit" class="page-po__btn-primary">Fetch images from web</button>
+        </form>
+      </section>
+
+      <section class="ecommerce-product-gallery-panel ecommerce-product-config-section">
+        <div class="ecommerce-product-gallery-panel__copy">
+          <p class="ecommerce-product-gallery-panel__title">Extra product images (gallery)</p>
+          <p class="ecommerce-product-gallery-panel__hint">
+            Open a product with <strong>Edit</strong> to manage the main image. For additional photos on the product page,
+            go to <a href="{{ url_for('ecommerce.media') }}">Media</a> → placement
+            <strong>Product gallery images</strong>, ref key = item code.
+            Recommended size: <strong>800 × 800 px</strong> square.
+          </p>
+        </div>
+      </section>
+
+      <section class="ecommerce-bulk-images-panel ecommerce-product-config-section">
+        <div class="ecommerce-bulk-images-panel__copy">
+          <p class="ecommerce-bulk-images-panel__title">Bulk product images (Excel)</p>
+          <p class="ecommerce-bulk-images-panel__hint">
+            Download the template, add <strong>ItemCode</strong> or <strong>Barcode</strong>, then use any one of:
+            paste a picture into the <strong>Image</strong> column (Insert → Picture in Excel),
+            an <strong>ImageURL</strong>, or an <strong>ImageFileName</strong> with an optional ZIP upload.
+            Images are saved to Item Master and shown on the storefront.
+          </p>
+          <a href="{{ url_for('ecommerce.products_image_import_template') }}" class="page-po__btn-secondary ecommerce-bulk-images-panel__template">
+            Download Excel template
+          </a>
+        </div>
+        <form method="post" action="{{ url_for('ecommerce.products_image_import') }}" enctype="multipart/form-data" class="ecommerce-bulk-images-panel__form">
+          <input type="hidden" name="q" value="{{ search }}" />
+          <label class="ecommerce-bulk-images-panel__field">
+            <span>Excel file (.xlsx)</span>
+            <input type="file" name="excel_file" accept=".xlsx,.xlsm" required />
+          </label>
+          <label class="ecommerce-bulk-images-panel__field">
+            <span>Images ZIP (optional)</span>
+            <input type="file" name="images_zip" accept=".zip" />
+          </label>
+          <label class="ecommerce-bulk-images-panel__checkbox">
+            <input type="checkbox" name="download_urls" value="1" checked />
+            Download images from URLs
+          </label>
+          <button type="submit" class="page-po__btn-primary">Import images</button>
+        </form>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var openBtn = document.getElementById('productConfigOpen');
+  var modal = document.getElementById('productConfigModal');
+  if (!openBtn || !modal) return;
+
+  function openModal() {
+    modal.classList.remove('hidden');
+  }
+
+  function closeModal() {
+    modal.classList.add('hidden');
+  }
+
+  openBtn.addEventListener('click', openModal);
+
+  modal.addEventListener('click', function (e) {
+    if (e.target.classList.contains('modal__overlay') || e.target.classList.contains('modal__close')) {
+      closeModal();
+      return;
+    }
+    var closeTarget = e.target.closest('[data-close="productConfigModal"]');
+    if (closeTarget) closeModal();
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
+  });
+})();
+
+(function () {
+  var params = new URLSearchParams(window.location.search);
+  var currentSort = (params.get('sort') || '').trim();
+  var currentOrder = (params.get('order') || '').trim();
+
+  document.querySelectorAll('.ecommerce-products-table th.sortable').forEach(function (header) {
+    header.addEventListener('click', function () {
+      var sortColumn = header.getAttribute('data-sort');
+      if (!sortColumn) return;
+
+      var newOrder = 'asc';
+      if (currentSort === sortColumn && currentOrder === 'asc') {
+        newOrder = 'desc';
+      }
+
+      var next = new URLSearchParams(window.location.search);
+      next.set('sort', sortColumn);
+      next.set('order', newOrder);
+      next.delete('page');
+      window.location.href = window.location.pathname + '?' + next.toString();
+    });
+  });
+})();
+</script>
+{% endblock %}

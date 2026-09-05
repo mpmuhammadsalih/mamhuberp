@@ -7,6 +7,7 @@ from mobile_backend.deps_auth import require_access_claims, require_any_permissi
 from mobile_backend.deps_save import require_save_nonce, success_after_mutation
 from mobile_backend.mutation_errors import failure_from_mutation_exc
 from mobile_backend.services import (
+    sales_ai_service,
     sales_invoice_service,
     sales_order_service,
     sales_return_service,
@@ -38,6 +39,35 @@ _sales_doc_perm = Depends(
 @router.get("/summary", dependencies=[_invoice_perm])
 def sales_summary():
     return success({"message": "Sales endpoints ready"})
+
+
+@router.get("/ai/status", dependencies=[_invoice_perm])
+def sales_ai_status():
+    """Whether OpenAI is configured for AI Sales Mode."""
+    return success(sales_ai_service.get_status())
+
+
+@router.post("/ai/chat", dependencies=[_invoice_perm])
+def sales_ai_chat(
+    payload: dict[str, Any] = Body(default_factory=dict),
+    claims: dict[str, Any] = Depends(require_access_claims),
+):
+    """Conversational AI sales turn — catalog tools + session cart mutations."""
+    try:
+        data = sales_ai_service.chat(
+            message=str(payload.get("message") or "").strip(),
+            history=payload.get("history") if isinstance(payload.get("history"), list) else [],
+            cart=payload.get("cart") if isinstance(payload.get("cart"), list) else [],
+            warehouse_id=str(payload.get("warehouse_id") or "").strip(),
+            customer_code=str(payload.get("customer_code") or "").strip(),
+            username=str(claims.get("sub") or "mobile").strip() or "mobile",
+            language=str(payload.get("language") or "en").strip() or "en",
+        )
+    except ValueError as exc:
+        return failure(str(exc) or "AI sales request failed.", status_code=400)
+    except Exception as exc:
+        return failure(str(exc) or "AI sales request failed.", status_code=500)
+    return success(data)
 
 
 _SALES_REPORT_PERMS = (
@@ -121,8 +151,13 @@ def sales_invoice_next_billno(peek: bool = Query(False)):
 def sales_invoice_customers(
     q: str = Query(""),
     limit: int = Query(50, ge=1, le=200),
+    billing_type: str = Query("", description="Optional CASH/CREDIT filter for customer picker"),
 ):
-    rows = sales_invoice_service.list_customers(search=q, limit=limit)
+    rows = sales_invoice_service.list_customers(
+        search=q,
+        limit=limit,
+        billing_type=billing_type,
+    )
     return success({"customers": rows})
 
 
@@ -168,6 +203,22 @@ def sales_invoice_item_last_sale(
     return success({"last_sale": data})
 
 
+@router.get("/invoice/customer-previous-items", dependencies=[_sales_doc_perm])
+def sales_invoice_customer_previous_items(
+    customer_code: str = Query(..., min_length=1),
+    warehouse_id: str = Query(""),
+    limit: int = Query(80, ge=1, le=200),
+    days: int = Query(365, ge=30, le=730),
+):
+    rows = sales_invoice_service.list_customer_previous_items(
+        customer_code=customer_code,
+        warehouse_id=warehouse_id or None,
+        limit=limit,
+        days=days,
+    )
+    return success({"items": rows, "count": len(rows)})
+
+
 @router.get("/invoice/catalog", dependencies=[_sales_doc_perm])
 def sales_invoice_catalog(
     q: str = Query(""),
@@ -178,8 +229,17 @@ def sales_invoice_catalog(
         False,
         description="Sales return catalog: include zero-stock / full item master",
     ),
+    for_order: bool = Query(
+        False,
+        description="Sales order catalog: use MINUSBILLING_ORDER (full master when enabled)",
+    ),
 ):
     from mobile_backend.request_context import get_jwt
+
+    from db import (
+        get_sales_minus_billing_invoice_enabled,
+        get_sales_minus_billing_order_enabled,
+    )
 
     claims = get_jwt()
     username = str(claims.get("sub") or "mobile").strip()
@@ -190,8 +250,17 @@ def sales_invoice_catalog(
         limit=limit,
         username=username,
         for_return=for_return,
+        for_order=for_order,
     )
-    return success({"items": rows})
+    # Mirror Sales Accounts Configuration so Flutter can enable Add on zero stock
+    # even if open-context features were stale / missing the flag.
+    if for_return:
+        minus_billing = True
+    elif for_order:
+        minus_billing = bool(get_sales_minus_billing_order_enabled())
+    else:
+        minus_billing = bool(get_sales_minus_billing_invoice_enabled())
+    return success({"items": rows, "minus_billing_enabled": minus_billing})
 
 
 @router.get("/invoice/warehouses", dependencies=[_sales_doc_perm])
@@ -364,6 +433,23 @@ def sales_order_detail(billno: str):
     if not data:
         return failure("Sales order not found.", status_code=404)
     return success(data)
+
+
+@router.get("/orders/{billno}/pdf", dependencies=[_order_perm])
+def sales_order_pdf(billno: str):
+    """Download ERP-style sales order PDF (cashbilldup layout)."""
+    try:
+        pdf_bytes, filename = sales_order_service.build_order_pdf(billno)
+    except ValueError as exc:
+        return failure(str(exc), status_code=404)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.get("/order/open", dependencies=[_order_perm])

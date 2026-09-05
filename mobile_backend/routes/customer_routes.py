@@ -67,6 +67,67 @@ def customer_masters_create(request: Request, payload: dict[str, Any] = Body(def
     )
 
 
+@router.get("/masters/{customer_code}", dependencies=[_master_perm])
+def customer_masters_get(customer_code: int):
+    try:
+        data = cust.get_customer(customer_code)
+    except Exception as exc:
+        return failure(str(exc) or "Failed to load customer.", status_code=400)
+    return success(data)
+
+
+@router.post("/masters/{customer_code}/delete", dependencies=[_master_perm, require_save_nonce])
+def customer_masters_delete(
+    request: Request,
+    customer_code: int,
+    payload: dict[str, Any] = Body(default_factory=dict),
+):
+    claims = get_jwt()
+    username = str(claims.get("sub") or "mobile").strip() or "mobile"
+    try:
+        data = cust.delete_customer(
+            customer_code,
+            password=str((payload or {}).get("password") or ""),
+            username=username,
+        )
+    except Exception as exc:
+        return failure_from_mutation_exc(exc, fallback="Failed to delete customer.")
+    return success_after_mutation(
+        request,
+        data,
+        message=data.get("message") or "Customer deleted",
+    )
+
+
+@router.put("/masters/{customer_code}", dependencies=[_master_perm, require_save_nonce])
+def customer_masters_update(
+    request: Request,
+    customer_code: int,
+    payload: dict[str, Any] = Body(default_factory=dict),
+):
+    claims = get_jwt()
+    username = str(claims.get("sub") or "mobile").strip() or "mobile"
+    try:
+        data = cust.update_customer(customer_code, payload, username=username)
+    except Exception as exc:
+        return failure_from_mutation_exc(exc, fallback="Failed to update customer.")
+    return success_after_mutation(
+        request,
+        data,
+        message=data.get("message") or "Customer updated",
+    )
+
+
+@router.get("/categories", dependencies=[_master_perm])
+def customer_categories_list(q: str = Query("")):
+    """List ERP customer categories (TBLCUSTOMERCATEGORY)."""
+    try:
+        data = cust.list_customer_categories(search=q)
+    except Exception as exc:
+        return failure(str(exc) or "Failed to list customer categories.", status_code=400)
+    return success(data)
+
+
 @router.post("/categories", dependencies=[_master_perm, require_save_nonce])
 def customer_category_create(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
     """Create ERP customer category (TBLCUSTOMERCATEGORY) for use on New Customer."""

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 220" fill="none">
+  <defs>
+    <linearGradient id="sky" x1="260" y1="0" x2="260" y2="220" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFD4A8"/>
+      <stop offset="0.45" stop-color="#FFE8C8"/>
+      <stop offset="1" stop-color="#B8E8E0"/>
+    </linearGradient>
+  </defs>
+  <rect width="520" height="220" rx="16" fill="url(#sky)"/>
+  <rect x="1" y="1" width="518" height="218" rx="15" stroke="#f0c89a" stroke-width="2"/>
+  <rect x="118" y="34" width="86" height="34" rx="6" fill="#ff4b8b"/>
+  <text x="161" y="57" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800" fill="#ffffff">FREE</text>
+  <rect x="118" y="72" width="86" height="34" rx="6" fill="#ffffff"/>
+  <text x="161" y="95" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800" fill="#1e293b">HOME</text>
+  <rect x="118" y="110" width="112" height="34" rx="6" fill="#334155"/>
+  <text x="174" y="133" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800" fill="#ffffff">DELIVERY</text>
+  <text x="260" y="162" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="1.1" fill="#334155">FOR ALL ORDERS ABOVE</text>
+  <text x="260" y="196" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="40" font-weight="800" fill="#1e293b">QAR 150/-</text>
+  <rect x="352" y="88" width="56" height="72" rx="10" fill="#ffffff" stroke="#fecdd3" stroke-width="2"/>
+  <rect x="408" y="104" width="34" height="64" rx="8" fill="#ffffff" stroke="#fecdd3" stroke-width="2"/>
+  <text x="470" y="208" font-family="Arial, Helvetica, sans-serif" font-size="9" fill="#64748b">*T&amp;C Apply</text>
+</svg>

@@ -299,7 +299,7 @@
   <section class="itemmaster-container pro-form-body">
   {% if transaction_date_blocked|default(false) and not query_mode %}
   <div class="pr-txn-date-block">
-    {{ transaction_date_error or 'No open transaction date. Set it in Transaction Date Setup before posting.' }}
+    {{ transaction_date_error or 'Setup date is missing. No open From–To date range in Transaction Date Setup. Open a date range in General Setup → Transaction Date Setup before posting.' }}
     {% if transaction_date_setup_url %}
     <a href="{{ transaction_date_setup_url }}">Open Transaction Date Setup</a>
     {% endif %}
@@ -701,7 +701,7 @@
       btnSave.textContent = btnSaveDefaultText;
       btnSave.style.opacity = txnDateBlocked ? '0.7' : '';
       btnSave.style.cursor = txnDateBlocked ? 'not-allowed' : '';
-      if (txnDateBlocked) btnSave.title = txnDateError || 'No open transaction date';
+      if (txnDateBlocked) btnSave.title = txnDateError || 'Setup date is missing';
     }
   }
   function isLocationEnabled(){ return !isVendorNote || !!(stockTypeToggle && stockTypeToggle.checked); }
@@ -767,7 +767,7 @@
   if (txnDateBlocked && !queryMode) {
     if (btnSave) {
       btnSave.disabled = true;
-      btnSave.title = txnDateError || 'No open transaction date';
+      btnSave.title = txnDateError || 'Setup date is missing';
     }
   }
 
@@ -2532,7 +2532,7 @@
   if (btnSave) btnSave.addEventListener('click', function () {
     if (queryMode || isSaving) return;
     if (txnDateBlocked) {
-      alert(txnDateError || 'No open transaction date. Set it in Transaction Date Setup before posting.');
+      alert(txnDateError || 'Setup date is missing. No open From–To date range in Transaction Date Setup. Open a date range in General Setup → Transaction Date Setup before posting.');
       return;
     }
     const goodsreturnno=parseInt(returnNoEl.value||'0',10)||0; if(!supplierCode.value){alert('Please select Supplier');return;}

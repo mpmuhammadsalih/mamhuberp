@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .aca-page { max-width: 1280px; margin: 0 auto; padding: 12px 16px 32px; }
+  .aca-top { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .aca-title { margin: 0; font-size: 22px; font-weight: 500; }
+  .aca-muted { margin: 4px 0 0; font-size: 13px; color: #6c757d; }
+  .aca-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .aca-btn { border: 1px solid #dee2e6; border-radius: 4px; padding: 7px 14px; font-size: 13px; background: #fff; cursor: pointer; text-decoration: none; color: #212529; }
+  .aca-btn:disabled { opacity: .55; cursor: not-allowed; }
+  .aca-btn--primary { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+  .aca-btn--danger { background: #dc3545; color: #fff; border-color: #dc3545; }
+  .aca-btn--ghost { background: #f8f9fa; }
+  .aca-flash { margin: 8px 0 12px; padding: 8px 12px; border-radius: 4px; font-size: 13px; }
+  .aca-flash--ok { background: #d1e7dd; color: #0f5132; }
+  .aca-flash--err { background: #f8d7da; color: #842029; }
+  .aca-card { border: 1px solid #dee2e6; border-radius: 6px; padding: 12px 14px; margin-bottom: 12px; background: #fff; }
+  .aca-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+  .aca-grid label { display: block; font-size: 12px; color: #6c757d; margin-bottom: 2px; }
+  .aca-grid input, .aca-grid select, .aca-grid textarea { width: 100%; border: 1px solid #dee2e6; border-radius: 4px; padding: 6px 8px; font-size: 13px; box-sizing: border-box; }
+  .aca-hint { font-size: 12px; color: #64748b; margin: 0 0 10px; line-height: 1.4; }
+  .aca-table-wrap { overflow: auto; border: 1px solid #dee2e6; border-radius: 4px; max-height: 48vh; }
+  .aca-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .aca-table th, .aca-table td { padding: 6px 8px; border-bottom: 1px solid #e9ecef; white-space: nowrap; }
+  .aca-table th { background: #f8f9fa; position: sticky; top: 0; z-index: 1; }
+  .aca-table td.num, .aca-table th.num { text-align: right; }
+  .aca-table tr.is-selected { background: #e7f1ff; }
+  .aca-table input[type="number"], .aca-table input[type="text"] { width: 100%; min-width: 80px; border: 1px solid #ced4da; border-radius: 3px; padding: 4px 6px; font-size: 13px; box-sizing: border-box; }
+  .aca-tag { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .aca-tag--cogs { background: #fff3cd; color: #664d03; }
+  .aca-tag--reval { background: #cfe2ff; color: #084298; }
+  .aca-tag--cost { background: #e9ecef; color: #495057; }
+  .aca-footer { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+  .aca-totals { font-size: 13px; font-weight: 600; }
+  .aca-pick { position: relative; }
+  .aca-pick__list { position: absolute; z-index: 20; left: 0; right: 0; top: 100%; max-height: 220px; overflow: auto; background: #fff; border: 1px solid #ced4da; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,.08); display: none; }
+  .aca-pick__list.is-open { display: block; }
+  .aca-pick__item { padding: 6px 10px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #f1f3f5; }
+  .aca-pick__item:hover { background: #f0f7ff; }
+</style>
+
+<div class="aca-page" id="acaPage"
+  data-query-mode="{{ 'true' if query_mode else 'false' }}"
+  data-save-url="{{ url_for('accounts.average_cost_adjustment_api_save') }}"
+  data-list-url="{{ url_for('accounts.average_cost_adjustment_list') }}"
+  data-item-context-url="{{ url_for('accounts.average_cost_adjustment_api_item_context') }}"
+  data-items-url="{{ url_for('accounts.average_cost_adjustment_api_items') }}"
+  data-negative-url="{{ url_for('accounts.average_cost_adjustment_api_negative_stock') }}">
+
+  <div class="aca-top">
+    <div>
+      <h1 class="aca-title">Average Cost Adjustment{% if query_mode %} <small style="font-size:14px;color:#6c757d;">(view)</small>{% endif %}</h1>
+      <p class="aca-muted">Stock &gt; 0: inventory revaluation vs variance. Stock &lt; 0 (minus billing): COGS ↔ Inventory correction. Stock = 0: cost master update only.</p>
+    </div>
+    <div class="aca-actions">
+      <a class="aca-btn" href="{{ url_for('accounts.average_cost_adjustment_list') }}">Back to list</a>
+      {% if not query_mode %}
+      <button type="button" class="aca-btn aca-btn--ghost" id="acaBtnNegStock">Load negative stock</button>
+      <button type="button" class="aca-btn" id="acaBtnSave">Save</button>
+      <button type="button" class="aca-btn aca-btn--primary" id="acaBtnPost">Post</button>
+      {% endif %}
+    </div>
+  </div>
+
+  <div id="acaFlash" class="aca-flash" hidden></div>
+
+  <div class="aca-card">
+    <div class="aca-grid">
+      <div>
+        <label>Journal</label>
+        <input type="text" id="acaJournalName" value="{{ payload.header.journalname or '' }}" {% if query_mode %}readonly{% endif %} />
+        <input type="hidden" id="acaJournalNo" value="{{ payload.header.journalno or '' }}" />
+      </div>
+      <div>
+        <label>Journal date</label>
+        <input type="date" id="acaJournalDate" value="{{ (payload.header.journal_date or today)|string|truncate(10, True, '') }}" {% if query_mode %}readonly{% endif %} />
+      </div>
+      <div>
+        <label>Posting date</label>
+        <input type="date" id="acaPostingDate" value="{{ (payload.header.posting_date or today)|string|truncate(10, True, '') }}" {% if query_mode %}readonly{% endif %} />
+      </div>
+      <div>
+        <label>Warehouse (optional)</label>
+        <select id="acaWarehouse" {% if query_mode %}disabled{% endif %}>
+          <option value="">All / location total</option>
+          {% for w in warehouses %}
+          <option value="{{ w.code }}" {% if payload.header.warehouse_code == w.code %}selected{% endif %}>{{ w.code }}{% if w.name %} — {{ w.name }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Reason</label>
+        <select id="acaReason" {% if query_mode %}disabled{% endif %}>
+          {% for r in reasons %}
+          <option value="{{ r }}" {% if payload.header.adjustment_reason == r %}selected{% endif %}>{{ r }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Reference</label>
+        <input type="text" id="acaReference" value="{{ payload.header.reference or '' }}" {% if query_mode %}readonly{% endif %} />
+      </div>
+      <div style="grid-column: 1 / -1;">
+        <label>Description</label>
+        <input type="text" id="acaDescription" value="{{ payload.header.description or '' }}" {% if query_mode %}readonly{% endif %} />
+      </div>
+    </div>
+    {% if payload.header.gl_voucher_no %}
+    <p class="aca-muted" style="margin-top:8px;">GL voucher: <strong>{{ payload.header.gl_voucher_no }}</strong></p>
+    {% endif %}
+  </div>
+
+  {% if not query_mode %}
+  <div class="aca-card">
+    <p class="aca-hint">Add an item, enter the <strong>new average cost</strong> (base unit). Value delta = stock × (new − old). Negative stock posts a COGS correction.</p>
+    <div class="aca-grid" style="align-items:end;">
+      <div class="aca-pick" style="grid-column: span 2;">
+        <label>Find item</label>
+        <input type="text" id="acaItemSearch" placeholder="Code, name, or barcode…" autocomplete="off" />
+        <div class="aca-pick__list" id="acaItemPickList"></div>
+      </div>
+      <div>
+        <label>Item code</label>
+        <input type="text" id="acaItemCode" readonly />
+      </div>
+      <div>
+        <label>Stock qty</label>
+        <input type="text" id="acaItemStock" readonly />
+      </div>
+      <div>
+        <label>Old avg cost</label>
+        <input type="text" id="acaItemOldAvg" readonly />
+      </div>
+      <div>
+        <label>New avg cost</label>
+        <input type="number" id="acaItemNewAvg" step="0.000001" min="0" />
+      </div>
+      <div>
+        <button type="button" class="aca-btn aca-btn--primary" id="acaBtnAddLine" style="width:100%;">+ Add line</button>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="aca-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap;">
+      <strong style="font-size:14px;">Lines</strong>
+      {% if not query_mode %}
+      <button type="button" class="aca-btn aca-btn--danger" id="acaBtnRemoveLine" disabled>Remove selected</button>
+      {% endif %}
+    </div>
+    <div class="aca-table-wrap">
+      <table class="aca-table">
+        <thead>
+          <tr>
+            {% if not query_mode %}<th></th>{% endif %}
+            <th>Item</th>
+            <th>Name</th>
+            <th>UOM</th>
+            <th class="num">Stock</th>
+            <th class="num">Old avg</th>
+            <th class="num">New avg</th>
+            <th class="num">Value delta</th>
+            <th>Type</th>
+            <th>Inv acct</th>
+            <th>Offset</th>
+          </tr>
+        </thead>
+        <tbody id="acaLinesBody">
+          <tr class="aca-empty"><td colspan="11">No lines yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="aca-footer">
+      <div class="aca-totals">Lines: <span id="acaLineCount">0</span> · Value delta: <span id="acaTotalDelta">0.00</span></div>
+      <div class="aca-muted" id="acaCorrLegend">Revaluation = inventory vs variance · COGS correction = inventory vs COGS (minus billing)</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.__ACA_PAYLOAD__ = {{ payload_json | safe }};
+</script>
+<script src="{{ url_for('static', filename='js/average_cost_adjustment.js') }}"></script>
+{% endblock %}

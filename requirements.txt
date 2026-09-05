@@ -19,3 +19,5 @@ pypdf>=4.0.0,<7
 pymupdf>=1.24.0,<2
 Werkzeug>=3.0.0,<3.2
 PyJWT>=2.8.0,<3
+bcrypt>=4.0.0,<5
+email-validator>=2.0.0,<3

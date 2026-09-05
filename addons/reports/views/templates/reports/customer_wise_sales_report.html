@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}Customer Wise Sales{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/setup_master_pages.css') }}?v=1" />
+<style>
+  .cws-page .co-table-wrap { overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; max-height: 68vh; }
+  .cws-page .co-table { width: 100%; min-width: 980px; border-collapse: collapse; font-size: 13px; }
+  .cws-page .co-table th, .cws-page .co-table td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+  .cws-page .co-table thead th { position: sticky; top: 0; z-index: 2; background: #f8fafc; font-size: 12px; font-weight: 700; color: #334155; }
+  .cws-page .co-table td.num, .cws-page .co-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .cws-page .co-table tbody tr:hover { background: #f8fafc; }
+  .cws-page .co-table tfoot td { background: #f1f5f9; font-weight: 700; border-top: 2px solid #94a3b8; }
+  .cws-page .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 12px; }
+  .cws-page .field label { display: block; font-size: 11px; color: #64748b; margin-bottom: 3px; font-weight: 600; }
+  .cws-page .input, .cws-page .select { border: 1px solid #dee2e6; border-radius: 6px; padding: 7px 8px; font-size: 12px; min-width: 140px; }
+  .cws-page .input-group { display: flex; gap: 6px; align-items: center; }
+  .cws-page .input-readonly { background: #f8fafc; cursor: pointer; min-width: 220px; }
+  .cws-modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.25); display: none; align-items: center; justify-content: center; z-index: 9999; }
+  .cws-modal-bg.show { display: flex; }
+  .cws-modal-card { width: min(640px, 94vw); max-height: 76vh; background: #fff; border: 1px solid #dee2e6; border-radius: 8px; display: flex; flex-direction: column; }
+  .cws-modal-head { padding: 10px 12px; border-bottom: 1px solid #dee2e6; display: flex; justify-content: space-between; font-weight: 600; }
+  .cws-modal-body { padding: 10px 12px; overflow: auto; }
+  .cws-modal-search { width: 100%; border: 1px solid #dee2e6; border-radius: 4px; padding: 7px 8px; margin-bottom: 8px; box-sizing: border-box; }
+  .cws-modal-row { width: 100%; border: 0; border-bottom: 1px solid #edf2f7; background: #fff; text-align: left; padding: 8px 10px; font-size: 12px; cursor: pointer; }
+  .cws-modal-row:hover { background: #e9f2ff; }
+</style>
+
+<div class="page-po nexa-list-page nexa-setup-list-page cws-page">
+  <section class="nexa-stat-grid" aria-label="Sales summary">
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--blue"><i class="bi bi-people" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Customers</p>
+        <p class="nexa-stat-value">{{ rows|length }}</p>
+        <p class="nexa-stat-sub">In report</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--green"><i class="bi bi-receipt" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Sales bills</p>
+        <p class="nexa-stat-value">{{ totals.billcount or 0 }}</p>
+        <p class="nexa-stat-sub">{{ '%.2f'|format(totals.salesamount or 0) }}</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--amber"><i class="bi bi-arrow-return-left" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Return bills</p>
+        <p class="nexa-stat-value">{{ totals.return_billcount or 0 }}</p>
+        <p class="nexa-stat-sub">{{ '%.2f'|format(totals.sales_return or 0) }}</p>
+      </div>
+    </div>
+    <div class="nexa-stat-card">
+      <span class="nexa-stat-icon nexa-stat-icon--purple"><i class="bi bi-currency-dollar" aria-hidden="true"></i></span>
+      <div>
+        <p class="nexa-stat-label">Net sales</p>
+        <p class="nexa-stat-value">{{ '%.2f'|format(totals.total_sale or 0) }}</p>
+        <p class="nexa-stat-sub">{{ totals.total_billcount or 0 }} total bills</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title page-po__title--with-icon">
+        <span class="page-po__title-icon" aria-hidden="true"><i class="bi bi-person-lines-fill"></i></span>
+        Customer Wise Sales
+      </h1>
+      <p class="page-po__muted">Sales and returns grouped by customer from BILLHDR.</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a class="page-po__btn page-po__btn-secondary" href="{{ url_for('reports.customer_wise_sales_report') }}">Clear</a>
+      <button class="page-po__btn page-po__btn-secondary" type="submit" form="cwsFilterForm" formaction="{{ url_for('reports.customer_wise_sales_export_excel') }}">Export CSV</button>
+    </div>
+  </div>
+
+  <form id="cwsFilterForm" method="get" action="{{ url_for('reports.customer_wise_sales_report') }}">
+    <div class="filters">
+      <div class="field">
+        <label for="cwsDateFrom">Date from</label>
+        <input id="cwsDateFrom" class="input" type="date" name="date_from" value="{{ (filters.date_from if filters else '') or '' }}" />
+      </div>
+      <div class="field">
+        <label for="cwsDateTo">Date to</label>
+        <input id="cwsDateTo" class="input" type="date" name="date_to" value="{{ (filters.date_to if filters else '') or '' }}" />
+      </div>
+      <div class="field">
+        <label>Customer</label>
+        <div class="input-group">
+          <input id="customerCode" type="hidden" name="customer_code" value="{{ (filters.customer_code if filters else '') or '' }}" />
+          <input id="customerText" class="input input-readonly" type="text" placeholder="All customers" value="{{ (filters.customer_label if filters else '') or '' }}" readonly />
+          <button id="pickCustomerBtn" class="page-po__btn page-po__btn-secondary" type="button">Popup</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="cwsBillType">Bill type</label>
+        <select id="cwsBillType" class="select" name="bill_type">
+          {% set bt = ((filters.bill_type if filters else '') or '')|trim|upper %}
+          <option value="" {% if not bt %}selected{% endif %}>All</option>
+          <option value="C" {% if bt == 'C' %}selected{% endif %}>Cash (C)</option>
+          <option value="R" {% if bt == 'R' %}selected{% endif %}>Credit (R)</option>
+          <option value="D" {% if bt == 'D' %}selected{% endif %}>Card / other (D)</option>
+        </select>
+      </div>
+      <button class="page-po__btn page-po__btn-primary" type="submit">Run Report</button>
+    </div>
+  </form>
+
+  <div class="co-table-wrap">
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th>Customer Code</th>
+          <th>Customer Name</th>
+          <th class="num">Bill Count</th>
+          <th class="num">Sales Amount</th>
+          <th class="num">Return Bill Count</th>
+          <th class="num">Sales Return</th>
+          <th class="num">Total Bill Count</th>
+          <th class="num">Total Sale</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.customercode if r.customercode is not none else '—' }}</td>
+          <td>{{ r.customername or '—' }}</td>
+          <td class="num">{{ r.billcount or 0 }}</td>
+          <td class="num">{{ '%.2f'|format(r.salesamount or 0) }}</td>
+          <td class="num">{{ r.return_billcount or 0 }}</td>
+          <td class="num">{{ '%.2f'|format(r.sales_return or 0) }}</td>
+          <td class="num">{{ r.total_billcount or 0 }}</td>
+          <td class="num">{{ '%.2f'|format(r.total_sale or 0) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">No sales data for the selected filters.</td></tr>
+        {% endfor %}
+      </tbody>
+      {% if rows %}
+      <tfoot>
+        <tr>
+          <td colspan="2">Total</td>
+          <td class="num">{{ totals.billcount or 0 }}</td>
+          <td class="num">{{ '%.2f'|format(totals.salesamount or 0) }}</td>
+          <td class="num">{{ totals.return_billcount or 0 }}</td>
+          <td class="num">{{ '%.2f'|format(totals.sales_return or 0) }}</td>
+          <td class="num">{{ totals.total_billcount or 0 }}</td>
+          <td class="num">{{ '%.2f'|format(totals.total_sale or 0) }}</td>
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div>
+
+<div id="customerModal" class="cws-modal-bg" aria-hidden="true">
+  <div class="cws-modal-card" role="dialog" aria-labelledby="customerModalTitle">
+    <div class="cws-modal-head">
+      <span id="customerModalTitle">Select customer</span>
+      <button type="button" id="closeCustomerModal" class="page-po__btn page-po__btn-secondary">Close</button>
+    </div>
+    <div class="cws-modal-body">
+      <input id="customerModalSearch" class="cws-modal-search" type="text" placeholder="Search code or name…" />
+      <div id="customerModalList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var apiCustomers = {{ url_for('reports.sales_details_customers_api')|tojson }};
+  var modal = document.getElementById('customerModal');
+  var listEl = document.getElementById('customerModalList');
+  var searchEl = document.getElementById('customerModalSearch');
+  var codeEl = document.getElementById('customerCode');
+  var textEl = document.getElementById('customerText');
+
+  function closeModal() { modal.classList.remove('show'); modal.setAttribute('aria-hidden', 'true'); }
+  function openModal() { modal.classList.add('show'); modal.setAttribute('aria-hidden', 'false'); searchEl.focus(); loadCustomers(''); }
+
+  function renderCustomers(items) {
+    listEl.innerHTML = '';
+    (items || []).forEach(function (c) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'cws-modal-row';
+      btn.textContent = String(c.customercode) + ' — ' + (c.customername || '');
+      btn.addEventListener('click', function () {
+        codeEl.value = String(c.customercode);
+        textEl.value = btn.textContent;
+        closeModal();
+      });
+      listEl.appendChild(btn);
+    });
+    if (!items || !items.length) listEl.innerHTML = '<p style="padding:8px;color:#64748b;">No customers found.</p>';
+  }
+
+  function loadCustomers(q) {
+    fetch(apiCustomers + '?search=' + encodeURIComponent(q || ''), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { renderCustomers((d && d.customers) || []); })
+      .catch(function () { renderCustomers([]); });
+  }
+
+  document.getElementById('pickCustomerBtn').addEventListener('click', openModal);
+  document.getElementById('closeCustomerModal').addEventListener('click', closeModal);
+  modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+  searchEl.addEventListener('input', function () { loadCustomers(searchEl.value); });
+})();
+</script>
+{% endblock %}

@@ -246,19 +246,66 @@ def _lookup_rows(
 
 
 def _flag_categories(flag: str, loc: int) -> list[dict[str, Any]]:
+    """
+    CATEGORY lookups for Item Master open form.
+
+    ERP Item Master popup loads M/B/Z/L with ``get_categories(flag)`` (no location
+    filter). Filtering by LOCATIONCODE often returns only one main category when
+    the rest of the master is shared / under another location — so M/B match ERP
+    and stay unscoped. D/C prefer the session location, then merge any missing
+    codes from the unscoped list so cascading still sees the full tree.
+    """
     from db import get_categories
 
-    try:
-        rows = get_categories(flag, location_code=loc) or get_categories(flag)
-    except Exception:
+    fl = (flag or "").strip().upper()[:1] or "C"
+
+    def _fetch(*, with_loc: bool) -> list[Any]:
         try:
-            rows = get_categories(flag)
+            if with_loc:
+                return list(get_categories(fl, location_code=int(loc)) or [])
+            return list(get_categories(fl) or [])
         except Exception:
-            rows = []
+            return []
+
+    def _code_key(row: Any) -> str:
+        r = dict(row or {})
+        for k in ("code", "CODE"):
+            if r.get(k) not in (None, ""):
+                try:
+                    return str(int(float(str(r.get(k)).strip())))
+                except (TypeError, ValueError):
+                    return str(r.get(k)).strip()
+        return ""
+
+    def _merge(primary: list[Any], secondary: list[Any]) -> list[Any]:
+        out: list[Any] = []
+        seen: set[str] = set()
+        for src in (primary, secondary):
+            for row in src:
+                ck = _code_key(row)
+                if not ck or ck in seen:
+                    continue
+                seen.add(ck)
+                out.append(row)
+        return out
+
+    # Same as ERP ``_itemmaster_lookup_rows`` for main/brand/size/color
+    if fl in ("M", "B", "Z", "L"):
+        rows = _fetch(with_loc=False)
+        if not rows:
+            rows = _fetch(with_loc=True)
+    else:
+        loc_rows = _fetch(with_loc=True)
+        all_rows = _fetch(with_loc=False)
+        # Location-first, but never hide masters that exist only outside this loc
+        rows = _merge(loc_rows, all_rows) if (loc_rows or all_rows) else []
+
     return _lookup_rows(
         rows,
         code_keys=("code", "CODE"),
         name_keys=("name", "NAME"),
+        # ID is parent code for D/C (main CODE / dept CODE); omit for M/B
+        parent_keys=("id", "ID", "parent_id", "parentid") if fl in ("D", "C") else (),
     )
 
 
@@ -277,8 +324,9 @@ def get_open_context() -> dict[str, Any]:
         next_code = int(get_next_item_code(loc) or 0)
         suggested_barcode = ""
         if next_code > 0:
+            # Same ERP rule: 12 + zero pad + item code (13 digits), e.g. 1200000001000
             suggested_barcode = str(
-                format_location_prefix_item_barcode(loc, next_code) or next_code
+                format_location_prefix_item_barcode(loc, next_code) or ""
             ).strip()
 
         try:
@@ -342,7 +390,7 @@ def list_items(
     lim = max(1, min(int(limit or 100), 300))
     q = (search or "").strip()
     stock = (stock_filter or "").strip().lower()
-    if stock not in ("", "notzero", "greater", "less"):
+    if stock not in ("", "notzero", "greater", "less", "instock", "low", "out", "zero"):
         stock = ""
     cat = _to_int(category_code, None)
     brand = _to_int(brand_code, None)
@@ -379,6 +427,12 @@ def list_items(
                     ).strip(),
                     "base_uom": str(r.get("baseuom") or r.get("base_uom") or "").strip(),
                     "cost_price": _to_float(r.get("costprice") or r.get("cost_price")),
+                    "average_cost": (
+                        _to_float(
+                            r.get("averagecost") or r.get("average_cost") or r.get("AVERAGECOST")
+                        )
+                        or _to_float(r.get("costprice") or r.get("cost_price"))
+                    ),
                     "retail_price": _to_float(r.get("retailprice") or r.get("retail_price")),
                     "current_stock": _to_float(r.get("currentstock") or r.get("current_stock")),
                     "category_code": _to_int(r.get("categorycode") or r.get("category_code"), 0) or 0,
@@ -409,9 +463,195 @@ def _alt_row_is_base(alt: dict[str, Any], base_uom: str) -> bool:
     return bool(uom) and uom.upper() == (base_uom or "").strip().upper() and abs(factor - 1.0) < 0.0001
 
 
+def get_item_ledger(
+    *,
+    item_code: int | None = None,
+    barcode: str = "",
+    tab: str = "purchase",
+    limit: int = 400,
+) -> dict[str, Any]:
+    """ERP Item Master ledger tabs (GRN / PR / sale / sale return / stock adj)."""
+    from db import get_item_by_code, get_item_by_manufacturer_id, get_item_ledger_tab
+
+    tab_n = str(tab or "purchase").strip().lower().replace("-", "_") or "purchase"
+    lim = max(1, min(int(limit or 400), 2000))
+    bc = str(barcode or "").strip()
+
+    with _erp_session_scope():
+        im = _itemmaster_mod()
+        loc = im._itemmaster_session_location_code()
+        code = _to_int(item_code, 0) or 0
+        item_name = ""
+        resolved_barcode = bc
+
+        if code <= 0 and bc:
+            item = None
+            try:
+                item = get_item_by_manufacturer_id(bc, loc)
+            except Exception:
+                item = None
+            if not item:
+                try:
+                    from db import get_item_by_alternate_barcode
+
+                    item = get_item_by_alternate_barcode(bc, loc)
+                except Exception:
+                    item = None
+            if not item:
+                raise ValueError(f"No item found for barcode {bc}")
+            code = _to_int(item.get("itemcode") or item.get("ITEMCODE"), 0) or 0
+            item_name = str(item.get("itemname") or item.get("ITEMNAME") or "").strip()
+            if code <= 0:
+                raise ValueError(f"Item for barcode {bc} has no valid item code")
+
+        if code <= 0:
+            raise ValueError("item_code or barcode is required.")
+
+        if not item_name:
+            try:
+                hdr = get_item_by_code(int(code), loc)
+                if hdr:
+                    item_name = str(hdr.get("itemname") or hdr.get("ITEMNAME") or "").strip()
+                    if not resolved_barcode:
+                        resolved_barcode = str(
+                            hdr.get("manufacturerid") or hdr.get("manufacturer_id") or ""
+                        ).strip()
+            except Exception:
+                pass
+
+        rows = get_item_ledger_tab(loc, int(code), tab_n, limit=lim) or []
+        out_rows: list[dict[str, Any]] = []
+        for raw in rows:
+            r = dict(raw or {})
+            out_rows.append(
+                {
+                    "doc_no": str(r.get("doc_no") or r.get("docno") or "").strip(),
+                    "doc_date": str(r.get("doc_date") or r.get("docdate") or "").strip(),
+                    "party_code": str(r.get("party_code") or r.get("partycode") or "").strip(),
+                    "party_name": str(r.get("party_name") or r.get("partyname") or "").strip(),
+                    "qty": _to_float(r.get("qty") or r.get("quantity")),
+                    "uom": str(r.get("uom") or "").strip(),
+                    "rate": _to_float(r.get("rate")),
+                    "bonus": _to_float(r.get("bonus")),
+                    "foc": r.get("foc"),
+                    "discount": _to_float(r.get("discount")),
+                    "amount": _to_float(r.get("amount")),
+                }
+            )
+        return {
+            "tab": tab_n,
+            "item_code": int(code),
+            "item_name": item_name,
+            "barcode": resolved_barcode,
+            "rows": out_rows,
+            "count": len(out_rows),
+        }
+
+
+def get_item_journal(
+    *,
+    item_code: int | None = None,
+    barcode: str = "",
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 500,
+) -> dict[str, Any]:
+    """ITEMJOURNAL stock movements for one item (same source as ERP stock ledger detail)."""
+    from datetime import date, timedelta
+
+    from db import get_item_by_alternate_barcode, get_item_by_code, get_item_by_manufacturer_id
+    from mobile_backend.services.inventory_reports_service import stock_ledger
+
+    with _erp_session_scope():
+        im = _itemmaster_mod()
+        loc = im._itemmaster_session_location_code()
+        code = _to_int(item_code, 0) or 0
+        item_name = ""
+        resolved_barcode = str(barcode or "").strip()
+        if code <= 0 and resolved_barcode:
+            item = None
+            try:
+                item = get_item_by_manufacturer_id(resolved_barcode, loc)
+            except Exception:
+                item = None
+            if not item:
+                try:
+                    item = get_item_by_alternate_barcode(resolved_barcode, loc)
+                except Exception:
+                    item = None
+            if not item:
+                raise ValueError(f"No item found for barcode {resolved_barcode}")
+            code = _to_int(item.get("itemcode") or item.get("ITEMCODE"), 0) or 0
+            item_name = str(item.get("itemname") or item.get("ITEMNAME") or "").strip()
+        if code <= 0:
+            raise ValueError("item_code or barcode is required.")
+        if not item_name:
+            try:
+                hdr = get_item_by_code(int(code), loc) or {}
+                item_name = str(hdr.get("itemname") or hdr.get("ITEMNAME") or "").strip()
+                if not resolved_barcode:
+                    resolved_barcode = str(
+                        hdr.get("manufacturerid") or hdr.get("manufacturer_id") or ""
+                    ).strip()
+            except Exception:
+                pass
+
+    df = (date_from or "").strip()
+    dt = (date_to or "").strip()
+    if not df or not dt:
+        today = date.today()
+        dt = dt or today.isoformat()
+        df = df or (today - timedelta(days=729)).isoformat()
+
+    payload = stock_ledger(
+        date_from=df,
+        date_to=dt,
+        search="",
+        item_code=str(code),
+        report_mode="detail",
+        limit=limit,
+    )
+
+    rows_out: list[dict[str, Any]] = []
+    for raw in payload.get("rows") or []:
+        r = dict(raw or {})
+        rows_out.append(
+            {
+                "stock_date": str(r.get("stock_date") or r.get("date") or "").strip(),
+                "stock_time": str(r.get("stock_time") or r.get("time") or "").strip(),
+                "transtype": str(r.get("transtype") or r.get("trans_type") or r.get("type") or "").strip(),
+                "source_doc": str(r.get("source_doc") or r.get("sourcedoc") or "").strip(),
+                "source_no": str(r.get("source_no") or r.get("sourceno") or "").strip(),
+                "qty_in": _to_float(r.get("qty_in")),
+                "qty_out": _to_float(r.get("qty_out")),
+                "net_qty": _to_float(r.get("net_qty") or r.get("qty") or r.get("quantity")),
+                "uom": str(r.get("uom") or "").strip(),
+                "rate": _to_float(r.get("rate") or r.get("costprice")),
+                "amount": _to_float(r.get("amount") or r.get("line_value")),
+                "warehouse_code": str(
+                    r.get("warehouse_code") or r.get("warehouse") or r.get("warehouse_name") or ""
+                ).strip(),
+            }
+        )
+    return {
+        "item_code": code,
+        "item_name": item_name,
+        "barcode": resolved_barcode,
+        "date_from": payload.get("date_from") or df,
+        "date_to": payload.get("date_to") or dt,
+        "rows": rows_out,
+        "count": len(rows_out),
+    }
+
+
 def get_item_detail(item_code: int) -> dict[str, Any]:
     """Full item header + non-base alternate UOM rows for mobile detail/edit."""
-    from db import get_category_lookup_label, get_item_alternate_uoms, get_item_by_code
+    from db import (
+        get_category_lookup_label,
+        get_item_alternate_uoms,
+        get_item_by_code,
+        get_supplier_by_code,
+    )
 
     code = _to_int(item_code, 0) or 0
     if code <= 0:
@@ -432,6 +672,22 @@ def get_item_detail(item_code: int) -> dict[str, Any]:
         main_category = _to_int(r.get("maincategory") or r.get("main_category"), 0) or 0
         department_code = _to_int(r.get("departmentcode") or r.get("department_code"), 0) or 0
         sup_code = _to_int(r.get("supcode") or r.get("sup_code"), 0) or 0
+        cost_price = _to_float(r.get("costprice") or r.get("cost_price"))
+        average_cost = _to_float(
+            r.get("averagecost") or r.get("average_cost") or r.get("AVERAGECOST")
+        )
+        if average_cost <= 0:
+            average_cost = cost_price
+
+        supplier_name = str(r.get("suppliername") or r.get("supplier_name") or "").strip()
+        if not supplier_name and sup_code > 0:
+            try:
+                sup = get_supplier_by_code(loc, int(sup_code)) or {}
+                supplier_name = str(
+                    sup.get("suppliername") or sup.get("SUPPLIERNAME") or ""
+                ).strip()
+            except Exception:
+                supplier_name = ""
 
         def _lbl(flag: str, c: int) -> str:
             if c <= 0:
@@ -447,6 +703,10 @@ def get_item_detail(item_code: int) -> dict[str, Any]:
             a = dict(araw or {})
             if _alt_row_is_base(a, base_uom):
                 continue
+            factor = _to_float(a.get("conversionfactor") or a.get("conversion_factor"))
+            alt_cost = _to_float(a.get("costprice") or a.get("cost_price"))
+            if alt_cost <= 0 and factor > 0:
+                alt_cost = round(factor * cost_price, 3)
             alts.append(
                 {
                     "slno": str(a.get("slno") or "").strip(),
@@ -456,10 +716,8 @@ def get_item_detail(item_code: int) -> dict[str, Any]:
                     "manufacturer_id": str(
                         a.get("manufacturerid") or a.get("manufacturer_id") or ""
                     ).strip(),
-                    "conversion_factor": _to_float(
-                        a.get("conversionfactor") or a.get("conversion_factor")
-                    ),
-                    "cost_price": _to_float(a.get("costprice") or a.get("cost_price")),
+                    "conversion_factor": factor,
+                    "cost_price": alt_cost,
                     "retail_price": _to_float(a.get("retailprice") or a.get("retail_price")),
                     "wholesale_price": _to_float(
                         a.get("wholesaleprice") or a.get("wholesale_price")
@@ -482,7 +740,9 @@ def get_item_detail(item_code: int) -> dict[str, Any]:
             "department_code": department_code,
             "department_name": _lbl("D", department_code),
             "sup_code": sup_code,
-            "cost_price": _to_float(r.get("costprice") or r.get("cost_price")),
+            "supplier_name": supplier_name,
+            "cost_price": cost_price,
+            "average_cost": average_cost,
             "retail_price": _to_float(r.get("retailprice") or r.get("retail_price")),
             "wholesale_price": _to_float(r.get("wholesaleprice") or r.get("wholesale_price")),
             "vat_percent": _to_float(r.get("vatpercent") or r.get("vat_percent")),
@@ -841,3 +1101,92 @@ def update_item(
     return _persist_item(
         data, is_new=False, username=username, fixed_item_code=int(item_code)
     )
+
+
+def delete_item(
+    item_code: int, *, password: str, username: str = "mobile"
+) -> dict[str, Any]:
+    """Delete ITEMMASTER (+ alternate UOMs) for the current location after password check."""
+    from master_activity_log import append_master_activity
+    from db import _get_connection, get_item_by_code
+    from mobile_backend.database.transaction import oracle_transaction
+    from mobile_backend.services.master_delete_auth import require_master_delete_password
+
+    code = int(item_code or 0)
+    if code <= 0:
+        raise ValueError("Item code is required.")
+    require_master_delete_password(password, username=username)
+
+    with mobile_operation_lock(
+        "item_delete",
+        str(code),
+        busy_message="Item delete is already running. Please wait.",
+    ), _erp_session_scope() as user:
+        im = _itemmaster_mod()
+        loc = im._itemmaster_session_location_code()
+        existing = get_item_by_code(code, loc)
+        if not existing:
+            raise ValueError(f"Item {code} not found.")
+        item_name = str(
+            existing.get("itemname") or existing.get("item_name") or ""
+        ).strip()[:200]
+
+        with _get_connection() as conn:
+            with oracle_transaction(conn), conn.cursor() as cur:
+                # Drop alternates first (same order as HO central delete)
+                try:
+                    cur.execute(
+                        "SELECT COUNT(*) FROM user_tables WHERE table_name = 'ITEMALTERNATEUOMMAP'"
+                    )
+                    has_alt = int((cur.fetchone() or [0])[0] or 0) > 0
+                except Exception:
+                    has_alt = False
+                if has_alt:
+                    cur.execute(
+                        "DELETE FROM ITEMALTERNATEUOMMAP WHERE LOCATIONCODE = :loc AND ITEMCODE = :icode",
+                        {"loc": int(loc), "icode": code},
+                    )
+                cur.execute(
+                    "DELETE FROM ITEMMASTER WHERE LOCATIONCODE = :loc AND ITEMCODE = :icode",
+                    {"loc": int(loc), "icode": code},
+                )
+                deleted = int(cur.rowcount or 0)
+                if deleted <= 0:
+                    raise ValueError(f"Failed to delete item {code}.")
+                # Optional audit table (HO has ITEMDELETED; ignore if missing)
+                try:
+                    cur.execute(
+                        """
+                        INSERT INTO ITEMDELETED (ITEMCODE, ITEMNAME, DELETEDUSER, DELETEDDATE)
+                        VALUES (:icode, :iname, :u, SYSDATE)
+                        """,
+                        {
+                            "icode": code,
+                            "iname": item_name,
+                            "u": str(user or username or "mobile")[:100],
+                        },
+                    )
+                except Exception:
+                    pass
+
+        try:
+            append_master_activity(
+                username=str(user or username or "mobile"),
+                action="DELETE",
+                entity="item",
+                summary=f"location={loc}, item_code={code}, name={item_name[:80]}",
+                detail={
+                    "locationcode": loc,
+                    "itemcode": code,
+                    "itemname": item_name,
+                    "source": "mobile",
+                },
+            )
+        except Exception:
+            pass
+
+        return {
+            "item_code": code,
+            "item_name": item_name,
+            "message": f"Item {item_name or code} deleted ({code}).",
+        }

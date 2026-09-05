@@ -110,15 +110,12 @@ def _reset_sales_ctx() -> None:
 
 
 def _resolve_sales_hdr_dtl() -> Tuple[str, str]:
-    """Prefer BILLHDRHISTORY when present (matches mobile dashboard / posted sales)."""
-    hdr = _detect_table(['BILLHDRHISTORY', 'billhdrhistory'])
-    dtl = _detect_table(['BILLDTLHISTORY', 'billdtlhistory'])
-    if hdr and dtl:
-        return hdr, dtl
+    """Live BILLHDR / BILLDTL only (mobile SI invoices stay here until archive)."""
     hdr = _detect_table(['BILLHDR', 'billhdr'])
     dtl = _detect_table(['BILLDTL', 'billdtl'])
     if hdr and dtl:
         return hdr, dtl
+    # Fall back to history only when live tables are unavailable.
     hdr = _detect_table(['BILLHDRHISTORY', 'billhdrhistory'])
     dtl = _detect_table(['BILLDTLHISTORY', 'billdtlhistory'])
     return hdr or '', dtl or ''
@@ -201,8 +198,11 @@ def _billhdr_filters(
     if extra_params:
         params.update(extra_params)
     std = ''
+    # Include NULL RESETNO — mobile SI bills may not set the ERP reset column.
     if ctx.get('reset_col'):
-        std += f' AND bh.{ctx["reset_col"]} = :srn '
+        std += (
+            f' AND (bh.{ctx["reset_col"]} IS NULL OR bh.{ctx["reset_col"]} = :srn) '
+        )
         params['srn'] = _SALES_RESET_NO
     if ctx.get('del_col'):
         std += f" AND NVL(bh.{ctx['del_col']}, 'N') = 'N' "
@@ -435,44 +435,52 @@ def _grn_receipt_daily_trend(filters: Dict[str, Any]) -> List[Dict[str, Any]]:
     return out
 
 
-def _purchase_metrics(filters: Dict[str, Any]) -> Dict[str, Any]:
+def _purchase_order_totals(filters: Dict[str, Any]) -> Tuple[float, int]:
+    """Purchase orders (LPOHDR) for the period — separate from GRN purchases."""
     d_from = filters['date_from']
     d_to = filters['date_to']
     loc = filters.get('branch')
     hdr = _detect_table(['LPOHDR', 'lpohdr'])
-    total = 0.0
-    cnt = 0
-    if hdr:
-        h_date = _detect_column(hdr, ['LPODATE', 'LPO_DATE'])
-        h_amt = _detect_column(hdr, ['LPOAMOUNT', 'LPO_AMOUNT', 'NETAMOUNT', 'netamount']) or 'LPOAMOUNT'
-        h_loc = _detect_column(hdr, ['LOCATIONCODE', 'LOCATION_CODE'])
-        h_sup = _detect_column(hdr, ['SUPPLIERCODE', 'SUPPLIER_CODE'])
-        h_del = _detect_column(hdr, ['DELFLAG', 'DEL_FLAG'])
-        if h_date:
-            where = [
-                f"TRUNC(h.{h_date}) >= TO_DATE(:df, 'YYYY-MM-DD')",
-                f"TRUNC(h.{h_date}) <= TO_DATE(:dt, 'YYYY-MM-DD')",
-            ]
-            params: Dict[str, Any] = {'df': d_from, 'dt': d_to}
-            if loc and h_loc:
-                where.append(f'h.{h_loc} = :loc')
-                params['loc'] = int(loc)
-            if h_del:
-                where.append(f"NVL(h.{h_del}, 'N') = 'N'")
-            if filters.get('supplier_code') and h_sup:
-                where.append(f'h.{h_sup} = :sup')
-                params['sup'] = int(filters['supplier_code']) if str(filters['supplier_code']).isdigit() else filters['supplier_code']
-            w = ' AND '.join(where)
-            total = _f(_get_scalar(f'SELECT NVL(SUM(h.{h_amt}), 0) FROM {hdr} h WHERE {w}', params))
-            cnt = int(_get_scalar(f'SELECT COUNT(*) FROM {hdr} h WHERE {w}', params) or 0)
+    if not hdr:
+        return 0.0, 0
+    h_date = _detect_column(hdr, ['LPODATE', 'LPO_DATE'])
+    h_amt = _detect_column(hdr, ['LPOAMOUNT', 'LPO_AMOUNT', 'NETAMOUNT', 'netamount']) or 'LPOAMOUNT'
+    h_loc = _detect_column(hdr, ['LOCATIONCODE', 'LOCATION_CODE'])
+    h_sup = _detect_column(hdr, ['SUPPLIERCODE', 'SUPPLIER_CODE'])
+    h_del = _detect_column(hdr, ['DELFLAG', 'DEL_FLAG'])
+    if not h_date:
+        return 0.0, 0
+    where = [
+        f"TRUNC(h.{h_date}) >= TO_DATE(:df, 'YYYY-MM-DD')",
+        f"TRUNC(h.{h_date}) <= TO_DATE(:dt, 'YYYY-MM-DD')",
+    ]
+    params: Dict[str, Any] = {'df': d_from, 'dt': d_to}
+    if loc and h_loc:
+        where.append(f'h.{h_loc} = :loc')
+        params['loc'] = int(loc)
+    if h_del:
+        where.append(f"NVL(h.{h_del}, 'N') = 'N'")
+    if filters.get('supplier_code') and h_sup:
+        where.append(f'h.{h_sup} = :sup')
+        params['sup'] = (
+            int(filters['supplier_code'])
+            if str(filters['supplier_code']).isdigit()
+            else filters['supplier_code']
+        )
+    w = ' AND '.join(where)
+    total = _f(_get_scalar(f'SELECT NVL(SUM(h.{h_amt}), 0) FROM {hdr} h WHERE {w}', params))
+    cnt = int(_get_scalar(f'SELECT COUNT(*) FROM {hdr} h WHERE {w}', params) or 0)
+    return total, cnt
 
-    purchase_source = 'lpo'
-    if total <= 0 and cnt <= 0:
-        grn_amt, grn_cnt = _grn_receipt_totals(filters)
-        if grn_amt > 0 or grn_cnt > 0:
-            total = grn_amt
-            cnt = grn_cnt
-            purchase_source = 'grn'
+
+def _purchase_metrics(filters: Dict[str, Any]) -> Dict[str, Any]:
+    """Purchases = GRN (goods received). Purchase orders (LPO) are returned separately."""
+    d_from = filters['date_from']
+    d_to = filters['date_to']
+    loc = filters.get('branch')
+
+    grn_amt, grn_cnt = _grn_receipt_totals(filters)
+    po_amt, po_cnt = _purchase_order_totals(filters)
 
     ret_hdr = _detect_table(['RETURNHDR', 'returnhdr'])
     ret_amt = 0.0
@@ -493,7 +501,11 @@ def _purchase_metrics(filters: Dict[str, Any]) -> Dict[str, Any]:
                 rp['loc'] = int(loc)
             if filters.get('supplier_code') and rh_sup:
                 rw.append(f'h.{rh_sup} = :sup')
-                rp['sup'] = int(filters['supplier_code']) if str(filters['supplier_code']).isdigit() else filters['supplier_code']
+                rp['sup'] = (
+                    int(filters['supplier_code'])
+                    if str(filters['supplier_code']).isdigit()
+                    else filters['supplier_code']
+                )
             ret_amt = _f(_get_scalar(
                 f'SELECT NVL(SUM(h.{rh_amt}), 0) FROM {ret_hdr} h WHERE {" AND ".join(rw)}',
                 rp,
@@ -501,12 +513,14 @@ def _purchase_metrics(filters: Dict[str, Any]) -> Dict[str, Any]:
             ret_cnt = int(_get_scalar(f'SELECT COUNT(*) FROM {ret_hdr} h WHERE {" AND ".join(rw)}', rp) or 0)
 
     return {
-        'total_purchases': total,
-        'purchase_count': cnt,
+        'total_purchases': grn_amt,
+        'purchase_count': grn_cnt,
         'purchase_return': ret_amt,
         'return_count': ret_cnt,
-        'net_purchases': total - ret_amt,
-        'purchase_source': purchase_source,
+        'net_purchases': grn_amt - ret_amt,
+        'purchase_source': 'grn',
+        'purchase_orders': po_amt,
+        'purchase_order_count': po_cnt,
     }
 
 
@@ -1090,6 +1104,9 @@ def _daily_trend(filters: Dict[str, Any], field: str) -> List[Dict[str, Any]]:
             params,
         )
     elif field == 'purchase':
+        # Purchases chart = GRN (goods received), not LPO
+        return _grn_receipt_daily_trend(filters)
+    elif field == 'purchase_order':
         rows: List[Dict[str, Any]] = []
         hdr = _detect_table(['LPOHDR', 'lpohdr'])
         h_date = _detect_column(hdr or '', ['LPODATE', 'LPO_DATE']) if hdr else None
@@ -1111,8 +1128,8 @@ def _daily_trend(filters: Dict[str, Any], field: str) -> List[Dict[str, Any]]:
                     FROM {hdr} h WHERE {where} GROUP BY TRUNC(h.{h_date}) ORDER BY 1""",
                 params,
             ) or []
-        if not rows:
-            return _grn_receipt_daily_trend(filters)
+        else:
+            return []
     else:
         return []
     out = []
@@ -1515,13 +1532,22 @@ def build_business_summary_dashboard(raw: Dict[str, Any]) -> Dict[str, Any]:
 def _empty_business_summary_dashboard(filters: Dict[str, Any], warnings: List[str]) -> Dict[str, Any]:
     sales = {k: 0.0 for k in ('total_sales', 'sales_return', 'net_sales', 'cash_sales', 'credit_sales')}
     sales.update({'sales_count': 0, 'return_count': 0})
-    purchase = {k: 0.0 for k in ('total_purchases', 'purchase_return', 'net_purchases')}
-    purchase.update({'purchase_count': 0, 'return_count': 0})
+    purchase = {
+        k: 0.0
+        for k in (
+            'total_purchases',
+            'purchase_return',
+            'net_purchases',
+            'purchase_orders',
+        )
+    }
+    purchase.update({'purchase_count': 0, 'return_count': 0, 'purchase_order_count': 0})
     kpis = [
         _kpi('total_sales', 'Total Sales', 0, 'bi-cart-check'),
         _kpi('sales_return', 'Sales Return', 0, 'bi-arrow-return-left'),
         _kpi('net_sales', 'Net Sales', 0, 'bi-graph-up-arrow'),
-        _kpi('total_purchases', 'Total Purchases', 0, 'bi-bag-plus'),
+        _kpi('total_purchases', 'Purchases (GRN)', 0, 'bi-truck'),
+        _kpi('purchase_orders', 'Purchase Orders', 0, 'bi-bag-plus'),
         _kpi('purchase_return', 'Purchase Return', 0, 'bi-arrow-left-right'),
         _kpi('net_purchases', 'Net Purchases', 0, 'bi-basket'),
         _kpi('gross_profit', 'Gross Profit', 0, 'bi-currency-dollar'),
@@ -1635,7 +1661,13 @@ def _build_business_summary_dashboard_inner(
         _kpi('total_sales', 'Total Sales', sales['total_sales'], 'bi-cart-check'),
         _kpi('sales_return', 'Sales Return', sales['sales_return'], 'bi-arrow-return-left'),
         _kpi('net_sales', 'Net Sales', sales['net_sales'], 'bi-graph-up-arrow'),
-        _kpi('total_purchases', 'Total Purchases', purchase['total_purchases'], 'bi-bag-plus'),
+        _kpi('total_purchases', 'Purchases (GRN)', purchase['total_purchases'], 'bi-truck'),
+        _kpi(
+            'purchase_orders',
+            'Purchase Orders',
+            purchase.get('purchase_orders', 0),
+            'bi-bag-plus',
+        ),
         _kpi('purchase_return', 'Purchase Return', purchase['purchase_return'], 'bi-arrow-left-right'),
         _kpi('net_purchases', 'Net Purchases', purchase['net_purchases'], 'bi-basket'),
         _kpi('gross_profit', 'Gross Profit', gross_profit, 'bi-currency-dollar'),
@@ -1659,10 +1691,14 @@ def _build_business_summary_dashboard_inner(
     tx_rows = [
         ('Sales', sales['sales_count'], sales['total_sales']),
         ('Sales Return', sales['return_count'], sales['sales_return']),
-        ('Purchase', purchase['purchase_count'], purchase['total_purchases']),
+        ('Purchase (GRN)', purchase['purchase_count'], purchase['total_purchases']),
+        (
+            'Purchase Order',
+            int(purchase.get('purchase_order_count') or 0),
+            _f(purchase.get('purchase_orders')),
+        ),
         ('Purchase Return', purchase['return_count'], purchase['purchase_return']),
         ('Stock Adjustment', adj_cnt, adj_amt),
-        ('Goods Receipt', grn_cnt, grn_amt),
         ('Goods Issue', issue_cnt, issue_amt),
         ('Expenses', 0, expense_total),
     ]
@@ -1714,7 +1750,8 @@ def _build_business_summary_dashboard_inner(
         'purchases': round(purchase['total_purchases'], 2),
         'purchase_return': round(purchase['purchase_return'], 2),
         'net_purchases': round(purchase['net_purchases'], 2),
-        'purchase_source': purchase.get('purchase_source') or 'lpo',
+        'purchase_orders': round(_f(purchase.get('purchase_orders')), 2),
+        'purchase_source': purchase.get('purchase_source') or 'grn',
         'cogs': round(cogs or (sales['net_sales'] - gross_profit), 2),
         'gross_profit': round(gross_profit, 2),
         'gross_profit_pct': round(gross_margin_pct, 2),

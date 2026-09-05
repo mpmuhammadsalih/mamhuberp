@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=4" />
+{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page ecommerce-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">{{ title }}</h1>
+      <p class="page-po__muted">Ecommerce module</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('ecommerce.dashboard') }}" class="page-po__btn-secondary">← Dashboard</a>
+    </div>
+  </div>
+
+  <div class="ecommerce-alert">
+    <p style="margin:0;">{{ blurb }}</p>
+    <p class="page-po__muted" style="margin:8px 0 0;">This page will be implemented in the <code>addons/ecommerce</code> module as MamaHub backend features are migrated.</p>
+  </div>
+</div>
+{% endblock %}

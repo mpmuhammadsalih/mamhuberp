@@ -60,3 +60,54 @@ def supplier_masters_create(request: Request, payload: dict[str, Any] = Body(def
         message=data.get("message") or "Supplier saved",
         status_code=201,
     )
+
+
+@router.get("/masters/{supplier_code}", dependencies=[_master_perm])
+def supplier_masters_get(supplier_code: int):
+    try:
+        data = sup.get_supplier(supplier_code)
+    except Exception as exc:
+        return failure(str(exc) or "Failed to load supplier.", status_code=400)
+    return success(data)
+
+
+@router.put("/masters/{supplier_code}", dependencies=[_master_perm, require_save_nonce])
+def supplier_masters_update(
+    request: Request,
+    supplier_code: int,
+    payload: dict[str, Any] = Body(default_factory=dict),
+):
+    claims = get_jwt()
+    username = str(claims.get("sub") or "mobile").strip() or "mobile"
+    try:
+        data = sup.update_supplier(supplier_code, payload, username=username)
+    except Exception as exc:
+        return failure_from_mutation_exc(exc, fallback="Failed to update supplier.")
+    return success_after_mutation(
+        request,
+        data,
+        message=data.get("message") or "Supplier updated",
+    )
+
+
+@router.post("/masters/{supplier_code}/delete", dependencies=[_master_perm, require_save_nonce])
+def supplier_masters_delete(
+    request: Request,
+    supplier_code: int,
+    payload: dict[str, Any] = Body(default_factory=dict),
+):
+    claims = get_jwt()
+    username = str(claims.get("sub") or "mobile").strip() or "mobile"
+    try:
+        data = sup.delete_supplier(
+            supplier_code,
+            password=str((payload or {}).get("password") or ""),
+            username=username,
+        )
+    except Exception as exc:
+        return failure_from_mutation_exc(exc, fallback="Failed to delete supplier.")
+    return success_after_mutation(
+        request,
+        data,
+        message=data.get("message") or "Supplier deleted",
+    )

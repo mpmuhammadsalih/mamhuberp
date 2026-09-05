@@ -1,13 +1,14 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from mobile_backend.deps_auth import require_access_claims, require_any_permission
 from mobile_backend.deps_save import require_save_nonce, success_after_mutation
 from mobile_backend.mutation_errors import failure_from_mutation_exc
 from mobile_backend.services import stock_transfer_service as svc
-from mobile_backend.utils.response import success
+from mobile_backend.utils.response import failure, success
 
 router = APIRouter(
     prefix="/api/v1/stock-transfer",
@@ -40,7 +41,7 @@ class TransferLineBody(BaseModel):
 
 
 class SaveTransferBody(BaseModel):
-    transfer_no: int = 0
+    transfer_no: str | int = ""
     transfer_date: str
     from_store: str
     to_store: str
@@ -72,11 +73,32 @@ def list_transfers_route(
 
 @router.get("/transfers/next-no", dependencies=[_perm])
 def next_no_route():
-    return success({"transfer_no": svc.next_transfer_no()})
+    try:
+        data = svc.get_open_context()
+    except Exception as exc:
+        return failure(str(exc) or "Failed to open stock transfer.", status_code=400)
+    return success(data)
 
 
-@router.get("/transfers/{transfer_no}", dependencies=[_perm])
-def get_transfer_route(transfer_no: int):
+@router.get("/transfers/{transfer_no}/pdf", dependencies=[_perm])
+def transfer_pdf_route(transfer_no: str, copy: int = Query(0, ge=0, le=1)):
+    """Download ERP-style stock transfer PDF."""
+    try:
+        pdf_bytes, filename = svc.build_transfer_pdf(transfer_no, duplicate=bool(copy))
+    except ValueError as exc:
+        return failure(str(exc), status_code=404)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.get("/transfers/{transfer_no:path}", dependencies=[_perm])
+def get_transfer_route(transfer_no: str):
     data = svc.get_transfer(transfer_no)
     if not data:
         return success(None, message="Transfer not found")
@@ -123,7 +145,7 @@ def save_transfer_route(request: Request, body: SaveTransferBody):
 
 
 @router.post("/transfers/{transfer_no}/transfer", dependencies=[_perm, require_save_nonce])
-def post_transfer_route(request: Request, transfer_no: int):
+def post_transfer_route(request: Request, transfer_no: str):
     try:
         data = svc.post_transfer(transfer_no)
     except Exception as exc:
@@ -132,7 +154,7 @@ def post_transfer_route(request: Request, transfer_no: int):
 
 
 @router.post("/transfers/{transfer_no}/approve", dependencies=[_perm, require_save_nonce])
-def approve_transfer_route(request: Request, transfer_no: int):
+def approve_transfer_route(request: Request, transfer_no: str):
     try:
         data = svc.approve_transfer(transfer_no)
     except Exception as exc:

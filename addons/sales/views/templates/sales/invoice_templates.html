@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title or 'Invoice Templates' }}{% endblock %}
+{% block content %}
+<style>
+  .it-wrap { max-width: 1100px; margin: 0 auto; padding: 18px 16px 40px; }
+  .it-head { display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:18px; }
+  .it-head h1 { margin:0; font-size:1.45rem; color:#0f172a; }
+  .it-head p { margin:6px 0 0; color:#64748b; font-size:.95rem; }
+  .it-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:16px; }
+  .it-card {
+    background:#fff; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden;
+    box-shadow:0 8px 24px rgba(15,23,42,.04); display:flex; flex-direction:column;
+  }
+  .it-card.is-selected { border-color:#2563eb; box-shadow:0 0 0 2px rgba(37,99,235,.18); }
+  .it-swatch { height:88px; position:relative; }
+  .it-swatch-label {
+    position:absolute; left:12px; bottom:10px; color:#fff; font-weight:700; font-size:.95rem;
+    text-shadow:0 1px 2px rgba(0,0,0,.35);
+  }
+  .it-body { padding:14px 14px 16px; display:flex; flex-direction:column; gap:10px; flex:1; }
+  .it-tagline { margin:0; color:#64748b; font-size:.88rem; line-height:1.4; min-height:2.5em; }
+  .it-actions { display:flex; gap:8px; margin-top:auto; }
+  .it-btn {
+    flex:1; text-align:center; border-radius:9px; padding:9px 10px; font-size:.85rem; font-weight:600;
+    text-decoration:none; border:1px solid #cbd5e1; background:#fff; color:#0f172a; cursor:pointer;
+  }
+  .it-btn:hover { background:#f8fafc; }
+  .it-btn-primary { background:#1d4ed8; border-color:#1d4ed8; color:#fff; }
+  .it-btn-primary:hover { background:#1e40af; }
+  .it-note {
+    margin-top:18px; padding:12px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;
+    color:#475569; font-size:.9rem;
+  }
+  .it-current { font-size:.9rem; color:#334155; }
+  .it-current strong { color:#0f172a; }
+</style>
+
+<div class="it-wrap">
+  <div class="it-head">
+    <div>
+      <h1>Invoice Templates</h1>
+      <p>Choose a PDF layout for Sales Invoice, Sales Return, and Sales Order prints.</p>
+    </div>
+    <div class="it-current">Current: <strong id="itCurrentName">Classic Blue</strong></div>
+  </div>
+
+  <div class="it-grid" id="itGrid">
+    {% for t in templates %}
+    <article class="it-card" data-template-id="{{ t.id }}" data-template-name="{{ t.name }}">
+      <div class="it-swatch" style="background:linear-gradient(135deg, {{ t.swatch }} 0%, #0f172a 120%);">
+        <div class="it-swatch-label">{{ t.name }}</div>
+      </div>
+      <div class="it-body">
+        <p class="it-tagline">{{ t.tagline }}</p>
+        <div class="it-actions">
+          <a class="it-btn" href="{{ preview_url }}?template={{ t.id }}" target="_blank" rel="noopener">Preview</a>
+          <button type="button" class="it-btn it-btn-primary it-use-btn" data-id="{{ t.id }}">Use this</button>
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+
+  <div class="it-note">
+    Your choice is saved for the whole company (web + mobile app).
+    You can also change it from the Template dropdown on Sales Invoice / Order screens.
+  </div>
+</div>
+
+<script>
+(function () {
+  const KEY = 'nexa_sales_invoice_template';
+  const preferUrl = {{ prefer_url|tojson }};
+  const serverCurrent = {{ (current_template or 'classic')|tojson }};
+  const cards = Array.from(document.querySelectorAll('.it-card'));
+  const currentEl = document.getElementById('itCurrentName');
+
+  function readLocal() {
+    try { return (localStorage.getItem(KEY) || '').trim().toLowerCase(); }
+    catch (e) { return ''; }
+  }
+  function writeLocal(id) {
+    try { localStorage.setItem(KEY, id); } catch (e) { /* ignore */ }
+  }
+  function paint(id) {
+    let name = 'Classic Blue';
+    cards.forEach((card) => {
+      const match = card.getAttribute('data-template-id') === id;
+      card.classList.toggle('is-selected', match);
+      if (match) name = card.getAttribute('data-template-name') || name;
+    });
+    if (currentEl) currentEl.textContent = name;
+  }
+  function saveServer(id) {
+    return fetch(preferUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ template: id }),
+    }).then(async (r) => {
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) return { success: false, message: body.message || ('HTTP ' + r.status) };
+      return body;
+    }).catch(() => ({ success: false, message: 'Network error saving template' }));
+  }
+
+  // Prefer server value (shared with mobile); keep localStorage in sync.
+  const initial = (serverCurrent || readLocal() || 'classic').trim().toLowerCase();
+  writeLocal(initial);
+  paint(initial);
+
+  document.querySelectorAll('.it-use-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id') || 'classic';
+      writeLocal(id);
+      paint(id);
+      btn.disabled = true;
+      const prev = btn.textContent;
+      btn.textContent = 'Saving…';
+      saveServer(id).then((res) => {
+        const saved = (res && res.template) ? res.template : id;
+        writeLocal(saved);
+        paint(saved);
+        if (res && res.success) {
+          btn.textContent = 'Saved for mobile too';
+        } else {
+          btn.textContent = 'Save failed';
+          alert((res && res.message) ? res.message : 'Could not save company template. Check server/DB.');
+        }
+        setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 1200);
+      });
+    });
+  });
+})();
+</script>
+{% endblock %}

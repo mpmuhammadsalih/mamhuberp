@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ title or "Nexus Erp" }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/font/bootstrap-icons.min.css') }}?v=1.11.3" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=29" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=30" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/nexa_list_page.css') }}?v=6" />
     {% block extra_css %}{% endblock %}
   </head>
@@ -294,6 +294,47 @@
                 {% endif %}
               </div>
             {% endif %}
+            {% if has_any_menu_permission(['ecommerce.dashboard', 'ecommerce.orders', 'ecommerce.products', 'ecommerce.categories', 'ecommerce.customers', 'ecommerce.promotions', 'ecommerce.reviews', 'ecommerce.media', 'ecommerce.cms', 'ecommerce.inventory', 'ecommerce.reports', 'ecommerce.settings']) %}
+              <button class="sidebar__section" type="button" data-menu="ecommerce-root" data-icon="EC">Ecommerce</button>
+              <div class="sidebar__submenu" id="ecommerce-root">
+                {% if has_menu_permission('ecommerce.dashboard') %}
+                  <a href="{{ url_for('ecommerce.dashboard') }}" data-icon="ED">Dashboard</a>
+                {% endif %}
+                {% if has_menu_permission('ecommerce.orders') %}
+                  <a href="{{ url_for('ecommerce.orders') }}" data-icon="EO">Orders</a>
+                {% endif %}
+                {% if has_menu_permission('ecommerce.products') %}
+                  <a href="{{ url_for('ecommerce.products') }}" data-icon="EP">Products</a>
+                {% endif %}
+                {% if has_menu_permission('ecommerce.categories') %}
+                  <a href="{{ url_for('ecommerce.categories') }}" data-icon="ECAT">Categories</a>
+                {% endif %}
+                {% if has_menu_permission('ecommerce.customers') %}
+                  <a href="{{ url_for('ecommerce.customers') }}" data-icon="ECU">Customers</a>
+                {% endif %}
+                {% if has_menu_permission('ecommerce.promotions') %}
+                  <a href="{{ url_for('ecommerce.promotions') }}" data-icon="EPR">Promotions</a>
+                {% endif %}
+                {% if has_menu_permission('ecommerce.reviews') %}
+                  <a href="{{ url_for('ecommerce.reviews') }}" data-icon="ERV">Reviews</a>
+                {% endif %}
+                {% if has_menu_permission('ecommerce.media') %}
+                  <a href="{{ url_for('ecommerce.media') }}" data-icon="EMD">Media</a>
+                {% endif %}
+                {% if has_menu_permission('ecommerce.cms') or has_menu_permission('ecommerce.media') %}
+                  <a href="{{ url_for('ecommerce.cms') }}" data-icon="ECMS">CMS pages</a>
+                {% endif %}
+                {% if has_menu_permission('ecommerce.inventory') %}
+                  <a href="{{ url_for('ecommerce.inventory') }}" data-icon="EIV">Inventory</a>
+                {% endif %}
+                {% if has_menu_permission('ecommerce.reports') %}
+                  <a href="{{ url_for('ecommerce.reports') }}" data-icon="ERP">Reports</a>
+                {% endif %}
+                {% if has_menu_permission('ecommerce.settings') %}
+                  <a href="{{ url_for('ecommerce.settings') }}" data-icon="ESG">Settings</a>
+                {% endif %}
+              </div>
+            {% endif %}
             {% if has_menu_permission('demo_sales.dashboard') %}
               <button class="sidebar__section" type="button" data-menu="demo-sales-addon" data-icon="DS">Demo Sales (sample)</button>
               <div class="sidebar__submenu" id="demo-sales-addon">
@@ -343,17 +384,6 @@
                 {% endif %}
                 {% if has_menu_permission('reports.gross_margin_dashboard_page') %}
                 <a href="{{ url_for('reports.gross_margin_dashboard_page') }}" data-icon="GMA">Gross Margin Analysis</a>
-                {% endif %}
-              </div>
-            {% endif %}
-            {% if has_menu_permission('tasveek.tasveek_list') or has_menu_permission('tasveek.tasveek_api_rawabi_data') %}
-              <button class="sidebar__section" type="button" data-menu="online-menu-root" data-icon="ON">Online</button>
-              <div class="sidebar__submenu" id="online-menu-root">
-                {% if has_menu_permission('tasveek.tasveek_list') %}
-                <a href="{{ url_for('tasveek.tasveek_list') }}" data-icon="TV">Tasveek</a>
-                {% endif %}
-                {% if has_menu_permission('tasveek.tasveek_api_rawabi_data') or allow_all_permissions %}
-                <a href="{{ url_for('tasveek.tasveek_api_rawabi_data') }}" data-icon="TW">Tasveek API data</a>
                 {% endif %}
               </div>
             {% endif %}
@@ -657,6 +687,9 @@
                 {% if has_menu_permission('purchase.item_journal_list') or allow_all_permissions %}
                   <a href="{{ url_for('purchase.item_journal_list') }}" data-icon="IJ">Item Journal</a>
                 {% endif %}
+                {% if has_menu_permission('purchase.item_journal_missing_list') or allow_all_permissions %}
+                  <a href="{{ url_for('purchase.item_journal_missing_list') }}" data-icon="IM">Item Journal Missing</a>
+                {% endif %}
                 {% if has_menu_permission('purchase.item_journal_summary_list') or allow_all_permissions %}
                   <a href="{{ url_for('purchase.item_journal_summary_list') }}" data-icon="JS">Item Journal Summary</a>
                 {% endif %}
@@ -708,7 +741,7 @@
               </div>
             {% endif %}
 
-            {% if has_any_menu_permission(['accounts.chart_of_accounts_list', 'accounts.account_ledger_page', 'accounts.main_account_ledger', 'accounts.main_account_ledger_pdf', 'accounts.main_account_ledger_excel', 'accounts.account_ledger_pdf', 'accounts.supplier_ledger_page', 'accounts.supplier_ledger_pdf', 'accounts.customer_ledger_page', 'accounts.customer_ledger_pdf', 'accounts.accounts_payable', 'accounts.accounts_receivable', 'accounts.cash_payment_voucher', 'accounts.receipt_voucher', 'accounts.payment_voucher', 'accounts.contra_voucher', 'accounts.cash_flow', 'accounts.cash_flow_pdf', 'accounts.cash_flow_excel', 'accounts.bank_reconciliation', 'accounts.journal_entry', 'accounts.transaction_audit', 'accounts.opening_balance_import', 'accounts.period_closing_page', 'accounts.customer_opening_outstanding', 'accounts.supplier_opening_outstanding', 'accounts.tax_accounts', 'accounts.trial_balance', 'accounts.trial_balance_pdf', 'accounts.trial_balance_excel', 'accounts.trial_balance_ledger_api', 'accounts.profit_loss', 'accounts.profit_loss_pdf', 'accounts.profit_loss_excel', 'accounts.balance_sheet', 'accounts.balance_sheet_pdf', 'accounts.balance_sheet_excel', 'accounts.pdc_tracker']) or allow_all_permissions %}
+            {% if has_any_menu_permission(['accounts.chart_of_accounts_list', 'accounts.account_ledger_page', 'accounts.main_account_ledger', 'accounts.main_account_ledger_pdf', 'accounts.main_account_ledger_excel', 'accounts.account_ledger_pdf', 'accounts.supplier_ledger_page', 'accounts.supplier_ledger_pdf', 'accounts.customer_ledger_page', 'accounts.customer_ledger_pdf', 'accounts.accounts_payable', 'accounts.accounts_receivable', 'accounts.cash_payment_voucher', 'accounts.receipt_voucher', 'accounts.payment_voucher', 'accounts.contra_voucher', 'accounts.cash_flow', 'accounts.cash_flow_pdf', 'accounts.cash_flow_excel', 'accounts.bank_reconciliation', 'accounts.journal_entry', 'accounts.transaction_audit', 'accounts.opening_balance_import', 'accounts.period_closing_page', 'accounts.average_cost_adjustment_list', 'accounts.customer_opening_outstanding', 'accounts.supplier_opening_outstanding', 'accounts.tax_accounts', 'accounts.trial_balance', 'accounts.trial_balance_pdf', 'accounts.trial_balance_excel', 'accounts.trial_balance_ledger_api', 'accounts.profit_loss', 'accounts.profit_loss_pdf', 'accounts.profit_loss_excel', 'accounts.balance_sheet', 'accounts.balance_sheet_pdf', 'accounts.balance_sheet_excel', 'accounts.pdc_tracker']) or allow_all_permissions %}
               <button class="sidebar__section" type="button" data-menu="finance" data-icon="AC">Accounts</button>
               <div class="sidebar__submenu" id="finance">
                 {% if has_menu_permission('accounts.chart_of_accounts_list') or allow_all_permissions %}
@@ -792,13 +825,16 @@
                 {% endif %}
                 {% endif %}
 
-                {% if has_any_menu_permission(['accounts.opening_balance_import', 'accounts.period_closing_page', 'accounts.tax_accounts']) or allow_all_permissions %}
+                {% if has_any_menu_permission(['accounts.opening_balance_import', 'accounts.period_closing_page', 'accounts.average_cost_adjustment_list', 'accounts.tax_accounts']) or allow_all_permissions %}
                 <div class="sidebar__submenu-heading">Accounts Utilities</div>
                 {% if has_menu_permission('accounts.opening_balance_import') or allow_all_permissions %}
                   <a href="{{ url_for('accounts.opening_balance_import') }}" data-icon="OB">Import Opening (CSV)</a>
                 {% endif %}
                 {% if has_menu_permission('accounts.period_closing_page') or allow_all_permissions %}
                   <a href="{{ url_for('accounts.period_closing_page') }}" data-icon="PC">Period Closing</a>
+                {% endif %}
+                {% if has_menu_permission('accounts.average_cost_adjustment_list') or allow_all_permissions %}
+                  <a href="{{ url_for('accounts.average_cost_adjustment_list') }}" data-icon="AC">Average Cost Adjustment</a>
                 {% endif %}
                 {% if has_menu_permission('accounts.tax_accounts') or allow_all_permissions %}
                   <a href="{{ url_for('accounts.tax_accounts') }}" data-icon="TX">Tax (VAT / GST)</a>
@@ -849,7 +885,7 @@
               </div>
             {% endif %}
 
-            {% if has_any_menu_permission(['business_summary.dashboard', 'sales_summary.sales_summary', 'temporary_invoices.temporary_invoices', 'reports.customer_outstanding_cr', 'reports.customer_outstanding_cr_month', 'reports.route_outstanding', 'reports.collection_report', 'reports.store_transfer_details', 'reports.purchase_details', 'reports.grn_details', 'reports.purchase_return_details', 'reports.sales_details', 'reports.last_transactions_report', 'reports.stock_report', 'reports.stock_report_datewise', 'reports.margin_report', 'reports.system_logs', 'transaction_recording_audit.viewer']) %}
+            {% if has_any_menu_permission(['business_summary.dashboard', 'sales_summary.sales_summary', 'temporary_invoices.temporary_invoices', 'reports.customer_outstanding_cr', 'reports.customer_outstanding_cr_month', 'reports.route_outstanding', 'reports.collection_report', 'reports.store_transfer_details', 'reports.purchase_details', 'reports.grn_details', 'reports.purchase_return_details', 'reports.sales_details', 'reports.customer_wise_sales_report', 'reports.last_transactions_report', 'reports.stock_report', 'reports.stock_report_datewise', 'reports.inventory_reports_hub', 'reports.warehouse_summary_report', 'reports.supplier_balance_report', 'reports.margin_report', 'reports.system_logs', 'transaction_recording_audit.viewer']) %}
               <button class="sidebar__section" type="button" data-menu="reports" data-icon="RA">Reports & Analytics</button>
               <div class="sidebar__submenu" id="reports">
                 {% if has_menu_permission('business_summary.dashboard') %}
@@ -888,6 +924,9 @@
                 {% if has_menu_permission('reports.sales_details') %}
                   <a href="{{ url_for('reports.sales_details') }}" data-icon="SD">Sales Details</a>
                 {% endif %}
+                {% if has_menu_permission('reports.customer_wise_sales_report') %}
+                  <a href="{{ url_for('reports.customer_wise_sales_report') }}" data-icon="CS">Customer Wise Sales</a>
+                {% endif %}
                 {% if has_menu_permission('reports.last_transactions_report') %}
                   <a href="{{ url_for('reports.last_transactions_report') }}" data-icon="LT">Last Transactions</a>
                 {% endif %}
@@ -896,6 +935,15 @@
                 {% endif %}
                 {% if has_menu_permission('reports.stock_report_datewise') %}
                   <a href="{{ url_for('reports.stock_report_datewise') }}" data-icon="SD">Stock Report Datewise</a>
+                {% endif %}
+                {% if has_menu_permission('reports.inventory_reports_hub') %}
+                  <a href="{{ url_for('reports.inventory_reports_hub') }}" data-icon="IR">Inventory Reports</a>
+                {% endif %}
+                {% if has_menu_permission('reports.warehouse_summary_report') %}
+                  <a href="{{ url_for('reports.warehouse_summary_report') }}" data-icon="WS">Warehouse Summary</a>
+                {% endif %}
+                {% if has_menu_permission('reports.supplier_balance_report') %}
+                  <a href="{{ url_for('reports.supplier_balance_report') }}" data-icon="SB">Supplier Balance</a>
                 {% endif %}
                 {% if has_menu_permission('reports.margin_report') %}
                   <a href="{{ url_for('reports.margin_report') }}" data-icon="MR">Margin Report</a>

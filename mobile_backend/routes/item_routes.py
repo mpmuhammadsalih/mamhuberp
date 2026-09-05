@@ -59,6 +59,52 @@ def item_masters_list(
     return success(data)
 
 
+@router.get("/ledger", dependencies=[_master_perm])
+def item_ledger(
+    item_code: Optional[int] = Query(None),
+    barcode: str = Query(""),
+    tab: str = Query("purchase"),
+    limit: int = Query(400, ge=1, le=2000),
+):
+    """ERP Item Master ledger (purchase / purchase_return / sale / sale_return / stock_adjustment)."""
+    try:
+        data = items.get_item_ledger(
+            item_code=item_code,
+            barcode=barcode,
+            tab=tab,
+            limit=limit,
+        )
+    except Exception as exc:
+        msg = str(exc) or "Failed to load item ledger."
+        status = 404 if "not found" in msg.lower() else 400
+        return failure(msg, status_code=status)
+    return success(data)
+
+
+@router.get("/journal", dependencies=[_master_perm])
+def item_journal(
+    item_code: Optional[int] = Query(None),
+    barcode: str = Query(""),
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    limit: int = Query(500, ge=1, le=2000),
+):
+    """ITEMJOURNAL movements for one item (stock in/out by transtype)."""
+    try:
+        data = items.get_item_journal(
+            item_code=item_code,
+            barcode=barcode,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+        )
+    except Exception as exc:
+        msg = str(exc) or "Failed to load item journal."
+        status = 404 if "not found" in msg.lower() else 400
+        return failure(msg, status_code=status)
+    return success(data)
+
+
 @router.get("/masters/{item_code}", dependencies=[_master_perm])
 def item_masters_detail(item_code: int = Path(..., ge=1)):
     try:
@@ -112,3 +158,22 @@ def item_masters_update(
         data,
         message=data.get("message") or "Item updated",
     )
+
+
+@router.post("/masters/{item_code}/delete", dependencies=[_master_perm, require_save_nonce])
+def item_masters_delete(
+    request: Request,
+    item_code: int = Path(..., ge=1),
+    payload: dict[str, Any] = Body(default_factory=dict),
+):
+    claims = get_jwt()
+    username = str(claims.get("sub") or "mobile").strip() or "mobile"
+    try:
+        data = items.delete_item(
+            item_code,
+            password=str((payload or {}).get("password") or ""),
+            username=username,
+        )
+    except Exception as exc:
+        return failure_from_mutation_exc(exc, fallback="Failed to delete item.")
+    return success_after_mutation(request, data, message=data.get("message") or "Item deleted")

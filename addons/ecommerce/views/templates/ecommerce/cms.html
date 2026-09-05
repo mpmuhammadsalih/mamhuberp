@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=5" />
+{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page ecommerce-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">CMS pages</h1>
+      <p class="page-po__muted">FAQ, Contact, Terms, Privacy and other storefront info pages · {{ pages|length }} shown</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('ecommerce.cms_new') }}" class="page-po__btn-primary">Add page</a>
+      <a href="{{ url_for('ecommerce.media') }}" class="page-po__btn-secondary">Media</a>
+      <a href="{{ url_for('ecommerce.dashboard') }}" class="page-po__btn-secondary">Dashboard</a>
+    </div>
+  </div>
+
+  {% if warning %}
+  <div class="ecommerce-alert">{{ warning }}</div>
+  {% endif %}
+
+  <div class="co-table-wrap">
+    <table class="co-table co-table--th-hint">
+      <thead>
+        <tr>
+          <th style="text-align:center; width:56px;">Sl.No</th>
+          <th>Code</th>
+          <th>Title</th>
+          <th>Slug</th>
+          <th>Type</th>
+          <th style="text-align:center;">Order</th>
+          <th>Status</th>
+          <th style="text-align:center;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in pages %}
+        <tr>
+          <td class="sl-no">{{ loop.index }}</td>
+          <td><code>{{ row.page_code }}</code></td>
+          <td>{{ row.page_title }}</td>
+          <td><code>/page/{{ row.slug }}</code></td>
+          <td><code>{{ row.page_type or 'STATIC' }}</code></td>
+          <td style="text-align:center;">{{ row.sort_order }}</td>
+          <td>
+            <span class="ecommerce-flag {% if row.is_published %}ecommerce-flag-Y{% else %}ecommerce-flag-N{% endif %}">
+              {% if row.is_published %}Published{% else %}Draft{% endif %}
+            </span>
+          </td>
+          <td style="text-align:center; white-space:nowrap;">
+            <a href="{{ url_for('ecommerce.cms_edit', cms_page_id=row.cms_page_id) }}" class="btn-view">Edit</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" style="text-align:center;padding:20px;color:#64748b;">
+            {% if tables_ready %}No CMS pages yet.{% else %}MH_CMS_PAGE table not available.{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

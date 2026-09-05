@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 220" fill="none">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="1040" y2="220" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EFF6FF"/>
+      <stop offset="1" stop-color="#DBEAFE"/>
+    </linearGradient>
+  </defs>
+  <rect width="1040" height="220" rx="16" fill="url(#bg2)"/>
+  <rect x="1" y="1" width="1038" height="218" rx="15" stroke="#bfdbfe" stroke-width="2"/>
+  <text x="48" y="88" font-family="Georgia, 'Times New Roman', serif" font-size="52" font-weight="700" fill="#1e40af">New Arrivals</text>
+  <text x="48" y="122" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#64748b">Fresh toys &amp; games just landed</text>
+  <rect x="48" y="144" width="148" height="40" rx="8" fill="#0071DC"/>
+  <text x="122" y="169" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="1.2" fill="#ffffff">EXPLORE NOW</text>
+  <circle cx="820" cy="110" r="56" fill="#ffffff" stroke="#bfdbfe" stroke-width="3"/>
+  <circle cx="820" cy="110" r="34" fill="#ff4b8b" opacity="0.85"/>
+  <rect x="900" y="70" width="80" height="80" rx="12" fill="#ffffff" stroke="#bfdbfe" stroke-width="3"/>
+  <rect x="916" y="86" width="48" height="48" rx="6" fill="#8b5cf6" opacity="0.8"/>
+</svg>

@@ -98,3 +98,113 @@ def lookup_queries(queries: list[str], *, locationcode: int | None = None) -> tu
         except ValueError:
             continue
     return None
+
+
+def lookup_storage_row(query: str, *, locationcode: int | None = None) -> dict[str, Any]:
+    """Resolve shelf/bin/rack by STORAGE_BARCODE or CODE (ERP Barcode Management — Shelf)."""
+    from db import (
+        WAREHOUSE_STORAGE_TABLE,
+        _detect_column,
+        _get_table_columns,
+        _safe_rows,
+        _table_exists,
+        ensure_warehouse_storage_table,
+        get_warehouse_storage_by_id,
+    )
+
+    q = (query or "").strip()
+    if not q:
+        raise ValueError("Shelf / bin barcode is required.")
+
+    with _erp_session_scope():
+        loc = resolve_location_code(locationcode)
+        ensure_warehouse_storage_table()
+        if not _table_exists(WAREHOUSE_STORAGE_TABLE):
+            raise ValueError("Warehouse storage (shelves/bins) is not configured.")
+
+        cols = {c.upper() for c in (_get_table_columns(WAREHOUSE_STORAGE_TABLE) or [])}
+        loc_col = _detect_column(WAREHOUSE_STORAGE_TABLE, ["LOCATIONCODE", "locationcode"])
+        code_col = _detect_column(WAREHOUSE_STORAGE_TABLE, ["CODE", "code"])
+        bc_col = "STORAGE_BARCODE" if "STORAGE_BARCODE" in cols else None
+        if not code_col:
+            raise ValueError("Storage CODE column missing.")
+
+        where_bits = [f"UPPER(TRIM({code_col})) = :qu"]
+        if bc_col:
+            where_bits.insert(0, f"UPPER(TRIM(NVL({bc_col}, ''))) = :qu")
+        where_sql = " OR ".join(where_bits)
+
+        def _find(exact: bool, use_loc: bool) -> list[dict[str, Any]]:
+            params: dict[str, Any] = {}
+            if exact:
+                params["qu"] = q.upper()
+                clause = where_sql
+            else:
+                params["like"] = f"%{q.upper()}%"
+                soft = [f"UPPER(TRIM({code_col})) LIKE :like"]
+                if bc_col:
+                    soft.insert(0, f"UPPER(TRIM(NVL({bc_col}, ''))) LIKE :like")
+                clause = " OR ".join(soft)
+            sql = (
+                f"SELECT STORAGE_ID AS storage_id FROM {WAREHOUSE_STORAGE_TABLE} "
+                f"WHERE ({clause})"
+            )
+            if use_loc and loc_col:
+                params["loc"] = loc
+                sql += f" AND {loc_col} = :loc"
+            sql += " AND ROWNUM = 1"
+            return _safe_rows(sql, params) or []
+
+        rows = (
+            _find(True, True)
+            or _find(True, False)
+            or _find(False, True)
+            or _find(False, False)
+        )
+        if not rows:
+            raise ValueError("Shelf / bin not found for that barcode.")
+
+        try:
+            sid = int(rows[0].get("storage_id") or 0)
+        except (TypeError, ValueError):
+            sid = 0
+        if sid <= 0:
+            raise ValueError("Shelf / bin not found for that barcode.")
+
+        row = get_warehouse_storage_by_id(sid) or {}
+        stype = str(row.get("storage_type") or "").strip().upper() or "BIN"
+        code = str(row.get("code") or "").strip()
+        name = str(row.get("name") or "").strip() or code
+        barcode = str(row.get("storage_barcode") or "").strip() or code
+        parent_code = ""
+        try:
+            pid = int(row.get("parent_storage_id") or 0)
+        except (TypeError, ValueError):
+            pid = 0
+        if pid > 0:
+            parent = get_warehouse_storage_by_id(pid) or {}
+            parent_code = str(parent.get("code") or parent.get("name") or "").strip()
+        path_bits = [b for b in (parent_code, code) if b]
+        path = " › ".join(path_bits) if path_bits else code
+        try:
+            wid = int(row.get("warehouse_id") or 0) or None
+        except (TypeError, ValueError):
+            wid = None
+        try:
+            row_loc = int(row.get("locationcode") or loc or 0) or loc
+        except (TypeError, ValueError):
+            row_loc = loc
+        return {
+            "storage_id": sid,
+            "storage_type": stype,
+            "code": code,
+            "name": name,
+            "status": str(row.get("status") or "").strip(),
+            "barcode": barcode,
+            "print_value": barcode,
+            "path": path,
+            "warehouse_id": wid,
+            "location_code": row_loc,
+            "label_title": name,
+            "label_subtitle": f"{stype} · {path}",
+        }

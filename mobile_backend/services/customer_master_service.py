@@ -81,6 +81,30 @@ def get_open_context() -> dict[str, Any]:
         }
 
 
+def list_customer_categories(*, search: str = "") -> dict[str, Any]:
+    """List ERP customer categories (TBLCUSTOMERCATEGORY) for the active location."""
+    q = (search or "").strip().lower()
+    with _erp_session_scope():
+        c = _customer_mod()
+        loc = c._resolve_location_code()
+        out: list[dict[str, Any]] = []
+        try:
+            for raw in c._get_category_list(loc) or []:
+                r = dict(raw or {})
+                code = r.get("code")
+                if code in (None, ""):
+                    continue
+                name = str(r.get("name") or "").strip()
+                code_s = str(code).strip()
+                if q and q not in code_s.lower() and q not in name.lower():
+                    continue
+                out.append({"code": code_s, "name": name})
+        except Exception as exc:
+            raise ValueError(str(exc) or "Failed to list customer categories.") from exc
+        out.sort(key=lambda row: (int(row["code"]) if str(row["code"]).isdigit() else 0, row["name"].lower()))
+        return {"categories": out, "count": len(out), "location_code": loc}
+
+
 def list_customers(*, search: str = "", limit: int = 100) -> dict[str, Any]:
     from db import get_customers_master_list
 
@@ -570,4 +594,425 @@ def create_customer(payload: dict[str, Any], *, username: str = "mobile") -> dic
             "mobile": mobile,
             "telephone": telephone,
             "message": f"Customer {customername} saved ({code}).",
+        }
+
+
+def _serialize_customer_row(row: dict[str, Any], *, category_name: str = "") -> dict[str, Any]:
+    from db import normalize_customer_billing_type
+
+    billing = normalize_customer_billing_type(
+        row.get("customer_billing_type") or row.get("billing_type")
+    )
+    if billing not in ("CASH", "CREDIT"):
+        billing = "CASH"
+    cat = _to_int(row.get("customercategory") or row.get("customer_category"), 0) or 0
+    return {
+        "customer_code": _to_int(row.get("customercode") or row.get("customer_code"), 0) or 0,
+        "customer_name": str(row.get("customername") or row.get("customer_name") or "").strip(),
+        "ccode": str(row.get("ccode") or "").strip(),
+        "customer_billing_type": billing,
+        "customercategory": cat,
+        "category_name": (category_name or "").strip(),
+        "mobile": str(row.get("mobile") or "").strip(),
+        "telephone": str(row.get("telephone") or "").strip(),
+        "whatsapp": str(row.get("whatsapp") or "").strip(),
+        "email": str(row.get("email") or "").strip(),
+        "address": str(row.get("address") or "").strip(),
+        "street": str(row.get("street") or "").strip(),
+        "crno": str(row.get("crno") or "").strip(),
+        "credit_limit": _to_float(row.get("creditlimit") or row.get("credit_limit")),
+        "credit_term": _to_float(
+            row.get("creditterms")
+            if row.get("creditterms") is not None
+            else row.get("creditterm") or row.get("credit_term") or row.get("duedays"),
+            2,
+        ),
+        "current_credit": _to_float(
+            row.get("currentcreditamount") or row.get("currentcredit") or row.get("current_credit")
+        ),
+        "flag": str(row.get("flag") or "Y").strip().upper()[:1] or "Y",
+        "closed": str(row.get("closed") or "N").strip().upper()[:1] or "N",
+        "receivableaccount": _positive_account(row.get("receivableaccount")),
+        "salesaccount": _positive_account(row.get("salesaccount")),
+        "vatoutputaccount": _positive_account(row.get("vatoutputaccount")),
+        "advanceaccount": _positive_account(row.get("advanceaccount")),
+    }
+
+
+def get_customer(customer_code: int) -> dict[str, Any]:
+    """Load one customer master row for detail / edit."""
+    code = int(customer_code or 0)
+    if code <= 0:
+        raise ValueError("Customer code is required.")
+    with _erp_session_scope():
+        c = _customer_mod()
+        c._ensure_customer_account_columns()
+        loc = c._resolve_location_code()
+        row = c._get_customer_by_code(loc, code)
+        if not row:
+            raise ValueError(f"Customer {code} was not found.")
+        cat_name = ""
+        cat_code = _to_int(row.get("customercategory"), 0) or 0
+        if cat_code:
+            try:
+                for raw in c._get_category_list(loc) or []:
+                    r = dict(raw or {})
+                    if str(r.get("code") or "").strip() == str(cat_code):
+                        cat_name = str(r.get("name") or "").strip()
+                        break
+            except Exception:
+                cat_name = ""
+        return _serialize_customer_row(dict(row), category_name=cat_name)
+
+
+def update_customer(
+    customer_code: int,
+    payload: dict[str, Any],
+    *,
+    username: str = "mobile",
+) -> dict[str, Any]:
+    """Update an existing customer (same fields as ERP customer edit)."""
+    from master_activity_log import append_master_activity
+    from master_name_duplicate import find_master_name_duplicate, master_name_duplicate_message
+    from db import (
+        _detect_column,
+        _get_connection,
+        _table_exists,
+        normalize_customer_billing_type,
+    )
+
+    code = int(customer_code or 0)
+    if code <= 0:
+        raise ValueError("Customer code is required.")
+
+    data = dict(payload or {})
+    name_key = str(data.get("customername") or data.get("customer_name") or "").strip().upper()
+
+    with mobile_operation_lock(
+        "customer_update",
+        str(code),
+        lock_seconds=90.0,
+        busy_message="Customer is already being saved. Please wait.",
+    ), _erp_session_scope() as user:
+        c = _customer_mod()
+        c._ensure_customer_account_columns()
+        tbl = c._customer_table()
+        if not tbl:
+            raise ValueError("Customer table not found.")
+
+        location_code = c._resolve_location_code()
+        existing = c._get_customer_by_code(location_code, code)
+        if not existing:
+            raise ValueError(f"Customer {code} was not found.")
+
+        customername = name_key
+        if not customername:
+            raise ValueError("Customer name is required.")
+
+        designation = str(data.get("designation") or existing.get("designation") or "").strip()[:100]
+        sex_raw = str(data.get("sex") or existing.get("sex") or "MALE").strip().upper()
+        cussex = "M" if sex_raw in ("MALE", "M") else "F"
+        address = str(data.get("address") if data.get("address") is not None else existing.get("address") or "").strip()[:200]
+        nationality = str(data.get("nationality") or existing.get("nationality") or "").strip()[:100]
+        telephone = str(data.get("telephone") if data.get("telephone") is not None else existing.get("telephone") or "").strip()[:15]
+        fax = str(data.get("fax") or existing.get("fax") or "").strip()[:15]
+        mobile = str(data.get("mobile") if data.get("mobile") is not None else existing.get("mobile") or "").strip()[:15]
+        creditlimit = _to_float(
+            data.get("creditlimit") if data.get("creditlimit") is not None else data.get("credit_limit"),
+            _to_float(existing.get("creditlimit")),
+        )
+        creditterms = _to_float(
+            data.get("creditterm")
+            if data.get("creditterm") is not None
+            else data.get("credit_term"),
+            _to_float(existing.get("creditterms") or existing.get("duedays"), 2),
+        )
+        duedays = creditterms
+        currentcredit = _to_float(
+            data.get("currentcredit") if data.get("currentcredit") is not None else data.get("current_credit"),
+            _to_float(existing.get("currentcreditamount") or existing.get("currentcredit")),
+        )
+        salesmancode = _to_int(
+            data.get("salesmancode") if data.get("salesmancode") is not None else data.get("salesman_code"),
+            _to_int(existing.get("salesmancode"), 0) or 0,
+        ) or 0
+        billing_type = normalize_customer_billing_type(
+            data.get("customer_billing_type")
+            or data.get("billing_type")
+            or existing.get("customer_billing_type")
+        )
+        customercategory = _to_int(
+            data.get("customercategory") if data.get("customercategory") is not None else data.get("customer_category"),
+            _to_int(existing.get("customercategory"), 0) or 0,
+        ) or 0
+        bysalesman = _to_int(data.get("bysalesman") or existing.get("bysalesman"), 0) or 0
+        routeno = _to_int(data.get("routeno") or existing.get("routeno"), 0) or 0
+        street = str(data.get("street") if data.get("street") is not None else existing.get("street") or "").strip()[:200]
+        zone = str(data.get("zone") or existing.get("zone") or "").strip()[:100]
+        pobox = str(data.get("pobox") or existing.get("pobox") or "").strip()[:50]
+        crno = str(data.get("crno") if data.get("crno") is not None else existing.get("crno") or "").strip()[:250]
+        email = str(data.get("email") if data.get("email") is not None else existing.get("email") or "").strip()[:150]
+        qatarid = str(data.get("qatarid") or existing.get("qatarid") or "").strip()[:50]
+        whatsapp = str(data.get("whatsapp") if data.get("whatsapp") is not None else existing.get("whatsapp") or "").strip()[:20]
+        flag = str(data.get("flag") or existing.get("flag") or "Y").strip().upper()[:1] or "Y"
+        closed = str(data.get("closed") or existing.get("closed") or "N").strip().upper()[:1] or "N"
+        employeecode = _to_int(data.get("employeecode") or existing.get("employeecode"), None)
+        reason = str(data.get("reason") or existing.get("reason") or "").strip()[:500]
+        otherreason = str(data.get("otherreason") or existing.get("otherreason") or "").strip()[:500]
+        closedreason = str(data.get("closedreason") or existing.get("closedreason") or "").strip()[:500]
+        countersale = "Y" if str(data.get("countersale") or existing.get("countersale") or "").strip().upper() == "Y" else "N"
+
+        # Keep existing GL accounts on update (mobile form does not edit accounts).
+        receivableaccount = _positive_account(existing.get("receivableaccount"))
+        salesaccount = _positive_account(existing.get("salesaccount"))
+        vatoutputaccount = _positive_account(existing.get("vatoutputaccount"))
+        advanceaccount = _positive_account(existing.get("advanceaccount"))
+        if None in (receivableaccount, salesaccount, vatoutputaccount, advanceaccount):
+            defs = c._cached_default_accounts()
+            receivableaccount = receivableaccount or _positive_account(defs.get("customer_receivable"))
+            salesaccount = salesaccount or _positive_account(defs.get("customer_sales"))
+            vatoutputaccount = vatoutputaccount or _positive_account(defs.get("customer_vat_output"))
+            advanceaccount = advanceaccount or _positive_account(defs.get("customer_advance"))
+
+        if billing_type not in ("CASH", "CREDIT"):
+            raise ValueError("Customer type (Cash / Credit) is required.")
+        if None in (receivableaccount, salesaccount, vatoutputaccount, advanceaccount):
+            raise ValueError(
+                "Default customer GL accounts are not configured. Set them in ERP, then try again."
+            )
+        if not mobile and not telephone:
+            raise ValueError("Mobile No or Telephone is required.")
+        if billing_type == "CREDIT":
+            if not creditlimit or creditlimit <= 0:
+                raise ValueError("Credit Limit is required for Credit customers.")
+            if not creditterms or creditterms <= 0:
+                raise ValueError("Credit Term (Days) is required for Credit customers.")
+
+        loc_col = _detect_column(tbl, ["LOCATIONCODE", "locationcode"])
+        code_col = _detect_column(tbl, ["CUSTOMERCODE", "customercode"])
+        name_col = _detect_column(tbl, ["CUSTOMERNAME", "customername"])
+        if not loc_col or not code_col:
+            raise ValueError("Required customer columns not found.")
+
+        with _get_connection() as conn:
+            with oracle_transaction(conn), conn.cursor() as cur:
+                if name_col:
+                    dup_code = find_master_name_duplicate(
+                        cur,
+                        table=tbl,
+                        name_col=name_col,
+                        name_value=customername,
+                        loc_col=loc_col,
+                        location_code=location_code,
+                        code_col=code_col,
+                        exclude_code=code,
+                    )
+                    if dup_code is not None:
+                        raise ValueError(
+                            master_name_duplicate_message(
+                                "customer",
+                                customername,
+                                location_code=location_code,
+                                existing_code=dup_code,
+                            )
+                        )
+
+                val_by_param = {
+                    "customername": customername,
+                    "designation": designation,
+                    "cussex": cussex,
+                    "address": address,
+                    "nationality": nationality,
+                    "telephone": telephone,
+                    "fax": fax,
+                    "mobile": mobile,
+                    "creditlimit": creditlimit,
+                    "creditterms": creditterms,
+                    "duedays": duedays,
+                    "currentcredit": currentcredit,
+                    "salesmancode": salesmancode,
+                    "customer_billing_type": billing_type,
+                    "customercategory": customercategory,
+                    "bysalesman": bysalesman,
+                    "routeno": routeno,
+                    "street": street,
+                    "zone": zone,
+                    "pobox": pobox,
+                    "crno": crno,
+                    "receivableaccount": receivableaccount,
+                    "salesaccount": salesaccount,
+                    "vatoutputaccount": vatoutputaccount,
+                    "advanceaccount": advanceaccount,
+                    "email": email,
+                    "qatarid": qatarid,
+                    "whatsapp": whatsapp,
+                    "flag": flag,
+                    "closed": closed,
+                    "employeecode": employeecode,
+                    "reason": reason,
+                    "otherreason": otherreason,
+                    "closedreason": closedreason,
+                    "countersale": countersale,
+                }
+                set_parts: list[str] = []
+                upd_params: dict[str, Any] = {"loc": location_code, "code": code}
+                for col, param in [
+                    ("CUSTOMERNAME", "customername"),
+                    ("DESIGNATION", "designation"),
+                    ("SEX", "cussex"),
+                    ("ADDRESS", "address"),
+                    ("NATIONALITY", "nationality"),
+                    ("TELEPHONE", "telephone"),
+                    ("FAX", "fax"),
+                    ("MOBILE", "mobile"),
+                    ("CREDITLIMIT", "creditlimit"),
+                    ("CREDITTERMS", "creditterms"),
+                    ("DUEDAYS", "duedays"),
+                    ("CURRENTCREDITAMOUNT", "currentcredit"),
+                    ("SALESMANCODE", "salesmancode"),
+                    ("CUSTOMER_BILLING_TYPE", "customer_billing_type"),
+                    ("FLAG", "flag"),
+                    ("CLOSED", "closed"),
+                    ("CUSTOMERCATEGORY", "customercategory"),
+                    ("BYSALESMAN", "bysalesman"),
+                    ("ROUTENO", "routeno"),
+                    ("STREET", "street"),
+                    ("ZONE", "zone"),
+                    ("POBOX", "pobox"),
+                    ("CRNO", "crno"),
+                    ("RECEIVABLEACCOUNT", "receivableaccount"),
+                    ("SALESACCOUNT", "salesaccount"),
+                    ("VATOUTPUTACCOUNT", "vatoutputaccount"),
+                    ("ADVANCEACCOUNT", "advanceaccount"),
+                    ("EMAIL", "email"),
+                    ("QATARID", "qatarid"),
+                    ("WHATSAPP", "whatsapp"),
+                    ("EMPLOYEECODE", "employeecode"),
+                    ("REASON", "reason"),
+                    ("OTHERREASON", "otherreason"),
+                    ("CLOSEDREASON", "closedreason"),
+                    ("COUNTERSALE", "countersale"),
+                ]:
+                    if c._column_exists(tbl, col):
+                        set_parts.append(f"{col} = :{param}")
+                        upd_params[param] = val_by_param[param]
+                if not set_parts:
+                    raise ValueError("No updatable columns found.")
+                cur.execute(
+                    f"UPDATE {tbl} SET {', '.join(set_parts)} "
+                    f"WHERE {loc_col} = :loc AND {code_col} = :code",
+                    upd_params,
+                )
+                try:
+                    tmp_tbl = None
+                    if _table_exists("CUSTOMERTMP"):
+                        tmp_tbl = "CUSTOMERTMP"
+                    elif _table_exists("customertmp"):
+                        tmp_tbl = "customertmp"
+                    if tmp_tbl:
+                        tmp_loc_col = _detect_column(tmp_tbl, ["LOCATIONCODE", "locationcode"])
+                        tmp_code_col = _detect_column(tmp_tbl, ["CUSTOMERCODE", "customercode"])
+                        tmp_due_col = _detect_column(
+                            tmp_tbl, ["DUEDAYS", "DUE_DAYS", "duedays", "due_days"]
+                        )
+                        if tmp_loc_col and tmp_code_col and tmp_due_col:
+                            cur.execute(
+                                f"UPDATE {tmp_tbl} SET {tmp_due_col} = :dd "
+                                f"WHERE {tmp_loc_col} = :loc AND {tmp_code_col} = :code",
+                                {"dd": duedays, "loc": location_code, "code": code},
+                            )
+                except Exception:
+                    pass
+
+        nm = customername[:120]
+        try:
+            append_master_activity(
+                username=str(user or username or "mobile"),
+                action="UPDATE",
+                entity="customer",
+                summary=f"location={location_code}, customer_code={code}, name={nm}",
+                detail={
+                    "locationcode": location_code,
+                    "customercode": code,
+                    "customername": nm,
+                    "source": "mobile",
+                },
+            )
+        except Exception:
+            pass
+
+        return {
+            "customer_code": int(code),
+            "customer_name": customername,
+            "customer_billing_type": billing_type,
+            "mobile": mobile,
+            "telephone": telephone,
+            "message": f"Customer {customername} updated ({code}).",
+        }
+
+
+def delete_customer(
+    customer_code: int, *, password: str, username: str = "mobile"
+) -> dict[str, Any]:
+    """Delete customer for the current location after password check."""
+    from master_activity_log import append_master_activity
+    from db import _detect_column, _get_connection
+    from mobile_backend.services.master_delete_auth import require_master_delete_password
+
+    code = int(customer_code or 0)
+    if code <= 0:
+        raise ValueError("Customer code is required.")
+    require_master_delete_password(password, username=username)
+
+    with mobile_operation_lock(
+        "customer_delete",
+        str(code),
+        busy_message="Customer delete is already running. Please wait.",
+    ), _erp_session_scope() as user:
+        c = _customer_mod()
+        tbl = c._customer_table()
+        if not tbl:
+            raise ValueError("Customer table not found.")
+        location_code = c._resolve_location_code()
+        existing = c._get_customer_by_code(location_code, code)
+        if not existing:
+            raise ValueError(f"Customer {code} not found.")
+        name = str(
+            existing.get("customername") or existing.get("customer_name") or ""
+        ).strip()[:200]
+
+        loc_col = _detect_column(tbl, ["LOCATIONCODE", "locationcode"])
+        code_col = _detect_column(tbl, ["CUSTOMERCODE", "customercode"])
+        if not loc_col or not code_col:
+            raise ValueError("Required customer columns not found.")
+
+        with _get_connection() as conn:
+            with oracle_transaction(conn), conn.cursor() as cur:
+                cur.execute(
+                    f"DELETE FROM {tbl} WHERE {loc_col} = :loc AND {code_col} = :code",
+                    {"loc": int(location_code), "code": code},
+                )
+                if int(cur.rowcount or 0) <= 0:
+                    raise ValueError(f"Failed to delete customer {code}.")
+
+        try:
+            append_master_activity(
+                username=str(user or username or "mobile"),
+                action="DELETE",
+                entity="customer",
+                summary=f"location={location_code}, customer_code={code}, name={name[:80]}",
+                detail={
+                    "locationcode": location_code,
+                    "customercode": code,
+                    "customername": name,
+                    "source": "mobile",
+                },
+            )
+        except Exception:
+            pass
+
+        return {
+            "customer_code": code,
+            "customer_name": name,
+            "message": f"Customer {name or code} deleted ({code}).",
         }

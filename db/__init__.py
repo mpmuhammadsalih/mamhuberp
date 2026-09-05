@@ -338,12 +338,6 @@ def _get_central_link_connection() -> cx_Oracle.Connection:
         raise ValueError('Central report DB not configured. Set CENTRAL_REPORT_USER, CENTRAL_REPORT_PASSWORD, CENTRAL_REPORT_DSN (or AUTH_DB_*) and CENTRAL_REPORT_LINKS.')
     return cx_oracle_connect(user=cfg['user'], password=cfg.get('password') or '', dsn=cfg['dsn'])
 
-def _get_connection_auth() -> cx_Oracle.Connection:
-    """Connection for login_users, roles, tenant_databases. Auth DB when multi-DB; else single DB."""
-    if is_multi_db_mode():
-        return _get_auth_connection()
-    return _get_connection()
-
 def _resolve_db_connect_config() -> Dict[str, str]:
     """Resolve user/password/dsn for the active tenant without opening a connection."""
     current_tenant_id = None
@@ -401,10 +395,62 @@ def _resolve_db_connect_config() -> Dict[str, str]:
     return config
 
 
-def _get_connection() -> cx_Oracle.Connection:
-    """Get database connection. In multi-DB mode with session tenant_id, uses tenant DB; else single DB from config."""
+def _open_tenant_connection() -> cx_Oracle.Connection:
     cfg = _resolve_db_connect_config()
     return cx_oracle_connect(user=cfg['user'], password=cfg['password'], dsn=cfg['dsn'])
+
+
+def _open_auth_connection() -> cx_Oracle.Connection:
+    if is_multi_db_mode():
+        return _get_auth_connection()
+    return _open_tenant_connection()
+
+
+class _ConnectionScope:
+    """Context manager — closes only when the connection is not request-scoped."""
+
+    __slots__ = ('_conn', '_close_on_exit')
+
+    def __init__(self, conn: Any, *, close_on_exit: bool = True) -> None:
+        self._conn = conn
+        self._close_on_exit = close_on_exit
+
+    def __enter__(self) -> Any:
+        return self._conn
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+        if self._close_on_exit:
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+        return False
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._conn, name)
+
+
+def _get_connection() -> _ConnectionScope:
+    """Get database connection. In multi-DB mode with session tenant_id, uses tenant DB; else single DB from config."""
+    try:
+        from nexa_http.oracle_request_scope import borrow_connection
+
+        conn, scoped = borrow_connection('tenant', _open_tenant_connection)
+        return _ConnectionScope(conn, close_on_exit=not scoped)
+    except Exception:
+        return _ConnectionScope(_open_tenant_connection(), close_on_exit=True)
+
+
+def _get_connection_auth() -> _ConnectionScope:
+    """Connection for login_users, roles, tenant_databases. Auth DB when multi-DB; else single DB."""
+    try:
+        from nexa_http.oracle_request_scope import borrow_connection
+
+        conn, scoped = borrow_connection('auth', _open_auth_connection)
+        return _ConnectionScope(conn, close_on_exit=not scoped)
+    except Exception:
+        return _ConnectionScope(_open_auth_connection(), close_on_exit=True)
+
 
 def _fix_mojibake(text: Any) -> Any:
     """Attempt to fix wrong encoding of Arabic (ITEMNAMEARA). Handles UTF-8 decoded as Latin-1 or as Windows-1256."""
@@ -687,6 +733,9 @@ def _safe_rows_auth(query: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def ensure_smart_list_ai_history_table() -> None:
     """Create Smart List AI chat history table in tenant DB when missing."""
+    global _SMARTLIST_AI_HISTORY_ENSURED
+    if _SMARTLIST_AI_HISTORY_ENSURED:
+        return
     with _get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT COUNT(1) FROM user_tables WHERE table_name = 'SMARTLIST_AI_HISTORY'")
@@ -703,6 +752,7 @@ def ensure_smart_list_ai_history_table() -> None:
             cur.execute("SELECT COUNT(1) FROM user_indexes WHERE index_name = 'IX_SLAI_USER_TENANT'")
             if int((cur.fetchone() or [0])[0] or 0) == 0:
                 cur.execute('CREATE INDEX IX_SLAI_USER_TENANT ON SMARTLIST_AI_HISTORY (USER_NAME, TENANT_ID, CREATED_AT)')
+    _SMARTLIST_AI_HISTORY_ENSURED = True
 
 def save_smart_list_ai_message(msg_id: str, chat_id: str, user_name: str, tenant_id: Optional[str], role: str, content: str) -> None:
     """Persist one Smart List AI chat message for a user and tenant."""
@@ -1035,34 +1085,299 @@ def update_itemmaster_itemnameara_if_empty(location_code: int, item_code: int, i
     return n > 0
 
 
+_CATEGORY_NAMEARA_COLUMN_ENSURED = False
+
+
+def ensure_category_nameara_column() -> bool:
+    """Add NAMEARA to CATEGORY for Arabic category names (storefront + ERP)."""
+    global _CATEGORY_NAMEARA_COLUMN_ENSURED
+    if _CATEGORY_NAMEARA_COLUMN_ENSURED:
+        return _table_exists('CATEGORY') and 'NAMEARA' in set(_get_table_columns('CATEGORY') or [])
+    if not _table_exists('CATEGORY'):
+        return False
+    cols = set(_get_table_columns('CATEGORY') or [])
+    if 'NAMEARA' in cols:
+        _CATEGORY_NAMEARA_COLUMN_ENSURED = True
+        return True
+    try:
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute('ALTER TABLE CATEGORY ADD NAMEARA VARCHAR2(100)')
+            conn.commit()
+        _TABLE_COLUMNS_CACHE.pop('CATEGORY', None)
+        _CATEGORY_NAMEARA_COLUMN_ENSURED = True
+        return True
+    except Exception as e:
+        print(f'[ensure_category_nameara_column] NAMEARA: {e}')
+        cols = set(_get_table_columns('CATEGORY') or [])
+        _CATEGORY_NAMEARA_COLUMN_ENSURED = 'NAMEARA' in cols
+        return 'NAMEARA' in cols
+
+
+def _category_missing_arabic_where_sql(cat_alias: str = 'c') -> str:
+    """CATEGORY rows with NAME set and empty NAMEARA (M/D/C hierarchy only)."""
+    if not _table_exists('CATEGORY'):
+        return '1=0'
+    cols = set(_get_table_columns('CATEGORY') or [])
+    if 'NAMEARA' not in cols or 'NAME' not in cols:
+        return '1=0'
+    return (
+        f"LENGTH(TRIM({cat_alias}.NAME)) > 0 "
+        f"AND ({cat_alias}.NAMEARA IS NULL OR LENGTH(TRIM({cat_alias}.NAMEARA)) = 0 "
+        f"OR LENGTH(TRIM({cat_alias}.NAMEARA)) IS NULL) "
+        f"AND UPPER(TRIM(TO_CHAR({cat_alias}.FLAG))) IN ('M', 'D', 'C', 'B')"
+    )
+
+
+def count_category_missing_nameara(location_code: int) -> int:
+    """Count CATEGORY rows with NAME but empty NAMEARA for a branch."""
+    if not ensure_category_nameara_column():
+        return 0
+    q = f"""
+        SELECT COUNT(*) AS cnt
+        FROM CATEGORY c
+        WHERE c.LOCATIONCODE = :loc AND {_category_missing_arabic_where_sql('c')}
+    """
+    rows = _safe_rows(q, {'loc': int(location_code)})
+    if not rows:
+        return 0
+    try:
+        return int(rows[0].get('cnt') or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def fetch_category_missing_nameara_batch(
+    location_code: int, offset: int, limit: int,
+) -> List[Dict[str, Any]]:
+    """Paged CATEGORY rows needing NAMEARA for a branch."""
+    if not ensure_category_nameara_column() or limit <= 0:
+        return []
+    off = max(0, int(offset))
+    lim = max(1, min(int(limit), 500))
+    hi = off + lim
+    q = f"""
+        SELECT code, name, flag FROM (
+            SELECT c.CODE AS code,
+                   c.NAME AS name,
+                   c.FLAG AS flag,
+                   ROW_NUMBER() OVER (ORDER BY c.FLAG, c.CODE) AS rn
+            FROM CATEGORY c
+            WHERE c.LOCATIONCODE = :loc AND {_category_missing_arabic_where_sql('c')}
+        ) t
+        WHERE t.rn > :off AND t.rn <= :hi
+    """
+    rows = _safe_rows(q, {'loc': int(location_code), 'off': off, 'hi': hi})
+    out: List[Dict[str, Any]] = []
+    for r in rows or []:
+        name = str(r.get('name') or '').strip()
+        flag = str(r.get('flag') or '').strip().upper()[:1]
+        try:
+            code = int(r.get('code') or 0)
+        except (TypeError, ValueError):
+            continue
+        if not code or not name or flag not in ('M', 'D', 'C', 'B'):
+            continue
+        out.append({'code': code, 'name': name, 'flag': flag})
+    return out
+
+
+def update_category_nameara_if_empty(
+    location_code: int, code: int, flag: str, nameara: str,
+) -> bool:
+    """Set CATEGORY.NAMEARA only when still null/empty. Returns True if updated."""
+    if not ensure_category_nameara_column():
+        return False
+    fl = str(flag or '').strip().upper()[:1]
+    if fl not in ('M', 'D', 'C', 'B'):
+        return False
+    ara = str(nameara or '').strip()
+    if not ara:
+        return False
+    if len(ara) > 100:
+        ara = ara[:100]
+    where_extra = _category_missing_arabic_where_sql('c')
+    q = f"""
+        UPDATE CATEGORY c SET c.NAMEARA = :ara
+        WHERE c.LOCATIONCODE = :loc AND c.CODE = :code AND c.FLAG = :flag AND {where_extra}
+    """
+    n = _execute_itemnameara_dml(q, {'ara': ara, 'loc': int(location_code), 'code': int(code), 'flag': fl})
+    return n > 0
+
+
+def _category_node_name_ar(row: Dict[str, Any]) -> Optional[str]:
+    """Extract fixed Arabic name from a CATEGORY row dict."""
+    raw = row.get('nameara') or row.get('NAMEARA')
+    if raw is None:
+        return None
+    fixed = _fix_mojibake(raw)
+    text = str(fixed).strip() if fixed is not None else ''
+    return text or None
+
+
 _TABLE_COLUMNS_CACHE: Dict[str, List[str]] = {}
-_TABLE_COLUMNS_CACHE_MAX = 300
+_TABLE_COLUMNS_CACHE_MAX = 600
 _TABLE_COLUMNS_LOADING: Set[str] = set()
 _TABLE_COLUMNS_LOADING_GUARD = threading.Lock()
 _TABLE_EXISTS_CACHE: Dict[str, bool] = {}
 _VIEW_EXISTS_CACHE: Dict[str, bool] = {}
+_CORE_SCHEMA_WARMED: Set[str] = set()
+_CORE_SCHEMA_TABLES: Tuple[str, ...] = (
+    'ITEMMASTER', 'BILLHDR', 'BILLDTL', 'BILLNOTABLE', 'RECEIPTHDR', 'RECEIPTDTL',
+    'LPOHDR', 'LPODTL', 'ITEMJOURNAL', 'ITEMJOURNEL', 'SUPPLIER', 'CUSTOMER',
+    'LOCATIONMASTER', 'CATEGORY', 'RETURNHDR', 'RETURNDTL', 'ITEMSTORE',
+    'WAREHOUSE_STOCK', 'CHARTOFACCOUNTS', 'COUNTER', 'TBLGRNPOSTINGHDR',
+)
 _TEMPRETURN_SCHEMA_ENSURED_PROCESS = False
 _RETURNHDR_SCHEMA_ENSURED_PROCESS = False
-_RESOLVE_DB_CFG_CACHE: Optional[Dict[str, str]] = None
+_RESOLVE_DB_CFG_CACHE: Dict[str, Dict[str, str]] = {}
+_LOGIN_TABLE_ENSURED = False
+_TENANT_DATABASES_TABLE_ENSURED = False
+_CHAT_TABLES_ENSURED = False
+_SMARTLIST_AI_HISTORY_ENSURED = False
+_TENANT_LIST_CACHE: Optional[Tuple[float, List[Dict[str, Any]]]] = None
+_TENANT_LIST_CACHE_TTL_SEC = 60.0
+
+
+def _resolve_db_cfg_cache_key() -> str:
+    try:
+        from nexa_http import g, session, has_request_context
+
+        tid = g.get('current_tenant_id') if g else None
+        if (not tid) and has_request_context():
+            tid = session.get('tenant_id')
+        if isinstance(tid, str):
+            s = tid.strip()
+            if s and s.lower() != 'none':
+                return f't:{s}'
+    except RuntimeError:
+        pass
+    try:
+        tid = getattr(_ACTIVE_DB_CONTEXT, 'tenant_id', None)
+        if isinstance(tid, str) and tid.strip():
+            return f't:{tid.strip()}'
+    except Exception:
+        pass
+    return 'default'
 
 
 def _resolve_db_connect_config_cached() -> Dict[str, str]:
-    """Cached config for metadata queries (avoids repeated session/tenant resolution)."""
-    global _RESOLVE_DB_CFG_CACHE
-    if _RESOLVE_DB_CFG_CACHE is not None:
-        return _RESOLVE_DB_CFG_CACHE.copy()
+    """Cached config for metadata queries (keyed by tenant to avoid wrong schema in multi-DB)."""
+    key = _resolve_db_cfg_cache_key()
+    cached = _RESOLVE_DB_CFG_CACHE.get(key)
+    if cached is not None:
+        return cached.copy()
     cfg = _resolve_db_connect_config()
-    _RESOLVE_DB_CFG_CACHE = cfg.copy()
+    _RESOLVE_DB_CFG_CACHE[key] = cfg.copy()
     return cfg.copy()
 
 
+def _schema_cache_key(table: str) -> str:
+    """Tenant-scoped cache key for table metadata (multi-DB safe)."""
+    t = (table or '').strip().upper()
+    if not t:
+        return ''
+    return f'{_tenant_cache_key()}:{t}'
+
+
+def _borrow_metadata_connection() -> Tuple[Any, bool]:
+    """Reuse request-scoped tenant connection when available; else acquire from pool."""
+    try:
+        from nexa_http.oracle_request_scope import borrow_connection
+
+        conn, scoped = borrow_connection('tenant', _open_tenant_connection)
+        return conn, scoped
+    except Exception:
+        pass
+    cfg = _resolve_db_connect_config_cached()
+    conn = cx_oracle_connect(user=cfg['user'], password=cfg['password'], dsn=cfg['dsn'])
+    return conn, False
+
+
+def _batch_load_user_tab_columns(table_names: List[str]) -> Dict[str, List[str]]:
+    """Load column lists for many tables in one metadata round-trip."""
+    names = []
+    seen: Set[str] = set()
+    for raw in table_names or []:
+        t = (raw or '').strip().upper()
+        if t and t not in seen:
+            seen.add(t)
+            names.append(t)
+    if not names:
+        return {}
+    binds: Dict[str, Any] = {f't{i}': t for i, t in enumerate(names)}
+    in_clause = ', '.join(f':t{i}' for i in range(len(names)))
+    query = f"""
+        SELECT table_name, column_name
+        FROM user_tab_columns
+        WHERE table_name IN ({in_clause})
+        ORDER BY table_name, column_id
+    """
+    conn = None
+    scoped = False
+    out: Dict[str, List[str]] = {t: [] for t in names}
+    try:
+        conn, scoped = _borrow_metadata_connection()
+        with conn.cursor() as cur:
+            cur.execute(query, binds)
+            for tname, col in cur.fetchall() or []:
+                key = str(tname or '').strip().upper()
+                col_u = str(col or '').strip().upper()
+                if key and col_u:
+                    out.setdefault(key, []).append(col_u)
+        return out
+    except Exception as e:
+        print(f'[WARN _batch_load_user_tab_columns] {e}')
+        return out
+    finally:
+        if conn is not None and not scoped:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def warm_core_schema_cache(*, force: bool = False) -> None:
+    """Pre-load column/table metadata for hot paths (once per tenant per process)."""
+    tk = _tenant_cache_key()
+    if not force and tk in _CORE_SCHEMA_WARMED:
+        return
+    try:
+        cols_by_table = _batch_load_user_tab_columns(list(_CORE_SCHEMA_TABLES))
+        for tbl, cols in cols_by_table.items():
+            cache_key = _schema_cache_key(tbl)
+            if cols:
+                _TABLE_COLUMNS_CACHE[cache_key] = cols
+                _TABLE_EXISTS_CACHE[cache_key] = True
+            else:
+                _TABLE_EXISTS_CACHE[cache_key] = False
+        for tbl in _CORE_SCHEMA_TABLES:
+            cache_key = _schema_cache_key(tbl)
+            if cache_key not in _TABLE_EXISTS_CACHE:
+                exists = bool(_TABLE_COLUMNS_CACHE.get(cache_key))
+                if not exists:
+                    try:
+                        exists = _get_count(
+                            'SELECT COUNT(*) FROM user_tables WHERE table_name = :table_name',
+                            {'table_name': tbl},
+                        ) > 0
+                    except Exception:
+                        exists = False
+                _TABLE_EXISTS_CACHE[cache_key] = exists
+                if exists and cache_key not in _TABLE_COLUMNS_CACHE:
+                    _TABLE_COLUMNS_CACHE[cache_key] = _query_user_tab_columns(tbl)
+        _CORE_SCHEMA_WARMED.add(tk)
+    except Exception as e:
+        print(f'[WARN warm_core_schema_cache] {e}')
+
+
 def _query_user_tab_columns(key: str) -> List[str]:
-    """Load column names for one table (uncached). Direct connect only — never _get_connection."""
+    """Load column names for one table (uncached). Prefer request-scoped connection."""
     query = '\n        SELECT column_name\n        FROM user_tab_columns\n        WHERE table_name = :table_name\n    '
     conn = None
+    scoped = False
     try:
-        cfg = _resolve_db_connect_config_cached()
-        conn = cx_oracle_connect(user=cfg['user'], password=cfg['password'], dsn=cfg['dsn'])
+        conn, scoped = _borrow_metadata_connection()
         with conn.cursor() as cur:
             cur.execute(query, {'table_name': key})
             return [row[0].upper() for row in cur.fetchall()]
@@ -1070,7 +1385,7 @@ def _query_user_tab_columns(key: str) -> List[str]:
         print(f'[WARN _query_user_tab_columns] {key}: {e}')
         return []
     finally:
-        if conn is not None:
+        if conn is not None and not scoped:
             try:
                 conn.close()
             except Exception:
@@ -1083,11 +1398,15 @@ def _table_has_column_direct(tbl: str, column: str) -> bool:
     c = (column or '').strip().upper()
     if not t or not c:
         return False
+    cache_key = _schema_cache_key(t)
+    cached_cols = _TABLE_COLUMNS_CACHE.get(cache_key)
+    if cached_cols is not None:
+        return c in cached_cols
     q = '\n        SELECT COUNT(*) FROM user_tab_columns\n        WHERE table_name = :table_name AND column_name = :column_name\n    '
     conn = None
+    scoped = False
     try:
-        cfg = _resolve_db_connect_config_cached()
-        conn = cx_oracle_connect(user=cfg['user'], password=cfg['password'], dsn=cfg['dsn'])
+        conn, scoped = _borrow_metadata_connection()
         with conn.cursor() as cur:
             cur.execute(q, {'table_name': t, 'column_name': c})
             row = cur.fetchone()
@@ -1095,7 +1414,7 @@ def _table_has_column_direct(tbl: str, column: str) -> bool:
     except Exception:
         return False
     finally:
-        if conn is not None:
+        if conn is not None and not scoped:
             try:
                 conn.close()
             except Exception:
@@ -1103,22 +1422,27 @@ def _table_has_column_direct(tbl: str, column: str) -> bool:
 
 
 def _get_table_columns(table: str) -> List[str]:
-    """Return column names for table; results cached per table to avoid slow metadata round-trips."""
-    key = table.upper()
-    cached = _TABLE_COLUMNS_CACHE.get(key)
+    """Return column names for table; results cached per tenant/table to avoid metadata round-trips."""
+    cache_key = _schema_cache_key(table)
+    if not cache_key:
+        return []
+    cached = _TABLE_COLUMNS_CACHE.get(cache_key)
     if cached is not None:
         return cached
+    legacy = (table or '').strip().upper()
+    if legacy and legacy in _TABLE_COLUMNS_CACHE:
+        return _TABLE_COLUMNS_CACHE[legacy]
     with _TABLE_COLUMNS_LOADING_GUARD:
-        if key in _TABLE_COLUMNS_LOADING:
+        if cache_key in _TABLE_COLUMNS_LOADING:
             # Another frame is loading this table — never nest metadata queries (RecursionError).
             return []
-        _TABLE_COLUMNS_LOADING.add(key)
+        _TABLE_COLUMNS_LOADING.add(cache_key)
     try:
-        result = _query_user_tab_columns(key)
+        result = _query_user_tab_columns(legacy)
     finally:
         with _TABLE_COLUMNS_LOADING_GUARD:
-            _TABLE_COLUMNS_LOADING.discard(key)
-    _TABLE_COLUMNS_CACHE[key] = result
+            _TABLE_COLUMNS_LOADING.discard(cache_key)
+    _TABLE_COLUMNS_CACHE[cache_key] = result
     if len(_TABLE_COLUMNS_CACHE) > _TABLE_COLUMNS_CACHE_MAX:
         for k in list(_TABLE_COLUMNS_CACHE.keys())[:_TABLE_COLUMNS_CACHE_MAX // 2]:
             del _TABLE_COLUMNS_CACHE[k]
@@ -1180,6 +1504,8 @@ def _get_table_column_types_with_key(table: str, _db_key_ignored: Any=None) -> D
 
 def ensure_billno_unique(_db_key_ignored: Any=None) -> None:
     """Ensure BILLNOTABLE has a unique constraint on BILLNO (+ LOCATIONCODE if present)."""
+    if not _use_billnotable():
+        return
     if not _table_exists('BILLNOTABLE'):
         return
     cols = _resolve_billnotable_columns()
@@ -1220,6 +1546,8 @@ def ensure_billnotable_locationcode(_db_key_ignored: Any=None) -> None:
     per-location bill numbers can repeat across locations, then callers should run ``ensure_billno_unique``
     to add ``UNIQUE (BILLNO, LOCATIONCODE)``. No-op when the table is not in ``user_tables`` (e.g. synonym-only).
     """
+    if not _use_billnotable():
+        return
     if not _table_exists('BILLNOTABLE'):
         return
     cols = _resolve_billnotable_columns()
@@ -1264,7 +1592,24 @@ _BILLNO_VARCHAR_TABLES = (
     'QUATATIONBILLDTL',
     'QUATATIONBILLHDR',
     'POS_BILL_PAYMODE',
+    'POS_SETTLEMENT_DRAFT_BILL',
 )
+
+
+def _clean_settlement_billnos(bill_nos: Any) -> List[Any]:
+    """Normalize settlement bill numbers for NUMBER or VARCHAR2 BILLNO storage."""
+    clean: List[Any] = []
+    seen: set = set()
+    for x in bill_nos or []:
+        bn = coerce_billno(x)
+        if not billno_is_valid(bn):
+            continue
+        key = str(bn)
+        if key in seen:
+            continue
+        seen.add(key)
+        clean.append(bn)
+    return sorted(clean, key=lambda v: str(v))
 
 
 def _billno_varchar_requested() -> bool:
@@ -1283,6 +1628,8 @@ def _billhdr_billno_column_type() -> str:
 
 def billno_uses_varchar_storage() -> bool:
     """True when BILLHDR.BILLNO is VARCHAR2 (formatted document numbers)."""
+    if _billno_varchar_requested():
+        return True
     dt = _billhdr_billno_column_type()
     return dt in ('VARCHAR2', 'VARCHAR', 'CHAR', 'NVARCHAR2', 'NCHAR')
 
@@ -1461,6 +1808,8 @@ def ensure_billno_varchar_columns() -> bool:
     global _BILLNO_VARCHAR_ENSURED
     if not _billno_varchar_requested():
         return billno_uses_varchar_storage()
+    if _BILLNO_VARCHAR_ENSURED:
+        return billno_uses_varchar_storage()
     if not _table_exists('BILLHDR'):
         print('[WARN ensure_billno_varchar_columns] BILLHDR not found; skipped.')
         return False
@@ -1468,15 +1817,20 @@ def ensure_billno_varchar_columns() -> bool:
     core_specs = [
         ('BILLHDR', 'PK_BILLHDR', ['LOCATIONCODE', 'RESETNO', 'BILLNO'], ['SYS_C0018596']),
         ('BILLDTL', 'PK_BILLDTL', ['LOCATIONCODE', 'RESETNO', 'BILLNO', 'SLNO'], ['SYS_C0018588']),
-        ('BILLNOTABLE', 'PK_BILLNOTABLE', ['BILLNO', 'BILLDATE'], ['UK_BILLNOTABLE_BILLNO']),
         ('BILLHDRHISTORY', 'BILLHDRHISTORY_PK', ['BILLNO'], []),
         ('BILLDTLHISTORY', '', [], []),
         ('BILLHDR1', 'PK_BILLHDR1', ['LOCATIONCODE', 'RESETNO', 'BILLNO'], []),
         ('BILLDTL1', 'PK_BILLDTL1', ['LOCATIONCODE', 'RESETNO', 'BILLNO', 'SLNO'], []),
     ]
+    if _use_billnotable():
+        core_specs.insert(
+            2,
+            ('BILLNOTABLE', 'PK_BILLNOTABLE', ['BILLNO', 'BILLDATE'], ['UK_BILLNOTABLE_BILLNO']),
+        )
     hold_table_specs = [
         ('BILLHDR1', 'PK_BILLHDR1', ['LOCATIONCODE', 'RESETNO', 'BILLNO'], []),
         ('BILLDTL1', 'PK_BILLDTL1', ['LOCATIONCODE', 'RESETNO', 'BILLNO', 'SLNO'], []),
+        ('POS_SETTLEMENT_DRAFT_BILL', 'PK_PSSD_BILL', ['DRAFT_ID', 'BILLNO'], []),
     ]
 
     def _migrate_pk_specs(cur, specs):
@@ -1501,6 +1855,8 @@ def ensure_billno_varchar_columns() -> bool:
                 if not _BILLNO_VARCHAR_ENSURED:
                     _migrate_pk_specs(cur, core_specs)
                     for tbl in _BILLNO_VARCHAR_TABLES:
+                        if tbl == 'BILLNOTABLE' and not _use_billnotable():
+                            continue
                         if tbl in {s[0] for s in core_specs}:
                             continue
                         if not _table_exists(tbl):
@@ -1529,20 +1885,21 @@ def ensure_billno_varchar_columns() -> bool:
                                     print(f'[WARN ensure_billno_varchar_columns] {tbl}: {ex2}')
                             else:
                                 print(f'[WARN ensure_billno_varchar_columns] {tbl}: {ex}')
-                    _BILLNO_VARCHAR_ENSURED = True
-                else:
                     _migrate_pk_specs(cur, hold_table_specs)
+                    _BILLNO_VARCHAR_ENSURED = True
             conn.commit()
-        try:
-            ensure_billno_unique()
-        except Exception:
-            pass
+        if _use_billnotable():
+            try:
+                ensure_billno_unique()
+            except Exception:
+                pass
     except Exception as ex:
         print(f'[WARN ensure_billno_varchar_columns] {ex}')
     _TABLE_COLUMNS_CACHE.pop('BILLHDR', None)
     _TABLE_COLUMNS_CACHE.pop('BILLHDR1', None)
     _TABLE_COLUMNS_CACHE.pop('BILLDTL1', None)
-    _TABLE_COLUMNS_CACHE.pop('BILLNOTABLE', None)
+    if _use_billnotable():
+        _TABLE_COLUMNS_CACHE.pop('BILLNOTABLE', None)
     return billno_uses_varchar_storage()
 
 
@@ -2928,9 +3285,9 @@ def _peek_billno_from_series(
 ) -> Optional[Any]:
     from addons.document_numbering.document_numbering_db import (
         BILLNO_DOC_TYPE,
+        _compute_next_series_no,
         format_document_no,
         get_document_series_by_type,
-        peek_document_no_int,
     )
     dt = str(doc_type or BILLNO_DOC_TYPE).strip().upper() or BILLNO_DOC_TYPE
     series = get_document_series_by_type(dt, location_code=location_code, reset_no=reset_no)
@@ -2944,10 +3301,10 @@ def _peek_billno_from_series(
                     floor_no = _max_existing_billno_cur(cur, location_code)
         except Exception:
             floor_no = 0
-    n = peek_document_no_int(
-        dt,
-        location_code=location_code,
-        reset_no=reset_no,
+    n = _compute_next_series_no(
+        series.get('starting_no', 1),
+        series.get('last_no_used', 0),
+        series.get('increment_by', 1),
         floor_no=floor_no,
     )
     if n is None:
@@ -2957,15 +3314,20 @@ def _peek_billno_from_series(
 
 
 def _table_exists(table: str, db_key: Optional[str]=None) -> bool:
-    key = table.upper()
-    if key in _TABLE_EXISTS_CACHE:
-        return _TABLE_EXISTS_CACHE[key]
+    t = (table or '').strip().upper()
+    if not t:
+        return False
+    cache_key = _schema_cache_key(t)
+    if cache_key in _TABLE_EXISTS_CACHE:
+        return _TABLE_EXISTS_CACHE[cache_key]
+    if t in _TABLE_EXISTS_CACHE:
+        return _TABLE_EXISTS_CACHE[t]
     query = '\n        SELECT COUNT(*) AS cnt\n        FROM user_tables\n        WHERE table_name = :table_name\n    '
     try:
-        result = _get_count(query, {'table_name': key}) > 0
+        result = _get_count(query, {'table_name': t}) > 0
     except Exception:
         result = False
-    _TABLE_EXISTS_CACHE[key] = result
+    _TABLE_EXISTS_CACHE[cache_key] = result
     return result
 
 def _view_exists(view_name: str, db_key: Optional[str]=None) -> bool:
@@ -2973,6 +3335,9 @@ def _view_exists(view_name: str, db_key: Optional[str]=None) -> bool:
     k = (view_name or '').strip().upper()
     if not k:
         return False
+    cache_key = _schema_cache_key(k)
+    if cache_key in _VIEW_EXISTS_CACHE:
+        return _VIEW_EXISTS_CACHE[cache_key]
     if k in _VIEW_EXISTS_CACHE:
         return _VIEW_EXISTS_CACHE[k]
     rows = _safe_rows('\n        SELECT COUNT(*) AS cnt\n        FROM user_views\n        WHERE view_name = :v\n    ', {'v': k}, db_key=db_key)
@@ -2981,7 +3346,7 @@ def _view_exists(view_name: str, db_key: Optional[str]=None) -> bool:
     except (TypeError, ValueError, IndexError):
         n = 0
     ok = n > 0
-    _VIEW_EXISTS_CACHE[k] = ok
+    _VIEW_EXISTS_CACHE[cache_key] = ok
     return ok
 
 def _table_exists_in_owner(table: str, owner: str, _db_key_ignored: Any=None) -> bool:
@@ -4884,11 +5249,35 @@ def _pos_billhdr_summary_where(
 
 
 def _pos_billhdr_billtype_char_expr(cols_u: set, alias: str = '') -> str:
-    """Oracle-safe first character of ``BILLTYPE`` (matches POS save: C/R)."""
+    """Oracle expression → ``C`` (cash) or ``R`` (credit).
+
+    Handles single-letter ``C``/``R`` and full words ``CASH``/``CREDIT``
+    (first-letter of CREDIT must not be treated as cash).
+    """
     pre = f'{alias}.' if alias else ''
     if 'BILLTYPE' not in cols_u:
         return "''"
-    return f"UPPER(SUBSTR(TRIM(TO_CHAR({pre}BILLTYPE)), 1, 1))"
+    raw = f"UPPER(TRIM(TO_CHAR({pre}BILLTYPE)))"
+    return (
+        f"CASE "
+        f"WHEN {raw} IN ('R', 'CREDIT', 'CR', '2') OR {raw} LIKE 'CREDIT%' THEN 'R' "
+        f"WHEN {raw} IN ('C', 'CASH', '1') OR {raw} LIKE 'CASH%' THEN 'C' "
+        f"WHEN SUBSTR({raw}, 1, 1) IN ('C', 'R') THEN SUBSTR({raw}, 1, 1) "
+        f"ELSE '' END"
+    )
+
+
+def _normalize_billtype_cash_credit(raw: Any) -> str:
+    """Normalize BILLHDR.BILLTYPE to ``C`` (cash) or ``R`` (credit) or ``''``."""
+    s = str(raw or '').strip().upper()
+    if not s:
+        return ''
+    if s in ('R', 'CREDIT', 'CR', '2') or s.startswith('CREDIT'):
+        return 'R'
+    if s in ('C', 'CASH', '1') or s.startswith('CASH'):
+        return 'C'
+    ch = s[:1]
+    return ch if ch in ('C', 'R') else ''
 
 
 def _pos_billhdr_customer_code_expr(cols_u: set, alias: str = '') -> str:
@@ -4905,17 +5294,20 @@ def _query_pos_billhdr_sales_metrics_sql(
     *,
     db_key: Optional[str] = None,
 ) -> Tuple[float, float, float]:
-    """``SUM(NETBILLAMOUNT)`` for walk-in (C, no customer) and credit (R) bills."""
+    """``SUM(NETBILLAMOUNT)`` for cash (``BILLTYPE='C'``) and credit (``BILLTYPE='R'``) bills.
+
+    Cash customer sale includes cash bills with a customer selected — do **not** treat
+    ``CUSTOMERCODE > 0`` as credit when bill type is cash.
+    """
     if 'NETBILLAMOUNT' not in cols_u:
         return 0.0, 0.0, 0.0
     bt = _pos_billhdr_billtype_char_expr(cols_u)
-    cc = _pos_billhdr_customer_code_expr(cols_u)
     disc_sql = 'NVL(DISCOUNTAMOUNT, 0)' if 'DISCOUNTAMOUNT' in cols_u else '0'
     q = f"""
         SELECT
-            NVL(SUM(CASE WHEN {bt} = 'C' AND {cc} = 0
+            NVL(SUM(CASE WHEN {bt} = 'C'
                 THEN NVL(NETBILLAMOUNT, 0) ELSE 0 END), 0) AS direct_customer,
-            NVL(SUM(CASE WHEN ({bt} = 'R' OR ({bt} = 'C' AND {cc} > 0))
+            NVL(SUM(CASE WHEN {bt} = 'R'
                 AND NVL(NETBILLAMOUNT, 0) > 0.0005
                 THEN NVL(NETBILLAMOUNT, 0) ELSE 0 END), 0) AS credit_sales,
             NVL(SUM({disc_sql}), 0) AS total_discount
@@ -4936,10 +5328,10 @@ def _query_pos_billhdr_sales_metrics_sql(
 
 
 def _metrics_from_pos_billhdr_rows(bill_rows: List[Dict[str, Any]]) -> Tuple[List[int], float, float, float, float]:
-    """Return bill_nos, direct_customer, credit_sales, total_sales, total_discount.
+    """Return bill_nos, direct_customer (cash), credit_sales, total_sales, total_discount.
 
-    direct_customer = SUM(NETBILLAMOUNT) for ``BILLTYPE = 'C'`` walk-in (includes return bills with negative net).
-    credit_sales = SUM(NETBILLAMOUNT) for ``BILLTYPE = 'R'`` or C with customer (positive net only).
+    Cash customer sale = ``BILLTYPE = 'C'`` (with or without customer).
+    Credit customer sale = ``BILLTYPE = 'R'`` (positive net only).
     """
     bill_nos: List[int] = []
     direct_customer = 0.0
@@ -4954,11 +5346,7 @@ def _metrics_from_pos_billhdr_rows(bill_rows: List[Dict[str, Any]]) -> Tuple[Lis
             bn = 0
         if bn > 0:
             bill_nos.append(bn)
-        bt = str(rk.get('billtype') or '').strip().upper()[:1]
-        try:
-            cc_hdr = int(rk.get('customercode') or 0)
-        except (TypeError, ValueError):
-            cc_hdr = 0
+        bt = _normalize_billtype_cash_credit(rk.get('billtype'))
         try:
             net = float(rk.get('netbillamount') or 0)
         except (TypeError, ValueError):
@@ -4968,20 +5356,20 @@ def _metrics_from_pos_billhdr_rows(bill_rows: List[Dict[str, Any]]) -> Tuple[Lis
         except (TypeError, ValueError):
             disc = 0.0
         total_discount += disc
-        if bt == 'C' and cc_hdr <= 0:
+        if bt == 'C':
             direct_customer += net
-        elif (bt == 'R' or cc_hdr > 0) and net > 0.0005:
+        elif bt == 'R' and net > 0.0005:
             credit_sales += net
     total_sales = round(direct_customer + credit_sales, 2)
     return bill_nos, direct_customer, credit_sales, total_sales, total_discount
 
 
-def _pos_billnos_with_paymode_rows(location_code: int, bill_nos: List[int]) -> set:
+def _pos_billnos_with_paymode_rows(location_code: int, bill_nos: List[Any]) -> set:
     """Bill numbers that have at least one ``POS_BILL_PAYMODE`` row."""
     if not bill_nos or not ensure_pos_bill_paymode_table():
         return set()
     tbl = POS_BILL_PAYMODE_TABLE
-    clean = sorted({int(b) for b in bill_nos if int(b) > 0})
+    clean = _clean_settlement_billnos(bill_nos)
     if not clean:
         return set()
     ph = ','.join([f':b{i}' for i in range(len(clean))])
@@ -4999,10 +5387,9 @@ def _pos_billnos_with_paymode_rows(location_code: int, bill_nos: List[int]) -> s
             cnt = 0
         if cnt <= 0:
             continue
-        try:
-            out.add(int(rk.get('bno')))
-        except (TypeError, ValueError):
-            continue
+        bn = coerce_billno(rk.get('bno'))
+        if billno_is_valid(bn):
+            out.add(str(bn))
     return out
 
 
@@ -5017,16 +5404,16 @@ def _merge_pos_shift_tender_totals(
     if not pm_totals:
         return paymode_amounts_from_billhdr_settlement_totals(totals_agg)
     with_pm = _pos_billnos_with_paymode_rows(location_code, bill_nos)
-    if not with_pm or len(with_pm) >= len({int(b) for b in bill_nos if int(b) > 0}):
+    clean_keys = {str(b) for b in _clean_settlement_billnos(bill_nos)}
+    if not with_pm or len(with_pm) >= len(clean_keys):
         return dict(pm_totals)
     rows_without: List[Dict[str, Any]] = []
     for r in bill_rows or []:
         rk = {str(k).lower(): v for k, v in r.items()}
-        try:
-            bn = int(rk.get('billno') or 0)
-        except (TypeError, ValueError):
-            bn = 0
-        if bn > 0 and bn not in with_pm:
+        bn = coerce_billno(rk.get('billno'))
+        if not billno_is_valid(bn):
+            continue
+        if str(bn) not in with_pm:
             rows_without.append(r)
     hdr_buckets = paymode_amounts_from_billhdr_settlement_totals(
         _aggregate_pos_settlement_totals_from_billhdr_rows(rows_without)
@@ -5820,6 +6207,7 @@ _LPOHDR_STANDARD_ERP_COLUMNS: Tuple[Tuple[str, str], ...] = (
 _LPOHDR_PO_FORM_COLUMNS: Tuple[Tuple[str, str], ...] = (
     ('OTHERCHARGE', 'NUMBER DEFAULT 0'),
     ('WAREHOUSE_ID', 'NUMBER'),
+    ('NETAMOUNT', 'NUMBER(18,3) DEFAULT 0'),
 )
 
 # Line-level fields used by web PO / TEMPLPODTL.
@@ -5964,6 +6352,7 @@ def ensure_lpo_po_standard_columns(_db_key_ignored: Any=None) -> None:
     - Drops legacy ``STORE`` / ``STORE1``…``STORE5`` on ``LPODTL`` and header store columns when warehouse mode is active.
     """
     ensure_lpohdr_po_form_columns(_db_key_ignored)
+    ensure_purchase_hdr_netamount_columns(_db_key_ignored)
     ensure_lpodtl_po_form_columns(_db_key_ignored)
     ensure_lpodtl_warehouse_columns(_db_key_ignored)
     ensure_templpo_po_form_columns()
@@ -6255,7 +6644,30 @@ def get_supplier_by_code(location_code: int, supplier_code: int) -> Optional[Dic
         return None
     cols = _get_table_columns(SUPPLIER_TABLE)
     select_parts = []
-    for c in ['LOCATIONCODE', 'SUPPLIERCODE', 'SUPPLIERNAME', 'SUPPLIERTYPE', 'ADDRESS', 'TELEPHONE', 'FAX', 'MOBILE', 'EMAILID', 'CONTACTPERSON', 'SUPPLIERID', 'ACCOUNTCODE', 'PAYABLEACCOUNT', 'PURCHASEACCOUNT', 'VATINPUTACCOUNT', 'ADVANCEACCOUNT', 'FLAG', 'SUPPLIERLOCATION', 'SUPREF', 'SUPPLIERCR', 'CREATIONFLAG']:
+    for c in [
+        'LOCATIONCODE',
+        'SUPPLIERCODE',
+        'SUPPLIERNAME',
+        'SUPPLIERTYPE',
+        'SUPPLIER_BILLING_TYPE',
+        'ADDRESS',
+        'TELEPHONE',
+        'FAX',
+        'MOBILE',
+        'EMAILID',
+        'CONTACTPERSON',
+        'SUPPLIERID',
+        'ACCOUNTCODE',
+        'PAYABLEACCOUNT',
+        'PURCHASEACCOUNT',
+        'VATINPUTACCOUNT',
+        'ADVANCEACCOUNT',
+        'FLAG',
+        'SUPPLIERLOCATION',
+        'SUPREF',
+        'SUPPLIERCR',
+        'CREATIONFLAG',
+    ]:
         if c in cols:
             select_parts.append(f'{c} AS {c.lower()}')
     if not select_parts:
@@ -6291,6 +6703,9 @@ def get_system_config_locations(db_key: str='HO') -> List[str]:
     return [str(row.get('location')).strip() for row in rows if row.get('location')]
 
 def ensure_login_table() -> None:
+    global _LOGIN_TABLE_ENSURED
+    if _LOGIN_TABLE_ENSURED:
+        return
     with _get_connection_auth() as conn:
         with conn.cursor() as cur:
             cur.execute("\n                SELECT COUNT(*) FROM user_tables WHERE table_name = 'LOGIN_USERS'\n            ")
@@ -6338,9 +6753,13 @@ def ensure_login_table() -> None:
                     conn.commit()
                 except Exception as e:
                     print(f'[ensure_login_table] default warehouse columns: {e}')
+    _LOGIN_TABLE_ENSURED = True
 
 def ensure_tenant_databases_table() -> None:
     """Ensure tenant_databases table exists (auth DB). DSN built from ip, port, service_name. Includes locationcode NUMBER."""
+    global _TENANT_DATABASES_TABLE_ENSURED
+    if _TENANT_DATABASES_TABLE_ENSURED:
+        return
     with _get_connection_auth() as conn:
         with conn.cursor() as cur:
             cur.execute("\n                SELECT COUNT(*) FROM user_tables WHERE table_name = 'TENANT_DATABASES'\n            ")
@@ -6359,6 +6778,7 @@ def ensure_tenant_databases_table() -> None:
                 if 'NETWORK_LINK' not in cols:
                     cur.execute('ALTER TABLE tenant_databases ADD network_link VARCHAR2(500)')
                     conn.commit()
+    _TENANT_DATABASES_TABLE_ENSURED = True
 
 def tenant_exists(tenant_id: str) -> bool:
     """Return True if tenant_id exists in tenant_databases."""
@@ -6412,6 +6832,8 @@ def create_tenant(tenant_id: str, ip: str, port: str, service_name: str, display
             conn.commit()
     except cx_Oracle.DatabaseError as exc:
         _raise_friendly_tenant_save_error(exc)
+    global _TENANT_LIST_CACHE
+    _TENANT_LIST_CACHE = None
 
 def get_tenants_list() -> List[Dict[str, Any]]:
     """Return all tenants for list page (tenant_id, display_name, ip, port, service_name, active_flag, locationcode)."""
@@ -6459,12 +6881,22 @@ def update_tenant(tenant_id: str, ip: str, port: str, service_name: str, display
     except cx_Oracle.DatabaseError as exc:
         _raise_friendly_tenant_save_error(exc)
     _tenant_config_cache.pop(tid, None)
+    global _TENANT_LIST_CACHE
+    _TENANT_LIST_CACHE = None
 
 def get_tenant_list() -> List[Dict[str, Any]]:
     """Return list of tenants for dropdown (tenant_id, display_name, locationcode when available). Uses tenant_databases table."""
+    global _TENANT_LIST_CACHE
+    import time as _time
+    now = _time.time()
+    if _TENANT_LIST_CACHE is not None:
+        cached_at, cached_rows = _TENANT_LIST_CACHE
+        if (now - cached_at) < _TENANT_LIST_CACHE_TTL_SEC:
+            return cached_rows
     ensure_tenant_databases_table()
     try:
         rows = _safe_rows_auth("\n            SELECT tenant_id,\n                   NVL(display_name, tenant_id) AS display_name,\n                   locationcode\n            FROM tenant_databases\n            WHERE NVL(active_flag, 'Y') = 'Y'\n            ORDER BY tenant_id\n            ", {})
+        _TENANT_LIST_CACHE = (now, rows)
         return rows
     except Exception:
         try:
@@ -6472,11 +6904,14 @@ def get_tenant_list() -> List[Dict[str, Any]]:
             for r in rows:
                 if 'locationcode' not in r:
                     r['locationcode'] = None
+            _TENANT_LIST_CACHE = (now, rows)
             return rows
         except Exception:
             try:
                 rows = _safe_rows_auth("SELECT tenant_id FROM tenant_databases WHERE NVL(active_flag, 'Y') = 'Y' ORDER BY tenant_id", {})
-                return [{'tenant_id': r['tenant_id'], 'display_name': r['tenant_id'], 'locationcode': None} for r in rows]
+                out = [{'tenant_id': r['tenant_id'], 'display_name': r['tenant_id'], 'locationcode': None} for r in rows]
+                _TENANT_LIST_CACHE = (now, out)
+                return out
             except Exception:
                 return []
 
@@ -8274,6 +8709,125 @@ def set_sales_orderno_mandatory(
         return (False, str(e))
 
 
+_SALES_DIRECT_POST_COL_ENSURED: Set[str] = set()
+_SALES_DIRECT_POST_COL_CANDS = [
+    'SALES_DIRECT_POST',
+    'SALESDIRECTPOST',
+    'DIRECT_POSTING',
+    'CASH_DIRECT_POST',
+]
+_SALES_DIRECT_POST_RETURN_COL_CANDS = [
+    'SALES_DIRECT_POST_RETURN',
+    'SALESDIRECTPOSTRETURN',
+    'DIRECT_POSTING_RETURN',
+    'CASH_DIRECT_POST_RETURN',
+]
+
+
+def _ensure_sales_direct_posting_columns() -> Tuple[Optional[str], Optional[str]]:
+    """Ensure LOCATIONMASTER has SALES_DIRECT_POST and SALES_DIRECT_POST_RETURN."""
+    tbl = (LOCATIONS_TABLE or 'LOCATIONMASTER').strip().upper()
+    if not _table_exists(tbl):
+        return (None, None)
+    inv_col = _detect_column(tbl, _SALES_DIRECT_POST_COL_CANDS)
+    ret_col = _detect_column(tbl, _SALES_DIRECT_POST_RETURN_COL_CANDS)
+    if inv_col and ret_col:
+        return (inv_col, ret_col)
+    key = f'{_tenant_cache_key()}:sales_direct_post'
+    if key in _SALES_DIRECT_POST_COL_ENSURED:
+        return (
+            _detect_column(tbl, _SALES_DIRECT_POST_COL_CANDS),
+            _detect_column(tbl, _SALES_DIRECT_POST_RETURN_COL_CANDS),
+        )
+    try:
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                if not inv_col:
+                    cur.execute(
+                        f"ALTER TABLE {tbl} ADD (SALES_DIRECT_POST VARCHAR2(1 BYTE) DEFAULT 'N')"
+                    )
+                if not ret_col:
+                    # Default return to invoice flag when invoice column already exists.
+                    inv_now = inv_col or 'SALES_DIRECT_POST'
+                    cur.execute(
+                        f"ALTER TABLE {tbl} ADD (SALES_DIRECT_POST_RETURN VARCHAR2(1 BYTE) DEFAULT 'N')"
+                    )
+                    try:
+                        cur.execute(
+                            f'UPDATE {tbl} SET SALES_DIRECT_POST_RETURN = NVL({inv_now}, \'N\')'
+                        )
+                    except Exception:
+                        pass
+            conn.commit()
+    except Exception as e:
+        print(f'[WARN _ensure_sales_direct_posting_columns] {e}')
+    finally:
+        _SALES_DIRECT_POST_COL_ENSURED.add(key)
+        _TABLE_COLUMNS_CACHE.pop(tbl, None)
+    return (
+        _detect_column(tbl, _SALES_DIRECT_POST_COL_CANDS),
+        _detect_column(tbl, _SALES_DIRECT_POST_RETURN_COL_CANDS),
+    )
+
+
+def _ensure_sales_direct_posting_column() -> Optional[str]:
+    """Backward-compatible: invoice direct-post column only."""
+    inv_col, _ = _ensure_sales_direct_posting_columns()
+    return inv_col
+
+
+def get_sales_direct_posting_enabled() -> bool:
+    """True when cash Sales Invoice posts Dr Cash/Bank by payment method (not Receivable)."""
+    inv_col, _ = _ensure_sales_direct_posting_columns()
+    if not inv_col:
+        return False
+    return _locationmaster_base_flag(inv_col) in ('Y', 'YES', '1', 'TRUE', 'ON')
+
+
+def get_sales_direct_posting_return_enabled() -> bool:
+    """True when cash Sales Return posts Cr Cash/Bank by payment method (not Receivable)."""
+    _, ret_col = _ensure_sales_direct_posting_columns()
+    if not ret_col:
+        # Fall back to invoice flag so older installs keep one switch for both.
+        return get_sales_direct_posting_enabled()
+    return _locationmaster_base_flag(ret_col) in ('Y', 'YES', '1', 'TRUE', 'ON')
+
+
+def set_sales_direct_posting(
+    enabled: bool,
+    *,
+    return_enabled: Optional[bool] = None,
+    updated_by: str = '',
+) -> Tuple[bool, str]:
+    """Turn cash direct posting on/off for Sales Invoice and Sales Return.
+
+    If ``return_enabled`` is omitted, the return flag is set to the same value as
+    ``enabled`` (invoice).
+    """
+    tbl = (LOCATIONS_TABLE or 'LOCATIONMASTER').strip().upper()
+    if not _table_exists(tbl):
+        return (False, 'LOCATIONMASTER table is not available.')
+    inv_col, ret_col = _ensure_sales_direct_posting_columns()
+    if not inv_col:
+        return (False, 'SALES_DIRECT_POST column could not be created on LOCATIONMASTER.')
+    inv_flag = 'Y' if enabled else 'N'
+    ret_flag = 'Y' if (enabled if return_enabled is None else return_enabled) else 'N'
+    try:
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                if ret_col:
+                    cur.execute(
+                        f'UPDATE {tbl} SET {inv_col} = :iv, {ret_col} = :rv',
+                        {'iv': inv_flag, 'rv': ret_flag},
+                    )
+                else:
+                    cur.execute(f'UPDATE {tbl} SET {inv_col} = :iv', {'iv': inv_flag})
+            conn.commit()
+        return (True, '')
+    except Exception as e:
+        return (False, str(e))
+
+
 def get_locationmaster_base_dbcode() -> Optional[str]:
     """
     Tenant DB: DBCODE from the base LOCATIONMASTER row (BASELOCATIONFLAG = 'Y').
@@ -9915,12 +10469,19 @@ def _customer_picker_search_where(
     return ' AND (' + ' OR '.join(parts) + ')'
 
 
-def get_customers_master_list(*, for_picker: bool=False, picker_search: str='', picker_limit: int=300) -> List[Dict[str, Any]]:
+def get_customers_master_list(
+    *,
+    for_picker: bool=False,
+    picker_search: str='',
+    picker_limit: int=300,
+    picker_billing_type: str='',
+) -> List[Dict[str, Any]]:
     """Get customers list for sales screens.
 
     Default (for_picker=False): full list — legacy behaviour for callers that still need it.
 
     for_picker=True: capped rows for modal pickers (search optional; avoids loading every row).
+    picker_billing_type: optional ``CASH`` / ``CREDIT`` filter for the sales customer picker.
     """
     table_candidates = ['CUSTOMER', 'CUSTOMERS']
     for table_name in table_candidates:
@@ -9970,6 +10531,7 @@ def get_customers_master_list(*, for_picker: bool=False, picker_search: str='', 
             params: Dict[str, Any] = {}
             lim = 300
             ps_raw = ''
+            billing_where = ''
             if for_picker:
                 try:
                     lim = max(1, min(int(picker_limit or 300), 500))
@@ -9977,6 +10539,27 @@ def get_customers_master_list(*, for_picker: bool=False, picker_search: str='', 
                     lim = 300
                 ps_raw = (picker_search or '').strip()
                 params['pick_lim'] = lim
+                want_bt = normalize_customer_billing_type(picker_billing_type) if str(picker_billing_type or '').strip() else ''
+                # Only filter when caller explicitly asks for CASH/CREDIT.
+                if str(picker_billing_type or '').strip() and want_bt in ('CASH', 'CREDIT'):
+                    if billing_col:
+                        if want_bt == 'CREDIT':
+                            billing_where = (
+                                f" AND UPPER(TRIM(TO_CHAR(c.{billing_col}))) IN ('CREDIT','CR','R','2')"
+                            )
+                        else:
+                            billing_where = (
+                                f" AND ("
+                                f"c.{billing_col} IS NULL OR "
+                                f"TRIM(TO_CHAR(c.{billing_col})) IS NULL OR "
+                                f"UPPER(TRIM(TO_CHAR(c.{billing_col}))) IN ('CASH','C','1','')"
+                                f")"
+                            )
+                    elif invoice_col:
+                        if want_bt == 'CREDIT':
+                            billing_where = f' AND NVL(c.{invoice_col}, 0) = 2'
+                        else:
+                            billing_where = f' AND NVL(c.{invoice_col}, 0) <> 2'
             tail_sql = f'WHERE 1=1 {where_extra}\n                ORDER BY c.{code_col}' if for_picker else f'ORDER BY c.{code_col}'
             inner_sql = f'\n                SELECT\n                    c.{code_col} AS CODE,\n                    {name_sql} AS NAME,\n                    {address_sql} AS ADDRESS,\n                    {phone_sql} AS PHONE,\n                    {invoice_sql} AS CUSTOMER_BILLING_TYPE,\n                    {category_sql} AS CATEGORYCODE,\n                    {category_name_sql} AS CATEGORYNAME,\n                    {credit_limit_sql} AS CREDITLIMIT,\n                    {recv_sql} AS RECEIVABLEACCOUNT,\n                    {points_sql} AS TOTALPOINTS,\n                    {current_credit_sql} AS CURRENTCREDIT,\n                    {outstanding_sql} AS OUTSTANDINGCASH\n                FROM {table_name} c\n                {join_sql}\n                {settle_join_sql}\n                {tail_sql}\n            '
 
@@ -9995,16 +10578,16 @@ def get_customers_master_list(*, for_picker: bool=False, picker_search: str='', 
                 if ps_raw:
                     prefix_where = _customer_picker_search_where(
                         code_col, name_col, phone_col, ps_raw, params, prefix_only=True,
-                    )
+                    ) + billing_where
                     rows = _run_picker_query(prefix_where)
                     if not rows:
                         contains_params: Dict[str, Any] = {'pick_lim': lim}
                         contains_where = _customer_picker_search_where(
                             code_col, name_col, phone_col, ps_raw, contains_params, prefix_only=False,
-                        )
+                        ) + billing_where
                         rows = _run_picker_query(contains_where, contains_params)
                 else:
-                    rows = _run_picker_query('')
+                    rows = _run_picker_query(billing_where)
             else:
                 query = inner_sql
                 _, rows = _fetch_rows(query, params if params else {})
@@ -11599,6 +12182,8 @@ def _sql_next_billno_above_billnotable_and_hdr(location_code: Optional[int], bil
 def _ensure_billnotable_schema_once() -> None:
     """Run BILLNOTABLE DDL/constraint setup once per process (not on every bill-no request)."""
     global _BILLNOTABLE_SCHEMA_ENSURED
+    if not _use_billnotable():
+        return
     if _BILLNOTABLE_SCHEMA_ENSURED:
         return
     try:
@@ -11705,20 +12290,28 @@ def _sales_billno_doc_type(header: Optional[Dict[str, Any]] = None) -> str:
     return DOC_TYPE_SALES_INVOICE
 
 
+_BILL_SERIES_ACTIVE_CACHE: Dict[str, bool] = {}
+
+
 def _bill_series_allocation_enabled(doc_type: Optional[str] = None) -> bool:
+    from addons.document_numbering.document_numbering_db import (
+        BILLNO_DOC_TYPE,
+        bill_series_is_active,
+        ensure_doc_number_series_table,
+        seed_default_document_series,
+    )
+    dt = str(doc_type or BILLNO_DOC_TYPE).strip().upper() or BILLNO_DOC_TYPE
+    cached = _BILL_SERIES_ACTIVE_CACHE.get(dt)
+    if cached is not None:
+        return cached
     try:
-        from addons.document_numbering.document_numbering_db import (
-            BILLNO_DOC_TYPE,
-            bill_series_is_active,
-            ensure_doc_number_series_table,
-            seed_default_document_series,
-        )
         ensure_doc_number_series_table()
         seed_default_document_series()
-        dt = str(doc_type or BILLNO_DOC_TYPE).strip().upper() or BILLNO_DOC_TYPE
-        return bill_series_is_active(doc_type=dt)
+        active = bill_series_is_active(doc_type=dt)
     except Exception:
-        return False
+        active = False
+    _BILL_SERIES_ACTIVE_CACHE[dt] = active
+    return active
 
 
 def _insert_billnotable_reservation_cur(
@@ -12168,15 +12761,24 @@ def _resolve_sales_order_billno_for_save(
     use_existing: bool = False,
 ) -> Tuple[Any, Optional[str]]:
     """Reuse peeked bill number when still free, else allocate from DOC_NUMBER_SERIES."""
-    _ = use_existing
+    from addons.document_numbering.document_numbering_db import DOC_TYPE_SALES_ORDER
+
     req = coerce_billno(requested)
-    if billno_is_valid(req) and get_sales_order_for_edit(location_code, req):
+    # Explicit edit of an existing pending order.
+    if use_existing and billno_is_valid(req) and get_sales_order_for_edit(location_code, req):
         return req, None
+    # New order: peeked number already used on an order → allocate fresh (do not overwrite).
+    if billno_is_valid(req) and get_sales_order_for_edit(location_code, req) and not use_existing:
+        try:
+            return get_next_bill_no(location_code, countercode, doc_type=DOC_TYPE_SALES_ORDER), None
+        except RuntimeError as e:
+            return 0, str(e) or 'Could not allocate bill number.'
     if billno_is_valid(req) and billhdr_exists(location_code, req):
         return 0, f'Bill number {req} is already used on a posted sales invoice.'
-    from addons.document_numbering.document_numbering_db import DOC_TYPE_SALES_ORDER
+    # Only keep a true BILLNOTABLE reservation; peek-only must allocate so the series advances.
     if (
-        billno_is_valid(req)
+        _use_billnotable()
+        and billno_is_valid(req)
         and billno_is_reserved(req, location_code)
         and _billno_matches_series_prefix(req, DOC_TYPE_SALES_ORDER, location_code)
     ):
@@ -12823,8 +13425,8 @@ def save_sales_order(data: Dict[str, Any]) -> Tuple[bool, Optional[str], Optiona
             'BILLTIME': (billtime_value or '')[:20],
             'EMPLOYEECODE': _to_int(header.get('employeecode'), 0),
             'COUNTERCODE': _to_int(header.get('countercode'), 0),
-            'DISCOUNTAMOUNT': round(total_discount, 2),
-            'NETBILLAMOUNT': round(total_amount, 2),
+            'DISCOUNTAMOUNT': round(total_discount, 3),
+            'NETBILLAMOUNT': round(total_amount, 3),
             'ALTERNATECURRENCYAMOUNT': round(_to_num(header.get('alternatecurrencyamount'), 0.0), 2),
             'DELFLAG': (header.get('delflag') or 'N')[:1],
             'CREATEDBY': (header.get('createdby') or '')[:20] or None,
@@ -12887,7 +13489,7 @@ def save_sales_order(data: Dict[str, Any]) -> Tuple[bool, Optional[str], Optiona
                             if store_code in store_vals:
                                 store_vals[store_code] = qty
                             item_code_val = _coerce_sales_item_code(line.get('item_code'))
-                            detail_data = {'LOCATIONCODE': location_code, 'BILLNO': billno, 'SLNO': idx, 'ITEMCODE': item_code_val, 'UNITOFMEASUREMENT': (line.get('uom') or '')[:10], 'QUANTITY': qty, 'RATE': _to_num(line.get('rate'), 0.0), 'RESETNO': reset_no, 'ITDISC': _to_num(line.get('discount'), 0.0), 'STORE1': store_vals['STORE1'], 'STORE2': store_vals['STORE2'], 'STORE3': store_vals['STORE3'], 'STORE4': store_vals['STORE4'], 'STORE5': store_vals['STORE5'], 'COST': _to_num(line.get('cost'), 0.0), 'STOCK': _to_num(line.get('stock'), 0.0), 'BASEQTY': _to_num(line.get('base_qty'), qty), 'OLDPRICE': _to_num(line.get('old_price'), 0.0), 'STORE': (line.get('store') or '')[:50], 'ITEMDETAILS1': (line.get('details') or line.get('item_name') or '')[:250], 'REBATEPERCENT': _to_num(line.get('rebate'), 0.0), 'AMOUNT': round(qty * _to_num(line.get('rate'), 0.0) - _to_num(line.get('discount'), 0.0), 2)}
+                            detail_data = {'LOCATIONCODE': location_code, 'BILLNO': billno, 'SLNO': idx, 'ITEMCODE': item_code_val, 'UNITOFMEASUREMENT': (line.get('uom') or '')[:10], 'QUANTITY': qty, 'RATE': _to_num(line.get('rate'), 0.0), 'RESETNO': reset_no, 'ITDISC': _to_num(line.get('discount'), 0.0), 'STORE1': store_vals['STORE1'], 'STORE2': store_vals['STORE2'], 'STORE3': store_vals['STORE3'], 'STORE4': store_vals['STORE4'], 'STORE5': store_vals['STORE5'], 'COST': _to_num(line.get('cost'), 0.0), 'STOCK': _to_num(line.get('stock'), 0.0), 'BASEQTY': _to_num(line.get('base_qty'), qty), 'OLDPRICE': _to_num(line.get('old_price'), 0.0), 'STORE': (line.get('store') or '')[:50], 'ITEMDETAILS1': (line.get('details') or line.get('item_name') or '')[:250], 'REBATEPERCENT': _to_num(line.get('rebate'), 0.0), 'AMOUNT': round(qty * _to_num(line.get('rate'), 0.0) - _to_num(line.get('discount'), 0.0), 3)}
                             use_dtl_cols = [col for col in detail_data.keys() if col in dtl_columns]
                             if not use_dtl_cols:
                                 continue
@@ -13200,6 +13802,15 @@ def get_sales_billhdr_list(
     billtype_col = _detect_column(hdr_table, ['BILLTYPE', 'billtype'])
     orderno_col = _detect_column(hdr_table, ['ORDERNO', 'orderno'])
     createdby_col = _detect_column(hdr_table, ['CREATEDBY', 'createdby'])
+    disc_col = _detect_column(hdr_table, ['DISCOUNTAMOUNT', 'discountamount'])
+    total_col = _detect_column(hdr_table, ['TOTALAMOUNT', 'totalamount', 'GROSSAMOUNT', 'grossamount'])
+    net_expr = f'NVL({net_col}, 0)' if net_col else '0'
+    disc_expr = f'NVL({disc_col}, 0)' if disc_col else '0'
+    if total_col:
+        total_sel = f'NVL({total_col}, 0) AS totalamount'
+    else:
+        total_sel = f'({net_expr} + {disc_expr}) AS totalamount'
+    disc_sel = f'{disc_expr} AS discountamount'
     where_parts = ['1=1']
     params: Dict[str, Any] = {}
     if location_code is not None and 'LOCATIONCODE' in cols_u:
@@ -13247,7 +13858,7 @@ def get_sales_billhdr_list(
         params['s'] = f'%{search.strip()}%'
         params['su'] = f'%{search.strip().upper()}%'
     createdby_sel = f"{createdby_col} AS createdby" if createdby_col else "'' AS createdby"
-    query = f"""\n        SELECT\n            {billno_col} AS billno,\n            {billdate_col} AS billdate,\n            {custcode_col} AS customercode,\n            {(custname_col if custname_col else 'NULL')} AS customername,\n            NVL({net_col}, 0) AS netbillamount,\n            {(status_col if status_col else "'P'")} AS billstatus,\n            {(remarks_col if remarks_col else 'NULL')} AS remarks,\n            {(billtype_col if billtype_col else 'NULL')} AS billtype,\n            {(orderno_col if orderno_col else 'NULL')} AS orderno,\n            {createdby_sel}\n        FROM {hdr_table}\n        WHERE {' AND '.join(where_parts)}\n        ORDER BY {billno_col} DESC\n    """
+    query = f"""\n        SELECT\n            {billno_col} AS billno,\n            {billdate_col} AS billdate,\n            {custcode_col} AS customercode,\n            {(custname_col if custname_col else 'NULL')} AS customername,\n            {total_sel},\n            {disc_sel},\n            {net_expr} AS netbillamount,\n            {(status_col if status_col else "'P'")} AS billstatus,\n            {(remarks_col if remarks_col else 'NULL')} AS remarks,\n            {(billtype_col if billtype_col else 'NULL')} AS billtype,\n            {(orderno_col if orderno_col else 'NULL')} AS orderno,\n            {createdby_sel}\n        FROM {hdr_table}\n        WHERE {' AND '.join(where_parts)}\n        ORDER BY {billno_col} DESC\n    """
     try:
         _, rows = _fetch_rows(query, params)
         return rows
@@ -13767,18 +14378,21 @@ def get_categories_by_department_code(department_code: int, location_code: Optio
 
 def _fetch_category_hierarchy_rows(location_code: Optional[int]) -> List[Dict[str, Any]]:
     """Single query for Category Master tree (M/D/C rows)."""
+    ensure_category_nameara_column()
+    cols = set(_get_table_columns('CATEGORY') or [])
+    nameara_sel = 'NAMEARA' if 'NAMEARA' in cols else 'CAST(NULL AS VARCHAR2(100)) AS NAMEARA'
     if location_code is not None:
-        query = """
-            SELECT CODE, NAME, ID, FLAG
+        query = f"""
+            SELECT CODE, NAME, ID, FLAG, {nameara_sel}
             FROM CATEGORY
-            WHERE FLAG IN ('M', 'D', 'C') AND LOCATIONCODE = :loc_code
+            WHERE UPPER(TRIM(TO_CHAR(FLAG))) IN ('M', 'D', 'C') AND LOCATIONCODE = :loc_code
             ORDER BY FLAG, CODE
         """
         return _safe_rows(query, {'loc_code': int(location_code)})
-    query = """
-        SELECT CODE, NAME, ID, FLAG
+    query = f"""
+        SELECT CODE, NAME, ID, FLAG, {nameara_sel}
         FROM CATEGORY
-        WHERE FLAG IN ('M', 'D', 'C')
+        WHERE UPPER(TRIM(TO_CHAR(FLAG))) IN ('M', 'D', 'C')
         ORDER BY FLAG, CODE
     """
     return _safe_rows(query, {})
@@ -13799,6 +14413,9 @@ def get_category_master_tree(location_code: Optional[int]=None) -> List[Dict[str
     - Category (D): D.ID = main category **CODE** (match main's CODE, not M.ID).
     - Micro (C): C.ID = category **CODE** (match D's CODE, not D.ID).
     When location_code is set, rows are restricted to that LOCATIONCODE (CENTRALWH.CATEGORY).
+
+    Orphan D/C rows (parent link missing or cross-location) are kept under an
+    ``Unassigned`` node so Category Master never silently hides data.
     """
     from collections import defaultdict
 
@@ -13815,22 +14432,67 @@ def get_category_master_tree(location_code: Optional[int]=None) -> List[Dict[str
 
     def _build(loc: Optional[int]) -> List[Dict[str, Any]]:
         rows = _fetch_category_hierarchy_rows(loc) or []
-        mains = [r for r in rows if str(r.get('flag') or '').upper() == 'M']
+        # Soften location filter: if branch has almost no hierarchy, merge
+        # unscoped rows so shared / mis-located masters still appear.
+        if loc is not None:
+            mains_loc = sum(1 for r in rows if str(r.get('flag') or '').upper().strip() == 'M')
+            kids_loc = sum(1 for r in rows if str(r.get('flag') or '').upper().strip() in ('D', 'C'))
+            if mains_loc == 0 or (mains_loc > 0 and kids_loc == 0):
+                all_rows = _fetch_category_hierarchy_rows(None) or []
+                if len(all_rows) > len(rows):
+                    rows = all_rows
+
+        mains = [r for r in rows if str(r.get('flag') or '').upper().strip() == 'M']
         d_by_parent: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
         c_by_parent: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
+        all_d: List[Dict[str, Any]] = []
+        all_c: List[Dict[str, Any]] = []
         for r in rows:
-            fl = str(r.get('flag') or '').upper()
+            fl = str(r.get('flag') or '').upper().strip()
             pid = _n(r.get('id'))
-            if pid is None:
-                continue
             if fl == 'D':
-                d_by_parent[pid].append(r)
+                all_d.append(r)
+                if pid is not None:
+                    d_by_parent[pid].append(r)
             elif fl == 'C':
-                c_by_parent[pid].append(r)
+                all_c.append(r)
+                if pid is not None:
+                    c_by_parent[pid].append(r)
         for bucket in d_by_parent.values():
             bucket.sort(key=_category_code_sort_key)
         for bucket in c_by_parent.values():
             bucket.sort(key=_category_code_sort_key)
+
+        used_d: set[int] = set()
+        used_c: set[int] = set()
+
+        def _micro_nodes(d_row: Dict[str, Any], m_code: Any) -> List[Dict[str, Any]]:
+            d_code = d_row.get('code')
+            d_id = d_row.get('id')
+            dc = _n(d_code)
+            did = _n(d_id)
+            micros: List[Dict[str, Any]] = []
+            seen_c: set[int] = set()
+            for parent_key in [k for k in (dc, did) if k is not None]:
+                for c in c_by_parent.get(parent_key, []):
+                    cc = _n(c.get('code'))
+                    if cc is None or cc in seen_c:
+                        continue
+                    seen_c.add(cc)
+                    used_c.add(cc)
+                    micros.append({
+                        'id': c.get('id'),
+                        'code': c.get('code'),
+                        'name': c.get('name'),
+                        'name_ar': _category_node_name_ar(c),
+                        'flag': 'C',
+                        'level_name': 'Micro category',
+                        'parent_main_code': m_code,
+                        'parent_category_code': d_code,
+                    })
+            micros.sort(key=_category_code_sort_key)
+            return micros
+
         out: List[Dict[str, Any]] = []
         for m in sorted(mains, key=_category_code_sort_key):
             m_code = m.get('code')
@@ -13845,38 +14507,88 @@ def get_category_master_tree(location_code: Optional[int]=None) -> List[Dict[str
                     if dc is None or dc in seen_d:
                         continue
                     seen_d.add(dc)
+                    used_d.add(dc)
                     d_list.append(d)
             d_list.sort(key=_category_code_sort_key)
             d_children: List[Dict[str, Any]] = []
             for d in d_list:
                 d_code = d.get('code')
-                dc = _n(d_code)
-                micros = list(c_by_parent.get(dc, [])) if dc is not None else []
                 d_children.append({
                     'id': d.get('id'),
                     'code': d.get('code'),
                     'name': d.get('name'),
+                    'name_ar': _category_node_name_ar(d),
                     'flag': 'D',
                     'level_name': 'Category',
                     'parent_main_code': m_code,
                     'parent_main_id': m_id,
-                    'children': [{
-                        'id': c.get('id'),
-                        'code': c.get('code'),
-                        'name': c.get('name'),
-                        'flag': 'C',
-                        'level_name': 'Micro category',
-                        'parent_main_code': m_code,
-                        'parent_category_code': d_code,
-                    } for c in micros],
+                    'children': _micro_nodes(d, m_code),
                 })
             out.append({
                 'id': m.get('id'),
                 'code': m.get('code'),
                 'name': m.get('name'),
+                'name_ar': _category_node_name_ar(m),
                 'flag': 'M',
                 'level_name': 'Main category',
                 'children': d_children,
+            })
+
+        # Keep orphan D/C visible (parent missing, wrong link, or other location).
+        orphan_d_nodes: List[Dict[str, Any]] = []
+        for d in sorted(all_d, key=_category_code_sort_key):
+            dc = _n(d.get('code'))
+            if dc is None or dc in used_d:
+                continue
+            used_d.add(dc)
+            orphan_d_nodes.append({
+                'id': d.get('id'),
+                'code': d.get('code'),
+                'name': d.get('name'),
+                'name_ar': _category_node_name_ar(d),
+                'flag': 'D',
+                'level_name': 'Category',
+                'parent_main_code': None,
+                'parent_main_id': None,
+                'children': _micro_nodes(d, None),
+            })
+        orphan_c_nodes: List[Dict[str, Any]] = []
+        for c in sorted(all_c, key=_category_code_sort_key):
+            cc = _n(c.get('code'))
+            if cc is None or cc in used_c:
+                continue
+            used_c.add(cc)
+            orphan_c_nodes.append({
+                'id': c.get('id'),
+                'code': c.get('code'),
+                'name': c.get('name'),
+                'name_ar': _category_node_name_ar(c),
+                'flag': 'C',
+                'level_name': 'Micro category',
+                'parent_main_code': None,
+                'parent_category_code': _n(c.get('id')),
+            })
+        if orphan_d_nodes or orphan_c_nodes:
+            # Pseudo main so ERP/mobile tree UIs can still expand children.
+            unassigned_children: List[Dict[str, Any]] = list(orphan_d_nodes)
+            if orphan_c_nodes:
+                unassigned_children.append({
+                    'id': None,
+                    'code': 0,
+                    'name': 'Unlinked micro categories',
+                    'flag': 'D',
+                    'level_name': 'Category',
+                    'parent_main_code': None,
+                    'parent_main_id': None,
+                    'children': orphan_c_nodes,
+                })
+            out.append({
+                'id': None,
+                'code': 0,
+                'name': 'Unassigned (check parent link)',
+                'flag': 'M',
+                'level_name': 'Main category',
+                'children': unassigned_children,
             })
         return out
 
@@ -13885,6 +14597,7 @@ def get_category_master_tree(location_code: Optional[int]=None) -> List[Dict[str
     if not out and location_code is not None:
         return get_category_master_tree(None)
     return out
+
 
 def get_category_master_flat(tree: Optional[List[Dict[str, Any]]]=None, location_code: Optional[int]=None) -> List[Dict[str, Any]]:
     """Flat list with parent keys for table view. Pass ``tree`` from get_category_master_tree() to avoid a second query."""
@@ -17627,9 +18340,87 @@ def search_barcode_management_products(location_code: int, search: str='', limit
         })
     return out
 
+
+def _lookup_receiptno_bind(
+    location_code: int,
+    receipt_no: Any,
+    *,
+    reset_no: int = 1,
+    db_key: Optional[str] = None,
+) -> Any:
+    """Resolve user-entered GRN to RECEIPTNO stored in DB (exact or numeric suffix)."""
+    requested = coerce_receiptno(receipt_no)
+    if not receiptno_is_valid(requested):
+        return None
+    hdr_tbl = _detect_table(['RECEIPTHDR', 'receipthdr'])
+    if not hdr_tbl:
+        return None
+    hdr_no = _detect_column(hdr_tbl, ['RECEIPTNO', 'RECEIPT_NO', 'receiptno'])
+    hdr_loc = _detect_column(hdr_tbl, ['LOCATIONCODE', 'LOCATION_CODE', 'locationcode'])
+    hdr_reset = _detect_column(hdr_tbl, ['RESETNO', 'RESET_NO', 'resetno'])
+    if not hdr_no:
+        return None
+
+    def _fetch_one(bind_val: Any) -> Any:
+        where = [f'{hdr_tbl}.{hdr_no} = :rno']
+        params: Dict[str, Any] = {'rno': bind_val}
+        if hdr_loc:
+            where.append(f'{hdr_tbl}.{hdr_loc} = :loc')
+            params['loc'] = int(location_code)
+        if hdr_reset:
+            where.append(f'{hdr_tbl}.{hdr_reset} = :rn')
+            params['rn'] = int(reset_no)
+        rows = _safe_rows(
+            f'SELECT {hdr_tbl}.{hdr_no} AS receiptno FROM {hdr_tbl} WHERE {" AND ".join(where)} AND ROWNUM = 1',
+            params,
+            db_key=db_key,
+        ) or []
+        if rows:
+            return coerce_receiptno(rows[0].get('receiptno'))
+        return None
+
+    found = _fetch_one(requested)
+    if found is not None:
+        return found
+
+    num = billno_numeric_part(requested)
+    if num <= 0:
+        return None
+
+    where = ['1=1']
+    params: Dict[str, Any] = {}
+    if hdr_loc:
+        where.append(f'{hdr_tbl}.{hdr_loc} = :loc')
+        params['loc'] = int(location_code)
+    if hdr_reset:
+        where.append(f'{hdr_tbl}.{hdr_reset} = :rn')
+        params['rn'] = int(reset_no)
+    rows = _safe_rows(
+        f'SELECT {hdr_tbl}.{hdr_no} AS receiptno FROM {hdr_tbl} WHERE {" AND ".join(where)}',
+        params,
+        db_key=db_key,
+    ) or []
+    matches: List[Any] = []
+    for row in rows:
+        stored = coerce_receiptno(row.get('receiptno'))
+        if not receiptno_is_valid(stored):
+            continue
+        if billno_numeric_part(stored) == num:
+            matches.append(stored)
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        req_s = normalize_receiptno(requested).upper()
+        for stored in matches:
+            if normalize_receiptno(stored).upper() == req_s:
+                return stored
+        return matches[0]
+    return None
+
+
 def get_goods_receipt_barcode_label_rows(
     location_code: int,
-    receipt_no: int,
+    receipt_no: Any,
     *,
     reset_no: int = 1,
     db_key: Optional[str] = None,
@@ -17637,11 +18428,20 @@ def get_goods_receipt_barcode_label_rows(
     """Load GRN (goods receipt) lines as barcode-management print rows (one per receipt line)."""
     try:
         loc = int(location_code)
-        rno = int(receipt_no)
     except (TypeError, ValueError):
-        return {'success': False, 'error': 'Invalid location or GRN number.', 'header': None, 'rows': []}
-    if rno <= 0:
+        return {'success': False, 'error': 'Invalid location.', 'header': None, 'rows': []}
+    ensure_receiptno_varchar_columns()
+    requested = coerce_receiptno(receipt_no)
+    if not receiptno_is_valid(requested):
         return {'success': False, 'error': 'Enter a valid GRN number.', 'header': None, 'rows': []}
+    rno = _lookup_receiptno_bind(loc, requested, reset_no=int(reset_no or 1), db_key=db_key)
+    if rno is None or not receiptno_is_valid(rno):
+        return {
+            'success': False,
+            'error': f'GRN {normalize_receiptno(requested) or requested} was not found for this branch.',
+            'header': None,
+            'rows': [],
+        }
     hdr_tbl = _detect_table(['RECEIPTHDR', 'receipthdr'])
     dtl_tbl = _detect_table(['RECEIPTDTL', 'receiptdtl'])
     if not hdr_tbl or not dtl_tbl:
@@ -18897,7 +19697,41 @@ def _sv_lot_at_warehouses_qty_map(
 
 
 def _resolve_itemjournal_table(db_key: Optional[str]=None) -> Optional[str]:
-    return _resolve_itemjournal_table_name()
+    """Primary physical journal table (same choice as posting)."""
+    _ = db_key  # tenant routing via _get_connection / session when queries run
+    return _resolve_itemjournal_post_table()
+
+
+def _itemjournal_read_tables(cur: Any = None, conn: Any = None) -> List[str]:
+    """
+    Physical tables included in net stock reads (SUM QTY).
+    When both ITEMJOURNEL and ITEMJOURNAL exist, sum both so verification/reports
+    match posted stock even during migration (posts may land in ITEMJOURNAL while
+    legacy history remains in ITEMJOURNEL).
+    """
+    primary = _resolve_itemjournal_post_table(cur, conn)
+    if not primary:
+        return []
+    alt = 'ITEMJOURNEL' if primary == 'ITEMJOURNAL' else 'ITEMJOURNAL'
+    try:
+        if cur is not None:
+            cur.execute(
+                'SELECT COUNT(*) FROM user_tables WHERE table_name = :t',
+                {'t': alt},
+            )
+            row = cur.fetchone()
+            alt_exists = int((row[0] if row else 0) or 0) > 0
+        else:
+            alt_exists = _get_count(
+                'SELECT COUNT(*) AS cnt FROM user_tables WHERE table_name = :table_name',
+                {'table_name': alt},
+            ) > 0
+        _TABLE_EXISTS_CACHE[alt] = alt_exists
+    except Exception:
+        alt_exists = False
+    if alt_exists and alt != primary:
+        return [primary, alt]
+    return [primary]
 
 
 def _sv_itemjournal_qty_map(
@@ -18909,11 +19743,31 @@ def _sv_itemjournal_qty_map(
 ) -> Dict[int, float]:
     """
     Net on-hand from item journal: SUM(QTY) per item (signed movements: + in, − out).
+    Includes REVERSAL rows (negated qty) — net effect is what matters for verification.
     Optional filter by WAREHOUSE_ID or warehouse code column when a warehouse is selected.
     """
-    tbl = _resolve_itemjournal_table(db_key)
-    if not tbl:
+    tables = _itemjournal_read_tables()
+    if not tables:
         return {}
+    merged: Dict[int, float] = {}
+    for tbl in tables:
+        part = _sv_itemjournal_qty_map_one_table(
+            tbl, location_code, warehouse_id, db_key, item_code=item_code,
+        )
+        for ic, qty in part.items():
+            merged[ic] = merged.get(ic, 0.0) + float(qty or 0)
+    return merged
+
+
+def _sv_itemjournal_qty_map_one_table(
+    tbl: str,
+    location_code: int,
+    warehouse_id: Optional[int]=None,
+    db_key: Optional[str]=None,
+    *,
+    item_code: Optional[int]=None,
+) -> Dict[int, float]:
+    """SUM(QTY) from one physical ITEMJOURNAL / ITEMJOURNEL table."""
     lc_col = _detect_column(tbl, ['LOCATIONCODE', 'LOCATION_CODE', 'locationcode'])
     ic_col = _detect_column(tbl, ['ITEMCODE', 'ITEM_CODE', 'itemcode'])
     qty_col = _detect_column(tbl, ['QTY', 'quantity'])
@@ -19780,6 +20634,39 @@ def _ensure_itemmaster_batch_tracked_column() -> None:
     except Exception as e:
         print(f'[_ensure_itemmaster_batch_tracked_column] {e}')
 
+def _ensure_itemmaster_is_weight_item_column() -> None:
+    """Add IS_WEIGHT_ITEM flag — item sold by KG using variable-weight scale barcodes (default N)."""
+    im = _detect_table(['ITEMMASTER', 'itemmaster', 'ITEM_MASTER'])
+    if not im:
+        return
+    cols = {c.upper() for c in _get_table_columns(im) or []}
+    added = False
+    if 'IS_WEIGHT_ITEM' not in cols:
+        try:
+            with _get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(f"ALTER TABLE {im} ADD (IS_WEIGHT_ITEM VARCHAR2(1) DEFAULT 'N' NOT NULL)")
+                conn.commit()
+            added = True
+        except Exception as e:
+            print(f'[_ensure_itemmaster_is_weight_item_column] {e}')
+    try:
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"UPDATE {im} SET IS_WEIGHT_ITEM = 'N' "
+                    f"WHERE IS_WEIGHT_ITEM IS NULL OR TRIM(IS_WEIGHT_ITEM) = ''"
+                )
+            conn.commit()
+    except Exception as e:
+        print(f'[_ensure_itemmaster_is_weight_item_column backfill] {e}')
+    if added:
+        try:
+            k = im.upper()
+            _TABLE_COLUMNS_CACHE.pop(k, None)
+        except Exception:
+            pass
+
 def ensure_itemmaster_default_bin_storage_id_column(_db_key_ignored: Any=None) -> None:
     """Add ``DEFAULT_BIN_STORAGE_ID`` (nullable NUMBER) to ITEMMASTER for default warehouse bin."""
     im = _detect_table(['ITEMMASTER', 'itemmaster', 'ITEM_MASTER'])
@@ -19862,11 +20749,12 @@ def ensure_itemmaster_image_path_column(_db_key_ignored: Any=None) -> None:
 
 
 def ensure_itemmaster_inventory_extension_columns(_db_key_ignored: Any=None) -> None:
-    """Ensure BATCH_TRACKED, DEFAULT_WAREHOUSE_ID, DEFAULT_BIN_STORAGE_ID, STAGING_BIN_STORAGE_ID on ITEMMASTER."""
+    """Ensure BATCH_TRACKED, IS_WEIGHT_ITEM, DEFAULT_WAREHOUSE_ID, DEFAULT_BIN_STORAGE_ID, STAGING_BIN_STORAGE_ID on ITEMMASTER."""
     global _IM_INV_EXT_COLS_ENSURED_PROCESS
     if _IM_INV_EXT_COLS_ENSURED_PROCESS:
         return
     _ensure_itemmaster_batch_tracked_column()
+    _ensure_itemmaster_is_weight_item_column()
     ensure_itemmaster_default_warehouse_id_column()
     ensure_itemmaster_default_bin_storage_id_column()
     ensure_itemmaster_staging_bin_storage_id_column()
@@ -20302,6 +21190,60 @@ def set_item_batch_tracked(item_code: int, location_code: int, tracked: bool, db
     except Exception as e:
         return (False, str(e))
 
+def is_item_weight_item(item_code: int, location_code: int, db_key: Optional[str]=None) -> bool:
+    """True when ITEMMASTER.IS_WEIGHT_ITEM = 'Y' for this branch/item."""
+    ensure_itemmaster_inventory_extension_columns()
+    im = _detect_table(['ITEMMASTER', 'itemmaster', 'ITEM_MASTER'])
+    if not im:
+        return False
+    cols = {c.upper() for c in _get_table_columns(im) or []}
+    if 'IS_WEIGHT_ITEM' not in cols:
+        return False
+    code_col = _detect_column(im, ['ITEMCODE', 'ITEM_CODE', 'itemcode'])
+    loc_col = _detect_column(im, ['LOCATIONCODE', 'LOCATION_CODE', 'locationcode'])
+    if not code_col:
+        return False
+    w = [f'{code_col} = :ic']
+    p: Dict[str, Any] = {'ic': int(item_code)}
+    if loc_col:
+        w.append(f'{loc_col} = :loc')
+        p['loc'] = int(location_code)
+    rows = _safe_rows(f"SELECT NVL(IS_WEIGHT_ITEM, 'N') AS flg FROM {im} WHERE {' AND '.join(w)} AND ROWNUM = 1", p, db_key=db_key)
+    if not rows:
+        return False
+    return str(rows[0].get('flg') or '').strip().upper() == 'Y'
+
+def set_item_weight_item(item_code: int, location_code: int, weight_item: bool, db_key: Optional[str]=None) -> Tuple[bool, str]:
+    """Set ITEMMASTER.IS_WEIGHT_ITEM to Y/N (variable-weight / sold-by-kg POS item)."""
+    ensure_itemmaster_inventory_extension_columns()
+    im = _detect_table(['ITEMMASTER', 'itemmaster', 'ITEM_MASTER'])
+    if not im:
+        return (False, 'ITEMMASTER not found.')
+    cols = {c.upper() for c in _get_table_columns(im) or []}
+    if 'IS_WEIGHT_ITEM' not in cols:
+        return (False, 'IS_WEIGHT_ITEM column missing; run app once to migrate.')
+    code_col = _detect_column(im, ['ITEMCODE', 'ITEM_CODE', 'itemcode'])
+    loc_col = _detect_column(im, ['LOCATIONCODE', 'LOCATION_CODE', 'locationcode'])
+    if not code_col:
+        return (False, 'Invalid item table.')
+    flg = 'Y' if weight_item else 'N'
+    w = [f'{code_col} = :ic']
+    p: Dict[str, Any] = {'ic': int(item_code), 'f': flg}
+    if loc_col:
+        w.append(f'{loc_col} = :loc')
+        p['loc'] = int(location_code)
+    try:
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"UPDATE {im} SET IS_WEIGHT_ITEM = :f WHERE {' AND '.join(w)}", p)
+                if cur.rowcount == 0:
+                    conn.rollback()
+                    return (False, 'Item row not found for this location.')
+            conn.commit()
+        return (True, '')
+    except Exception as e:
+        return (False, str(e))
+
 def set_item_default_bin_storage_id(item_code: int, location_code: int, storage_id: Optional[Any], db_key: Optional[str]=None) -> Tuple[bool, str]:
     """Set ITEMMASTER.DEFAULT_BIN_STORAGE_ID (NULL clears)."""
     ensure_itemmaster_default_bin_storage_id_column()
@@ -20697,6 +21639,17 @@ def ensure_returnhdr_discount_column(returnhdr_tbl: Optional[str]=None, _db_key_
     _ensure_table_column(tbl, 'DISCOUNT', f'ALTER TABLE {tbl} ADD (DISCOUNT NUMBER(18,3) DEFAULT 0)')
 
 
+def ensure_purchase_hdr_netamount_columns(_db_key_ignored: Any=None) -> None:
+    """``NETAMOUNT`` on LPOHDR, RECEIPTHDR, RETURNHDR (header net total after discount/charges)."""
+    for tbl in (
+        _detect_table(['LPOHDR', 'lpohdr']),
+        _detect_table(['RECEIPTHDR', 'receipthdr']),
+        _detect_table(['RETURNHDR', 'returnhdr']),
+    ):
+        if tbl:
+            _ensure_table_column(tbl, 'NETAMOUNT', f'ALTER TABLE {tbl} ADD (NETAMOUNT NUMBER(18,3) DEFAULT 0)')
+
+
 def ensure_returnhdr_extension_columns(returnhdr_tbl: Optional[str]=None, _db_key_ignored: Any=None) -> None:
     """RETURNHDR posting/discount/inventory columns — once per process/request."""
     global _RETURNHDR_SCHEMA_ENSURED_PROCESS
@@ -20709,6 +21662,7 @@ def ensure_returnhdr_extension_columns(returnhdr_tbl: Optional[str]=None, _db_ke
     if _RETURNHDR_SCHEMA_ENSURED_PROCESS:
         return
     try:
+        ensure_purchase_hdr_netamount_columns(_db_key_ignored)
         ensure_returnhdr_posting_date_column(returnhdr_tbl, _db_key_ignored)
         ensure_returnhdr_discount_column(returnhdr_tbl, _db_key_ignored)
         ensure_returnhdr_inventory_posted_column(returnhdr_tbl, _db_key_ignored)
@@ -21056,6 +22010,7 @@ def ensure_returndtl_discount_amount_columns(_db_key_ignored: Any=None) -> None:
 
 def ensure_receipt_warehouse_id_columns(receipthdr_tbl: Optional[str]=None, receiptdtl_tbl: Optional[str]=None, _db_key_ignored: Any=None) -> None:
     """RECEIPTHDR/RECEIPTDTL/LPO line warehouse cols + ITEMJOURNAL trace columns."""
+    ensure_purchase_hdr_netamount_columns(_db_key_ignored)
     ensure_receipthdr_warehouse_id_column(receipthdr_tbl, _db_key_ignored)
     ensure_receiptdtl_warehouse_columns(receiptdtl_tbl, _db_key_ignored)
     ensure_itemjournal_warehouse_columns(_db_key_ignored)
@@ -22029,6 +22984,10 @@ def get_item_by_code(item_code: int, location_code: int) -> Optional[Dict[str, A
         extras.append(f"NVL(im.BATCH_TRACKED, 'N') AS batch_tracked")
     else:
         extras.append("'N' AS batch_tracked")
+    if 'IS_WEIGHT_ITEM' in icols:
+        extras.append(f"NVL(im.IS_WEIGHT_ITEM, 'N') AS is_weight_item")
+    else:
+        extras.append("'N' AS is_weight_item")
     if 'DEFAULT_BIN_STORAGE_ID' in icols:
         extras.append('im.DEFAULT_BIN_STORAGE_ID AS default_bin_storage_id')
     else:
@@ -24720,7 +25679,13 @@ def _sv_build_verification_row(
 
     issues: List[str] = []
     if ij_branch_map and not _sv_near(im_qty, ij_branch_qty):
-        issues.append('Item master ≠ net item journal QTY (branch)')
+        if abs(im_qty) > STOCK_VERIFICATION_TOL and abs(ij_branch_qty) <= STOCK_VERIFICATION_TOL:
+            issues.append(
+                'Item master ≠ net item journal QTY (branch) — journal net is 0; '
+                'check Item Journal for missing PURCHASE/SALES lines or REVERSAL pairs'
+            )
+        else:
+            issues.append('Item master ≠ net item journal QTY (branch)')
     if wid and ij_wh_map and not _sv_near(wh_qty, ij_wh_qty):
         issues.append('Warehouse stock ≠ net item journal QTY (warehouse)')
     if bin_verify_enabled and not _sv_near(wh_qty, bin_qty):
@@ -25653,6 +26618,15 @@ def _build_items_list_where(
             where_conditions.append(f'NVL({tbl_alias}.CURRENTSTOCK, 0) > 0')
         elif stock_filter == 'less':
             where_conditions.append(f'NVL({tbl_alias}.CURRENTSTOCK, 0) < 0')
+        elif stock_filter == 'instock':
+            # Above low-stock threshold (matches mobile catalog buckets)
+            where_conditions.append(f'NVL({tbl_alias}.CURRENTSTOCK, 0) > 10')
+        elif stock_filter == 'low':
+            where_conditions.append(
+                f'NVL({tbl_alias}.CURRENTSTOCK, 0) > 0 AND NVL({tbl_alias}.CURRENTSTOCK, 0) <= 10'
+            )
+        elif stock_filter in ('out', 'zero'):
+            where_conditions.append(f'NVL({tbl_alias}.CURRENTSTOCK, 0) <= 0')
     if brand_code is not None:
         where_conditions.append(f'{tbl_alias}.BRANDCODE = :brand_code')
         params['brand_code'] = brand_code
@@ -25739,6 +26713,7 @@ def get_items_list(
             'currentstock': 'im.CURRENTSTOCK',
             'retailprice': 'im.RETAILPRICE',
             'wholesaleprice': 'im.WHOLESALEPRICE',
+            'description': 'im.DESCRIPTION',
             'categoryname': _sql_cat_name,
             'brandname': _sql_brand_name,
             'suppliername': _sql_supp_name,
@@ -25757,6 +26732,8 @@ def get_items_list(
             im.ITEMCODE,
             im.MANUFACTURERID,
             im.ITEMNAME,
+            im.DESCRIPTION,
+            im.IMAGE_PATH,
             im.BASEUOM,
             NVL(im.COSTPRICE, 0) AS COSTPRICE,
             NVL(im.AVERAGECOST, 0) AS AVERAGECOST,
@@ -26054,6 +27031,26 @@ def _journal_row_exists(cur: Any, tbl_u: str, jcols: Set[str], loc: int, reset: 
     cur.execute(sql, params)
     return cur.fetchone() is not None
 
+
+def _journal_row_exists_any(
+    cur: Any,
+    conn: Any,
+    loc: int,
+    reset: int,
+    receipt: int,
+    lineno: int,
+    source_doc: str,
+    source_no: str,
+) -> bool:
+    """True when a matching line exists in any journal read table (ITEMJOURNAL / ITEMJOURNEL)."""
+    for tbl in _itemjournal_read_tables(cur, conn):
+        tbl_u = tbl.upper()
+        jcols = _journal_cols_upper(cur, tbl_u)
+        if _journal_row_exists(cur, tbl_u, jcols, loc, reset, receipt, lineno, source_doc, source_no):
+            return True
+    return False
+
+
 def _alloc_itemjournal_id_cur(cur: Any, tbl_u: str) -> Optional[int]:
     """Next ITEMJOURNAL_ID from ``{TABLE}_SEQ`` (works with or without BI trigger)."""
     seq_name = f'{str(tbl_u or "").upper()}_SEQ'[:30]
@@ -26071,20 +27068,23 @@ def _alloc_itemjournal_ids_cur(cur: Any, tbl_u: str, count: int) -> List[int]:
     if n <= 0:
         return []
     seq_name = f'{str(tbl_u or "").upper()}_SEQ'[:30]
+    out: List[int] = []
     try:
         cur.execute(
             f'SELECT {seq_name}.NEXTVAL FROM DUAL CONNECT BY LEVEL <= :n',
             {'n': n},
         )
-        return [int(r[0]) for r in cur.fetchall() or [] if r and r[0] is not None]
+        out = [int(r[0]) for r in cur.fetchall() or [] if r and r[0] is not None]
+        if len(out) == n:
+            return out
     except Exception:
-        out: List[int] = []
-        for _ in range(n):
-            jid = _alloc_itemjournal_id_cur(cur, tbl_u)
-            if jid is None:
-                break
-            out.append(jid)
-        return out
+        out = []
+    for _ in range(n - len(out)):
+        jid = _alloc_itemjournal_id_cur(cur, tbl_u)
+        if jid is None:
+            break
+        out.append(jid)
+    return out
 
 
 def _journal_row_map_for_insert(
@@ -26127,6 +27127,7 @@ def _journal_insert_many_from_maps(
     if 'ITEMJOURNAL_ID' in jcols:
         ids = _alloc_itemjournal_ids_cur(cur, tbl_u, len(row_maps))
         if len(ids) != len(row_maps):
+            # Bulk sequence allocation can fail under load; caller falls back row-by-row.
             return 0
     for idx, values in enumerate(row_maps):
         jid = ids[idx] if idx < len(ids) else None
@@ -26177,10 +27178,10 @@ def _journal_insert_from_map(cur: Any, tbl_u: str, jcols: Set[str], values: Dict
     if 'ITEMJOURNAL_ID' in jcols:
         jid = _alloc_itemjournal_id_cur(cur, tbl_u)
         if jid is None:
-            return False
+            raise RuntimeError(f'Could not allocate ITEMJOURNAL_ID for {tbl_u}')
         use = ['ITEMJOURNAL_ID'] + [c for c in use if c != 'ITEMJOURNAL_ID']
     if not use:
-        return False
+        raise RuntimeError(f'No insertable ITEMJOURNAL columns for {tbl_u}')
     cols_sql = ', '.join(use)
     placeholders = []
     bind: Dict[str, Any] = {}
@@ -26376,8 +27377,12 @@ def _resolve_itemjournal_table_name(
     cur: Any = None,
     *,
     candidates: tuple = ('ITEMJOURNEL', 'ITEMJOURNAL'),
+    conn: Any = None,
 ) -> Optional[str]:
-    """Resolve journal table via user_tables (ignore stale negative cache)."""
+    """Resolve primary journal table (same as posting). Falls back to legacy candidate order."""
+    canonical = _resolve_itemjournal_post_table(cur, conn)
+    if canonical:
+        return canonical
     for t in candidates:
         try:
             if cur is not None:
@@ -26400,8 +27405,89 @@ def _resolve_itemjournal_table_name(
     return None
 
 
-def _resolve_itemjournal_post_table(cur: Any = None) -> Optional[str]:
-    return _resolve_itemjournal_table_name(cur)
+def _resolve_itemjournal_post_table(cur: Any = None, conn: Any = None) -> Optional[str]:
+    """Physical table for INSERT/UPDATE/DELETE — prefer migrated ITEMJOURNAL when both exist."""
+    order = ('ITEMJOURNEL', 'ITEMJOURNAL')
+    present: List[str] = []
+    for t in order:
+        try:
+            if cur is not None:
+                cur.execute(
+                    'SELECT COUNT(*) FROM user_tables WHERE table_name = :t',
+                    {'t': t},
+                )
+                row = cur.fetchone()
+                exists = int((row[0] if row else 0) or 0) > 0
+            else:
+                exists = _get_count(
+                    'SELECT COUNT(*) AS cnt FROM user_tables WHERE table_name = :table_name',
+                    {'table_name': t},
+                ) > 0
+            _TABLE_EXISTS_CACHE[t] = exists
+            if exists:
+                present.append(t)
+        except Exception:
+            _TABLE_EXISTS_CACHE[t] = False
+    if not present:
+        return None
+    if len(present) == 1:
+        return present[0]
+    conn_for_pk = conn
+    if conn_for_pk is None and cur is not None:
+        try:
+            conn_for_pk = cur.connection
+        except Exception:
+            conn_for_pk = None
+    if conn_for_pk is not None:
+        for t in ('ITEMJOURNAL', 'ITEMJOURNEL'):
+            if t in present:
+                try:
+                    if _itemjournal_pk_columns(conn_for_pk, t) == ['ITEMJOURNAL_ID']:
+                        return t
+                except Exception:
+                    pass
+    return 'ITEMJOURNAL' if 'ITEMJOURNAL' in present else present[0]
+
+
+def _journal_insert_prepared_rows(
+    cur: Any,
+    tbl_u: str,
+    jcols: Set[str],
+    prepared: List[Dict[str, Any]],
+) -> int:
+    """Insert journal rows; bulk when large, row-by-row fallback if bulk fails."""
+    if not prepared:
+        return 0
+    n = 0
+    if len(prepared) >= 20:
+        n = _journal_insert_many_from_maps(cur, tbl_u, jcols, prepared)
+    if n >= len(prepared):
+        return n
+    start_at = n
+    for row_map in prepared[start_at:]:
+        if _journal_insert_from_map(cur, tbl_u, jcols, row_map, dry_run=False):
+            n += 1
+    return n
+
+
+def _require_itemjournal_lines_inserted(
+    expected: int,
+    inserted: int,
+    *,
+    source_doc: str,
+    source_no: str,
+    tbl_u: Optional[str] = None,
+) -> None:
+    if expected <= 0:
+        return
+    if inserted >= expected:
+        return
+    tbl_part = f' into {tbl_u}' if tbl_u else ''
+    raise ValueError(
+        f'Item journal incomplete{tbl_part}: inserted {inserted} of {expected} line(s) '
+        f'for {source_doc} {source_no}. Save rolled back — retry once; if it persists, '
+        f'run Admin → ensure ITEMJOURNAL sequence/PK migration.'
+    )
 
 
 def _is_itemjournal_reversal_transtype(transtype: Any) -> bool:
@@ -26604,7 +27690,7 @@ def reverse_itemjournal_document(
     Only open (not-yet-reversed) lines are reversed — safe for repeated document re-edits.
     Returns count of reversal rows inserted.
     """
-    tbl_u = _resolve_itemjournal_post_table()
+    tbl_u = _resolve_itemjournal_post_table(cur, conn)
     if not tbl_u:
         return 0
     ensure_itemjournal_surrogate_pk(conn)
@@ -26614,10 +27700,14 @@ def reverse_itemjournal_document(
         receipt_no=receipt_no, open_only=True,
     )
     n = 0
+    expected = len(posted)
     for row in posted:
         rev = _journal_row_to_reversal(row, jcols)
         if _journal_insert_from_map(cur, tbl_u, jcols, rev, dry_run=False):
             n += 1
+    _require_itemjournal_lines_inserted(
+        expected, n, source_doc=source_doc, source_no=source_no, tbl_u=tbl_u,
+    )
     return n
 
 
@@ -26633,7 +27723,7 @@ def post_itemjournal_lines(
     lines: List[Dict[str, Any]],
 ) -> int:
     """Insert new journal lines only (unique ITEMJOURNAL_ID per row)."""
-    tbl_u = _resolve_itemjournal_post_table(cur)
+    tbl_u = _resolve_itemjournal_post_table(cur, conn)
     if not tbl_u:
         if lines:
             print(
@@ -26695,12 +27785,10 @@ def post_itemjournal_lines(
             if wc:
                 row_map[wh_col.upper()] = str(wc)[:30]
         prepared.append(row_map)
-    if len(prepared) >= 20:
-        return _journal_insert_many_from_maps(cur, tbl_u, jcols, prepared)
-    n = 0
-    for row_map in prepared:
-        if _journal_insert_from_map(cur, tbl_u, jcols, row_map, dry_run=False):
-            n += 1
+    n = _journal_insert_prepared_rows(cur, tbl_u, jcols, prepared)
+    _require_itemjournal_lines_inserted(
+        len(prepared), n, source_doc=source_doc, source_no=source_no, tbl_u=tbl_u,
+    )
     return n
 
 
@@ -26928,8 +28016,10 @@ def repost_itemjournal_standard(
     so GRN #1, bill #1, POS #1, etc. never collide.
     Returns (reversal_count, insert_count).
     """
-    tbl_u = _resolve_itemjournal_post_table()
+    tbl_u = _resolve_itemjournal_post_table(cur, conn)
     if not tbl_u:
+        if lines:
+            raise ValueError('ITEMJOURNAL / ITEMJOURNEL table not found; cannot post stock journal.')
         return (0, 0)
     ensure_itemjournal_surrogate_pk(conn)
     needs_ns = _itemjournal_needs_receiptno_namespace(conn, tbl_u)
@@ -27131,7 +28221,18 @@ def repost_itemjournal_purchase_return(
         uom = str(line.get('uom') or 'NOS')[:20]
         line_conv = float(line.get('conversionfactor') or line.get('uomfactor') or 0)
         factor_for_base = line_conv if line_conv > 0 else _get_uom_factor_for_item(item, uom)
+        if factor_for_base <= 0:
+            factor_for_base = 1.0
         qty_out_base = -abs(abs(qty) * factor_for_base)
+        # AVERAGECOST on journal must be base-UOM unit cost (qty column is already base).
+        try:
+            avg_raw = float(line.get('averagecost') or line.get('average_cost') or 0)
+        except (TypeError, ValueError):
+            avg_raw = 0.0
+        if avg_raw <= 0:
+            avg_raw = rate
+        if factor_for_base > 1.0 + 1e-9 and rate > 0 and abs(avg_raw - rate) <= max(0.01, abs(rate) * 0.001):
+            avg_raw = rate / factor_for_base
         ij_row: Dict[str, Any] = {
             'lineno': line_no,
             'item': item,
@@ -27143,7 +28244,9 @@ def repost_itemjournal_purchase_return(
             'vat_percent': 0.0,
             'vat_amount': 0.0,
             'total_amount': amt_out,
-            'averagecost': line.get('averagecost') or line.get('average_cost') or rate,
+            'averagecost': round(float(avg_raw or 0), 4),
+            'conversionfactor': factor_for_base,
+            'quantity': qty,
         }
         ij_row.update(_journal_warehouse_fields_from_line(line))
         lines.append(ij_row)
@@ -27499,63 +28602,189 @@ def _journal_average_cost_for_line(
     *,
     item_cache: Optional[Dict[int, float]] = None,
 ) -> float:
-    """Unit cost for ITEMJOURNAL.AVERAGECOST: line value, else ITEMMASTER.AVERAGECOST, else COSTPRICE."""
-    for key in (
-        'averagecost', 'average_cost', 'AVERAGECOST',
-        'costprice', 'cost', 'rate', 'RATE', 'COSTPRICE',
-    ):
+    """Base-UOM unit cost for ITEMJOURNAL.AVERAGECOST / sales COGS.
+
+    Prefer ITEMMASTER.AVERAGECOST (base). Do not use alt-UOM pack cost with BASEQTY.
+    """
+    item_raw = (
+        line.get('itemcode')
+        or line.get('ITEMCODE')
+        or line.get('item')
+        or line.get('item_code')
+    )
+    try:
+        item_int = int(float(item_raw))
+    except (TypeError, ValueError):
+        item_int = 0
+
+    cache = item_cache if item_cache is not None else {}
+    master = 0.0
+    if item_int > 0:
+        if item_int in cache:
+            master = float(cache[item_int] or 0)
+        else:
+            im = _detect_table(['ITEMMASTER', 'itemmaster', 'ITEM_MASTER'])
+            if im:
+                im_code = _detect_column(im, ['ITEMCODE', 'ITEM_CODE', 'itemcode'])
+                im_loc = _detect_column(im, ['LOCATIONCODE', 'LOCATION_CODE', 'locationcode'])
+                im_avg = _detect_column(im, ['AVERAGECOST', 'averagecost'])
+                im_cost = _detect_column(im, ['COSTPRICE', 'COST_PRICE', 'costprice'])
+                if im_code and (im_avg or im_cost):
+                    if im_avg and im_cost:
+                        cost_sel = f'NVL({im_avg}, NVL({im_cost}, 0))'
+                    elif im_avg:
+                        cost_sel = f'NVL({im_avg}, 0)'
+                    else:
+                        cost_sel = f'NVL({im_cost}, 0)'
+                    wh = [f'{im_code} = :ic']
+                    prm: Dict[str, Any] = {'ic': item_int}
+                    if im_loc:
+                        wh.append(f'{im_loc} = :lc')
+                        prm['lc'] = int(location_code)
+                    try:
+                        cur.execute(f'SELECT {cost_sel} FROM {im} WHERE {" AND ".join(wh)}', prm)
+                        r = cur.fetchone()
+                        master = round(float(r[0] or 0), 4) if r else 0.0
+                    except Exception:
+                        master = 0.0
+            cache[item_int] = master
+        if master > 0:
+            return round(master, 4)
+
+    # No master cost — fall back carefully (unwind pack cost when alt UOM).
+    qty = 0.0
+    base = 0.0
+    try:
+        qty = abs(
+            float(
+                line.get('quantity')
+                or line.get('qty')
+                or line.get('adjust_qty')
+                or line.get('transfer_qty')
+                or 0
+            )
+        )
+    except (TypeError, ValueError):
+        qty = 0.0
+    try:
+        base = abs(
+            float(
+                line.get('base_qty')
+                or line.get('baseqty')
+                or qty
+                or 0
+            )
+        )
+    except (TypeError, ValueError):
+        base = qty
+    factor = (base / qty) if qty > 1e-12 else 1.0
+    cf = 0.0
+    try:
+        cf = float(
+            line.get('conversion_factor')
+            or line.get('conversionfactor')
+            or line.get('item_factor')
+            or line.get('factor')
+            or line.get('uomfactor')
+            or 0
+        )
+        if cf > 1e-12:
+            factor = cf
+    except (TypeError, ValueError):
+        cf = 0.0
+    if factor <= 0:
+        factor = 1.0
+
+    for key in ('averagecost', 'average_cost', 'AVERAGECOST'):
         raw = line.get(key)
         if raw is None or str(raw).strip() == '':
             continue
         try:
             val = float(raw)
-            if val > 0:
-                return round(val, 4)
         except (TypeError, ValueError):
             continue
-    item_raw = line.get('itemcode') or line.get('ITEMCODE') or line.get('item')
-    try:
-        item_int = int(float(item_raw))
-    except (TypeError, ValueError):
-        return 0.0
-    if item_int <= 0:
-        return 0.0
-    cache = item_cache if item_cache is not None else {}
-    if item_int in cache:
-        return cache[item_int]
-    im = _detect_table(['ITEMMASTER', 'itemmaster', 'ITEM_MASTER'])
-    if not im:
-        cache[item_int] = 0.0
-        return 0.0
-    im_code = _detect_column(im, ['ITEMCODE', 'ITEM_CODE', 'itemcode'])
-    im_loc = _detect_column(im, ['LOCATIONCODE', 'LOCATION_CODE', 'locationcode'])
-    im_avg = _detect_column(im, ['AVERAGECOST', 'averagecost'])
-    im_cost = _detect_column(im, ['COSTPRICE', 'COST_PRICE', 'costprice'])
-    if not im_code:
-        cache[item_int] = 0.0
-        return 0.0
-    if im_avg and im_cost:
-        cost_sel = f'NVL({im_avg}, NVL({im_cost}, 0))'
-    elif im_avg:
-        cost_sel = f'NVL({im_avg}, 0)'
-    elif im_cost:
-        cost_sel = f'NVL({im_cost}, 0)'
-    else:
-        cache[item_int] = 0.0
-        return 0.0
-    wh = [f'{im_code} = :ic']
-    prm: Dict[str, Any] = {'ic': item_int}
-    if im_loc:
-        wh.append(f'{im_loc} = :lc')
-        prm['lc'] = int(location_code)
-    try:
-        cur.execute(f'SELECT {cost_sel} FROM {im} WHERE {" AND ".join(wh)}', prm)
-        r = cur.fetchone()
-        cost = round(float(r[0] or 0), 4) if r else 0.0
-    except Exception:
-        cost = 0.0
-    cache[item_int] = cost
-    return cost
+        if val <= 0:
+            continue
+        pack = 0.0
+        for ck in ('costprice', 'cost', 'COSTPRICE', 'COST', 'rate', 'RATE'):
+            try:
+                pack = float(line.get(ck) or 0)
+            except (TypeError, ValueError):
+                pack = 0.0
+            if pack > 0:
+                break
+        # Pack cost wrongly stored as averagecost while qty is already converted to base.
+        if factor > 1.0 + 1e-9 and pack > 0 and abs(val - pack) <= max(0.01, pack * 0.001):
+            return round(val / factor, 4)
+        if factor > 1.0 + 1e-9 and qty < 1e-12 and base > 1e-12:
+            # Only base_qty present: if value looks like pack (no master), prefer /factor when
+            # conversionfactor was supplied explicitly.
+            if cf > 1.0 + 1e-9:
+                return round(val / factor, 4)
+        return round(val, 4)
+
+    for key in ('costprice', 'cost', 'COSTPRICE', 'COST'):
+        raw = line.get(key)
+        if raw is None or str(raw).strip() == '':
+            continue
+        try:
+            val = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if val <= 0:
+            continue
+        if factor > 1.0 + 1e-9:
+            return round(val / factor, 4)
+        return round(val, 4)
+    return 0.0
+
+
+def _base_unit_inventory_cost_from_maps(
+    ln: Dict[str, Any],
+    item_row: Optional[Dict[str, Any]] = None,
+) -> float:
+    """Per-base-UOM cost for sales inventory/COGS (never alt pack cost × BASEQTY)."""
+
+    def _n(v: Any, default: float = 0.0) -> float:
+        try:
+            if v is None or v == '':
+                return default
+            return float(v)
+        except (TypeError, ValueError):
+            return default
+
+    item_row = item_row or {}
+    master_avg = _n(item_row.get('averagecost') or item_row.get('AVERAGECOST'))
+    if master_avg > 0:
+        return round(master_avg, 6)
+    master_cost = _n(item_row.get('costprice') or item_row.get('COSTPRICE'))
+    if master_cost > 0:
+        return round(master_cost, 6)
+
+    qty = abs(_n(ln.get('quantity')))
+    base = abs(_n(ln.get('base_qty') or ln.get('baseqty'), qty))
+    factor = (base / qty) if qty > 1e-12 else _n(
+        ln.get('conversion_factor')
+        or ln.get('conversionfactor')
+        or ln.get('item_factor')
+        or ln.get('factor'),
+        1.0,
+    )
+    if factor <= 0:
+        factor = 1.0
+
+    line_avg = _n(ln.get('averagecost') or ln.get('average_cost'))
+    pack = _n(ln.get('costprice') or ln.get('cost'))
+    if line_avg > 0:
+        if factor > 1.0 + 1e-9 and pack > 0 and abs(line_avg - pack) <= max(0.01, pack * 0.001):
+            return round(line_avg / factor, 6)
+        return round(line_avg, 6)
+    if pack > 0:
+        if factor > 1.0 + 1e-9:
+            return round(pack / factor, 6)
+        return round(pack, 6)
+    return 0.0
+
 
 def backfill_itemjournal_from_documents(conn: Optional[Any]=None, *, location_code: Optional[int]=None, prefer_itemjournel: bool=True, include_grn: bool=True, include_sales: bool=True, include_purchase_return: bool=True, dry_run: bool=False) -> Tuple[bool, str, Dict[str, int]]:
     """
@@ -27691,7 +28920,7 @@ def backfill_itemjournal_from_documents(conn: Optional[Any]=None, *, location_co
                                 continue
                             if lineno <= 0:
                                 continue
-                            if _journal_row_exists(cur, tbl_u, jcols, loc_i, reset_i, rno_i, lineno, 'GRN', str(rno_i)):
+                            if _journal_row_exists_any(cur, conn, loc_i, reset_i, rno_i, lineno, 'GRN', str(rno_i)):
                                 stats['skipped_exists'] += 1
                                 continue
                             qty_f = abs(float(qty or 0))
@@ -27833,7 +29062,7 @@ def backfill_itemjournal_from_documents(conn: Optional[Any]=None, *, location_co
                                 continue
                             src_doc = 'BILL RETURN' if is_ret else 'BILL'
                             ttype = 'SALES RETURN' if is_ret else 'SALES'
-                            if _journal_row_exists(cur, tbl_u, jcols, loc_i, reset_i, bno_i, lineno, src_doc, str(bno_i)):
+                            if _journal_row_exists_any(cur, conn, loc_i, reset_i, bno_i, lineno, src_doc, str(bno_i)):
                                 stats['skipped_exists'] += 1
                                 continue
                             qty_f = float(qty or 0)
@@ -27936,7 +29165,7 @@ def backfill_itemjournal_from_documents(conn: Optional[Any]=None, *, location_co
                                 continue
                             if lineno <= 0:
                                 continue
-                            if _journal_row_exists(cur, tbl_u, jcols, loc_i, reset_i, grn_i, lineno, 'RETURN', str(grn_i)):
+                            if _journal_row_exists_any(cur, conn, loc_i, reset_i, grn_i, lineno, 'RETURN', str(grn_i)):
                                 stats['skipped_exists'] += 1
                                 continue
                             qty_f = abs(float(qty or 0))
@@ -28119,7 +29348,8 @@ def _insert_pos_bill_paymode_rows(cur: Any, location_code: int, billno: Any, row
             amt = float((r or {}).get('amount') or 0)
         except (TypeError, ValueError):
             amt = 0.0
-        if not code or amt < 0.005:
+        # Allow negative amounts (sales returns / refunds).
+        if not code or abs(amt) < 0.005:
             continue
         slno += 1
         insert_cols = ['LOCATIONCODE', 'BILLNO', 'SLNO', 'PAYMODE', 'AMOUNT']
@@ -28822,19 +30052,39 @@ def resolve_stk_adj_variance_account_codes() -> Dict[str, str]:
     }
 
 
-def fetch_pos_paymode_totals_for_bills(location_code: int, bill_nos: List[int]) -> Dict[str, float]:
-    """Sum POS_BILL_PAYMODE amounts per PAYMODE code for the given bills."""
+def fetch_pos_paymode_totals_for_bills(location_code: int, bill_nos: List[Any]) -> Dict[str, float]:
+    """Sum POS_BILL_PAYMODE amounts per PAYMODE code for the given bills.
+
+    Sales-return bills often store tender AMOUNT as a positive refund figure; sign by
+    ``BILLHDR.NETBILLAMOUNT`` so settlement expected cash nets (sale − return).
+    """
     if not bill_nos or not ensure_pos_bill_paymode_table():
         return {}
     tbl = POS_BILL_PAYMODE_TABLE
-    clean = sorted({int(b) for b in bill_nos if int(b) > 0})
+    clean = _clean_settlement_billnos(bill_nos)
     if not clean:
         return {}
     ph = ','.join([f':b{i}' for i in range(len(clean))])
     params: Dict[str, Any] = {'loc': int(location_code)}
     for i, bn in enumerate(clean):
         params[f'b{i}'] = bn
-    q = f'SELECT PAYMODE AS pm, SUM(AMOUNT) AS samt FROM {tbl} WHERE LOCATIONCODE = :loc AND BILLNO IN ({ph}) GROUP BY PAYMODE'
+    # Negative NETBILLAMOUNT (returns) → negative tender contribution.
+    q = f"""
+        SELECT pm.PAYMODE AS pm,
+               SUM(
+                   CASE
+                       WHEN NVL(bh.NETBILLAMOUNT, 0) < 0 THEN -ABS(NVL(pm.AMOUNT, 0))
+                       ELSE NVL(pm.AMOUNT, 0)
+                   END
+               ) AS samt
+        FROM {tbl} pm
+        LEFT JOIN BILLHDR bh
+          ON bh.LOCATIONCODE = pm.LOCATIONCODE
+         AND bh.BILLNO = pm.BILLNO
+        WHERE pm.LOCATIONCODE = :loc
+          AND pm.BILLNO IN ({ph})
+        GROUP BY pm.PAYMODE
+    """
     rows = _safe_rows(q, params) or []
     out: Dict[str, float] = {}
     for r in rows:
@@ -28872,11 +30122,22 @@ def fetch_pos_paymode_amounts_by_bill(location_code: int, bill_nos: List[Any]) -
     params: Dict[str, Any] = {'loc': int(location_code)}
     for i, bn in enumerate(clean):
         params[f'b{i}'] = bn
-    q = (
-        f'SELECT BILLNO AS bno, PAYMODE AS pm, SUM(AMOUNT) AS samt '
-        f'FROM {tbl} WHERE LOCATIONCODE = :loc AND BILLNO IN ({ph}) '
-        f'GROUP BY BILLNO, PAYMODE'
-    )
+    q = f"""
+        SELECT pm.BILLNO AS bno, pm.PAYMODE AS pm,
+               SUM(
+                   CASE
+                       WHEN NVL(bh.NETBILLAMOUNT, 0) < 0 THEN -ABS(NVL(pm.AMOUNT, 0))
+                       ELSE NVL(pm.AMOUNT, 0)
+                   END
+               ) AS samt
+        FROM {tbl} pm
+        LEFT JOIN BILLHDR bh
+          ON bh.LOCATIONCODE = pm.LOCATIONCODE
+         AND bh.BILLNO = pm.BILLNO
+        WHERE pm.LOCATIONCODE = :loc
+          AND pm.BILLNO IN ({ph})
+        GROUP BY pm.BILLNO, pm.PAYMODE
+    """
     rows = _safe_rows(q, params) or []
     out: Dict[Any, Dict[str, float]] = {}
     for r in rows:
@@ -28936,12 +30197,12 @@ def settlement_tender_amounts_by_bill(
     return out
 
 
-def pos_settlement_bills_have_paymode_rows(location_code: int, bill_nos: List[int]) -> bool:
+def pos_settlement_bills_have_paymode_rows(location_code: int, bill_nos: List[Any]) -> bool:
     """True when every bill has at least one POS_BILL_PAYMODE row (detail present)."""
     if not bill_nos or not ensure_pos_bill_paymode_table():
         return False
     tbl = POS_BILL_PAYMODE_TABLE
-    clean = sorted({int(b) for b in bill_nos if int(b) > 0})
+    clean = _clean_settlement_billnos(bill_nos)
     if not clean:
         return False
     ph = ','.join([f':b{i}' for i in range(len(clean))])
@@ -28959,10 +30220,9 @@ def pos_settlement_bills_have_paymode_rows(location_code: int, bill_nos: List[in
             cnt = 0
         if cnt <= 0:
             continue
-        try:
-            present.add(int(rk.get('bno')))
-        except (TypeError, ValueError):
-            continue
+        bn = coerce_billno(rk.get('bno'))
+        if billno_is_valid(bn):
+            present.add(str(bn))
     return len(present) == len(clean)
 
 
@@ -29023,15 +30283,7 @@ def pos_settlement_paymode_totals_reconcile(totals: Dict[str, Any], paymode_tota
 
 def compute_pos_settlement_payment_mode_summary(location_code: int, bill_nos: List[Any]) -> Dict[str, Any]:
     """POS Settlement UI: payment lines with amounts aligned to draft/journal logic and labels from ``POS_TENDER_TYPE``."""
-    clean: List[int] = []
-    for x in bill_nos or []:
-        try:
-            n = int(x)
-            if n > 0:
-                clean.append(n)
-        except (TypeError, ValueError):
-            continue
-    clean = sorted(set(clean))
+    clean = _clean_settlement_billnos(bill_nos)
     if not clean:
         return {'lines': [], 'source': 'empty', 'paymode_totals': {}, 'billhdr_totals': {}, 'bill_count': 0}
     rows = _fetch_billhdr_rows_for_pos_settlement(location_code, clean)
@@ -29049,6 +30301,10 @@ def compute_pos_settlement_payment_mode_summary(location_code: int, bill_nos: Li
     else:
         pm = _merge_pos_shift_tender_totals(location_code, rows, clean)
         if not pm:
+            pm = paymode_amounts_from_billhdr_settlement_totals(totals_agg)
+            source = 'billhdr_buckets_tender_map'
+        elif not pos_settlement_paymode_totals_reconcile(totals_agg, pm):
+            # Unsigned return tenders (or stale paymode) — prefer BILLHDR net buckets.
             pm = paymode_amounts_from_billhdr_settlement_totals(totals_agg)
             source = 'billhdr_buckets_tender_map'
         else:
@@ -29488,6 +30744,143 @@ def get_pos_tender_gl_by_code(*, active_only: bool = True) -> Dict[str, str]:
     return out
 
 
+def _sales_cash_direct_post_debit_lines(
+    *,
+    payment_mode_rows: List[Dict[str, Any]],
+    header: Dict[str, Any],
+    total_amt: float,
+    receivable_fallback: str,
+) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """Build Dr (invoice) / Cr (return) lines for cash direct posting by payment method.
+
+    Returns ``(lines, error)``. Each line: ``account_code``, ``amount``, ``tender_code``, ``remarks``.
+    Uses POS tender GL mapping (Cash → cash GL, Card/Visa → bank/card GL, etc.).
+    """
+    tender_gl = get_pos_tender_gl_by_code(active_only=False)
+    # Seed defaults if tender master empty / missing codes
+    seed_gl = {
+        str(r.get('tender_code') or '').strip().upper(): str(r.get('gl_account_code') or '').strip()[:20]
+        for r in POS_TENDER_TYPE_SEED_ROWS
+        if str(r.get('tender_code') or '').strip() and str(r.get('gl_account_code') or '').strip()
+    }
+
+    def _gl_for(code: str) -> str:
+        c = (code or '').strip().upper()
+        return (tender_gl.get(c) or seed_gl.get(c) or '').strip()[:20]
+
+    amounts: Dict[str, float] = {}
+    for row in payment_mode_rows or []:
+        if not isinstance(row, dict):
+            continue
+        code = str(row.get('code') or row.get('paymode') or '').strip().upper()
+        if not code or code == 'CREDIT':
+            continue
+        try:
+            amt = abs(float(row.get('amount') or 0))
+        except (TypeError, ValueError):
+            amt = 0.0
+        if amt < 0.005:
+            continue
+        amounts[code] = round(amounts.get(code, 0.0) + amt, 2)
+
+    if not amounts:
+        try:
+            cash_a = abs(float(header.get('cashamount') or 0))
+        except (TypeError, ValueError):
+            cash_a = 0.0
+        try:
+            card_a = abs(float(header.get('cardamount') or 0))
+        except (TypeError, ValueError):
+            card_a = 0.0
+        try:
+            wallet_a = abs(float(header.get('walletamount') or 0))
+        except (TypeError, ValueError):
+            wallet_a = 0.0
+        try:
+            loyalty_a = abs(float(header.get('loyaltyamount') or header.get('loyalty_amount') or 0))
+        except (TypeError, ValueError):
+            loyalty_a = 0.0
+        try:
+            points_a = abs(float(header.get('pointsamount') or header.get('points_amount') or 0))
+        except (TypeError, ValueError):
+            points_a = 0.0
+        if cash_a >= 0.005:
+            amounts['CASH'] = round(cash_a, 2)
+        if card_a >= 0.005:
+            amounts['CARD'] = round(card_a, 2)
+        if wallet_a >= 0.005:
+            amounts['WALLET'] = round(wallet_a, 2)
+        if loyalty_a >= 0.005:
+            amounts['LOYALTY'] = round(loyalty_a, 2)
+        if points_a >= 0.005:
+            amounts['POINTS'] = round(points_a, 2)
+
+    target = round(abs(float(total_amt or 0)), 2)
+    if not amounts and target >= 0.005:
+        amounts['CASH'] = target
+
+    if not amounts:
+        return ([], None)
+
+    missing: List[str] = []
+    lines: List[Dict[str, Any]] = []
+    for code, amt in amounts.items():
+        gl = _gl_for(code)
+        if not gl:
+            missing.append(code)
+            continue
+        lines.append({
+            'account_code': gl,
+            'amount': round(amt, 2),
+            'tender_code': code,
+            'remarks': f'{code} tender',
+        })
+    if missing:
+        return (
+            [],
+            'Direct posting is enabled but these payment methods have no GL account: '
+            + ', '.join(sorted(missing))
+            + '. Set GL on POS Tender Types (or disable Direct posting in Sales Accounts Configuration).',
+        )
+
+    paid = round(sum(float(x['amount']) for x in lines), 2)
+    diff = round(target - paid, 2)
+    if abs(diff) >= 0.02:
+        cash_gl = _gl_for('CASH') or (receivable_fallback or '').strip()[:20]
+        if not cash_gl:
+            return (
+                [],
+                f'Direct posting payment total {paid:.2f} does not match invoice {target:.2f} '
+                'and no Cash / Receivable GL is available for the difference.',
+            )
+        # Merge remainder into an existing CASH line when possible
+        merged = False
+        for ln in lines:
+            if str(ln.get('tender_code') or '').upper() == 'CASH' and cash_gl == ln.get('account_code'):
+                ln['amount'] = round(float(ln['amount']) + diff, 2)
+                merged = True
+                break
+        if not merged:
+            lines.append({
+                'account_code': cash_gl,
+                'amount': abs(diff),
+                'tender_code': 'CASH' if cash_gl == _gl_for('CASH') else 'ADJ',
+                'remarks': 'Rounding / remainder',
+            })
+        # Drop zero/negative after merge
+        lines = [ln for ln in lines if float(ln.get('amount') or 0) >= 0.005]
+
+    # Collapse same account+tender
+    collapsed: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for ln in lines:
+        key = (str(ln['account_code']), str(ln.get('tender_code') or ''))
+        if key in collapsed:
+            collapsed[key]['amount'] = round(float(collapsed[key]['amount']) + float(ln['amount']), 2)
+        else:
+            collapsed[key] = dict(ln)
+    return (list(collapsed.values()), None)
+
+
 def ensure_billhdr_pos_settlement_columns() -> None:
     """Ensure ``BILLHDR`` has POS settlement workflow columns (tenant DB)."""
     try:
@@ -29542,14 +30935,7 @@ def update_billhdr_pos_settlement_posting(
     cols_u = {str(c).upper() for c in (_get_table_columns('BILLHDR') or [])}
     if 'POS_SETTLEMENT_STATUS' not in cols_u:
         return (False, 'BILLHDR does not have POS_SETTLEMENT_STATUS.')
-    clean_nos: List[int] = []
-    for x in bill_nos or []:
-        try:
-            n = int(x)
-            if n > 0:
-                clean_nos.append(n)
-        except (TypeError, ValueError):
-            continue
+    clean_nos = _clean_settlement_billnos(bill_nos)
     if not clean_nos:
         return (False, 'No valid bill numbers.')
     st = str(status or '').strip().upper()[:20]
@@ -29624,11 +31010,16 @@ def ensure_pos_settlement_draft_tables() -> bool:
                     except Exception:
                         pass
                 if not _table_exists(bill_tbl):
+                    billno_col = (
+                        f'BILLNO VARCHAR2({_BILLNO_VARCHAR_LEN}) NOT NULL'
+                        if billno_uses_varchar_storage()
+                        else 'BILLNO NUMBER NOT NULL'
+                    )
                     cur.execute(
                         f"""
                         CREATE TABLE {bill_tbl} (
                             DRAFT_ID NUMBER NOT NULL,
-                            BILLNO NUMBER NOT NULL,
+                            {billno_col},
                             CONSTRAINT PK_PSSD_BILL PRIMARY KEY (DRAFT_ID, BILLNO),
                             CONSTRAINT FK_PSSD_BILL_REF FOREIGN KEY (DRAFT_ID) REFERENCES {hdr}(DRAFT_ID) ON DELETE CASCADE
                         )
@@ -29803,10 +31194,10 @@ def build_pos_settlement_gl_lines(
     return lines
 
 
-def _fetch_billhdr_rows_by_billnos(location_code: int, bill_nos: List[int]) -> List[Dict[str, Any]]:
+def _fetch_billhdr_rows_by_billnos(location_code: int, bill_nos: List[Any]) -> List[Dict[str, Any]]:
     """Load BILLHDR rows by bill number only (used when opening an existing draft)."""
     ensure_billhdr_pos_settlement_columns()
-    clean = sorted({int(b) for b in bill_nos or [] if int(b) > 0})
+    clean = _clean_settlement_billnos(bill_nos)
     if not clean:
         return []
     cols_u = {str(c).upper() for c in (_get_table_columns('BILLHDR') or [])}
@@ -29820,9 +31211,9 @@ def _fetch_billhdr_rows_by_billnos(location_code: int, bill_nos: List[int]) -> L
     return _safe_rows(q, params) or []
 
 
-def _fetch_billhdr_rows_for_pos_settlement(location_code: int, bill_nos: List[int]) -> List[Dict[str, Any]]:
+def _fetch_billhdr_rows_for_pos_settlement(location_code: int, bill_nos: List[Any]) -> List[Dict[str, Any]]:
     ensure_billhdr_pos_settlement_columns()
-    clean = sorted({int(b) for b in bill_nos or [] if int(b) > 0})
+    clean = _clean_settlement_billnos(bill_nos)
     if not clean:
         return []
     cols_u = {str(c).upper() for c in (_get_table_columns('BILLHDR') or [])}
@@ -29843,7 +31234,7 @@ def _fetch_billhdr_rows_for_pos_settlement(location_code: int, bill_nos: List[in
 
 def _cancel_open_pos_settlement_drafts_for_bills(
     location_code: int,
-    bill_nos: List[int],
+    bill_nos: List[Any],
     *,
     except_draft_id: Optional[int] = None,
     conn: Any = None,
@@ -29851,7 +31242,7 @@ def _cancel_open_pos_settlement_drafts_for_bills(
     """Cancel open (DRAFT/VERIFIED) settlements that include any of the given bills."""
     if not ensure_pos_settlement_draft_tables():
         return 0
-    clean = sorted({int(b) for b in bill_nos or [] if int(b) > 0})
+    clean = _clean_settlement_billnos(bill_nos)
     if not clean:
         return 0
     hdr = POS_SETTLEMENT_DRAFT_HDR_TABLE
@@ -29942,15 +31333,11 @@ def create_pos_settlement_draft(
     if not ensure_pos_settlement_draft_tables():
         return (False, 'POS settlement draft tables are not available.', None)
     ensure_billhdr_pos_settlement_columns()
-    clean_nos: List[int] = []
-    for x in bill_nos or []:
-        try:
-            n = int(x)
-            if n > 0:
-                clean_nos.append(n)
-        except (TypeError, ValueError):
-            continue
-    clean_nos = sorted(set(clean_nos))
+    try:
+        ensure_billno_varchar_columns()
+    except Exception:
+        pass
+    clean_nos = _clean_settlement_billnos(bill_nos)
     if not clean_nos:
         return (False, 'No valid bill numbers.', None)
     # Replace prior open drafts for the same bills so Open drafts stays clean.
@@ -29989,6 +31376,9 @@ def create_pos_settlement_draft(
             else:
                 pm_amounts_for_meta = _merge_pos_shift_tender_totals(location_code, rows, clean_nos)
                 if not pm_amounts_for_meta:
+                    pm_amounts_for_meta = paymode_amounts_from_billhdr_settlement_totals(totals)
+                    meta_journal_source = 'billhdr_buckets_tender_map'
+                elif not pos_settlement_paymode_totals_reconcile(totals, pm_amounts_for_meta):
                     pm_amounts_for_meta = paymode_amounts_from_billhdr_settlement_totals(totals)
                     meta_journal_source = 'billhdr_buckets_tender_map'
                 else:
@@ -30071,7 +31461,7 @@ def create_pos_settlement_draft(
                 for bn in clean_nos:
                     cur.execute(
                         f'INSERT INTO {bill_tbl} (DRAFT_ID, BILLNO) VALUES (:d, :b)',
-                        {'d': draft_id, 'b': int(bn)},
+                        {'d': draft_id, 'b': coerce_billno(bn)},
                     )
             conn.commit()
         return (True, '', draft_id)
@@ -30100,7 +31490,10 @@ def list_pos_settlement_pending_by_date(location_code: int, *, limit_days: int =
     elif 'BILLTYPE' in cols_u:
         where_parts.append("UPPER(NVL(TRIM(TO_CHAR(BILLTYPE)), ' ')) <> 'R'")
     if 'POS_SETTLEMENT_STATUS' in cols_u:
-        where_parts.append("NVL(POS_SETTLEMENT_STATUS, 'PENDING') = 'PENDING'")
+        where_parts.append(
+            "(UPPER(TRIM(NVL(POS_SETTLEMENT_STATUS, 'PENDING'))) IN ('PENDING', '') "
+            "OR POS_SETTLEMENT_STATUS IS NULL)"
+        )
     amt_expr = 'NVL(NETBILLAMOUNT, 0)' if 'NETBILLAMOUNT' in cols_u else '0'
     where_sql = ' AND '.join(where_parts)
     q = f"""
@@ -30228,10 +31621,9 @@ def get_pos_settlement_draft_detail(draft_id: int, location_code: int) -> Option
     bill_nos = []
     for br in brows or []:
         bk = {str(k).lower(): v for k, v in br.items()}
-        try:
-            bill_nos.append(int(bk.get('billno') or 0))
-        except (TypeError, ValueError):
-            continue
+        bn = coerce_billno(bk.get('billno'))
+        if billno_is_valid(bn):
+            bill_nos.append(bn)
     lines: List[Any] = []
     meta: Dict[str, Any] = {}
     try:
@@ -30352,11 +31744,13 @@ def post_pos_settlement_draft(
         return (False, 'Draft not found.', None)
     if str(detail.get('status') or '').upper() != 'VERIFIED':
         return (False, 'Draft must be verified before posting.', None)
-    bill_nos = detail.get('bill_nos') or []
+    bill_nos = _clean_settlement_billnos(detail.get('bill_nos') or [])
     lines = detail.get('journal_lines') or []
     if not isinstance(lines, list) or len(lines) < 2:
         return (False, 'Draft has no valid journal lines.', None)
-    rows = _fetch_billhdr_rows_for_pos_settlement(location_code, [int(x) for x in bill_nos])
+    if not bill_nos:
+        return (False, 'Draft has no valid bill numbers.', None)
+    rows = _fetch_billhdr_rows_for_pos_settlement(location_code, bill_nos)
     if len(rows) != len(bill_nos):
         return (False, 'One or more bills are missing or no longer eligible.', None)
     for r in rows:
@@ -30434,7 +31828,7 @@ def post_pos_settlement_draft(
                 # Remove other open drafts that still reference these now-settled bills.
                 _cancel_open_pos_settlement_drafts_for_bills(
                     location_code,
-                    [int(x) for x in bill_nos],
+                    bill_nos,
                     except_draft_id=int(draft_id),
                     conn=conn,
                 )
@@ -32325,13 +33719,14 @@ def save_sales_invoice(data: Dict[str, Any]) -> Tuple[bool, Optional[str], Optio
     except (TypeError, ValueError):
         cc_hdr = 0
     is_pos_billing_save = bool(header.get('pos_billing_save'))
-    is_pos_credit_sale = is_pos_billing_save and cc_hdr > 0
     if is_pos_billing_save and cc_hdr <= 0:
         billtype_raw = 'C'
     else:
         billtype_raw, billtype_err = _resolve_sales_header_billtype(header)
         if billtype_err:
             return (False, billtype_err, None, stock_debug)
+    # Credit sale = billing type R only — cash customers (C) keep cash/card tenders.
+    is_pos_credit_sale = is_pos_billing_save and _normalize_billtype_cash_credit(billtype_raw) == 'R'
     cash_amt_pos = float(header.get('cashamount') or 0) if not is_pos_credit_sale else 0.0
     card_amt_pos = float(header.get('cardamount') or 0) if not is_pos_credit_sale else 0.0
     delivery_date_val = _parse_line_date(header.get('deliverydate') or header.get('delivery_date'))
@@ -32353,13 +33748,22 @@ def save_sales_invoice(data: Dict[str, Any]) -> Tuple[bool, Optional[str], Optio
                         amt_m = float(row.get('amount') or 0)
                     except (TypeError, ValueError):
                         amt_m = 0.0
-                    if code and amt_m >= 0.005:
+                    if code and abs(amt_m) >= 0.005:
+                        # Keep sign of tender amount; for returns prefer signed net when mode abs-only.
+                        if total_amount < -0.0005 and amt_m > 0:
+                            amt_m = -abs(amt_m)
                         pos_payment_mode_rows.append({'code': code[:30], 'amount': round(amt_m, 2), 'reference': str(row.get('reference') or '')[:200]})
             if not pos_payment_mode_rows:
-                if cash_amt_pos >= 0.005:
-                    pos_payment_mode_rows.append({'code': 'CASH', 'amount': round(cash_amt_pos, 2), 'reference': ''})
-                if card_amt_pos >= 0.005:
-                    pos_payment_mode_rows.append({'code': 'CARD', 'amount': round(card_amt_pos, 2), 'reference': ''})
+                if abs(cash_amt_pos) >= 0.005:
+                    cash_save = cash_amt_pos
+                    if total_amount < -0.0005 and cash_save > 0:
+                        cash_save = -abs(cash_save)
+                    pos_payment_mode_rows.append({'code': 'CASH', 'amount': round(cash_save, 2), 'reference': ''})
+                if abs(card_amt_pos) >= 0.005:
+                    card_save = card_amt_pos
+                    if total_amount < -0.0005 and card_save > 0:
+                        card_save = -abs(card_save)
+                    pos_payment_mode_rows.append({'code': 'CARD', 'amount': round(card_save, 2), 'reference': ''})
                 try:
                     loyalty_amt = float(header.get('loyaltyamount') or header.get('loyalty_amount') or 0)
                 except (TypeError, ValueError):
@@ -32368,11 +33772,15 @@ def save_sales_invoice(data: Dict[str, Any]) -> Tuple[bool, Optional[str], Optio
                     points_amt = float(header.get('pointsamount') or header.get('points_amount') or 0)
                 except (TypeError, ValueError):
                     points_amt = 0.0
-                if loyalty_amt >= 0.005:
+                if abs(loyalty_amt) >= 0.005:
+                    if total_amount < -0.0005 and loyalty_amt > 0:
+                        loyalty_amt = -abs(loyalty_amt)
                     pos_payment_mode_rows.append({'code': 'LOYALTY', 'amount': round(loyalty_amt, 2), 'reference': ''})
-                if points_amt >= 0.005:
+                if abs(points_amt) >= 0.005:
+                    if total_amount < -0.0005 and points_amt > 0:
+                        points_amt = -abs(points_amt)
                     pos_payment_mode_rows.append({'code': 'POINTS', 'amount': round(points_amt, 2), 'reference': ''})
-            if not pos_payment_mode_rows and total_amount > 0.005:
+            if not pos_payment_mode_rows and abs(total_amount) > 0.005:
                 pos_payment_mode_rows.append({'code': 'CASH', 'amount': round(total_amount, 2), 'reference': ''})
     ensure_billhdr_sales_schema_once()
     header_columns = _get_table_columns('BILLHDR')
@@ -32437,7 +33845,7 @@ def save_sales_invoice(data: Dict[str, Any]) -> Tuple[bool, Optional[str], Optio
         def _line_costing_totals(cur: Any, location_code_val: int, sale_lines: List[Dict[str, Any]]) -> Tuple[Dict[str, float], Dict[str, float]]:
             """
             Returns (cogs_debit_by_account, inventory_credit_by_account).
-            COGS = base qty × ITEMMASTER.AVERAGECOST (line averagecost, else master; fallback COSTPRICE).
+            COGS = base qty × base-UOM ITEMMASTER.AVERAGECOST (never alt/pack cost × BASEQTY).
             """
             cogs_map: Dict[str, float] = {}
             inv_map: Dict[str, float] = {}
@@ -32457,15 +33865,12 @@ def save_sales_invoice(data: Dict[str, Any]) -> Tuple[bool, Optional[str], Optio
                     if item_code not in item_cache:
                         item_cache[item_code] = get_item_by_code(item_code, location_code_val) or {}
                     item_row = item_cache.get(item_code) or {}
-                unit_cost = _to_number(ln.get('averagecost') or ln.get('average_cost'), 0.0)
-                if unit_cost <= 0:
-                    unit_cost = _to_number(item_row.get('averagecost') or item_row.get('AVERAGECOST'), 0.0)
-                if unit_cost <= 0:
-                    unit_cost = _to_number(ln.get('costprice') or ln.get('cost'), 0.0)
-                if unit_cost <= 0:
-                    unit_cost = _to_number(item_row.get('costprice') or item_row.get('COSTPRICE'), 0.0)
+                unit_cost = _base_unit_inventory_cost_from_maps(ln, item_row)
                 if unit_cost <= 0:
                     continue
+                # Persist corrected base unit cost on the line for BILLDTL / ITEMJOURNAL.
+                ln['averagecost'] = unit_cost
+                ln['average_cost'] = unit_cost
                 line_cogs = round(qty_base * unit_cost, 2)
                 if line_cogs <= 0:
                     continue
@@ -32755,6 +34160,19 @@ def save_sales_invoice(data: Dict[str, Any]) -> Tuple[bool, Optional[str], Optio
                             if (is_pos_billing_save or record_payment_modes) and ensure_pos_bill_paymode_table() and pos_payment_mode_rows:
                                 _insert_pos_bill_paymode_rows(cur, location_code, billno, pos_payment_mode_rows, billdate_value)
                             for idx, line in enumerate(lines, start=1):
+                                # AVERAGECOST on BILLDTL must be base-UOM unit cost (COGS = BASEQTY × this).
+                                try:
+                                    _ic = int(float(line.get('item_code') or 0))
+                                except Exception:
+                                    _ic = 0
+                                _item_row = (item_defaults_cache.get(_ic) if _ic else None) or {}
+                                if _ic and not _item_row:
+                                    _item_row = get_item_by_code(_ic, location_code) or {}
+                                    item_defaults_cache[_ic] = _item_row
+                                _base_unit_cost = _base_unit_inventory_cost_from_maps(line, _item_row)
+                                if _base_unit_cost > 0:
+                                    line['averagecost'] = _base_unit_cost
+                                    line['average_cost'] = _base_unit_cost
                                 detail_data = {'LOCATIONCODE': location_code, 'BILLNO': billno, 'SLNO': idx, 'ITEMCODE': line.get('item_code'), 'UNITOFMEASUREMENT': line.get('uom'), 'QUANTITY': line.get('quantity'), 'RATE': line.get('rate'), 'RESETNO': header.get('resetno') or 1, 'STORE1': line.get('store1') or 0, 'STORE2': line.get('store2') or 0, 'STORE3': line.get('store3') or 0, 'STORE4': line.get('store4') or 0, 'STORE5': line.get('store5') or 0, 'ITDISC': line.get('discount') or 0, 'BASEQTY': line.get('base_qty') or line.get('quantity') or 0, 'OLDPRICE': line.get('old_price') or 0, 'STORE': line.get('store') or '', 'COST': line.get('costprice') or line.get('cost') or 0, 'REBATEPERCENT': line.get('rebate') or 0, 'ITEMDETAILS1': line.get('details') or line.get('item_name') or '', 'POINTS': line.get('points') or 0, 'AVERAGECOST': line.get('averagecost') or line.get('average_cost') or 0, 'LANDINGCOST': line.get('landing_cost') or 0, 'AMOUNT': _sales_detail_line_amount(line)}
                                 detail_cols = [col for col in detail_data.keys() if col in detail_columns]
                                 if not detail_cols:
@@ -32786,8 +34204,28 @@ def save_sales_invoice(data: Dict[str, Any]) -> Tuple[bool, Optional[str], Optio
                                 vat_amount_val = round(_to_number(line.get('vat_amount'), 0.0), 3)
                                 total_amount_val = round(amount_val + vat_amount_val, 3)
                                 avg_cost_val = round(
-                                    _to_number(line.get('averagecost') or line.get('average_cost'), 0.0), 4
+                                    _to_number(
+                                        line.get('averagecost') or line.get('average_cost'),
+                                        0.0,
+                                    ),
+                                    4,
                                 )
+                                if avg_cost_val <= 0:
+                                    avg_cost_val = round(
+                                        _journal_average_cost_for_line(
+                                            cur,
+                                            location_code,
+                                            {
+                                                **line,
+                                                'item': line.get('item_code'),
+                                                'itemcode': line.get('item_code'),
+                                            },
+                                        ),
+                                        4,
+                                    )
+                                if avg_cost_val > 0:
+                                    line['averagecost'] = avg_cost_val
+                                    line['average_cost'] = avg_cost_val
                                 ij_row: Dict[str, Any] = {
                                     'lineno': idx,
                                     'item': line.get('item_code'),
@@ -32860,10 +34298,48 @@ def save_sales_invoice(data: Dict[str, Any]) -> Tuple[bool, Optional[str], Optio
                                 cur.execute(f'\n                            INSERT INTO {GL_HDR_TABLE}\n                                (VOUCHER_NO, VOUCHER_DATE, REFERENCE_NO, NARRATION, SOURCE, CREATED_BY)\n                            VALUES\n                                (:vno, :vdate, :ref, :nar, :src, :usr)\n                            ', {'vno': gl_voucher_no, 'vdate': billdate_value, 'ref': gl_ref_no, 'nar': gl_narration, 'src': source_label, 'usr': gl_user})
                                 gl_line_no = 1
                                 if revenue_gl:
-                                    cur.execute(f'SELECT {GL_DTL_SEQ}.NEXTVAL FROM DUAL')
-                                    lid = cur.fetchone()[0]
-                                    cur.execute(f'\n                            INSERT INTO {GL_DTL_TABLE}\n                                (LINE_ID, VOUCHER_NO, LINE_NO, ACCOUNT_CODE, DEBIT, CREDIT, REMARKS, PARTY_TYPE, PARTY_CODE)\n                            VALUES\n                                (:lid, :vno, :lno, :ac, :dr, :cr, :rm, :pt, :pc)\n                            ', {'lid': lid, 'vno': gl_voucher_no, 'lno': gl_line_no, 'ac': str(gl_accounts['receivable'])[:20], 'dr': 0 if is_sales_return else total_amt, 'cr': total_amt if is_sales_return else 0, 'rm': f'{doc_label} {billno} Receivable'[:250], 'pt': 'CUSTOMER', 'pc': customer_party_code[:50] or None})
-                                    gl_line_no += 1
+                                    use_direct_cash = (
+                                        (
+                                            get_sales_direct_posting_return_enabled()
+                                            if is_sales_return
+                                            else get_sales_direct_posting_enabled()
+                                        )
+                                        and _normalize_billtype_cash_credit(billtype_raw) == 'C'
+                                    )
+                                    debit_specs: List[Dict[str, Any]] = []
+                                    if use_direct_cash:
+                                        debit_specs, direct_err = _sales_cash_direct_post_debit_lines(
+                                            payment_mode_rows=pos_payment_mode_rows,
+                                            header=header,
+                                            total_amt=total_amt,
+                                            receivable_fallback=str(gl_accounts.get('receivable') or ''),
+                                        )
+                                        if direct_err:
+                                            raise ValueError(direct_err)
+                                    if not debit_specs:
+                                        debit_specs = [{
+                                            'account_code': str(gl_accounts['receivable'])[:20],
+                                            'amount': total_amt,
+                                            'tender_code': '',
+                                            'remarks': 'Receivable',
+                                            'party': True,
+                                        }]
+                                    for dspec in debit_specs:
+                                        cur.execute(f'SELECT {GL_DTL_SEQ}.NEXTVAL FROM DUAL')
+                                        lid = cur.fetchone()[0]
+                                        ac = str(dspec.get('account_code') or '')[:20]
+                                        amt_d = round(float(dspec.get('amount') or 0), 2)
+                                        if amt_d < 0.005 or not ac:
+                                            continue
+                                        tender_lbl = str(dspec.get('tender_code') or '').strip()
+                                        rm_base = str(dspec.get('remarks') or 'Receivable').strip()
+                                        if tender_lbl:
+                                            rm = f'{doc_label} {billno} {tender_lbl}'[:250]
+                                        else:
+                                            rm = f'{doc_label} {billno} {rm_base}'[:250]
+                                        use_party = bool(dspec.get('party')) or not tender_lbl
+                                        cur.execute(f'\n                            INSERT INTO {GL_DTL_TABLE}\n                                (LINE_ID, VOUCHER_NO, LINE_NO, ACCOUNT_CODE, DEBIT, CREDIT, REMARKS, PARTY_TYPE, PARTY_CODE)\n                            VALUES\n                                (:lid, :vno, :lno, :ac, :dr, :cr, :rm, :pt, :pc)\n                            ', {'lid': lid, 'vno': gl_voucher_no, 'lno': gl_line_no, 'ac': ac, 'dr': 0 if is_sales_return else amt_d, 'cr': amt_d if is_sales_return else 0, 'rm': rm, 'pt': ('CUSTOMER' if use_party else None), 'pc': (customer_party_code[:50] or None) if use_party else None})
+                                        gl_line_no += 1
                                     if sales_amt > 0:
                                         cur.execute(f'SELECT {GL_DTL_SEQ}.NEXTVAL FROM DUAL')
                                         lid = cur.fetchone()[0]
@@ -35814,7 +37290,10 @@ def _party_gl_voucher_balance_rows(party_type: str, party_code: str) -> List[Dic
         JOIN {GL_HDR_TABLE} h ON h.VOUCHER_NO = d.VOUCHER_NO
         WHERE UPPER(NVL(d.PARTY_TYPE, '')) = :pt
           AND d.PARTY_CODE IS NOT NULL
-          AND TRIM(TO_CHAR(d.PARTY_CODE)) = :pcode
+          AND (
+            TRIM(TO_CHAR(d.PARTY_CODE)) = :pcode
+            OR LTRIM(TRIM(TO_CHAR(d.PARTY_CODE)), '0') = LTRIM(:pcode, '0')
+          )
           AND UPPER(NVL(h.SOURCE, '')) NOT IN ('AP_RECEIPT', 'AR_RECEIPT')
         GROUP BY d.VOUCHER_NO, h.VOUCHER_DATE, h.REFERENCE_NO, h.NARRATION, h.SOURCE, d.ACCOUNT_CODE
         """,
@@ -35833,16 +37312,22 @@ def _voucher_open_amount_from_party_rows(
 
     Uses the same priority as :func:`get_accounts_payable_summary` / receivable balances:
     LIABILITY/ASSET lines first, else supplier/customer mapped control account, else all party lines on the voucher.
+
+    Purchase returns / debit notes often party-tag both inventory and payable lines; those
+    cancel to ~0 if summed. When that happens, prefer the payable/receivable control side.
     """
     mode = (balance_mode or '').strip().lower()
     primary = str(primary_account or '').strip().upper()
+    primary_norm = _norm_gl_account_code(primary).upper()
     target_type = 'LIABILITY' if mode == 'payable' else 'ASSET'
+    contra_type = 'ASSET' if mode == 'payable' else 'LIABILITY'
     voucher_map: Dict[str, Dict[str, Any]] = {}
     for r in rows or []:
         vno = str(r.get('voucher_no') or '').strip()
         if not vno:
             continue
         acc = str(r.get('account_code') or '').strip().upper()
+        acc_norm = _norm_gl_account_code(acc).upper()
         dr = float(r.get('debit') or 0)
         cr = float(r.get('credit') or 0)
         line_bal = round((cr - dr) if mode == 'payable' else (dr - cr), 2)
@@ -35857,18 +37342,326 @@ def _voucher_open_amount_from_party_rows(
                 'line_bals': [],
             },
         )
-        rec['line_bals'].append((acc, line_bal, coa_types.get(acc, '')))
+        rec['line_bals'].append((acc, acc_norm, line_bal, coa_types.get(acc, '') or coa_types.get(acc_norm, '')))
+    credit_note_sources = {
+        'PURCHASE_RETURN',
+        'PURCHASE_DEBIT_NOTE',
+        'RETURN',
+        'SALES_RETURN',
+        'BILL_RETURN',
+    }
     for vno, rec in voucher_map.items():
-        bals: List[Tuple[str, float, str]] = rec.pop('line_bals', [])
-        typed = [b for _a, b, t in bals if t == target_type]
-        mapped = [b for a, b, _t in bals if primary and a == primary]
+        bals: List[Tuple[str, str, float, str]] = rec.pop('line_bals', [])
+        typed = [b for _a, _an, b, t in bals if t == target_type]
+        mapped = [
+            b
+            for a, an, b, _t in bals
+            if primary and (a == primary or an == primary_norm)
+        ]
+        src = str(rec.get('source') or '').strip().upper()
         if typed:
-            rec['invoice_amount'] = round(sum(typed), 2)
+            amount = round(sum(typed), 2)
         elif mapped:
-            rec['invoice_amount'] = round(sum(mapped), 2)
+            amount = round(sum(mapped), 2)
         else:
-            rec['invoice_amount'] = round(sum((b for _a, b, _t in bals)), 2)
+            # Drop known contra stock/VAT lines when COA type is known.
+            filtered = [b for _a, _an, b, t in bals if t != contra_type]
+            amount = round(sum(filtered if filtered else (b for _a, _an, b, _t in bals)), 2)
+        # Inventory + payable both party-tagged → nets to ~0; recover control side.
+        if abs(amount) < 0.005 and len(bals) > 1:
+            if mapped:
+                amount = round(sum(mapped), 2)
+            elif typed:
+                amount = round(sum(typed), 2)
+            else:
+                significant = [b for _a, _an, b, _t in bals if abs(b) >= 0.005]
+                if src in credit_note_sources:
+                    neg = [b for b in significant if b < 0]
+                    amount = round(sum(neg), 2) if neg else (min(significant) if significant else 0.0)
+                elif src in {'GRN', 'PURCHASE', 'AP_INVOICE', 'SALES', 'BILL', 'POS'}:
+                    pos = [b for b in significant if b > 0]
+                    amount = round(sum(pos), 2) if pos else (max(significant) if significant else 0.0)
+                elif significant:
+                    # Largest-magnitude line (one side of a cancelled pair).
+                    amount = round(max(significant, key=lambda x: abs(x)), 2)
+        rec['invoice_amount'] = round(amount, 2)
     return voucher_map
+
+
+def _purchase_return_gl_credits_for_supplier(
+    supplier_code: Any,
+    payable_account: str,
+) -> Dict[str, Dict[str, Any]]:
+    """Find PURCHASE_RETURN GL vouchers for a supplier even when party tags are missing/wrong.
+
+    Matches via TBLPRPOSTINGHDR / RETURNHDR supplier, then reads the payable debit on the GL voucher.
+    Also backfills PARTY_TYPE/PARTY_CODE on the payable debit line when columns exist.
+    """
+    pcode = _norm_supplier_key(supplier_code)
+    payable = _norm_gl_account_code(payable_account) or str(
+        DEFAULT_PARTY_ACCOUNTS.get('supplier_payable') or '2110'
+    ).strip()
+    if not pcode:
+        return {}
+    out: Dict[str, Dict[str, Any]] = {}
+
+    posting_rows: List[Dict[str, Any]] = []
+    if _table_exists('TBLPRPOSTINGHDR'):
+        posting_rows = _safe_rows(
+            """
+            SELECT
+                LOCATIONCODE AS locationcode,
+                GOODSRETURNNO AS goodsreturnno,
+                SUPPLIERCODE AS suppliercode,
+                TOTALAMOUNT AS totalamount,
+                RETURNDATE AS returndate
+            FROM TBLPRPOSTINGHDR
+            WHERE SUPPLIERCODE IS NOT NULL
+            """,
+            {},
+        ) or []
+    # Fallback: posted RETURNHDR linked by supplier (when posting hdr missing).
+    if not posting_rows:
+        rh = _detect_table(['RETURNHDR', 'returnhdr'])
+        if rh:
+            h_loc = _detect_column(rh, ['LOCATIONCODE', 'locationcode'])
+            h_no = _detect_column(rh, ['GOODSRETURNNO', 'goodsreturnno'])
+            h_sup = _detect_column(rh, ['SUPPLIERCODE', 'suppliercode'])
+            h_date = _detect_column(rh, ['RETURNDATE', 'returndate', 'POSTINGDATE', 'postingdate'])
+            h_amt = _detect_column(rh, ['RETURNAMOUNT', 'returnamount', 'NETAMOUNT', 'netamount'])
+            h_type = _detect_column(rh, ['RETURNTYPE', 'returntype'])
+            if h_loc and h_no and h_sup:
+                type_f = f" AND UPPER(TRIM(NVL({h_type}, 'P'))) IN ('P','R')" if h_type else ''
+                posting_rows = _safe_rows(
+                    f"""
+                    SELECT
+                        {h_loc} AS locationcode,
+                        {h_no} AS goodsreturnno,
+                        {h_sup} AS suppliercode,
+                        NVL({h_amt or '0'}, 0) AS totalamount,
+                        {h_date or h_loc} AS returndate
+                    FROM {rh}
+                    WHERE {h_sup} IS NOT NULL
+                    {type_f}
+                    """,
+                    {},
+                ) or []
+
+    # Also pick up any PURCHASE_RETURN GL already party-tagged / payable-debited.
+    gl_pr_rows = _safe_rows(
+        f"""
+        SELECT
+            h.VOUCHER_NO AS voucher_no,
+            h.VOUCHER_DATE AS voucher_date,
+            h.REFERENCE_NO AS reference_no,
+            h.NARRATION AS narration,
+            h.SOURCE AS source,
+            d.ACCOUNT_CODE AS account_code,
+            d.PARTY_TYPE AS party_type,
+            d.PARTY_CODE AS party_code,
+            NVL(d.DEBIT, 0) AS debit,
+            NVL(d.CREDIT, 0) AS credit
+        FROM {GL_HDR_TABLE} h
+        JOIN {GL_DTL_TABLE} d ON d.VOUCHER_NO = h.VOUCHER_NO
+        WHERE UPPER(NVL(h.SOURCE, '')) IN ('PURCHASE_RETURN', 'PURCHASE_DEBIT_NOTE', 'RETURN')
+        """,
+        {},
+    ) or []
+
+    def _party_matches(raw: Any) -> bool:
+        return _norm_supplier_key(raw) == pcode
+
+    def _acc_matches(raw: Any) -> bool:
+        return _norm_gl_account_code(raw).upper() == payable.upper()
+
+    # Index GL lines by voucher.
+    by_vno: Dict[str, List[Dict[str, Any]]] = {}
+    for r in gl_pr_rows:
+        vno = str(r.get('voucher_no') or '').strip()
+        if vno:
+            by_vno.setdefault(vno, []).append(dict(r))
+
+    candidate_vnos: Set[str] = set()
+    meta_by_vno: Dict[str, Dict[str, Any]] = {}
+
+    for pr in posting_rows:
+        if not _party_matches(pr.get('suppliercode')):
+            continue
+        loc = pr.get('locationcode')
+        try:
+            loc_i = int(loc)
+        except (TypeError, ValueError):
+            loc_i = loc
+        grn_raw = pr.get('goodsreturnno')
+        n = 0
+        try:
+            n = int(billno_numeric_part(grn_raw) or 0)
+        except Exception:
+            try:
+                n = int(float(str(grn_raw or '0').strip()))
+            except Exception:
+                n = 0
+        grn_s = str(grn_raw or '').strip()
+        cands = [
+            str(f'PR-{loc_i}-{grn_s}')[:30],
+            str(f'PR-{loc_i}-{n}')[:30] if n > 0 else '',
+            str(f'PR-{grn_s}')[:30],
+            str(f'PR-{n}')[:30] if n > 0 else '',
+        ]
+        # Strict ref match only (avoid short numeric false positives like "1"/"2").
+        ref_needles = {
+            x.upper()
+            for x in (
+                f'PR-{grn_s}',
+                f'PR-{n}' if n > 0 else '',
+                grn_s if len(grn_s) >= 4 else '',
+            )
+            if x
+        }
+        narr_needles = {
+            x.upper()
+            for x in (
+                f'PURCHASE RETURN {grn_s}',
+                f'PURCHASE RETURN {n}' if n > 0 else '',
+                f'PR {grn_s}',
+                f'PR {n}' if n > 0 else '',
+            )
+            if x
+        }
+        for vno, lines in by_vno.items():
+            ref_u = str(lines[0].get('reference_no') or '').strip().upper()
+            nar_u = str(lines[0].get('narration') or '').strip().upper()
+            vno_u = str(vno or '').strip().upper()
+            if (
+                any(vno_u == str(c).upper() for c in cands if c)
+                or any(ref_u == needle or ref_u.endswith(needle) for needle in ref_needles)
+                or any(needle in nar_u for needle in narr_needles)
+            ):
+                if any(
+                    _acc_matches(ln.get('account_code')) and float(ln.get('debit') or 0) > 0.005
+                    for ln in lines
+                ) or any(
+                    str(ln.get('party_type') or '').upper() == 'SUPPLIER' and _party_matches(ln.get('party_code'))
+                    for ln in lines
+                ):
+                    cands.append(vno)
+        for c in cands:
+            c = str(c or '').strip()
+            if not c:
+                continue
+            candidate_vnos.add(c)
+            meta_by_vno.setdefault(
+                c,
+                {
+                    'voucher_date': _to_iso_date(pr.get('returndate')),
+                    'reference_no': f'PR-{grn_raw}',
+                    'narration': f'Purchase Return {grn_raw}',
+                    'source': 'PURCHASE_RETURN',
+                    'totalamount': float(pr.get('totalamount') or 0),
+                },
+            )
+
+    # Include vouchers already tagged to this supplier or payable-debit without tag.
+    for vno, lines in by_vno.items():
+        tagged = any(
+            str(ln.get('party_type') or '').strip().upper() == 'SUPPLIER'
+            and _party_matches(ln.get('party_code'))
+            for ln in lines
+        )
+        payable_dr = any(
+            _acc_matches(ln.get('account_code')) and float(ln.get('debit') or 0) > 0.005
+            for ln in lines
+        )
+        if tagged or (payable_dr and vno in candidate_vnos):
+            candidate_vnos.add(vno)
+            if vno not in meta_by_vno and lines:
+                meta_by_vno[vno] = {
+                    'voucher_date': _to_iso_date(lines[0].get('voucher_date')),
+                    'reference_no': lines[0].get('reference_no'),
+                    'narration': lines[0].get('narration'),
+                    'source': lines[0].get('source') or 'PURCHASE_RETURN',
+                    'totalamount': 0.0,
+                }
+
+    # Resolve voucher nos that exist in GL (case-insensitive).
+    gl_keys = {_norm_voucher_key(k): k for k in by_vno.keys()}
+    for cand in list(candidate_vnos):
+        real = gl_keys.get(_norm_voucher_key(cand))
+        if not real:
+            # try load detail if missing from bulk (rare)
+            continue
+        lines = by_vno.get(real) or []
+        # Payable open credit = Dr payable − Cr payable (negative invoice_amount for AP).
+        dr = sum(float(ln.get('debit') or 0) for ln in lines if _acc_matches(ln.get('account_code')))
+        cr = sum(float(ln.get('credit') or 0) for ln in lines if _acc_matches(ln.get('account_code')))
+        # If payable lines missing (wrong account), fall back to any supplier-tagged Dr−Cr.
+        if abs(dr) < 0.005 and abs(cr) < 0.005:
+            dr = sum(
+                float(ln.get('debit') or 0)
+                for ln in lines
+                if str(ln.get('party_type') or '').upper() == 'SUPPLIER' and _party_matches(ln.get('party_code'))
+            )
+            cr = sum(
+                float(ln.get('credit') or 0)
+                for ln in lines
+                if str(ln.get('party_type') or '').upper() == 'SUPPLIER' and _party_matches(ln.get('party_code'))
+            )
+        # Payable mode amount = credit − debit → PR debit is negative credit.
+        invoice_amount = round(cr - dr, 2)
+        if abs(invoice_amount) < 0.005:
+            # Last resort: posting hdr total as credit.
+            meta = meta_by_vno.get(cand) or meta_by_vno.get(real) or {}
+            tot = float(meta.get('totalamount') or 0)
+            if tot > 0.005:
+                invoice_amount = round(-tot, 2)
+        if abs(invoice_amount) < 0.005:
+            continue
+        # Prefer negative (credit). If somehow positive on payable for PR, flip when source is return.
+        src = str((meta_by_vno.get(real) or meta_by_vno.get(cand) or {}).get('source') or lines[0].get('source') or '').upper()
+        if invoice_amount > 0 and src in ('PURCHASE_RETURN', 'PURCHASE_DEBIT_NOTE', 'RETURN'):
+            invoice_amount = -invoice_amount
+        meta = meta_by_vno.get(real) or meta_by_vno.get(cand) or {}
+        out[real] = {
+            'voucher_no': real,
+            'voucher_date': meta.get('voucher_date') or _to_iso_date(lines[0].get('voucher_date')),
+            'reference_no': meta.get('reference_no') or lines[0].get('reference_no'),
+            'narration': meta.get('narration') or lines[0].get('narration'),
+            'source': meta.get('source') or lines[0].get('source') or 'PURCHASE_RETURN',
+            'invoice_amount': invoice_amount,
+        }
+        # Backfill party on payable debit lines so subsequent party queries see this PR.
+        try:
+            party_col = _detect_column(GL_DTL_TABLE, ['PARTY_TYPE', 'party_type'])
+            code_col = _detect_column(GL_DTL_TABLE, ['PARTY_CODE', 'party_code'])
+            if party_col and code_col:
+                with _get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            f"""
+                            UPDATE {GL_DTL_TABLE}
+                               SET PARTY_TYPE = 'SUPPLIER',
+                                   PARTY_CODE = :pcode
+                             WHERE VOUCHER_NO = :vno
+                               AND NVL(DEBIT, 0) > 0
+                               AND (
+                                    UPPER(TRIM(TO_CHAR(ACCOUNT_CODE))) = :acc
+                                    OR LTRIM(TRIM(TO_CHAR(ACCOUNT_CODE)), '0')
+                                       = LTRIM(:acc, '0')
+                               )
+                               AND (
+                                    PARTY_TYPE IS NULL
+                                    OR TRIM(TO_CHAR(PARTY_TYPE)) = ''
+                                    OR PARTY_CODE IS NULL
+                                    OR TRIM(TO_CHAR(PARTY_CODE)) = ''
+                               )
+                            """,
+                            {'pcode': pcode, 'vno': real, 'acc': payable.upper()},
+                        )
+                    conn.commit()
+        except Exception:
+            pass
+
+    return out
 
 
 def get_supplier_open_invoices_for_payment(supplier_code: Any) -> List[Dict[str, Any]]:
@@ -35876,6 +37669,8 @@ def get_supplier_open_invoices_for_payment(supplier_code: Any) -> List[Dict[str,
 
     Includes GRN/AP invoices and **manual journals** when the payable line is party-tagged
     (``PARTY_TYPE=SUPPLIER``), not only rows on accounts with COA type LIABILITY.
+    Also includes purchase-return / debit-note credits linked by posting header supplier
+    even when GL party tags were missing on older posts.
     """
     ensure_ap_payment_tables()
     pcode = _norm_supplier_key(supplier_code)
@@ -35890,6 +37685,40 @@ def get_supplier_open_invoices_for_payment(supplier_code: Any) -> List[Dict[str,
         primary_account=payable_acc,
         coa_types=_coa_type_map_for_payment(),
     )
+    # Merge purchase-return credits that party tagging missed.
+    try:
+        for vno, rec in (_purchase_return_gl_credits_for_supplier(pcode, payable_acc) or {}).items():
+            existing = voucher_map.get(vno)
+            if existing and abs(float(existing.get('invoice_amount') or 0)) >= 0.005:
+                continue
+            # Also skip if same voucher under different key casing.
+            hit = False
+            for k, val in list(voucher_map.items()):
+                if _norm_voucher_key(k) == _norm_voucher_key(vno):
+                    if abs(float(val.get('invoice_amount') or 0)) < 0.005:
+                        voucher_map[k] = {
+                            'voucher_no': k,
+                            'voucher_date': rec.get('voucher_date'),
+                            'reference_no': rec.get('reference_no'),
+                            'narration': rec.get('narration'),
+                            'source': rec.get('source'),
+                            'invoice_amount': rec.get('invoice_amount'),
+                        }
+                    hit = True
+                    break
+            if not hit:
+                voucher_map[vno] = {
+                    'voucher_no': vno,
+                    'voucher_date': rec.get('voucher_date'),
+                    'reference_no': rec.get('reference_no'),
+                    'narration': rec.get('narration'),
+                    'source': rec.get('source'),
+                    'invoice_amount': rec.get('invoice_amount'),
+                }
+    except Exception:
+        logger = __import__('logging').getLogger(__name__)
+        logger.debug('merge purchase return AP credits failed', exc_info=True)
+
     alloc_rows = _safe_rows(
         f"""
         SELECT INVOICE_VOUCHER_NO AS invoice_voucher_no, SUM(ALLOCATED_AMOUNT) AS allocated_amount
@@ -35933,6 +37762,13 @@ def get_supplier_open_invoices_for_payment(supplier_code: Any) -> List[Dict[str,
         is_credit_doc = invoice_amount < 0
         is_credit = is_credit_doc and open_amount < 0
         display_allocated = round(allocated + payment_applied, 2) if is_credit_doc else allocated
+        src = str(rec.get('source') or '').strip().upper()
+        if is_credit_doc and src in ('PURCHASE_RETURN', 'RETURN'):
+            hint = 'Purchase return credit'
+        elif is_credit_doc:
+            hint = 'Supplier credit (Dr payable journal)'
+        else:
+            hint = 'Payable'
         out.append({
             'voucher_no': vno,
             'voucher_date': rec.get('voucher_date'),
@@ -35946,7 +37782,7 @@ def get_supplier_open_invoices_for_payment(supplier_code: Any) -> List[Dict[str,
             'is_credit': is_credit,
             'is_credit_doc': is_credit_doc,
             'credit_available': round(abs(open_amount), 2) if is_credit else 0.0,
-            'balance_hint': 'Payable' if invoice_amount > 0 else 'Supplier credit (Dr payable journal)',
+            'balance_hint': hint,
         })
     out.sort(key=lambda x: (0 if x.get('is_payable') else 1, x.get('voucher_date') or '', x.get('voucher_no') or ''))
     return out
@@ -36659,7 +38495,7 @@ def list_gl_journal_entries(
     if src and src not in ('ALL', '*'):
         where.append("UPPER(TRIM(NVL(h.SOURCE, ''))) = :src")
         params['src'] = src
-    q = f"\n        SELECT h.VOUCHER_NO, h.VOUCHER_DATE, h.REFERENCE_NO, h.NARRATION, h.SOURCE, h.CREATED_BY, h.CREATED_AT,\n               SUM(d.DEBIT) AS TOTAL_DEBIT, SUM(d.CREDIT) AS TOTAL_CREDIT, COUNT(*) AS LINE_COUNT\n        FROM {GL_HDR_TABLE} h\n        JOIN {GL_DTL_TABLE} d ON d.VOUCHER_NO = h.VOUCHER_NO\n        WHERE {' AND '.join(where)}\n        GROUP BY h.VOUCHER_NO, h.VOUCHER_DATE, h.REFERENCE_NO, h.NARRATION, h.SOURCE, h.CREATED_BY, h.CREATED_AT\n        ORDER BY h.VOUCHER_DATE DESC, h.VOUCHER_NO DESC\n    "
+    q = f"\n        SELECT h.VOUCHER_NO, h.VOUCHER_DATE, h.REFERENCE_NO, h.NARRATION, h.SOURCE, h.CREATED_BY, h.CREATED_AT,\n               SUM(d.DEBIT) AS TOTAL_DEBIT, SUM(d.CREDIT) AS TOTAL_CREDIT, COUNT(*) AS LINE_COUNT,\n               MAX(d.LINE_ID) AS LINE_ID\n        FROM {GL_HDR_TABLE} h\n        JOIN {GL_DTL_TABLE} d ON d.VOUCHER_NO = h.VOUCHER_NO\n        WHERE {' AND '.join(where)}\n        GROUP BY h.VOUCHER_NO, h.VOUCHER_DATE, h.REFERENCE_NO, h.NARRATION, h.SOURCE, h.CREATED_BY, h.CREATED_AT\n        ORDER BY MAX(d.LINE_ID) DESC, h.CREATED_AT DESC, h.VOUCHER_NO DESC\n    "
     rows = _safe_rows(q, params)
     return (rows or [])[:max(1, int(limit or 200))]
 
@@ -39127,6 +40963,9 @@ def _chat_decode_emoji_text(text: str) -> str:
         return s
 
 def ensure_chat_tables() -> None:
+    global _CHAT_TABLES_ENSURED
+    if _CHAT_TABLES_ENSURED:
+        return
     with _get_connection_auth() as conn:
         with conn.cursor() as cur:
             cur.execute('SELECT COUNT(*) FROM user_tables WHERE table_name = :t', {'t': CHAT_CONVERSATIONS_TABLE})
@@ -39162,6 +41001,7 @@ def ensure_chat_tables() -> None:
             if int((cur.fetchone() or [0])[0] or 0) == 0:
                 cur.execute(f"\n                    CREATE TABLE {CHAT_TYPING_TABLE} (\n                        CONVERSATION_ID NUMBER NOT NULL,\n                        USERNAME VARCHAR2(100) NOT NULL,\n                        IS_TYPING CHAR(1) DEFAULT 'N',\n                        UPDATED_DATE DATE DEFAULT SYSDATE,\n                        PRIMARY KEY (CONVERSATION_ID, USERNAME)\n                    )\n                    ")
         conn.commit()
+    _CHAT_TABLES_ENSURED = True
 
 def _env_truthy(name: str) -> bool:
     return (os.getenv(name) or '').strip().lower() in ('1', 'true', 'yes', 'on')
@@ -39253,6 +41093,10 @@ def warm_sales_save_caches() -> None:
     """Pre-warm process caches used by sales/POS save (background at app startup)."""
     global _ITEMJOURNAL_SURROGATE_PK_ENSURED
     try:
+        warm_core_schema_cache(force=True)
+    except Exception as e:
+        print(f'[WARN warm_sales_save_caches] schema: {e}')
+    try:
         ensure_gl_tables()
     except Exception as e:
         print(f'[WARN warm_sales_save_caches] gl: {e}')
@@ -39260,6 +41104,16 @@ def warm_sales_save_caches() -> None:
         ensure_billhdr_sales_schema_once()
     except Exception as e:
         print(f'[WARN warm_sales_save_caches] billhdr: {e}')
+    try:
+        ensure_billno_varchar_columns()
+    except Exception as e:
+        print(f'[WARN warm_sales_save_caches] billno_varchar: {e}')
+    try:
+        from addons.document_numbering.document_numbering_db import seed_default_document_series
+        seed_default_document_series()
+        peek_next_bill_no(0, None, doc_type='SALES_INVOICE')
+    except Exception as e:
+        print(f'[WARN warm_sales_save_caches] doc_series: {e}')
     try:
         with _get_connection() as conn:
             ensure_itemjournal_surrogate_pk(conn)

@@ -36,6 +36,12 @@
   .imcfg-btn--ai:disabled { opacity: 0.45; cursor: not-allowed; }
   .imcfg-ai-log { margin-top: 10px; font-size: 0.8rem; color: #334155; white-space: pre-wrap; max-height: 200px; overflow: auto; padding: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
   .imcfg-ai-samples { margin-top: 8px; font-size: 0.78rem; color: #475569; }
+  .imcfg-ref-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; margin: 10px 0 0; }
+  .imcfg-ref-table th, .imcfg-ref-table td { padding: 7px 10px; border: 1px solid #e2e8f0; text-align: left; vertical-align: top; }
+  .imcfg-ref-table thead th { background: #f1f5f9; font-weight: 700; color: #334155; }
+  .imcfg-ref-table code { font-size: 0.92em; }
+  .imcfg-ref-note { margin: 0 0 10px; font-size: 0.82rem; color: #475569; line-height: 1.5; }
+  .imcfg-ref-example { margin: 10px 0 0; padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.78rem; line-height: 1.55; color: #334155; }
 </style>
 
 <div class="imcfg-page">
@@ -100,6 +106,70 @@
       <button type="submit" class="imcfg-btn imcfg-btn--run">Reload SQL</button>
     </div>
   </form>
+
+  <div class="imcfg-panel" id="imcfg-weight-barcode-panel">
+    <div class="imcfg-ph">POS · Variable-weight barcodes (sold by KG)</div>
+    <div class="imcfg-pbody">
+      <p class="imcfg-ref-note">
+        Used when an item has <strong>Weight item</strong> enabled (<code>ITEMMASTER.IS_WEIGHT_ITEM = Y</code>) on the
+        Item Master <strong>Inventory</strong> tab. POS reads a <strong>13-digit</strong> scale barcode (prefix <strong>20–29</strong>),
+        extracts scale PLU and weight, then prices as <strong>weight × price per KG</strong>.
+      </p>
+
+      <p class="imcfg-ref-note" style="margin-bottom:6px;"><strong>Barcode layout (13 digits)</strong></p>
+      <pre style="margin:0 0 10px;">PP + CCCCC + WWWWW + D
+│    │       │       └── EAN-13 check digit
+│    │       └── weight (5 digits; decimal places from prefix)
+│    └── scale PLU (5 digits)
+└── prefix 20–29</pre>
+
+      <p class="imcfg-ref-note" style="margin-bottom:6px;"><strong>Allowed prefixes</strong> — second digit = decimal places in the weight field</p>
+      <table class="imcfg-ref-table">
+        <thead>
+          <tr><th>Prefix</th><th>Decimal places</th><th>Weight field <code>01250</code> → KG</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>20</code></td><td>0</td><td>1250 kg</td></tr>
+          <tr><td><code>21</code></td><td>1</td><td>125.0 kg</td></tr>
+          <tr><td><code>22</code></td><td>2</td><td>12.50 kg</td></tr>
+          <tr><td><code>23</code></td><td>3</td><td><strong>1.250 kg</strong> (most common for retail)</td></tr>
+          <tr><td><code>24</code></td><td>4</td><td>0.1250 kg</td></tr>
+          <tr><td><code>25</code></td><td>5</td><td>0.01250 kg</td></tr>
+          <tr><td><code>26</code></td><td>6</td><td>0.001250 kg</td></tr>
+          <tr><td><code>27</code></td><td>7</td><td>0.0001250 kg</td></tr>
+          <tr><td><code>28</code></td><td>8</td><td>0.00001250 kg</td></tr>
+          <tr><td><code>29</code></td><td>9</td><td>0.000001250 kg</td></tr>
+        </tbody>
+      </table>
+
+      <p class="imcfg-ref-note" style="margin-top:14px;margin-bottom:6px;"><strong>PLU → item lookup order</strong></p>
+      <ol style="margin:0 0 10px;padding-left:1.25rem;font-size:0.82rem;color:#475569;line-height:1.55;">
+        <li><code>ITEMMASTER.MANUFACTURERID</code> = 5-digit PLU (leading zeros kept, e.g. <code>00001</code>)</li>
+        <li><code>ITEMMASTER.MANUFACTURERID</code> = prefix + PLU (e.g. <code>23</code> + <code>00001</code> → <code>2300001</code>)</li>
+        <li><code>ITEMALTERNATEUOMMAP.MANUFACTURERID</code> for the same keys</li>
+        <li><code>ITEMMASTER.ITEMCODE</code> (fallback when PLU matches item code)</li>
+      </ol>
+
+      <p class="imcfg-ref-note" style="margin-bottom:6px;"><strong>Item Master setup</strong></p>
+      <ul style="margin:0 0 10px;padding-left:1.25rem;font-size:0.82rem;color:#475569;line-height:1.55;">
+        <li>Enable <strong>Weight item (variable-weight barcode, sold by KG)</strong> on the Inventory tab</li>
+        <li>Set scale PLU on the item <strong>Barcode / MANUFACTURERID</strong> field</li>
+        <li>Set retail price <strong>per KG</strong> (base or KG alternate UOM)</li>
+        <li>Barcode must be exactly <strong>13 digits</strong> with a valid EAN-13 check digit</li>
+      </ul>
+
+      <div class="imcfg-ref-example">
+        <strong>Example</strong> — item <code>1014</code>, scale PLU <code>00001</code>, <code>MANUFACTURERID = 2300001</code>,
+        weight <strong>1.250 kg</strong>, prefix <code>23</code>:<br />
+        <code>23 00001 01250 7</code> → full scan <strong>2301014012507</strong><br />
+        Total at POS = <strong>1.250 × price per KG</strong>
+      </div>
+
+      <p class="imcfg-ref-note" style="margin-top:12px;margin-bottom:0;font-size:0.78rem;color:#64748b;">
+        Normal internal barcodes (e.g. prefix <code>12</code>) are unchanged. Prefixes outside <code>20–29</code> are not treated as variable-weight barcodes.
+      </p>
+    </div>
+  </div>
 
   {% if exec_error %}
   <div class="imcfg-msg imcfg-msg--err" role="alert">{{ exec_error }}</div>
@@ -190,6 +260,38 @@
       </div>
       <div class="imcfg-ai-log" id="imcfg-ai-log" aria-live="polite"></div>
       <div class="imcfg-ai-samples" id="imcfg-ai-samples"></div>
+    </div>
+  </div>
+
+  <div class="imcfg-panel" id="imcfg-ai-category-arabic-panel">
+    <div class="imcfg-ph">AI · Update Arabic (CATEGORY.NAMEARA)</div>
+    <div class="imcfg-pbody">
+      <p style="margin:0 0 10px;font-size:0.82rem;color:#475569;line-height:1.45;">
+        Fills <strong>NAMEARA</strong> on the ERP <strong>CATEGORY</strong> table from <strong>NAME</strong> using AI
+        (OpenAI when <code>OPENAI_API_KEY</code> is set, otherwise the built-in term map).
+        Updates main (M), department (D), and micro (C) categories where Arabic is <strong>null or blank</strong>,
+        for branch location <strong>{{ cfg_loc }}</strong>.
+      </p>
+      {% if not has_category_nameara %}
+      <p style="margin:0 0 10px;font-size:0.82rem;color:#b45309;">
+        The <code>NAMEARA</code> column will be added automatically on first run (ALTER TABLE CATEGORY).
+      </p>
+      {% endif %}
+      <p style="margin:0 0 10px;font-size:0.82rem;color:#64748b;">
+        Missing Arabic category names: <strong id="imcfg-cat-ai-missing-count">{{ cat_ai_arabic_missing_count }}</strong>
+        {% if not has_openai %}<span style="color:#b45309;"> · OPENAI_API_KEY not set — fallback translator only</span>{% endif %}
+      </p>
+      <div class="imcfg-actions">
+        <label style="font-size:0.78rem;color:#64748b;display:flex;align-items:center;gap:6px;">
+          Batch size
+          <input type="number" id="imcfg-cat-ai-batch-size" min="1" max="100" value="{{ ai_arabic_batch_default or 25 }}" style="width:64px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px;" />
+        </label>
+        <button type="button" class="imcfg-btn imcfg-btn--run" id="imcfg-cat-ai-refresh-count">Refresh count</button>
+        <button type="button" class="imcfg-btn imcfg-btn--ai" id="imcfg-cat-ai-run-bulk">Update category Arabic using AI</button>
+        <button type="button" class="imcfg-btn imcfg-btn--run" id="imcfg-cat-ai-stop-bulk" style="display:none;background:#64748b;">Stop</button>
+      </div>
+      <div class="imcfg-ai-log" id="imcfg-cat-ai-log" aria-live="polite"></div>
+      <div class="imcfg-ai-samples" id="imcfg-cat-ai-samples"></div>
     </div>
   </div>
 
@@ -545,6 +647,126 @@
     }
 
     if (!confirm('Update ITEMNAMEARA using AI for all items with empty Arabic at location ' + currentLoc() + '?\nThis may take a long time for large catalogs.')) {
+      return;
+    }
+    step();
+  }
+
+  if (btnRefresh) btnRefresh.addEventListener('click', function() {
+    if (logEl) logEl.textContent = 'Refreshing count…';
+    refreshCount().then(function() {
+      if (logEl) logEl.textContent = 'Count refreshed.';
+    });
+  });
+  if (btnRun) btnRun.addEventListener('click', runBulkLoop);
+  if (btnStop) btnStop.addEventListener('click', function() { stopRequested = true; });
+})();
+
+(function() {
+  function currentLoc() {
+    var el = document.getElementById('location_code');
+    var v = el ? parseInt(el.value, 10) : NaN;
+    return isNaN(v) ? {{ cfg_loc|tojson }} : v;
+  }
+  var COUNT_URL = {{ url_for('itemmaster.itemmaster_data_config_ai_category_arabic_missing_count')|tojson }};
+  var BULK_URL = {{ url_for('itemmaster.itemmaster_data_config_ai_category_arabic_bulk')|tojson }};
+  var countEl = document.getElementById('imcfg-cat-ai-missing-count');
+  var logEl = document.getElementById('imcfg-cat-ai-log');
+  var samplesEl = document.getElementById('imcfg-cat-ai-samples');
+  var batchEl = document.getElementById('imcfg-cat-ai-batch-size');
+  var btnRun = document.getElementById('imcfg-cat-ai-run-bulk');
+  var btnStop = document.getElementById('imcfg-cat-ai-stop-bulk');
+  var btnRefresh = document.getElementById('imcfg-cat-ai-refresh-count');
+  var running = false;
+  var stopRequested = false;
+
+  function logLine(msg) {
+    if (!logEl) return;
+    logEl.textContent = (logEl.textContent ? logEl.textContent + '\n' : '') + msg;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function refreshCount() {
+    var u = COUNT_URL + '?location_code=' + encodeURIComponent(String(currentLoc()));
+    return fetch(u, { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(j) {
+        if (j && j.ok && countEl) countEl.textContent = String(j.missing_count != null ? j.missing_count : '0');
+        return j;
+      });
+  }
+
+  function runBulkLoop() {
+    if (!btnRun || !BULK_URL) return;
+    var batch = parseInt(batchEl && batchEl.value, 10) || 25;
+    batch = Math.max(1, Math.min(batch, 100));
+    running = true;
+    stopRequested = false;
+    btnRun.disabled = true;
+    if (btnStop) btnStop.style.display = '';
+    if (logEl) logEl.textContent = '';
+    if (samplesEl) samplesEl.textContent = '';
+    var offset = 0;
+    var totalUpdated = 0;
+    var totalFailed = 0;
+
+    function step() {
+      if (stopRequested) {
+        logLine('Stopped by user.');
+        finish();
+        return;
+      }
+      fetch(BULK_URL, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location_code: currentLoc(), offset: offset, batch_size: batch })
+      })
+        .then(function(r) { return r.json().then(function(j) { return { okHttp: r.ok, j: j }; }); })
+        .then(function(res) {
+          var j = res.j || {};
+          if (!res.okHttp || !j.ok) {
+            logLine(j.error || 'Category Arabic bulk update failed.');
+            finish();
+            return;
+          }
+          totalUpdated += (j.updated || 0);
+          totalFailed += (j.failed || 0);
+          logLine(
+            'Batch @' + offset + ': processed ' + (j.processed || 0) +
+            ', updated ' + (j.updated || 0) + ', skipped ' + (j.skipped || 0) +
+            ', failed ' + (j.failed || 0) + ', remaining ' + (j.remaining != null ? j.remaining : '?')
+          );
+          if (j.errors && j.errors.length) {
+            j.errors.slice(0, 5).forEach(function(e) { logLine('  ' + e); });
+          }
+          if (samplesEl && j.samples && j.samples.length) {
+            samplesEl.textContent = j.samples.map(function(s) {
+              return (s.flag || '?') + '/' + s.code + ': ' + (s.name || '') + ' → ' + (s.nameara || '');
+            }).join('\n');
+          }
+          if (j.done) {
+            logLine('Done. Updated ' + totalUpdated + ', failed ' + totalFailed + '.');
+            finish();
+            return;
+          }
+          offset = j.next_offset != null ? j.next_offset : (offset + batch);
+          setTimeout(step, 120);
+        })
+        .catch(function() {
+          logLine('Network error during category Arabic update.');
+          finish();
+        });
+    }
+
+    function finish() {
+      running = false;
+      if (btnRun) btnRun.disabled = false;
+      if (btnStop) btnStop.style.display = 'none';
+      refreshCount();
+    }
+
+    if (!confirm('Update CATEGORY.NAMEARA using AI for all categories with empty Arabic at location ' + currentLoc() + '?')) {
       return;
     }
     step();

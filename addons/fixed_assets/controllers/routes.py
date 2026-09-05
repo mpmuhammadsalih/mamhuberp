@@ -7,6 +7,13 @@ from pathlib import Path
 from nexa_http import Blueprint, abort, flash, jsonify, redirect, render_template, request, send_file, session, url_for
 
 from global_lookup import resolve_lookup_label
+from addons.fixed_assets.fa_save_guard import (
+    FaSaveBlocked,
+    FaSaveReplay,
+    fa_form_save_guard,
+    fa_post_action_guard,
+    reissue_fa_save_nonce,
+)
 from addons.fixed_assets.fixed_assets_db import (
     RUN_POSTED,
     create_depreciation_run,
@@ -33,8 +40,11 @@ from addons.fixed_assets.fixed_assets_db import (
     post_fa_sale,
     preview_depreciation,
     save_fa_asset,
+    save_fa_asset_register_batch,
     save_fa_disposal,
+    save_fa_disposal_and_post,
     save_fa_sale,
+    save_fa_sale_and_post,
     upsert_fa_category,
 )
 from db import get_locations_list
@@ -252,105 +262,123 @@ def fa_asset_form():
         row['acquisition_date'] = datetime.now().strftime('%Y-%m-%d')
     elif request.method == 'POST':
         try:
-            asset_id = int(request.form.get('asset_id') or 0) or None
-        except ValueError:
-            asset_id = None
-        if asset_id:
-            ok, err, aid = save_fa_asset(
-                asset_id=asset_id,
-                name=request.form.get('name') or '',
-                category_id=int(request.form.get('category_id') or 0),
-                acquisition_date=request.form.get('acquisition_date') or '',
-                acquisition_cost=float(request.form.get('acquisition_cost') or 0),
-                salvage_value=float(request.form.get('salvage_value') or 0),
-                location_code=int(request.form.get('location_code') or 0) or None,
-                custodian=request.form.get('custodian') or '',
-                serial_no=request.form.get('serial_no') or '',
-                remarks=request.form.get('remarks') or '',
-                credit_account=request.form.get('credit_account') or '',
-                credit_party_type=request.form.get('credit_party_type') or '',
-                credit_party_code=request.form.get('credit_party_code') or '',
-                user=_user(),
-            )
-            if ok and aid:
-                if request.form.get('post_acq') == '1':
-                    pok, perr, vno = post_fa_acquisition(aid, user=_user())
-                    if pok:
-                        flash(f'Asset saved and acquisition posted (voucher {vno}).', 'success')
-                    else:
-                        flash(f'Asset saved but acquisition post failed: {perr}', 'error')
-                else:
-                    flash('Asset saved.', 'success')
-                return redirect(url_for('fixed_assets.fa_asset_list'))
-            flash(err or 'Save failed.', 'error')
-            row = dict(request.form)
-            row['asset_id'] = asset_id
-        else:
-            batch_lines = _parse_asset_register_lines_from_form()
-            if not batch_lines:
-                flash('Add at least one asset line.', 'error')
-            else:
-                acq_date = request.form.get('acquisition_date') or ''
-                credit_account = request.form.get('credit_account') or ''
-                credit_party_type = request.form.get('credit_party_type') or ''
-                credit_party_code = request.form.get('credit_party_code') or ''
-                remarks = request.form.get('remarks') or ''
+            with fa_form_save_guard():
                 try:
-                    default_loc = int(request.form.get('default_location_code') or 0) or None
-                except (TypeError, ValueError):
-                    default_loc = None
-                post_acq = request.form.get('post_acq') == '1'
-                saved_ids: list = []
-                errors: list = []
-                for idx, ln in enumerate(batch_lines, start=1):
-                    loc = ln.get('location_code') or default_loc
+                    asset_id = int(request.form.get('asset_id') or 0) or None
+                except ValueError:
+                    asset_id = None
+                if asset_id:
                     ok, err, aid = save_fa_asset(
-                        asset_id=None,
-                        name=ln.get('name') or '',
-                        category_id=int(ln.get('category_id') or 0),
-                        acquisition_date=acq_date,
-                        acquisition_cost=float(ln.get('acquisition_cost') or 0),
-                        salvage_value=float(ln.get('salvage_value') or 0),
-                        location_code=loc,
-                        custodian=ln.get('custodian') or '',
-                        serial_no=ln.get('serial_no') or '',
-                        remarks=remarks,
-                        credit_account=credit_account,
-                        credit_party_type=credit_party_type,
-                        credit_party_code=credit_party_code,
+                        asset_id=asset_id,
+                        name=request.form.get('name') or '',
+                        category_id=int(request.form.get('category_id') or 0),
+                        acquisition_date=request.form.get('acquisition_date') or '',
+                        acquisition_cost=float(request.form.get('acquisition_cost') or 0),
+                        salvage_value=float(request.form.get('salvage_value') or 0),
+                        location_code=int(request.form.get('location_code') or 0) or None,
+                        custodian=request.form.get('custodian') or '',
+                        serial_no=request.form.get('serial_no') or '',
+                        remarks=request.form.get('remarks') or '',
+                        credit_account=request.form.get('credit_account') or '',
+                        credit_party_type=request.form.get('credit_party_type') or '',
+                        credit_party_code=request.form.get('credit_party_code') or '',
                         user=_user(),
                     )
-                    if not ok or not aid:
-                        errors.append(f'Line {idx}: {err or "Save failed."}')
-                        continue
-                    saved_ids.append(aid)
-                    if post_acq:
-                        pok, perr, _vno = post_fa_acquisition(int(aid), user=_user())
-                        if not pok:
-                            errors.append(f'Line {idx} ({ln.get("name")}): saved but GL post failed — {perr}')
-                if saved_ids:
-                    msg = f'Registered {len(saved_ids)} asset(s).'
-                    if errors:
-                        msg += ' ' + '; '.join(errors[:5])
-                        if len(errors) > 5:
-                            msg += f' … and {len(errors) - 5} more.'
-                        flash(msg, 'error' if errors else 'success')
+                    if ok and aid:
+                        flash('Asset saved.', 'success')
+                        return redirect(url_for('fixed_assets.fa_asset_list'))
+                    flash(err or 'Save failed.', 'error')
+                    row = dict(request.form)
+                    row['asset_id'] = asset_id
+                else:
+                    batch_lines = _parse_asset_register_lines_from_form()
+                    if not batch_lines:
+                        flash('Add at least one asset line.', 'error')
                     else:
-                        flash(msg + (' Acquisition posted to GL.' if post_acq else ''), 'success')
-                    return redirect(url_for('fixed_assets.fa_asset_list'))
-                flash(errors[0] if errors else 'Save failed.', 'error')
-            row = {
-                'acquisition_date': request.form.get('acquisition_date') or '',
-                'default_location_code': request.form.get('default_location_code') or '',
-                'remarks': request.form.get('remarks') or '',
-                'credit_account': request.form.get('credit_account') or '',
-                'credit_party_type': request.form.get('credit_party_type') or '',
-                'credit_party_code': request.form.get('credit_party_code') or '',
-                'post_acq': request.form.get('post_acq') == '1',
-            }
-            batch_lines = batch_lines or _parse_asset_register_lines_from_form()
+                        acq_date = request.form.get('acquisition_date') or ''
+                        credit_account = request.form.get('credit_account') or ''
+                        credit_party_type = request.form.get('credit_party_type') or ''
+                        credit_party_code = request.form.get('credit_party_code') or ''
+                        remarks = request.form.get('remarks') or ''
+                        try:
+                            default_loc = int(request.form.get('default_location_code') or 0) or None
+                        except (TypeError, ValueError):
+                            default_loc = None
+                        save_action = (request.form.get('save_action') or 'draft').strip().lower()
+                        post_acq = save_action == 'post'
+                        ok, err, saved_ids = save_fa_asset_register_batch(
+                            lines=batch_lines,
+                            acquisition_date=acq_date,
+                            location_code=default_loc,
+                            remarks=remarks,
+                            credit_account=credit_account,
+                            credit_party_type=credit_party_type,
+                            credit_party_code=credit_party_code,
+                            post_acq=post_acq,
+                            user=_user(),
+                        )
+                        if ok and saved_ids:
+                            if post_acq:
+                                flash(f'Registered {len(saved_ids)} asset(s) and posted acquisition to GL.', 'success')
+                            else:
+                                flash(
+                                    f'Saved {len(saved_ids)} asset(s) as draft. Post from the asset register when ready.',
+                                    'success',
+                                )
+                            return redirect(url_for('fixed_assets.fa_asset_list'))
+                        flash(err or 'Save failed.', 'error')
+                    row = {
+                        'acquisition_date': request.form.get('acquisition_date') or '',
+                        'default_location_code': request.form.get('default_location_code') or '',
+                        'remarks': request.form.get('remarks') or '',
+                        'credit_account': request.form.get('credit_account') or '',
+                        'credit_party_type': request.form.get('credit_party_type') or '',
+                        'credit_party_code': request.form.get('credit_party_code') or '',
+                    }
+                    batch_lines = batch_lines or _parse_asset_register_lines_from_form()
+        except FaSaveBlocked as ex:
+            flash(str(ex), 'warning')
+            try:
+                asset_id = int(request.form.get('asset_id') or 0) or None
+            except ValueError:
+                asset_id = None
+            if asset_id:
+                row = dict(request.form)
+                row['asset_id'] = asset_id
+            else:
+                batch_lines = _parse_asset_register_lines_from_form()
+                row = {
+                    'acquisition_date': request.form.get('acquisition_date') or '',
+                    'default_location_code': request.form.get('default_location_code') or '',
+                    'remarks': request.form.get('remarks') or '',
+                    'credit_account': request.form.get('credit_account') or '',
+                    'credit_party_type': request.form.get('credit_party_type') or '',
+                    'credit_party_code': request.form.get('credit_party_code') or '',
+                }
+        except FaSaveReplay as ex:
+            flash(str(ex), 'error')
+            try:
+                asset_id = int(request.form.get('asset_id') or 0) or None
+            except ValueError:
+                asset_id = None
+            if asset_id:
+                row = dict(request.form)
+                row['asset_id'] = asset_id
+            else:
+                batch_lines = _parse_asset_register_lines_from_form()
+                row = {
+                    'acquisition_date': request.form.get('acquisition_date') or '',
+                    'default_location_code': request.form.get('default_location_code') or '',
+                    'remarks': request.form.get('remarks') or '',
+                    'credit_account': request.form.get('credit_account') or '',
+                    'credit_party_type': request.form.get('credit_party_type') or '',
+                    'credit_party_code': request.form.get('credit_party_code') or '',
+                }
     categories = list_fa_categories()
     locations = get_locations_list() or []
+    save_nonce_kw = {}
+    if request.method == 'POST':
+        save_nonce_kw['global_save_nonce'] = reissue_fa_save_nonce()
     if asset_id or row.get('asset_id'):
         posted = str(row.get('posted_acq') or 'N').upper() == 'Y'
         credit_lookup_label = format_credit_lookup_label(
@@ -367,6 +395,7 @@ def fa_asset_form():
             edit_mode=bool(row.get('asset_id')),
             posted=posted,
             fa_nav_active='assets',
+            **save_nonce_kw,
         )
     display_lines = _fa_register_lines_for_display(
         batch_lines, categories=categories, locations=locations,
@@ -390,6 +419,7 @@ def fa_asset_form():
         fa_total_cost=total_cost,
         fa_total_salvage=total_salvage,
         fa_nav_active='assets',
+        **save_nonce_kw,
     )
 
 
@@ -404,7 +434,14 @@ def fa_asset_post_acquisition():
         aid = int(request.form.get('asset_id') or 0)
     except ValueError:
         aid = 0
-    ok, err, vno = post_fa_acquisition(aid, user=_user())
+    try:
+        with fa_post_action_guard():
+            ok, err, vno = post_fa_acquisition(aid, user=_user())
+    except FaSaveBlocked as ex:
+        flash(str(ex), 'warning')
+        ok = False
+        err = str(ex)
+        vno = None
     if ok:
         flash(f'Acquisition posted — voucher {vno}.', 'success')
     else:
@@ -527,7 +564,6 @@ def _parse_asset_register_lines_from_form() -> list:
     salvages = request.form.getlist('line_salvage[]') or request.form.getlist('line_salvage')
     serials = request.form.getlist('line_serial[]') or request.form.getlist('line_serial')
     custodians = request.form.getlist('line_custodian[]') or request.form.getlist('line_custodian')
-    locs = request.form.getlist('line_location[]') or request.form.getlist('line_location')
     lines = []
     for i, raw_name in enumerate(names):
         name = str(raw_name or '').strip()
@@ -547,11 +583,6 @@ def _parse_asset_register_lines_from_form() -> list:
             salvage = float(salvages[i] if i < len(salvages) else 0)
         except (TypeError, ValueError):
             salvage = 0.0
-        loc_raw = locs[i] if i < len(locs) else ''
-        try:
-            loc_code = int(loc_raw or 0) or None
-        except (TypeError, ValueError):
-            loc_code = None
         lines.append({
             'name': name,
             'category_id': cid,
@@ -559,7 +590,6 @@ def _parse_asset_register_lines_from_form() -> list:
             'salvage_value': salvage,
             'serial_no': str(serials[i] if i < len(serials) else '').strip(),
             'custodian': str(custodians[i] if i < len(custodians) else '').strip(),
-            'location_code': loc_code,
         })
     return lines
 
@@ -582,15 +612,12 @@ def _fa_register_location_maps(locations: list) -> dict:
 
 def _fa_register_lines_for_display(lines: list, *, categories: list, locations: list) -> list:
     cat_map = _fa_register_category_maps(categories)
-    loc_map = _fa_register_location_maps(locations)
     out = []
     for ln in lines or []:
         cid = ln.get('category_id')
-        loc = ln.get('location_code')
         out.append({
             **ln,
             'category_label': cat_map.get(str(cid), str(cid or '')),
-            'location_label': loc_map.get(str(loc), '—') if loc else '—',
         })
     return out
 
@@ -642,6 +669,7 @@ def fa_disposal_form():
     disposal_id = None
     row: dict = {}
     selected_asset = None
+    save_nonce_kw: dict = {}
     if request.method == 'GET':
         if request.args.get('id'):
             try:
@@ -665,36 +693,60 @@ def fa_disposal_form():
             if selected_asset:
                 row['asset_id'] = selected_asset.get('asset_id')
     elif request.method == 'POST':
+        save_nonce_kw = {}
         try:
-            disposal_id = int(request.form.get('disposal_id') or 0) or None
-        except ValueError:
-            disposal_id = None
-        ok, err, did = save_fa_disposal(
-            disposal_id=disposal_id,
-            asset_id=int(request.form.get('asset_id') or 0),
-            disposal_date=request.form.get('disposal_date') or '',
-            disposal_type=request.form.get('disposal_type') or 'SALE',
-            proceeds_amount=float(request.form.get('proceeds_amount') or 0),
-            proceeds_account=request.form.get('proceeds_account') or '',
-            proceeds_party_type=request.form.get('proceeds_party_type') or '',
-            proceeds_party_code=request.form.get('proceeds_party_code') or '',
-            remarks=request.form.get('remarks') or '',
-            user=_user(),
-        )
-        if ok and did:
-            if request.form.get('post_disposal') == '1':
-                pok, perr, vno = post_fa_disposal(did, user=_user())
-                if pok:
-                    flash(f'Disposal saved and posted (voucher {vno}).', 'success')
+            with fa_form_save_guard():
+                try:
+                    disposal_id = int(request.form.get('disposal_id') or 0) or None
+                except ValueError:
+                    disposal_id = None
+                save_action = (request.form.get('save_action') or 'draft').strip().lower()
+                post_now = save_action == 'post'
+                common = dict(
+                    disposal_id=disposal_id,
+                    asset_id=int(request.form.get('asset_id') or 0),
+                    disposal_date=request.form.get('disposal_date') or '',
+                    disposal_type=request.form.get('disposal_type') or 'SALE',
+                    proceeds_amount=float(request.form.get('proceeds_amount') or 0),
+                    proceeds_account=request.form.get('proceeds_account') or '',
+                    proceeds_party_type=request.form.get('proceeds_party_type') or '',
+                    proceeds_party_code=request.form.get('proceeds_party_code') or '',
+                    remarks=request.form.get('remarks') or '',
+                    user=_user(),
+                )
+                if post_now:
+                    ok, err, did, vno = save_fa_disposal_and_post(**common)
+                    if ok and did:
+                        flash(f'Disposal saved and posted (voucher {vno}).', 'success')
+                        return redirect(url_for('fixed_assets.fa_disposal_form', id=did))
                 else:
-                    flash(f'Disposal saved but post failed: {perr}', 'error')
-            else:
-                flash('Disposal saved (draft).', 'success')
-            return redirect(url_for('fixed_assets.fa_disposal_form', id=did))
-        flash(err or 'Save failed.', 'error')
-        row = dict(request.form)
-        row['disposal_id'] = disposal_id
-        selected_asset = get_fa_asset(int(request.form.get('asset_id') or 0)) if request.form.get('asset_id') else None
+                    ok, err, did = save_fa_disposal(**common)
+                    if ok and did:
+                        flash('Disposal saved as draft. Post when ready from the form or disposal list.', 'success')
+                        return redirect(url_for('fixed_assets.fa_disposal_form', id=did))
+                flash(err or 'Save failed.', 'error')
+                row = dict(request.form)
+                row['disposal_id'] = disposal_id
+                selected_asset = get_fa_asset(int(request.form.get('asset_id') or 0)) if request.form.get('asset_id') else None
+        except FaSaveBlocked as ex:
+            flash(str(ex), 'warning')
+            try:
+                disposal_id = int(request.form.get('disposal_id') or 0) or None
+            except ValueError:
+                disposal_id = None
+            row = dict(request.form)
+            row['disposal_id'] = disposal_id
+            selected_asset = get_fa_asset(int(request.form.get('asset_id') or 0)) if request.form.get('asset_id') else None
+        except FaSaveReplay as ex:
+            flash(str(ex), 'error')
+            try:
+                disposal_id = int(request.form.get('disposal_id') or 0) or None
+            except ValueError:
+                disposal_id = None
+            row = dict(request.form)
+            row['disposal_id'] = disposal_id
+            selected_asset = get_fa_asset(int(request.form.get('asset_id') or 0)) if request.form.get('asset_id') else None
+        save_nonce_kw['global_save_nonce'] = reissue_fa_save_nonce()
     eligible_assets = list_fa_assets_eligible(for_disposal=True)
     if row.get('asset_id') and disposal_id:
         aid = int(row.get('asset_id') or 0)
@@ -710,6 +762,7 @@ def fa_disposal_form():
     )
     if selected_asset is None and row.get('asset_id'):
         selected_asset = get_fa_asset(int(row.get('asset_id') or 0))
+    tpl_kw = save_nonce_kw if request.method == 'POST' else {}
     return render_template(
         'fixed_assets/disposal_form.html',
         row=row,
@@ -723,6 +776,7 @@ def fa_disposal_form():
         list_endpoint='fixed_assets.fa_disposal_list',
         form_endpoint='fixed_assets.fa_disposal_form',
         post_endpoint='fixed_assets.fa_disposal_post',
+        **tpl_kw,
     )
 
 
@@ -737,7 +791,14 @@ def fa_disposal_post():
         did = int(request.form.get('disposal_id') or 0)
     except ValueError:
         did = 0
-    ok, err, vno = post_fa_disposal(did, user=_user())
+    try:
+        with fa_post_action_guard():
+            ok, err, vno = post_fa_disposal(did, user=_user())
+    except FaSaveBlocked as ex:
+        flash(str(ex), 'warning')
+        ok = False
+        err = str(ex)
+        vno = None
     if ok:
         flash(f'Disposal posted — voucher {vno}.', 'success')
     else:
@@ -773,6 +834,7 @@ def fa_sale_form():
     sale_id = None
     row: dict = {}
     lines: list = []
+    save_nonce_kw: dict = {}
     if request.method == 'GET':
         if request.args.get('id'):
             try:
@@ -791,61 +853,96 @@ def fa_sale_form():
         else:
             row['sale_date'] = datetime.now().strftime('%Y-%m-%d')
     elif request.method == 'POST':
+        save_nonce_kw = {}
         try:
-            sale_id = int(request.form.get('sale_id') or 0) or None
-        except ValueError:
-            sale_id = None
-        lines = _parse_sale_lines_from_form()
-        ok, err, sid = save_fa_sale(
-            sale_id=sale_id,
-            sale_date=request.form.get('sale_date') or '',
-            proceeds_account=request.form.get('proceeds_account') or '',
-            proceeds_party_type=request.form.get('proceeds_party_type') or '',
-            proceeds_party_code=request.form.get('proceeds_party_code') or '',
-            remarks=request.form.get('remarks') or '',
-            lines=lines,
-            user=_user(),
-        )
-        if ok and sid:
-            if request.form.get('post_sale') == '1':
-                pok, perr, vno = post_fa_sale(sid, user=_user())
-                if pok:
-                    flash(f'Sale saved and posted (voucher {vno}).', 'success')
-                    return redirect(url_for('fixed_assets.fa_sale_form', id=sid, pdf=1))
-                flash(f'Sale saved but post failed: {perr}', 'error')
-            else:
-                flash('Sale saved (draft).', 'success')
-            return redirect(url_for('fixed_assets.fa_sale_form', id=sid))
-        flash(err or 'Save failed.', 'error')
-        row = {
-            'sale_id': sale_id,
-            'sale_date': request.form.get('sale_date') or '',
-            'proceeds_account': request.form.get('proceeds_account') or '',
-            'proceeds_party_type': request.form.get('proceeds_party_type') or '',
-            'proceeds_party_code': request.form.get('proceeds_party_code') or '',
-            'remarks': request.form.get('remarks') or '',
-        }
-        # rebuild display lines from posted form + asset master
-        rebuilt = []
-        for ln in lines:
-            asset = get_fa_asset(int(ln.get('asset_id') or 0))
-            if not asset:
-                continue
-            cost = round(float(asset.get('acquisition_cost') or 0), 2)
-            accum = round(float(asset.get('accum_dep') or 0), 2)
-            nbv = round(cost - accum, 2)
-            pr = round(float(ln.get('proceeds_amount') or 0), 2)
-            rebuilt.append({
-                'asset_id': asset.get('asset_id'),
-                'asset_no': asset.get('asset_no'),
-                'asset_name': asset.get('name'),
-                'acquisition_cost': cost,
-                'accum_dep': accum,
-                'nbv': nbv,
-                'proceeds_amount': pr,
-                'gain_loss_amount': round(pr - nbv, 2),
-            })
-        lines = rebuilt
+            with fa_form_save_guard():
+                try:
+                    sale_id = int(request.form.get('sale_id') or 0) or None
+                except ValueError:
+                    sale_id = None
+                lines = _parse_sale_lines_from_form()
+                save_action = (request.form.get('save_action') or 'draft').strip().lower()
+                post_now = save_action == 'post'
+                common = dict(
+                    sale_id=sale_id,
+                    sale_date=request.form.get('sale_date') or '',
+                    proceeds_account=request.form.get('proceeds_account') or '',
+                    proceeds_party_type=request.form.get('proceeds_party_type') or '',
+                    proceeds_party_code=request.form.get('proceeds_party_code') or '',
+                    remarks=request.form.get('remarks') or '',
+                    lines=lines,
+                    user=_user(),
+                )
+                if post_now:
+                    ok, err, sid, vno = save_fa_sale_and_post(**common)
+                    if ok and sid:
+                        flash(f'Sale saved and posted (voucher {vno}).', 'success')
+                        return redirect(url_for('fixed_assets.fa_sale_form', id=sid, pdf=1))
+                else:
+                    ok, err, sid = save_fa_sale(**common)
+                    if ok and sid:
+                        flash('Sale saved as draft. Post when ready from the form or sale list.', 'success')
+                        return redirect(url_for('fixed_assets.fa_sale_form', id=sid))
+                flash(err or 'Save failed.', 'error')
+                row = {
+                    'sale_id': sale_id,
+                    'sale_date': request.form.get('sale_date') or '',
+                    'proceeds_account': request.form.get('proceeds_account') or '',
+                    'proceeds_party_type': request.form.get('proceeds_party_type') or '',
+                    'proceeds_party_code': request.form.get('proceeds_party_code') or '',
+                    'remarks': request.form.get('remarks') or '',
+                }
+                rebuilt = []
+                for ln in lines:
+                    asset = get_fa_asset(int(ln.get('asset_id') or 0))
+                    if not asset:
+                        continue
+                    cost = round(float(asset.get('acquisition_cost') or 0), 2)
+                    accum = round(float(asset.get('accum_dep') or 0), 2)
+                    nbv = round(cost - accum, 2)
+                    pr = round(float(ln.get('proceeds_amount') or 0), 2)
+                    rebuilt.append({
+                        'asset_id': asset.get('asset_id'),
+                        'asset_no': asset.get('asset_no'),
+                        'asset_name': asset.get('name'),
+                        'acquisition_cost': cost,
+                        'accum_dep': accum,
+                        'nbv': nbv,
+                        'proceeds_amount': pr,
+                        'gain_loss_amount': round(pr - nbv, 2),
+                    })
+                lines = rebuilt
+        except FaSaveBlocked as ex:
+            flash(str(ex), 'warning')
+            try:
+                sale_id = int(request.form.get('sale_id') or 0) or None
+            except ValueError:
+                sale_id = None
+            lines = _parse_sale_lines_from_form()
+            row = {
+                'sale_id': sale_id,
+                'sale_date': request.form.get('sale_date') or '',
+                'proceeds_account': request.form.get('proceeds_account') or '',
+                'proceeds_party_type': request.form.get('proceeds_party_type') or '',
+                'proceeds_party_code': request.form.get('proceeds_party_code') or '',
+                'remarks': request.form.get('remarks') or '',
+            }
+        except FaSaveReplay as ex:
+            flash(str(ex), 'error')
+            try:
+                sale_id = int(request.form.get('sale_id') or 0) or None
+            except ValueError:
+                sale_id = None
+            lines = _parse_sale_lines_from_form()
+            row = {
+                'sale_id': sale_id,
+                'sale_date': request.form.get('sale_date') or '',
+                'proceeds_account': request.form.get('proceeds_account') or '',
+                'proceeds_party_type': request.form.get('proceeds_party_type') or '',
+                'proceeds_party_code': request.form.get('proceeds_party_code') or '',
+                'remarks': request.form.get('remarks') or '',
+            }
+        save_nonce_kw['global_save_nonce'] = reissue_fa_save_nonce()
     if sale_id and not lines and row.get('lines'):
         lines = row.get('lines') or []
     # Include assets already on this draft so they remain selectable when editing
@@ -882,6 +979,7 @@ def fa_sale_form():
         fa_proceeds=total_proceeds,
         fa_gain_loss=total_gain,
         fa_has_asset=bool(lines),
+        **(save_nonce_kw if request.method == 'POST' else {}),
     )
 
 
@@ -896,7 +994,14 @@ def fa_sale_post():
         sid = int(request.form.get('sale_id') or 0)
     except ValueError:
         sid = 0
-    ok, err, vno = post_fa_sale(sid, user=_user())
+    try:
+        with fa_post_action_guard():
+            ok, err, vno = post_fa_sale(sid, user=_user())
+    except FaSaveBlocked as ex:
+        flash(str(ex), 'warning')
+        ok = False
+        err = str(ex)
+        vno = None
     if ok:
         flash(f'Sale posted — voucher {vno}.', 'success')
         if sid:

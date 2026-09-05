@@ -12,8 +12,6 @@ from mobile_backend.database.oracle_pool import get_connection
 from mobile_backend.request_context import get_jwt
 from mobile_backend.services.dashboard_service import (
     _billhdr_column_names,
-    _billhdr_history_column_names,
-    _billhdr_history_from_clause,
     _to_float,
 )
 from mobile_backend.services.inventory_service import _pick_existing
@@ -84,12 +82,7 @@ def _table_columns(cur: Any, table: str) -> frozenset[str]:
 
 
 def _resolve_bill_source(cur: Any) -> tuple[str, frozenset[str]]:
-    """Prefer BILLHDRHISTORY when selectable (ERP dashboard parity), else BILLHDR."""
-    hist_from = _billhdr_history_from_clause(cur)
-    if hist_from:
-        hist_cols = _billhdr_history_column_names(cur)
-        if hist_cols:
-            return hist_from, hist_cols
+    """Live BILLHDR only (mobile sales source of truth)."""
     bh_cols = _billhdr_column_names(cur)
     return "billhdr b", bh_cols
 
@@ -451,12 +444,68 @@ def _pct_change(current: float, previous: float) -> float | None:
     return round(((current - previous) / abs(previous)) * 100.0, 1)
 
 
+def _aggregate_from_billhdr_list(
+    *,
+    date_from: date,
+    date_to: date,
+) -> dict[str, float | int]:
+    """Sum live BILLHDR invoices for a period (same source as Sales Invoices list)."""
+    from mobile_backend.services import sales_invoice_service as sis
+
+    rows = (
+        sis.list_invoices(
+            date_from=date_from.isoformat(),
+            date_to=date_to.isoformat(),
+            limit=100,
+        )
+        or []
+    )
+    total = round(sum(_to_float(r.get("net_amount")) for r in rows), 2)
+    invoices = len(rows)
+    avg = round(total / invoices, 2) if invoices else 0.0
+    return {
+        "total_sales": total,
+        "invoice_count": invoices,
+        "return_amount": 0.0,
+        "avg_ticket": avg,
+    }
+
+
+def _daily_trend_from_billhdr_list(
+    *,
+    date_from: date,
+    date_to: date,
+) -> list[dict[str, Any]]:
+    from mobile_backend.services import sales_invoice_service as sis
+
+    rows = (
+        sis.list_invoices(
+            date_from=date_from.isoformat(),
+            date_to=date_to.isoformat(),
+            limit=100,
+        )
+        or []
+    )
+    by_day: dict[str, dict[str, float | int]] = {}
+    for r in rows:
+        ds = str(r.get("billdate") or "")[:10]
+        if not ds:
+            continue
+        bucket = by_day.setdefault(ds, {"amount": 0.0, "invoices": 0})
+        bucket["amount"] = round(_to_float(bucket["amount"]) + _to_float(r.get("net_amount")), 2)
+        bucket["invoices"] = int(bucket["invoices"]) + 1
+    return [
+        {"date": d, "amount": by_day[d]["amount"], "invoices": by_day[d]["invoices"]}
+        for d in sorted(by_day.keys())
+    ]
+
+
 def get_sales_reports(
     days: int = 30,
     date_from: str = "",
     date_to: str = "",
 ) -> dict[str, Any]:
-    """Aggregate sales analytics for mobile charts."""
+    """Aggregate sales analytics for mobile charts from live BILLHDR."""
     start, end, prev_start, prev_end, period_days = _resolve_report_period(days, date_from, date_to)
 
     claims = get_jwt()
@@ -466,13 +515,31 @@ def get_sales_reports(
     with conn.cursor() as cur:
         schema = _resolve_schema(cur)
         if not schema:
+            # Still try BILLHDR list path (column metadata can be empty on some tenants).
+            current = _aggregate_from_billhdr_list(date_from=start, date_to=end)
+            previous = _aggregate_from_billhdr_list(date_from=prev_start, date_to=prev_end)
+            today_start = date.today()
+            today = _aggregate_from_billhdr_list(date_from=today_start, date_to=today_start)
+            summary = {
+                **current,
+                "today_sales": today["total_sales"],
+                "today_invoices": today["invoice_count"],
+                "prev_period_sales": previous["total_sales"],
+                "prev_invoice_count": previous["invoice_count"],
+                "sales_change_pct": _pct_change(current["total_sales"], previous["total_sales"]),
+                "invoice_change_pct": _pct_change(
+                    float(current["invoice_count"]),
+                    float(previous["invoice_count"]),
+                ),
+            }
             return {
                 "period_days": period_days,
                 "date_from": start.isoformat(),
                 "date_to": end.isoformat(),
-                "error": "Sales tables not available for this tenant.",
-                "summary": {},
-                "daily_trend": [],
+                "prev_date_from": prev_start.isoformat(),
+                "prev_date_to": prev_end.isoformat(),
+                "summary": summary,
+                "daily_trend": _daily_trend_from_billhdr_list(date_from=start, date_to=end),
                 "week_comparison": [],
                 "top_customers": [],
                 "top_items": [],
@@ -482,6 +549,24 @@ def get_sales_reports(
         previous = _period_aggregate(cur, schema, prev_start, prev_end)
         today_start = date.today()
         today = _period_aggregate(cur, schema, today_start, today_start)
+
+        # If SQL aggregate misses mobile SI rows, use the BILLHDR invoice list.
+        if _to_float(current.get("total_sales")) <= 0:
+            listed = _aggregate_from_billhdr_list(date_from=start, date_to=end)
+            if _to_float(listed.get("total_sales")) > 0:
+                current = listed
+        if _to_float(today.get("total_sales")) <= 0:
+            listed_today = _aggregate_from_billhdr_list(
+                date_from=today_start, date_to=today_start
+            )
+            if _to_float(listed_today.get("total_sales")) > 0:
+                today = listed_today
+        if _to_float(previous.get("total_sales")) <= 0:
+            previous = _aggregate_from_billhdr_list(date_from=prev_start, date_to=prev_end)
+
+        daily = _daily_trend(cur, schema, start, end)
+        if not daily and _to_float(current.get("total_sales")) > 0:
+            daily = _daily_trend_from_billhdr_list(date_from=start, date_to=end)
 
         summary = {
             **current,
@@ -503,7 +588,7 @@ def get_sales_reports(
             "prev_date_from": prev_start.isoformat(),
             "prev_date_to": prev_end.isoformat(),
             "summary": summary,
-            "daily_trend": _daily_trend(cur, schema, start, end),
+            "daily_trend": daily,
             "week_comparison": _week_comparison(cur, schema),
             "top_customers": _top_customers(cur, schema, start, end, 5),
             "top_items": _top_items(cur, schema, start, end, 5),

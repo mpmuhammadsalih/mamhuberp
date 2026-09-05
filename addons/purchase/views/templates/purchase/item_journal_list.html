@@ -54,6 +54,7 @@
       <p class="page-po__muted">Inventory movement journal entries.</p>
     </div>
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <a href="{{ url_for('purchase.item_journal_missing_list') }}" class="page-po__btn-secondary">Item Journal Missing</a>
       <a href="{{ url_for('purchase.item_journal_summary_list') }}" class="page-po__btn-secondary">Item Journal Summary</a>
     </div>
   </div>

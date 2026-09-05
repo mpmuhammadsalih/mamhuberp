@@ -8,12 +8,12 @@
     const entrySalvage = document.getElementById('farEntrySalvage');
     const entrySerial = document.getElementById('farEntrySerial');
     const entryCustodian = document.getElementById('farEntryCustodian');
-    const entryLocation = document.getElementById('farEntryLocation');
     const defaultLocation = document.getElementById('default_location_code');
     const btnAdd = document.getElementById('farBtnAddLine');
+    const btnSaveDraft = document.getElementById('farBtnSaveDraft');
+    const btnSavePost = document.getElementById('farBtnSavePost');
 
     const categories = window.__FA_REGISTER_CATEGORIES__ || {};
-    const locations = window.__FA_REGISTER_LOCATIONS__ || {};
 
     const lookup = document.querySelector('#faCreditLookupDisplay')
         && document.querySelector('#faCreditLookupDisplay').closest('.global-lookup, .odoo-lookup');
@@ -22,11 +22,10 @@
     const acqDate = document.getElementById('acquisition_date');
     const remarks = document.getElementById('remarks');
     const creditDisplay = document.getElementById('faCreditLookupDisplay');
-    const postAcq = form?.querySelector('input[name="post_acq"]');
 
     const HEADER_INPUTS = [acqDate, defaultLocation, remarks, creditDisplay];
     const ENTRY_INPUTS = [
-        entryName, entryCategory, entryCost, entrySalvage, entrySerial, entryCustodian, entryLocation,
+        entryName, entryCategory, entryCost, entrySalvage, entrySerial, entryCustodian,
     ];
 
     function lookupDropdownOpen() {
@@ -42,7 +41,8 @@
         return HEADER_INPUTS.includes(el)
             || ENTRY_INPUTS.includes(el)
             || el === btnAdd
-            || el === postAcq;
+            || el === btnSaveDraft
+            || el === btnSavePost;
     }
 
     function buildFocusChain() {
@@ -55,7 +55,6 @@
         HEADER_INPUTS.forEach(push);
         ENTRY_INPUTS.forEach(push);
         push(btnAdd);
-        push(postAcq);
         return chain;
     }
 
@@ -120,11 +119,6 @@
         return categories[String(id)] || String(id || '');
     }
 
-    function locLabel(code) {
-        if (!code) return '—';
-        return locations[String(code)] || String(code);
-    }
-
     function syncTotals() {
         const rows = lineRows();
         let cost = 0;
@@ -153,7 +147,7 @@
 
     function ensureEmpty() {
         if (lineRows().length) return;
-        body.innerHTML = '<tr class="far-empty-row"><td colspan="9" style="text-align:center;color:#64748b;padding:16px;">No asset lines yet. Fill the entry row above and click + Add line.</td></tr>';
+        body.innerHTML = '<tr class="far-empty-row"><td colspan="8" style="text-align:center;color:#64748b;padding:16px;">No asset lines yet. Fill the entry row above and click + Add line.</td></tr>';
     }
 
     function clearEntry() {
@@ -163,7 +157,6 @@
         if (entrySalvage) entrySalvage.value = '0';
         if (entrySerial) entrySerial.value = '';
         if (entryCustodian) entryCustodian.value = '';
-        if (entryLocation) entryLocation.value = '';
     }
 
     function addLine() {
@@ -173,8 +166,6 @@
         const salvage = Number(entrySalvage?.value || 0);
         const serial = String(entrySerial?.value || '').trim();
         const custodian = String(entryCustodian?.value || '').trim();
-        let locCode = String(entryLocation?.value || '').trim();
-        if (!locCode && defaultLocation) locCode = String(defaultLocation.value || '').trim();
 
         if (!name) {
             alert('Description is required.');
@@ -200,7 +191,6 @@
         clearEmpty();
         const tr = document.createElement('tr');
         tr.dataset.categoryId = catId;
-        tr.dataset.locationCode = locCode;
         tr.dataset.name = name;
         tr.dataset.cost = String(cost);
         tr.dataset.salvage = String(salvage);
@@ -214,7 +204,6 @@
             <td class="far-num far-salvage">${money(salvage)}</td>
             <td class="far-serial">${esc(serial)}</td>
             <td class="far-custodian">${esc(custodian)}</td>
-            <td class="far-loc-label">${esc(locLabel(locCode))}</td>
             <td style="text-align:center;"><button type="button" class="im-link far-remove-line" title="Remove">×</button></td>
         `;
         body.appendChild(tr);
@@ -234,7 +223,6 @@
                 ['line_salvage[]', tr.dataset.salvage || '0'],
                 ['line_serial[]', tr.dataset.serial || ''],
                 ['line_custodian[]', tr.dataset.custodian || ''],
-                ['line_location[]', tr.dataset.locationCode || ''],
             ];
             fields.forEach(([n, v]) => {
                 const inp = document.createElement('input');
@@ -263,12 +251,38 @@
     }
 
     if (form) {
+        let submitting = false;
+        const lockSubmit = () => {
+            if (submitting) return true;
+            submitting = true;
+            document.querySelectorAll('[form="faRegisterForm"], #faRegisterForm button[type="submit"]').forEach((btn) => {
+                btn.disabled = true;
+            });
+            return false;
+        };
         form.addEventListener('submit', (e) => {
+            if (submitting) {
+                e.preventDefault();
+                return;
+            }
             buildHiddenFields();
             if (!lineRows().length) {
                 e.preventDefault();
                 alert('Add at least one asset line.');
+                return;
             }
+            const submitter = e.submitter;
+            if (submitter && submitter.name === 'save_action' && submitter.value === 'post') {
+                const n = lineRows().length;
+                const msg = n === 1
+                    ? 'Save and post acquisition to GL for 1 asset?'
+                    : `Save and post acquisition to GL for ${n} assets? All lines are saved in one transaction.`;
+                if (!window.confirm(msg)) {
+                    e.preventDefault();
+                    return;
+                }
+            }
+            lockSubmit();
         });
     }
 

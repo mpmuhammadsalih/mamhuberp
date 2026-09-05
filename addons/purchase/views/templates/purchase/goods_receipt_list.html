@@ -54,6 +54,8 @@
   #grnDeleteModal { position: fixed; inset: 0; z-index: 9999; align-items: center; justify-content: center; padding: 16px; }
   #grnDeleteModal.hidden { display: none !important; }
   #grnDeleteModal:not(.hidden) { display: flex; }
+  .grn-list-page #grnTable tbody tr.grn-row-clickable { cursor: pointer; }
+  .grn-list-page #grnTable.grn-list-is-loading tbody tr.grn-row-clickable { opacity: 0.55; pointer-events: none; }
 </style>
   <div class="page-po__topbar">
     <div>
@@ -169,5 +171,5 @@ function openSummaryPdf() {
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/grn_list.js') }}?v=14"></script>
+<script src="{{ url_for('static', filename='js/grn_list.js') }}?v=15"></script>
 {% endblock %}

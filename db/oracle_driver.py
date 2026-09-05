@@ -216,7 +216,7 @@ def _pool_sizes() -> tuple[int, int, int]:
         raw = (os.getenv(name) or '').strip()
         return int(raw) if raw.isdigit() else default
 
-    return (_int('ORACLE_POOL_MIN', 2), _int('ORACLE_POOL_MAX', 10), _int('ORACLE_POOL_INCREMENT', 1))
+    return (_int('ORACLE_POOL_MIN', 2), _int('ORACLE_POOL_MAX', 20), _int('ORACLE_POOL_INCREMENT', 2))
 
 
 def _pool_key(user: str, password: str, dsn: str) -> str:

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=5" />
+{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page ecommerce-page" style="max-width:640px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Storefront logo</h1>
+      <p class="page-po__muted">Shown in the site header and footer · PNG or SVG with transparent background works best</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('ecommerce.media') }}" class="page-po__btn-secondary">← Back to media</a>
+    </div>
+  </div>
+
+  {% if logo_item %}
+  <div class="ecommerce-form-panel mb-5" style="display:flex;align-items:center;gap:16px;">
+    <span class="page-po__muted">Current logo</span>
+    {% set logo_fname = logo_item.image_url.split('/media/files/')[-1] if logo_item.image_url and '/media/files/' in logo_item.image_url else None %}
+    {% if logo_fname %}
+      <img src="{{ url_for('ecommerce.media_file', filename=logo_fname) }}" alt="Current logo" style="height:72px;max-width:200px;object-fit:contain;border-radius:8px;background:#fff;border:1px solid #e2e8f0;padding:8px;" />
+    {% elif logo_item.image_url and (logo_item.image_url.startswith('http://') or logo_item.image_url.startswith('https://')) %}
+      <img src="{{ logo_item.image_url }}" alt="Current logo" style="height:72px;max-width:200px;object-fit:contain;border-radius:8px;background:#fff;border:1px solid #e2e8f0;padding:8px;" />
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="ecommerce-form-panel">
+    <form method="post" enctype="multipart/form-data" class="ecommerce-form-grid">
+      {% if form.media_id %}
+      <input type="hidden" name="media_id" value="{{ form.media_id }}" />
+      {% endif %}
+      <input type="hidden" name="placement" value="storefront_logo" />
+
+      <div class="form-group span-full">
+        <label for="image_file">Logo image {% if not logo_item %}<span style="color:#dc2626;">*</span>{% endif %}</label>
+        <input id="image_file" name="image_file" type="file" accept="image/png,image/svg+xml,image/jpeg,image/webp,image/avif,.png,.svg,.jpg,.jpeg,.webp,.avif" class="input" {% if not logo_item %}required{% endif %} />
+        <p class="page-po__muted" style="margin-top:6px;">PNG, SVG, JPG, or WebP · max 5 MB. Leave empty when updating alt text only.</p>
+      </div>
+
+      <div class="form-group span-full">
+        <label for="alt_text">Alt text</label>
+        <input id="alt_text" name="alt_text" class="input" value="{{ form.alt_text or 'MamaHub' }}" />
+      </div>
+
+      <div class="form-group span-full ecommerce-form-actions">
+        <button type="submit" class="page-po__btn-primary">Save logo</button>
+        <a href="{{ url_for('ecommerce.media') }}" class="page-po__btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

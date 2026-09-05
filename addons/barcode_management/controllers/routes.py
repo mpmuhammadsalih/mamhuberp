@@ -11,9 +11,16 @@ from db import (
     get_warehouse_location_sites,
     get_warehouse_storage_flat,
     get_warehouse_storage_tree,
+    parse_receiptno_from_request,
+    receiptno_is_valid,
     search_barcode_management_item_picker,
     search_barcode_management_products,
     update_warehouse_storage_barcode,
+)
+from addons.barcode_management.barcode_print_list_db import (
+    get_print_list_label_rows,
+    list_print_lists,
+    mark_print_list_status,
 )
 
 _ADDON_ROOT = Path(__file__).resolve().parents[1]
@@ -111,13 +118,44 @@ def barcode_items_api():
 @bp.route('/api/grn-lines', methods=['GET'])
 def barcode_grn_lines_api():
     """Load GRN receipt lines as product label rows for the print queue."""
-    try:
-        receipt_no = int(request.args.get('receiptno') or request.args.get('grn') or 0)
-    except (TypeError, ValueError):
-        receipt_no = 0
-    if receipt_no <= 0:
+    receipt_no = parse_receiptno_from_request(request.args.get('receiptno') or request.args.get('grn'))
+    if not receiptno_is_valid(receipt_no):
         return jsonify({'success': False, 'error': 'receiptno is required.'}, 400)
     result = get_goods_receipt_barcode_label_rows(_session_location_code(), receipt_no)
+    return jsonify(result)
+
+
+@bp.route('/api/print-lists', methods=['GET'])
+def barcode_print_lists_api():
+    """Recent barcode print-list documents (built on mobile / saved lists)."""
+    try:
+        limit = int(request.args.get('limit') or 40)
+    except (TypeError, ValueError):
+        limit = 40
+    list_type = (request.args.get('list_type') or request.args.get('type') or '').strip() or None
+    rows = list_print_lists(
+        _session_location_code(),
+        list_type=list_type,
+        limit=limit,
+    )
+    return jsonify({'success': True, 'rows': rows})
+
+
+@bp.route('/api/print-list', methods=['GET'])
+def barcode_print_list_api():
+    """Open a saved print-list document into the barcode print queue (by PRINT_NO)."""
+    try:
+        print_no = int(request.args.get('printno') or request.args.get('print_no') or 0)
+    except (TypeError, ValueError):
+        print_no = 0
+    if print_no <= 0:
+        return jsonify({'success': False, 'error': 'printno is required.'}, 400)
+    loc = _session_location_code()
+    result = get_print_list_label_rows(loc, print_no)
+    if result.get('success') and (request.args.get('mark') or '').strip().lower() in ('1', 'true', 'yes'):
+        mark_print_list_status(loc, print_no, 'PRINTED', updated_by=str(session.get('user') or 'erp'))
+        if isinstance(result.get('header'), dict):
+            result['header']['status'] = 'PRINTED'
     return jsonify(result)
 
 @bp.route('/api/item-uoms', methods=['GET'])

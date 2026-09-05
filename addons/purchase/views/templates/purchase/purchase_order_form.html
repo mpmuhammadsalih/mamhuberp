@@ -338,7 +338,7 @@
   <section class="itemmaster-container po-form-body">
   {% if transaction_date_blocked|default(false) and not query_mode %}
   <div class="po-txn-date-block">
-    {{ transaction_date_error or 'No open transaction date. Set it in Transaction Date Setup before posting.' }}
+    {{ transaction_date_error or 'Setup date is missing. No open From–To date range in Transaction Date Setup. Open a date range in General Setup → Transaction Date Setup before posting.' }}
     {% if transaction_date_setup_url %}
     <a href="{{ transaction_date_setup_url }}">Open Transaction Date Setup</a>
     {% endif %}
@@ -573,7 +573,7 @@
   <div class="modal__overlay" data-close="itemModal"></div>
   <div class="modal__content">
     <div class="modal__header">
-      <h4>Select Item (alternate UOM)</h4>
+      <h4>Select Item (by UOM)</h4>
       <button type="button" class="modal__close" data-close="itemModal">×</button>
     </div>
     <div class="modal__body">
@@ -587,7 +587,7 @@
   <div class="modal__overlay" data-close="uomModal"></div>
   <div class="modal__content">
     <div class="modal__header">
-      <h4>Select UOM (Item variants)</h4>
+      <h4>Select UOM (Base + Alternate)</h4>
       <button type="button" class="modal__close" data-close="uomModal">×</button>
     </div>
     <div class="modal__body">
@@ -932,7 +932,7 @@
     const btnSaveEl = document.getElementById('btnSave');
     if (btnSaveEl) {
       btnSaveEl.disabled = true;
-      btnSaveEl.title = txnDateError || 'No open transaction date';
+      btnSaveEl.title = txnDateError || 'Setup date is missing';
     }
   }
   if (lpoHeader && lpoHeader.suppliercode) {
@@ -2679,7 +2679,7 @@
   btnSave.addEventListener('click', function() {
     if (isSaving) return;
     if (txnDateBlocked && !queryMode) {
-      alert(txnDateError || 'No open transaction date. Set it in Transaction Date Setup before posting.');
+      alert(txnDateError || 'Setup date is missing. No open From–To date range in Transaction Date Setup. Open a date range in General Setup → Transaction Date Setup before posting.');
       return;
     }
     const buildPayload = function(forcedLpono) {

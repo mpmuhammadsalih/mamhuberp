@@ -813,7 +813,7 @@ def is_date_in_open_transaction_range(
     """
     rng = get_open_transaction_date_range(location_code, transaction_code)
     if not rng:
-        return (False, 'No open transaction date range.', None)
+        return (False, 'Setup date is missing. No open From–To date range in Transaction Date Setup.', None)
     d = _parse_ymd(doc_date)
     if d is None:
         return (True, '', rng)  # caller may default to preferred

@@ -409,8 +409,12 @@
       </div>
       <div class="bc-toolbar-grn" style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:-4px 0 12px; padding:10px 0; border-top:1px solid #e2e8f0; border-bottom:1px solid #e2e8f0;">
         <label for="bcGrnNo" class="muted" style="font-weight:600;">Load from GRN</label>
-        <input type="number" id="bcGrnNo" class="input" min="1" step="1" placeholder="Receipt no." style="width:130px;" autocomplete="off" title="Goods receipt number — Enter to load" />
+        <input type="text" id="bcGrnNo" class="input" placeholder="GRN-000001" style="width:160px;" autocomplete="off" title="Goods receipt number — Enter to load" />
         <button type="button" class="bc-btn-print bc-btn-print--primary" id="bcGrnLoad" title="Load all GRN lines into the print list">Load items</button>
+        <span class="bc-muted" style="margin:0 4px;">|</span>
+        <label for="bcPrintListNo" class="muted" style="font-weight:600;">Open print list</label>
+        <input type="number" id="bcPrintListNo" class="input" min="1" step="1" placeholder="List no." style="width:110px;" autocomplete="off" title="Barcode print list document number from mobile" />
+        <button type="button" class="bc-btn-print bc-btn-print--primary" id="bcPrintListLoad" title="Load a saved barcode print list into this queue">Open</button>
         <span id="bcGrnStatus" class="bc-muted" style="font-size:12px;" aria-live="polite"></span>
       </div>
       <div id="bcAddMatches" class="bc-add-matches hidden" aria-live="polite">
@@ -457,6 +461,9 @@
           const url = {{ url_for('barcode_management.barcode_products_api')|tojson }};
           const apiItems = {{ url_for('barcode_management.barcode_items_api')|tojson }};
           const apiGrnLines = {{ url_for('barcode_management.barcode_grn_lines_api')|tojson }};
+          const apiPrintList = {{ url_for('barcode_management.barcode_print_list_api')|tojson }};
+          const bcPrintListNo = document.getElementById('bcPrintListNo');
+          const bcPrintListLoad = document.getElementById('bcPrintListLoad');
           const q = document.getElementById('bcProdSearch');
           const bcGrnNo = document.getElementById('bcGrnNo');
           const bcGrnLoad = document.getElementById('bcGrnLoad');
@@ -774,8 +781,8 @@
             });
           };
           function bcLoadFromGrn() {
-            var rno = parseInt(bcGrnNo && bcGrnNo.value, 10) || 0;
-            if (!rno) {
+            var rnoRaw = bcGrnNo && String(bcGrnNo.value || '').trim();
+            if (!rnoRaw) {
               alert('Enter a GRN (receipt) number.');
               if (bcGrnNo) bcGrnNo.focus();
               return;
@@ -786,8 +793,8 @@
               }
             }
             if (bcGrnLoad) bcGrnLoad.disabled = true;
-            if (bcGrnStatus) bcGrnStatus.textContent = 'Loading GRN ' + rno + '…';
-            fetch(apiGrnLines + '?receiptno=' + encodeURIComponent(String(rno)), { credentials: 'same-origin' })
+            if (bcGrnStatus) bcGrnStatus.textContent = 'Loading GRN ' + rnoRaw + '…';
+            fetch(apiGrnLines + '?receiptno=' + encodeURIComponent(rnoRaw), { credentials: 'same-origin' })
               .then(function(r) {
                 return r.json().then(function(j) {
                   if (!r.ok) throw new Error((j && j.error) ? String(j.error) : ('HTTP ' + r.status));
@@ -808,7 +815,7 @@
                   else failed++;
                 });
                 var hdr = j.header || {};
-                var parts = ['GRN ' + rno];
+                var parts = ['GRN ' + (hdr.receiptno || rnoRaw)];
                 if (hdr.invoiceno) parts.push('Inv ' + hdr.invoiceno);
                 if (hdr.receiptdate) {
                   var rd = hdr.receiptdate;
@@ -825,6 +832,56 @@
               })
               .finally(function() {
                 if (bcGrnLoad) bcGrnLoad.disabled = false;
+              });
+          }
+          function bcLoadFromPrintList() {
+            var pno = parseInt(bcPrintListNo && bcPrintListNo.value, 10) || 0;
+            if (!pno) {
+              alert('Enter a barcode print list number (from the mobile app).');
+              if (bcPrintListNo) bcPrintListNo.focus();
+              return;
+            }
+            if (bcPrintQueue.length) {
+              if (!window.confirm('Add print-list lines to the current queue? (Cancel = replace list)')) {
+                bcPrintQueue = [];
+              }
+            }
+            if (bcPrintListLoad) bcPrintListLoad.disabled = true;
+            if (bcGrnStatus) bcGrnStatus.textContent = 'Opening print list ' + pno + '…';
+            fetch(apiPrintList + '?printno=' + encodeURIComponent(String(pno)), { credentials: 'same-origin' })
+              .then(function(r) {
+                return r.json().then(function(j) {
+                  if (!r.ok) throw new Error((j && j.error) ? String(j.error) : ('HTTP ' + r.status));
+                  return j;
+                });
+              })
+              .then(function(j) {
+                if (!j || !j.success) {
+                  alert((j && j.error) ? j.error : 'Could not open print list.');
+                  if (bcGrnStatus) bcGrnStatus.textContent = '';
+                  return;
+                }
+                var rows = j.rows || [];
+                var added = 0;
+                var failed = 0;
+                rows.forEach(function(r) {
+                  if (bcEnqueueProduct(r, true)) added++;
+                  else failed++;
+                });
+                var hdr = j.header || {};
+                var parts = ['Print list #' + pno];
+                if (hdr.remarks) parts.push(String(hdr.remarks).slice(0, 40));
+                if (hdr.print_date) parts.push(String(hdr.print_date).slice(0, 10));
+                parts.push(added + ' line(s) loaded');
+                if (failed) parts.push(failed + ' skipped');
+                if (bcGrnStatus) bcGrnStatus.textContent = parts.join(' · ');
+              })
+              .catch(function(err) {
+                alert((err && err.message) ? err.message : 'Request failed.');
+                if (bcGrnStatus) bcGrnStatus.textContent = '';
+              })
+              .finally(function() {
+                if (bcPrintListLoad) bcPrintListLoad.disabled = false;
               });
           }
           function bcEnqueueProduct(apiRow, silentNoBarcode) {
@@ -1086,6 +1143,12 @@
           if (bcGrnNo) {
             bcGrnNo.addEventListener('keydown', function(e) {
               if (e.key === 'Enter') { e.preventDefault(); bcLoadFromGrn(); }
+            });
+          }
+          if (bcPrintListLoad) bcPrintListLoad.addEventListener('click', bcLoadFromPrintList);
+          if (bcPrintListNo) {
+            bcPrintListNo.addEventListener('keydown', function(e) {
+              if (e.key === 'Enter') { e.preventDefault(); bcLoadFromPrintList(); }
             });
           }
           if (q) {
@@ -1372,7 +1435,7 @@ window.__BC_QZ_URLS__ = {
 <script src="{{ url_for('static', filename='js/qz_printer_prefs.js') }}"></script>
 <script src="{{ url_for('static', filename='js/qz_invoice_print.js') }}"></script>
 <script src="{{ url_for('static', filename='js/qz_printer_picker.js') }}"></script>
-<script src="{{ url_for('static', filename='js/qz_barcode_print.js') }}?v=3"></script>
+<script src="{{ url_for('static', filename='js/qz_barcode_print.js') }}?v=4"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 <script>
 (function() {
@@ -1577,21 +1640,7 @@ window.__BC_QZ_URLS__ = {
     }
   };
 
-  /** Label printers often ignore page-breaks in one HTML job — use one QZ job per copy when Count > 1. */
-  function bcNeedsPerLabelJobs(items) {
-    if (!items || items.length <= 1) return false;
-    for (var i = 0; i < items.length; i++) {
-      if (items[i]._labelCopy > 1) return true;
-    }
-    var seen = {};
-    for (var j = 0; j < items.length; j++) {
-      var k = String(items[j].value || '').trim();
-      if (seen[k]) return true;
-      seen[k] = true;
-    }
-    return false;
-  }
-
+  /** Label printers often ignore page-breaks — QZ sends one job per label when count > 1. */
   function bcPrintLabels(items) {
     if (!window.JsBarcode) {
       alert('Barcode library not loaded.');
@@ -1678,10 +1727,7 @@ window.__BC_QZ_URLS__ = {
       if (pn) window.QzPrinterPrefs.set('barcode_label', pn);
     }
     if (window.BcQzPrint && typeof window.BcQzPrint.printLabelsFromArea === 'function') {
-      var printOpts = bcNeedsPerLabelJobs(items)
-        ? { perLabelJob: true, betweenMs: 250 }
-        : undefined;
-      window.BcQzPrint.printLabelsFromArea(area, printOpts)
+      window.BcQzPrint.printLabelsFromArea(area, { betweenMs: 250 })
         .then(clearArea)
         .catch(function(err) {
           clearArea();

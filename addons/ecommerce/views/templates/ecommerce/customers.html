@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=4" />
+{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page ecommerce-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Customers</h1>
+      <p class="page-po__muted">Registered storefront customers · {{ total }} total</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('ecommerce.dashboard') }}" class="page-po__btn-secondary">Dashboard</a>
+    </div>
+  </div>
+
+  <form method="get" class="nexa-list-toolbar">
+    <input type="text" name="q" value="{{ request.args.get('q', '') }}" placeholder="Search name or email…"
+           class="input" style="min-width:220px; max-width:320px;" autocomplete="off" />
+    <button type="submit" class="page-po__btn-primary" style="padding:4px 12px; font-size:11px;">Search</button>
+    <a href="{{ url_for('ecommerce.customers') }}" class="page-po__btn-secondary" style="padding:4px 10px; font-size:11px;">Clear</a>
+    <span class="nexa-num">{{ total }} record{{ '' if total == 1 else 's' }}</span>
+  </form>
+
+  <div class="co-table-wrap">
+    <table class="co-table co-table--th-hint">
+      <thead>
+        <tr>
+          <th style="text-align:center; width:56px; cursor:default;">Sl.No</th>
+          <th>Customer</th>
+          <th>Email</th>
+          <th>Mobile</th>
+          <th>Status</th>
+          <th>Joined</th>
+          <th style="text-align:center; cursor:default;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in customers %}
+        {% set acct = (row.account_status or '')|upper %}
+        <tr>
+          <td class="sl-no">{{ loop.index + (page - 1) * page_size }}</td>
+          <td><strong>{{ row.first_name }} {{ row.last_name }}</strong></td>
+          <td>{{ row.email }}</td>
+          <td>{{ row.mobile or '—' }}</td>
+          <td>
+            <span class="ecommerce-flag ecommerce-flag-{% if acct == 'ACTIVE' %}Y{% elif acct in ('SUSPENDED', 'BLOCKED') %}N{% else %}M{% endif %}">
+              {{ row.account_status or '—' }}
+            </span>
+          </td>
+          <td>{{ (row.created_at|string)[:19].replace('T', ' ') if row.created_at else '—' }}</td>
+          <td style="text-align:center;">
+            <a href="{{ url_for('ecommerce.customer_detail', user_id=row.user_id) }}" class="btn-view">View</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" style="text-align:center;padding:20px;color:#64748b;">
+            {% if tables_ready %}No customers found.{% else %}APP_USER table not available.{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if total_pages > 1 %}
+  <div class="nexa-list-toolbar ecommerce-pagination">
+    <div style="display:flex; gap:6px; align-items:center;">
+      {% if page > 1 %}
+      <a href="{{ url_for('ecommerce.customers', page=page-1, q=request.args.get('q','')) }}" class="btn-view">← Previous</a>
+      {% endif %}
+      {% if page < total_pages %}
+      <a href="{{ url_for('ecommerce.customers', page=page+1, q=request.args.get('q','')) }}" class="btn-view">Next →</a>
+      {% endif %}
+    </div>
+    <span class="nexa-num">Page {{ page }} of {{ total_pages }}</span>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

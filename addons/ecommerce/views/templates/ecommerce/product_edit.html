@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('ecommerce.static', filename='css/ecommerce.css') }}?v=16" />
+{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page ecommerce-page ecommerce-product-edit-page">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Edit product</h1>
+      <p class="page-po__muted">
+        Code {{ product.item_code }}
+        {% if product.category_name %} · {{ product.category_name }}{% endif %}
+        {% if product.brand_name %} · {{ product.brand_name }}{% endif %}
+        · Stock {{ product.current_stock }}
+      </p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a
+        href="{{ url_for('ecommerce.products', q=back_q or None, page=back_page if back_page > 1 else None, sort=back_sort or None, order=back_order if back_order in ('asc', 'desc') else None) }}"
+        class="page-po__btn-secondary"
+      >← Back to products</a>
+    </div>
+  </div>
+
+  <form
+    method="post"
+    action="/ecommerce/products/{{ product.item_code }}/update"
+    enctype="multipart/form-data"
+    class="ecommerce-product-edit"
+  >
+    <input type="hidden" name="return_to" value="edit" />
+
+    <div class="ecommerce-product-edit__layout">
+      <section class="ecommerce-form-panel ecommerce-product-edit__media">
+        <h2 class="ecommerce-product-edit__section-title">Images</h2>
+
+        <div class="ecommerce-product-edit__main-image">
+          <div class="ecommerce-product-edit__preview">
+            {% if product.image_url %}
+            <img src="{{ product.image_url }}" alt="" width="120" height="120" />
+            {% else %}
+            <span class="ecommerce-product-edit__preview-empty">No main image</span>
+            {% endif %}
+          </div>
+          <div class="ecommerce-product-edit__image-actions">
+            <label class="page-po__btn-secondary ecommerce-product-edit__file-btn">
+              Upload main image
+              <input type="file" name="product_image" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" />
+            </label>
+            {% if product.image_url %}
+            <label class="ecommerce-product-edit__remove-check">
+              <input type="checkbox" name="remove_image" value="1" />
+              Remove main image
+            </label>
+            {% endif %}
+            <button
+              type="button"
+              class="page-po__btn-secondary ecommerce-product-edit__fetch-web"
+              data-fetch-url="/ecommerce/products/{{ product.item_code }}/fetch-image-web"
+            >Fetch from web</button>
+            <span class="ecommerce-product-edit__fetch-status" aria-live="polite"></span>
+          </div>
+          <p class="page-po__muted">Main image shown on listings and as the first product photo. Recommended: 800 × 800 px.</p>
+        </div>
+
+        <div class="ecommerce-product-edit__gallery">
+          <h3 class="ecommerce-product-edit__gallery-title">Gallery images</h3>
+          <p class="page-po__muted ecommerce-product-edit__gallery-hint">
+            Extra photos shown on the product page (after the main image). Recommended: 800 × 800 px, JPG or PNG.
+          </p>
+
+          {% if product.gallery_images %}
+          <div class="ecommerce-product-edit__gallery-grid">
+            {% for img in product.gallery_images %}
+            <label class="ecommerce-product-edit__gallery-item">
+              {% if img.image_url %}
+              <img src="{{ img.image_url }}" alt="" loading="lazy" width="72" height="72" />
+              {% endif %}
+              <span class="ecommerce-product-edit__gallery-order">#{{ loop.index }}</span>
+              <span class="ecommerce-product-edit__gallery-remove">
+                <input type="checkbox" name="remove_gallery" value="{{ img.media_id }}" />
+                Remove
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="page-po__muted ecommerce-product-edit__gallery-empty">No gallery images yet.</p>
+          {% endif %}
+
+          <label class="ecommerce-product-edit__gallery-upload page-po__btn-secondary">
+            Add gallery images
+            <input
+              type="file"
+              name="gallery_images"
+              accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+              multiple
+            />
+          </label>
+          <p class="page-po__muted ecommerce-product-edit__gallery-upload-note">You can select multiple files at once.</p>
+        </div>
+      </section>
+
+      <section class="ecommerce-form-panel ecommerce-product-edit__details">
+        <h2 class="ecommerce-product-edit__section-title">Product details</h2>
+
+        <div class="ecommerce-form-grid">
+          <div class="form-group span-full">
+            <label for="item_name">Product name</label>
+            <input id="item_name" name="item_name" class="input" value="{{ product.item_name }}" maxlength="200" required />
+          </div>
+
+          <div class="form-group">
+            <label for="retail_price">Retail price (QAR)</label>
+            <input id="retail_price" name="retail_price" class="input num" inputmode="decimal" value="{{ product.retail_price }}" />
+          </div>
+
+          <div class="form-group">
+            <label for="offer_price">Offer price (QAR)</label>
+            <input id="offer_price" name="offer_price" class="input num" inputmode="decimal" value="{{ product.offer_price or '' }}" placeholder="Leave empty for no offer" />
+            <p class="page-po__muted" style="margin-top:6px;">Must be lower than retail to show as a sale on the app (retail shown struck through).</p>
+          </div>
+
+          <div class="form-group">
+            <label>Item code</label>
+            <input class="input" value="{{ product.item_code }}" readonly disabled />
+          </div>
+
+          <div class="form-group span-full">
+            <div class="ecommerce-field-toolbar">
+              <label for="description">Description</label>
+              <button type="button" class="page-po__btn-secondary ecommerce-translate-ar" data-target="description">Convert to Arabic</button>
+            </div>
+            <textarea
+              id="description"
+              name="description"
+              class="input"
+              rows="5"
+              maxlength="500"
+              placeholder="Short description shown on the product page"
+            >{{ product.description_text }}</textarea>
+          </div>
+
+          <div class="form-group span-full im-field-arabic">
+            <label for="description_ar">Description (Arabic)</label>
+            <textarea
+              id="description_ar"
+              name="description_ar"
+              class="input"
+              rows="5"
+              maxlength="3500"
+              dir="rtl"
+              placeholder="الوصف بالعربية"
+            >{{ product.description_ar_text }}</textarea>
+          </div>
+
+          <div class="form-group span-full">
+            <div class="ecommerce-field-toolbar">
+              <label for="specifications">Specifications</label>
+              <button type="button" class="page-po__btn-secondary ecommerce-translate-ar" data-target="specifications">Convert to Arabic</button>
+            </div>
+            <textarea
+              id="specifications"
+              name="specifications"
+              class="input"
+              rows="8"
+              maxlength="3500"
+              placeholder="One per line: Label: value&#10;Age: 3+ years&#10;Pieces: 20&#10;Material: Plastic"
+            >{{ product.specifications_text }}</textarea>
+            <p class="page-po__muted" style="margin-top:6px;">Use <code>Label: value</code> for specs (e.g. Age: 3+ years). Plain lines with emojis appear under <strong>Highlights</strong> on the app.</p>
+          </div>
+
+          <div class="form-group span-full im-field-arabic">
+            <label for="specifications_ar">Specifications (Arabic)</label>
+            <textarea
+              id="specifications_ar"
+              name="specifications_ar"
+              class="input"
+              rows="8"
+              maxlength="3500"
+              dir="rtl"
+              placeholder="المواصفات بالعربية"
+            >{{ product.specifications_ar_text }}</textarea>
+          </div>
+
+          <div class="form-group span-full ecommerce-product-edit__actions">
+            <button type="button" class="page-po__btn-secondary ecommerce-translate-ar" data-target="both">Convert all to Arabic</button>
+            <button type="submit" class="page-po__btn-primary">Save product</button>
+            <a
+              href="{{ url_for('ecommerce.products', q=back_q or None, page=back_page if back_page > 1 else None, sort=back_sort or None, order=back_order if back_order in ('asc', 'desc') else None) }}"
+              class="page-po__btn-secondary"
+            >Cancel</a>
+          </div>
+        </div>
+      </section>
+    </div>
+  </form>
+</div>
+
+<script>
+(function () {
+  var btn = document.querySelector('.ecommerce-product-edit__fetch-web');
+  if (!btn) return;
+  var statusEl = document.querySelector('.ecommerce-product-edit__fetch-status');
+  var preview = document.querySelector('.ecommerce-product-edit__preview');
+
+  btn.addEventListener('click', async function () {
+    var url = btn.getAttribute('data-fetch-url');
+    if (!url) return;
+    var prevLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Fetching…';
+    if (statusEl) statusEl.textContent = '';
+
+    try {
+      var body = new URLSearchParams({ download_images: '1' });
+      var resp = await fetch(url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: body.toString(),
+      });
+      var data = await resp.json();
+      if (!resp.ok || !data.ok) {
+        throw new Error(data.error || data.message || 'Could not fetch image.');
+      }
+      if (preview && data.image_url) {
+        preview.innerHTML = '<img src="' + data.image_url + '" alt="" width="120" height="120" />';
+      }
+      if (statusEl) {
+        statusEl.textContent = 'Image saved.';
+        statusEl.className = 'ecommerce-product-edit__fetch-status is-ok';
+      }
+    } catch (err) {
+      if (statusEl) {
+        statusEl.textContent = (err && err.message) ? err.message : 'Failed';
+        statusEl.className = 'ecommerce-product-edit__fetch-status is-error';
+      }
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+  });
+})();
+</script>
+<script>
+(function () {
+  var translateUrl = {{ url_for('ecommerce.product_translate_arabic', item_code=product.item_code)|tojson }};
+  var statusId = 'translate-ar-status';
+  var statusEl = document.getElementById(statusId);
+  if (!statusEl) {
+    statusEl = document.createElement('p');
+    statusEl.id = statusId;
+    statusEl.className = 'page-po__muted';
+    statusEl.style.marginTop = '8px';
+    var actions = document.querySelector('.ecommerce-product-edit__actions');
+    if (actions) actions.parentNode.insertBefore(statusEl, actions);
+  }
+
+  function fieldValue(id) {
+    var el = document.getElementById(id);
+    return el ? el.value.trim() : '';
+  }
+
+  function setFieldValue(id, value) {
+    var el = document.getElementById(id);
+    if (el) el.value = value || '';
+  }
+
+  async function translateTarget(target, btn) {
+    var payload = { target: target };
+    if (target === 'description' || target === 'both') {
+      payload.description = fieldValue('description');
+    }
+    if (target === 'specifications' || target === 'both') {
+      payload.specifications = fieldValue('specifications');
+    }
+    var prev = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Translating…';
+    if (statusEl) {
+      statusEl.textContent = '';
+      statusEl.className = 'page-po__muted';
+    }
+    try {
+      var resp = await fetch(translateUrl, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify(payload),
+      });
+      var data = await resp.json();
+      if (!resp.ok || !data.ok) {
+        throw new Error(data.error || 'Translation failed.');
+      }
+      if (data.description_ar) setFieldValue('description_ar', data.description_ar);
+      if (data.specifications_ar) setFieldValue('specifications_ar', data.specifications_ar);
+      if (statusEl) {
+        statusEl.textContent = 'Arabic text generated — review and save.';
+        statusEl.className = 'page-po__muted is-ok';
+      }
+    } catch (err) {
+      if (statusEl) {
+        statusEl.textContent = (err && err.message) ? err.message : 'Translation failed';
+        statusEl.className = 'page-po__muted is-error';
+      }
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prev;
+    }
+  }
+
+  document.querySelectorAll('.ecommerce-translate-ar').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var target = btn.getAttribute('data-target') || 'both';
+      translateTarget(target, btn);
+    });
+  });
+})();
+</script>
+<style>
+  .ecommerce-field-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+  .ecommerce-field-toolbar label { margin: 0; }
+  .im-field-arabic textarea {
+    font-family: "Segoe UI", Tahoma, "Arial Unicode MS", "Noto Sans Arabic", Arial, sans-serif;
+  }
+  .page-po__muted.is-ok { color: #0f766e; }
+  .page-po__muted.is-error { color: #b42318; }
+</style>
+{% endblock %}

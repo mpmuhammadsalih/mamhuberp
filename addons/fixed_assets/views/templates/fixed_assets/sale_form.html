@@ -8,7 +8,7 @@
 {% block title %}{% if edit_mode %}Fixed Asset Sale{% else %}New Fixed Asset Sale{% endif %}{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/im_form_shell.css') }}?v=2" />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/fixed_assets_pages.css') }}?v=6" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/fixed_assets_pages.css') }}?v=8" />
 <style>
   main.container:has(> .im-page.im-form-shell-page.fas-sale-page) { padding-top: 0; }
 </style>
@@ -24,11 +24,12 @@
       </h1>
       <div class="im-actions">
         {% if not posted %}
-        <button type="submit" form="faSaleForm" class="im-btn-save" id="fasBtnSave">Save</button>
-        {% endif %}
+        <button type="submit" form="faSaleForm" name="save_action" value="draft" class="im-btn-save" id="fasBtnSaveDraft">Save draft</button>
+        <button type="submit" form="faSaleForm" name="save_action" value="post" class="im-btn-secondary" id="fasBtnSavePost">Save &amp; post</button>
         {% if edit_mode and not posted and row.sale_id %}
         <button type="submit" form="faSalePostForm" class="im-btn-secondary"
           onclick="return confirm('Post this multi-asset sale to GL? All listed assets will be marked disposed.');">Post</button>
+        {% endif %}
         {% endif %}
         {% if posted and row.sale_id %}
         <a href="{{ url_for('fixed_assets.fa_sale_pdf', sale_id=row.sale_id) }}" class="im-btn-secondary" target="_blank" rel="noopener">PDF</a>
@@ -41,6 +42,7 @@
 
   <section class="itemmaster-container si-form-body">
     <form id="faSaleForm" method="post" action="{{ url_for('fixed_assets.fa_sale_form') }}" class="form" autocomplete="off">
+      <input type="hidden" name="save_nonce" value="{{ global_save_nonce | default('') }}" />
       {% if row.sale_id %}<input type="hidden" name="sale_id" value="{{ row.sale_id }}" />{% endif %}
       <input type="hidden" id="faProceedsPartyType" name="proceeds_party_type" value="{{ row.proceeds_party_type or '' }}" />
       <input type="hidden" id="faProceedsPartyCode" name="proceeds_party_code" value="{{ row.proceeds_party_code or '' }}" />
@@ -178,12 +180,12 @@
         </div>
 
         {% if not posted %}
-        <div class="fas-post-bar">
-          <label class="checkbox-inline">
-            <input type="checkbox" name="post_sale" value="1" />
-            Post sale to GL on save
-          </label>
-          <span class="fas-post-hint">Posts all asset lines in one journal — clears cost &amp; accum. dep., books proceeds, and gain/loss.</span>
+        <div class="fas-post-bar fas-post-bar--info">
+          <strong>Draft vs post</strong>
+          <span class="fas-post-hint">
+            <strong>Save draft</strong> keeps the sale as <em>Draft</em> — post later with <strong>Post</strong> (when editing) or from the sale list.
+            <strong>Save &amp; post</strong> saves and posts all asset lines in one journal to GL.
+          </span>
         </div>
         {% else %}
         <div class="fas-post-bar fas-post-bar--done">
@@ -382,12 +384,33 @@
     });
   }
   if (form) {
+    var saleSubmitting = false;
     form.addEventListener('submit', function (e) {
+      if (saleSubmitting) {
+        e.preventDefault();
+        return;
+      }
       buildHiddenFields();
       if (!posted && !lineRows().length) {
         e.preventDefault();
         alert('Add at least one asset line.');
+        return;
       }
+      var submitter = e.submitter;
+      if (submitter && submitter.name === 'save_action' && submitter.value === 'post') {
+        var n = lineRows().length;
+        var msg = n === 1
+          ? 'Save and post this sale to GL? The asset will be marked disposed.'
+          : 'Save and post this sale to GL? All ' + n + ' assets will be marked disposed.';
+        if (!window.confirm(msg)) {
+          e.preventDefault();
+          return;
+        }
+      }
+      saleSubmitting = true;
+      document.querySelectorAll('[form="faSaleForm"], #faSaleForm button[type="submit"], #fasBtnSaveDraft, #fasBtnSavePost').forEach(function (btn) {
+        btn.disabled = true;
+      });
     });
   }
 

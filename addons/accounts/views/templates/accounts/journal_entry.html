@@ -947,7 +947,7 @@
       <table class="co-table" id="jeRecentTable">
         <thead>
           <tr>
-            <th class="sortable" data-sort="sl" data-sort-type="number" style="text-align:center;width:52px;">Sl.No <span class="sort-indicator"></span></th>
+            <th class="sortable sort-desc" data-sort="lineid" data-sort-type="number" data-sort-dir="desc" style="text-align:center;width:72px;">Line ID <span class="sort-indicator">▼</span></th>
             <th class="sortable" data-sort="voucher" data-sort-type="text">Voucher No <span class="sort-indicator"></span></th>
             <th class="sortable" data-sort="date" data-sort-type="text">Date <span class="sort-indicator"></span></th>
             <th class="sortable" data-sort="reference" data-sort-type="text">Reference <span class="sort-indicator"></span></th>
@@ -964,7 +964,7 @@
           {% set row_status = row.status or 'POSTED' %}
           {% set row_source = (row.source or '')|upper %}
           <tr class="je-data-row"
-              data-sl="{{ loop.index }}"
+              data-lineid="{{ row.line_id or row.draft_id or '' }}"
               data-voucher="{{ (row.voucher_no or '')|e }}"
               data-date="{{ (row.voucher_date or '')|e }}"
               data-reference="{{ (row.reference_no or '')|e }}"
@@ -973,7 +973,7 @@
               data-source="{{ (row.source or '')|e }}"
               data-debit="{{ '%.2f'|format(row.total_debit or 0) }}"
               data-credit="{{ '%.2f'|format(row.total_credit or 0) }}">
-            <td class="je-sl" style="text-align:center;">{{ loop.index }}</td>
+            <td class="je-line-id" style="text-align:center;">{{ row.line_id or row.draft_id or '—' }}</td>
             <td class="je-vno">
               {% if row.status == 'DRAFT' %}
               <a href="{{ url_for('accounts.journal_entry', draft_id=row.draft_id, new=1, date_from=date_from or none, date_to=date_to or none) }}">{{ row.voucher_no }}</a>
@@ -995,6 +995,8 @@
               <a class="btn-view" href="{{ url_for('accounts.journal_voucher_pdf', voucher_no=row.voucher_no) }}" target="_blank" rel="noopener">PDF</a>
               {% if row_source == 'MANUAL' %}
               <a class="btn-view" href="{{ url_for('accounts.journal_entry', edit=row.voucher_no, date_from=date_from or none, date_to=date_to or none) }}">Edit</a>
+              <a class="btn-view" href="{{ url_for('accounts.journal_voucher_view', voucher_no=row.voucher_no, date_from=date_from or none, date_to=date_to or none) }}#je-reverse">Reverse</a>
+              {% elif row_source == 'CPV' %}
               <a class="btn-view" href="{{ url_for('accounts.journal_voucher_view', voucher_no=row.voucher_no, date_from=date_from or none, date_to=date_to or none) }}#je-reverse">Reverse</a>
               {% else %}
               <a class="btn-view" href="{{ url_for('accounts.journal_voucher_view', voucher_no=row.voucher_no, date_from=date_from or none, date_to=date_to or none) }}">View</a>
@@ -2966,15 +2968,6 @@
     return String(raw).toLowerCase();
   }
 
-  function reindex() {
-    var rows = tbody.querySelectorAll('tr.je-data-row');
-    rows.forEach(function (tr, i) {
-      tr.setAttribute('data-sl', String(i + 1));
-      var sl = tr.querySelector('.je-sl');
-      if (sl) sl.textContent = String(i + 1);
-    });
-  }
-
   table.querySelectorAll('thead th.sortable').forEach(function (th) {
     th.addEventListener('click', function () {
       var key = th.getAttribute('data-sort');
@@ -3004,7 +2997,6 @@
         return dir === 'asc' ? cmp : -cmp;
       });
       rows.forEach(function (r) { tbody.appendChild(r); });
-      if (key !== 'sl') reindex();
     });
   });
 })();

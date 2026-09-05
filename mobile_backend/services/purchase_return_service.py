@@ -256,7 +256,19 @@ def get_posted_detail(return_no: Any) -> dict[str, Any] | None:
         }
 
 
+def _normalize_pr_save_mode(raw: Any) -> str:
+    mode = str(raw or "pr_draft").strip().lower()
+    if mode in ("draft", "pr_draft", "grn_draft"):
+        return "pr_draft"
+    if mode in ("inventory_only", "pr_only", "grn_only", "approved", "pr_post"):
+        return "pr_only"
+    if mode in ("inventory_accounts", "pr_posting", "grn_invoice_posting", "accounts"):
+        return "pr_posting"
+    return "pr_draft"
+
+
 def save_request(payload: dict[str, Any], *, username: str = "mobile") -> dict[str, Any]:
+    """Save purchase return with GRN-style modes: draft / stock only / stock + accounts."""
     from db import (
         coerce_goodsreturnno,
         goodsreturnno_is_valid,
@@ -270,6 +282,20 @@ def save_request(payload: dict[str, Any], *, username: str = "mobile") -> dict[s
     if not lines_in:
         raise ValueError("Add at least one line item.")
     doc = str(header.get("return_no") or header.get("goodsreturnno") or "").strip()
+    save_mode = _normalize_pr_save_mode(
+        payload.get("save_mode") or header.get("save_mode") or "pr_draft"
+    )
+    post_inventory_raw = payload.get("post_inventory")
+    if post_inventory_raw is None:
+        post_inventory_raw = header.get("post_inventory")
+    if post_inventory_raw is not None:
+        if isinstance(post_inventory_raw, str):
+            post_inventory = post_inventory_raw.strip().lower() not in ("0", "false", "no", "")
+        else:
+            post_inventory = bool(post_inventory_raw)
+    else:
+        post_inventory = save_mode != "pr_draft"
+    post_accounts = save_mode == "pr_posting"
 
     with mobile_operation_lock(
         "purchase_return",
@@ -360,12 +386,13 @@ def save_request(payload: dict[str, Any], *, username: str = "mobile") -> dict[s
         if not lines:
             raise ValueError("Add at least one line item.")
 
+        amount = total - discount
         err = p._save_purchase_return_order(
             return_no,
             return_date,
             supplier_code,
             receipt_no,
-            total - discount,
+            amount,
             "P",
             remarks,
             lines,
@@ -374,14 +401,54 @@ def save_request(payload: dict[str, Any], *, username: str = "mobile") -> dict[s
         )
         if err:
             raise ValueError(str(err))
-        p._set_return_request_approval_status(
-            return_no, "DRAFT", "SAVE_DRAFT", remarks or f"Saved by {username}"
+
+        final_no = str(coerce_goodsreturnno(return_no)).strip()
+        if not post_inventory:
+            p._set_return_request_approval_status(
+                return_no, "DRAFT", "SAVE_DRAFT", remarks or f"Saved by {username}"
+            )
+            return {
+                "return_no": final_no,
+                "approval_status": "DRAFT",
+                "amount": amount,
+                "save_mode": save_mode,
+                "inventory_posted": False,
+                "accounts_posted": False,
+                "message": f"Purchase return {final_no} saved as draft. Stock is not posted yet.",
+            }
+
+        # Approve & post stock (creates RETURNHDR + inventory), same as ERP option 2/3.
+        post_err, posted_no, status = p._approve_return_order_and_post_stock(
+            return_no, remarks=remarks or f"Posted from mobile ({save_mode})"
         )
+        if post_err:
+            raise ValueError(str(post_err))
+
+        accounts_posted = False
+        if post_accounts and posted_no:
+            acct_err = p._post_saved_purchase_return(
+                posted_no, source_return_order_no=return_no
+            )
+            if acct_err:
+                raise ValueError(
+                    f"Purchase return {posted_no} stock posted, but accounts posting failed: {acct_err}"
+                )
+            accounts_posted = True
+
+        out_no = str(coerce_goodsreturnno(posted_no or return_no)).strip()
+        if accounts_posted:
+            msg = f"Purchase return {out_no} saved and posted (stock + accounts)."
+        else:
+            msg = f"Purchase return {out_no} saved. Stock posted (use Accounts Posting for GL when needed)."
         return {
-            "return_no": str(coerce_goodsreturnno(return_no)).strip(),
-            "approval_status": "DRAFT",
-            "amount": total - discount,
-            "message": f"Purchase return {coerce_goodsreturnno(return_no)} saved.",
+            "return_no": out_no,
+            "posted_stock_no": str(posted_no or "").strip(),
+            "approval_status": str(status or "POSTED").upper(),
+            "amount": amount,
+            "save_mode": save_mode,
+            "inventory_posted": True,
+            "accounts_posted": accounts_posted,
+            "message": msg,
         }
 
 

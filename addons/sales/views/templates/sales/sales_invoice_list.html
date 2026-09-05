@@ -14,7 +14,7 @@
 
 {% set is_all = tab == 'all' %}
 
-{% set col_count = 13 if is_all else 12 %}
+{% set col_count = 15 if is_all else 14 %}
 
 
 
@@ -31,6 +31,18 @@
     </div>
 
     <div class="page-po__topbar-actions">
+
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#334155;margin-right:8px;">
+        Template
+        <select id="siListInvoiceTemplate" style="border:1px solid #cbd5e1;border-radius:8px;padding:6px 8px;font-weight:600;">
+          <option value="classic">Classic Blue</option>
+          <option value="modern">Modern Teal</option>
+          <option value="compact">Compact Gray</option>
+          <option value="slate">Slate Banner</option>
+          <option value="gulfnova">Gulf Nova Retail</option>
+        </select>
+      </label>
+      <a href="{{ url_for('sales.sales_invoice_templates') }}" class="page-po__btn-secondary" style="text-decoration:none;">Templates</a>
 
       {% if is_all %}
 
@@ -290,15 +302,19 @@
 
           <th data-col="{{ 6 if is_all else 5 }}">Order No<span class="sort-arrow"></span></th>
 
-          <th data-col="{{ 7 if is_all else 6 }}" style="text-align:right;">Net Amount<span class="sort-arrow"></span></th>
+          <th data-col="{{ 7 if is_all else 6 }}" style="text-align:right;">Total Amount<span class="sort-arrow"></span></th>
 
-          <th data-col="{{ 8 if is_all else 7 }}">Status<span class="sort-arrow"></span></th>
+          <th data-col="{{ 8 if is_all else 7 }}" style="text-align:right;">Discount Amount<span class="sort-arrow"></span></th>
 
-          <th data-col="{{ 9 if is_all else 8 }}">Type<span class="sort-arrow"></span></th>
+          <th data-col="{{ 9 if is_all else 8 }}" style="text-align:right;">Net Amount<span class="sort-arrow"></span></th>
 
-          <th data-col="{{ 10 if is_all else 9 }}">Created By<span class="sort-arrow"></span></th>
+          <th data-col="{{ 10 if is_all else 9 }}">Status<span class="sort-arrow"></span></th>
 
-          <th data-col="{{ 11 if is_all else 10 }}">Remarks<span class="sort-arrow"></span></th>
+          <th data-col="{{ 11 if is_all else 10 }}">Type<span class="sort-arrow"></span></th>
+
+          <th data-col="{{ 12 if is_all else 11 }}">Created By<span class="sort-arrow"></span></th>
+
+          <th data-col="{{ 13 if is_all else 12 }}">Remarks<span class="sort-arrow"></span></th>
 
           <th style="text-align:center; cursor:default;">Action</th>
 
@@ -312,9 +328,17 @@
 
         {% set row_is_return = (row.doc_type|default('') == 'return') or is_return %}
 
-        {% set amt = (row.netbillamount or 0)|float %}
+        {% set net_amt = (row.netbillamount or 0)|float %}
 
-        {% set disp_amt = (amt|abs) if row_is_return else amt %}
+        {% set disc_amt = (row.discountamount or 0)|float %}
+
+        {% set total_amt = (row.totalamount or (net_amt + disc_amt))|float %}
+
+        {% set disp_total = (total_amt|abs) if row_is_return else total_amt %}
+
+        {% set disp_disc = (disc_amt|abs) if row_is_return else disc_amt %}
+
+        {% set disp_net = (net_amt|abs) if row_is_return else net_amt %}
 
         {% set doc_label = 'Sales Return' if row_is_return else 'Sales Invoice' %}
 
@@ -340,7 +364,11 @@
 
           data-remarks="{{ row.remarks or '' }}"
 
-          data-amount="{{ disp_amt }}"
+          data-totalamount="{{ disp_total }}"
+
+          data-discountamount="{{ disp_disc }}"
+
+          data-amount="{{ disp_net }}"
 
         >
 
@@ -362,7 +390,11 @@
 
           <td>{{ row.orderno or '' }}</td>
 
-          <td class="num">{{ "%.2f"|format(disp_amt) }}</td>
+          <td class="num">{{ "%.2f"|format(disp_total) }}</td>
+
+          <td class="num">{{ "%.2f"|format(disp_disc) }}</td>
+
+          <td class="num">{{ "%.2f"|format(disp_net) }}</td>
 
           <td>{{ row.billstatus or 'P' }}</td>
 
@@ -395,6 +427,46 @@
         <tr>
 
           <td colspan="{{ 7 if is_all else 6 }}" style="text-align:right; padding-right:12px; font-weight:700;">Total</td>
+
+          <td class="num" id="siTotalGross">
+
+            {% set ns = namespace(total=0) %}
+
+            {% for r in invoices %}
+
+              {% set raw_net = (r.netbillamount|float if r.netbillamount is not none and r.netbillamount != '' else 0) %}
+
+              {% set raw_disc = (r.discountamount|float if r.discountamount is not none and r.discountamount != '' else 0) %}
+
+              {% set raw_total = (r.totalamount|float if r.totalamount is not none and r.totalamount != '' else (raw_net + raw_disc)) %}
+
+              {% set r_ret = (r.doc_type|default('') == 'return') or is_return %}
+
+              {% set ns.total = ns.total + (raw_total|abs if r_ret else raw_total) %}
+
+            {% endfor %}
+
+            {{ '{:,.2f}'.format(ns.total) }}
+
+          </td>
+
+          <td class="num" id="siTotalDisc">
+
+            {% set ns = namespace(total=0) %}
+
+            {% for r in invoices %}
+
+              {% set raw_disc = (r.discountamount|float if r.discountamount is not none and r.discountamount != '' else 0) %}
+
+              {% set r_ret = (r.doc_type|default('') == 'return') or is_return %}
+
+              {% set ns.total = ns.total + (raw_disc|abs if r_ret else raw_disc) %}
+
+            {% endfor %}
+
+            {{ '{:,.2f}'.format(ns.total) }}
+
+          </td>
 
           <td class="num" id="siTotalAmt">
 
@@ -512,6 +584,10 @@ function openCsvExport() {
 
   const totalEl = document.getElementById('siTotalAmt');
 
+  const totalGrossEl = document.getElementById('siTotalGross');
+
+  const totalDiscEl = document.getElementById('siTotalDisc');
+
   let sortCol = -1, sortAsc = true;
 
 
@@ -584,7 +660,7 @@ function openCsvExport() {
 
     const rows = tbody.querySelectorAll('tr:not(#siNoData)');
 
-    let vis = 0, total = 0;
+    let vis = 0, total = 0, totalGross = 0, totalDisc = 0;
 
     rows.forEach(row => {
 
@@ -624,7 +700,12 @@ function openCsvExport() {
 
       row.style.display = show ? '' : 'none';
 
-      if (show) { vis++; total += parseFloat(row.getAttribute('data-amount') || 0); }
+      if (show) {
+        vis++;
+        total += parseFloat(row.getAttribute('data-amount') || 0);
+        totalGross += parseFloat(row.getAttribute('data-totalamount') || 0);
+        totalDisc += parseFloat(row.getAttribute('data-discountamount') || 0);
+      }
 
     });
 
@@ -635,6 +716,10 @@ function openCsvExport() {
     if (countEl) countEl.textContent = (q || dateFrom || dateTo || customer) ? (vis + ' of ' + totalRows + ' shown') : (totalRows + ' records');
 
     if (totalEl) totalEl.textContent = total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    if (totalGrossEl) totalGrossEl.textContent = totalGross.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    if (totalDiscEl) totalDiscEl.textContent = totalDisc.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   }
 
@@ -741,6 +826,71 @@ function clearFilters() {
     });
 
   });
+
+  (function wireInvoiceTemplateLinks() {
+    var KEY = 'nexa_sales_invoice_template';
+    var PREFER = '/sales/invoice-templates/prefer';
+    var sel = document.getElementById('siListInvoiceTemplate');
+    function read() {
+      try {
+        var v = (localStorage.getItem(KEY) || 'classic').trim().toLowerCase();
+        if (['classic', 'modern', 'compact', 'slate', 'gulfnova'].indexOf(v) >= 0) return v;
+      } catch (e) {}
+      return 'classic';
+    }
+    function write(v) {
+      try { localStorage.setItem(KEY, v); } catch (e) {}
+    }
+    function apply(tmpl) {
+      document.querySelectorAll('a.so-link, a.btn-view').forEach(function (a) {
+        var href = a.getAttribute('href') || '';
+        if (!href || href.indexOf('crystal-reports/open/') < 0) return;
+        try {
+          var u = new URL(href, window.location.origin);
+          u.searchParams.set('template', tmpl);
+          a.setAttribute('href', u.pathname + u.search + u.hash);
+        } catch (e) {}
+      });
+    }
+    function persist(tmpl) {
+      write(tmpl);
+      apply(tmpl);
+      try {
+        fetch(PREFER, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ template: tmpl }),
+        }).then(function (r) { return r.json(); }).then(function (res) {
+          if (res && res.template) { write(res.template); apply(res.template); if (sel) sel.value = res.template; }
+        }).catch(function () {});
+      } catch (e) {}
+    }
+    try {
+      fetch(PREFER, { method: 'GET', headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (!res || !res.success) return;
+          var local = read();
+          if (!res.saved && local && local !== 'classic') {
+            persist(local);
+            return;
+          }
+          if (res.template) {
+            write(res.template);
+            if (sel) sel.value = res.template;
+            apply(res.template);
+          }
+        }).catch(function () {});
+    } catch (e) {}
+    if (sel) {
+      sel.value = read();
+      sel.addEventListener('change', function () {
+        persist(sel.value || 'classic');
+      });
+    }
+    apply(read());
+  })();
 
 })();
 

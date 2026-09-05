@@ -150,31 +150,80 @@ def list_receipt_documents(
 
 def next_receipt_no() -> Any:
     from db import coerce_receiptno
+    from mobile_backend.services.doc_peek import fresh_doc_no
 
     with _erp_session_scope():
         st = _purchase_st()
         st._apply_db()
-        return coerce_receiptno(st._receipt_next_no())
+        return coerce_receiptno(
+            fresh_doc_no(
+                peek_fn=st._receipt_next_no,
+                exists_fn=st._receipt_no_exists_in_hdr,
+                allocate_fn=lambda n: st._allocate_next_free_receipt_no(n),
+            )
+        )
 
 
-def _normalize_mobile_line(raw: dict[str, Any], warehouse_id: int | None) -> dict[str, Any]:
+def _apply_erp_stock_qty_fields(
+    line: dict[str, Any],
+    *,
+    st: Any,
+    item_code: Any,
+) -> None:
+    """
+    Set conversionfactor / baseqty / receivedqty like ERP goods_receipt_form.
+
+    Stock posting uses: stock_qty_base = quantity × conversionfactor + bonus
+    and requires receivedqty ≈ that base qty.
+    """
+    from mobile_backend.services.uom_factor import apply_line_stock_base, stock_base_qty
+
+    uom = str(line.get("uom") or line.get("unit") or "PCS").strip() or "PCS"
+    qty = abs(_line_float(line, "quantity", "qty"))
+    bonus = abs(_line_float(line, "bonus"))
+    line["quantity"] = qty
+    line["bonus"] = bonus
+    baseqty = apply_line_stock_base(
+        line, item_code=item_code, uom=uom, qty=qty, bonus=bonus, st=st
+    )
+    # Keep explicit GRN receivedqty (ERP validates against base)
+    line["receivedqty"] = stock_base_qty(qty, float(line.get("conversionfactor") or 1), bonus)
+    if abs(baseqty - line["receivedqty"]) > 1e-9:
+        line["receivedqty"] = baseqty
+
+
+def _normalize_mobile_line(
+    raw: dict[str, Any],
+    warehouse_id: int | None,
+    st: Any,
+) -> dict[str, Any]:
     item_raw = raw.get("itemcode") or raw.get("item_code")
-    qty = float(raw.get("quantity") or raw.get("qty") or raw.get("receivedqty") or 0)
-    rate = float(raw.get("rate") or 0)
+    # Ordered qty in line UOM (not base). Prefer quantity/qty over receivedqty —
+    # receivedqty may already be base from a prior ERP-shaped payload.
+    qty = _line_float(raw, "quantity", "qty")
+    if qty <= 0:
+        # Fallback: if only received/base sent, treat as UOM qty when factor is 1 later
+        qty = _line_float(raw, "receivedqty", "baseqty")
+    rate = _line_float(raw, "rate")
     unit = str(raw.get("uom") or raw.get("unit") or "PCS").strip() or "PCS"
-    amount = float(raw.get("amount") if raw.get("amount") is not None else qty * rate)
+    amount = raw.get("amount")
+    try:
+        amount_f = float(amount) if amount is not None else qty * rate
+    except (TypeError, ValueError):
+        amount_f = qty * rate
     line: dict[str, Any] = {
         "itemcode": item_raw,
         "quantity": qty,
-        "receivedqty": qty,
-        "baseqty": qty,
-        "conversionfactor": 1,
         "uom": unit,
         "rate": rate,
-        "amount": amount,
-        "discount": float(raw.get("discount") or 0),
-        "othercharge": float(raw.get("othercharge") or 0),
+        "amount": amount_f,
+        "discount": _line_float(raw, "discount"),
+        "othercharge": _line_float(raw, "othercharge"),
+        "bonus": _line_float(raw, "bonus"),
         "foc": bool(raw.get("foc")),
+        "conversionfactor": raw.get("conversionfactor") or raw.get("uomfactor"),
+        "barcode": str(raw.get("barcode") or "").strip(),
+        "itemname": str(raw.get("itemname") or raw.get("item_name") or "").strip(),
     }
     wh_code = str(
         raw.get("warehouse_code") or raw.get("location") or raw.get("store") or ""
@@ -197,7 +246,7 @@ def _prepare_erp_lines(
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for ln in lines or []:
-        erp_ln = _normalize_mobile_line(ln, warehouse_id)
+        erp_ln = _normalize_mobile_line(ln, warehouse_id, st)
         inv_loc = st._line_warehouse_code_from_payload(erp_ln, warehouse_id)
         if not inv_loc:
             idx = len(out) + 1
@@ -212,6 +261,7 @@ def _prepare_erp_lines(
         if code is None:
             raise ValueError(f"Invalid item code: {erp_ln.get('itemcode')!r}")
         erp_ln["itemcode"] = code
+        _apply_erp_stock_qty_fields(erp_ln, st=st, item_code=code)
         out.append(erp_ln)
     if not out:
         raise ValueError("Add at least one GRN line with a valid item code.")
@@ -436,15 +486,10 @@ def load_from_lpo(lpo_no: Any) -> dict[str, Any]:
         lpo_key = resolved_key
         st._lpo_resolve_header_warehouse(header, lpo_key, lines=details)
         # Prefer Transaction Date Setup open date for new GRNs (not calendar/PO date).
+        from mobile_backend.services.transaction_date_helper import resolve_doc_date
+
+        open_date = resolve_doc_date("grn", None, snap_out_of_range=True)
         txn = st._purchase_txn_date_context("grn")
-        open_date = str(
-            txn.get("open_transaction_date")
-            or st._purchase_open_transaction_date("grn")
-            or ""
-        ).strip()[:10]
-        if not open_date:
-            open_date, _ = st._enforce_purchase_open_date("", "grn")
-            open_date = str(open_date or datetime.now().strftime("%Y-%m-%d"))[:10]
         if not header.get("lpoamount"):
             total = 0.0
             for line in details:
@@ -673,14 +718,13 @@ def save_receipt(payload: dict[str, Any]) -> dict[str, Any]:
         if not receiptno_is_valid(receipt_no):
             receipt_no = coerce_receiptno(st._receipt_next_no())
 
-        receipt_date = str(payload.get("receipt_date") or payload.get("receiptdate") or "")[:10]
-        open_date, txn_err = st._enforce_purchase_open_date(receipt_date, "grn")
-        if txn_err:
-            # Mobile may send calendar today / PO date — snap to preferred open date.
-            open_date, txn_err = st._enforce_purchase_open_date("", "grn")
-        if txn_err:
-            raise ValueError(txn_err)
-        receipt_date = str(open_date or receipt_date or datetime.now().strftime("%Y-%m-%d"))[:10]
+        from mobile_backend.services.transaction_date_helper import resolve_doc_date
+
+        receipt_date = resolve_doc_date(
+            "grn",
+            payload.get("receipt_date") or payload.get("receiptdate"),
+            snap_out_of_range=True,
+        )
 
         try:
             supplier_code = int(payload.get("supplier_code") or payload.get("suppliercode") or 0)
@@ -889,14 +933,20 @@ def post_inventory(receipt_no: Any, payload: dict[str, Any] | None = None) -> di
                     ln["location"] = inv_loc
                     ln["warehouse_code"] = inv_loc
                     ln["inventorylocation"] = inv_loc
+                code = st._coerce_grn_item_code(ln.get("itemcode") or ln.get("item_code"))
+                if code is not None:
+                    ln["itemcode"] = code
+                    # Recompute base stock qty from UOM factor (ERP parity) even if
+                    # an older mobile draft stored conversionfactor=1.
+                    _apply_erp_stock_qty_fields(ln, st=st, item_code=code)
 
-        receipt_date = str(payload.get("receipt_date") or hdr.get("receiptdate") or "")[:10]
-        open_date, txn_err = st._enforce_purchase_open_date(receipt_date, "grn")
-        if txn_err:
-            open_date, txn_err = st._enforce_purchase_open_date("", "grn")
-        if txn_err:
-            raise ValueError(txn_err)
-        receipt_date = str(open_date or receipt_date or datetime.now().strftime("%Y-%m-%d"))[:10]
+        from mobile_backend.services.transaction_date_helper import resolve_doc_date
+
+        receipt_date = resolve_doc_date(
+            "grn",
+            payload.get("receipt_date") or hdr.get("receiptdate"),
+            snap_out_of_range=True,
+        )
         supplier_code = int(payload.get("supplier_code") or hdr.get("suppliercode") or 0)
         invoice_no = str(payload.get("invoice_no") or hdr.get("invoiceno") or "").strip()
         invoice_date = str(payload.get("invoice_date") or hdr.get("invoicedate") or "")[:10]
@@ -974,3 +1024,20 @@ def post_accounts(receipt_no: Any) -> dict[str, Any]:
             "account_posted": True,
             "message": f"Accounts posted for GRN {rn}.",
         }
+
+
+def build_receipt_pdf(receipt_no: Any) -> tuple[bytes, str]:
+    """ERP GRN PDF (same ReportLab layout as desktop receipt print)."""
+    from db import coerce_receiptno, parse_receiptno_from_request, receiptno_is_valid
+
+    with _erp_session_scope():
+        st = _purchase_st()
+        st._apply_db()
+        rn = parse_receiptno_from_request(receipt_no)
+        if not receiptno_is_valid(rn):
+            raise ValueError("Invalid GRN number.")
+        pdf_bytes, err = st._build_grn_pdf_bytes(rn)
+        if err or not pdf_bytes:
+            raise ValueError(str(err or "Failed to generate GRN PDF."))
+        safe = str(coerce_receiptno(rn) or rn).replace("/", "-").replace("\\", "-")
+        return pdf_bytes, f"GRN_{safe}.pdf"

@@ -88,7 +88,15 @@
             {% if st == 'POSTED' %}<span class="fa-status-badge fa-status-badge--posted">Posted</span>
             {% else %}<span class="fa-status-badge fa-status-badge--draft">Draft</span>{% endif %}
           </td>
-          <td style="text-align:center;"><a class="btn-view" href="{{ url_for(form_ep, id=r.disposal_id) }}">Open</a></td>
+          <td style="text-align:center; white-space:nowrap;">
+            <a class="btn-view" href="{{ url_for(form_ep, id=r.disposal_id) }}">Open</a>
+            {% if st != 'POSTED' %}
+            <form method="post" action="{{ url_for('fixed_assets.fa_disposal_post') }}" style="display:inline;" onsubmit="return confirm('Post {{ list_label }} {{ r.disposal_no }} to GL?');">
+              <input type="hidden" name="disposal_id" value="{{ r.disposal_id }}" />
+              <button type="submit" class="btn-view" style="border:none;background:none;cursor:pointer;padding:0;margin-left:6px;">Post</button>
+            </form>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
         {% endif %}

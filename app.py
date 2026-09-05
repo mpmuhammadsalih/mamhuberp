@@ -2,7 +2,6 @@ import asyncio
 import logging
 import html as html_escape
 import os
-import socket
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from logging.handlers import RotatingFileHandler
@@ -302,8 +301,9 @@ if __name__ == '__main__':
         port = int(_port_raw)
     except ValueError:
         port = 5002
-    hostname = socket.gethostname()
-    local_ip = socket.gethostbyname(hostname)
+    from nexa_http.network_util import resolve_lan_ip
+
+    local_ip = resolve_lan_ip()
     print(f'\n  App running on:')
     print(f'    http://127.0.0.1:{port}')
     print(f'    http://{local_ip}:{port}  (network)\n')

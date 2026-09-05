@@ -23,6 +23,7 @@
   </div>
 
   <form id="faAssetForm" method="post" action="{{ url_for('fixed_assets.fa_asset_form') }}" class="fa-form-shell">
+    <input type="hidden" name="save_nonce" value="{{ global_save_nonce | default('') }}" />
     {% if row.asset_id %}<input type="hidden" name="asset_id" value="{{ row.asset_id }}" />{% endif %}
     <input type="hidden" id="faCreditPartyType" name="credit_party_type" value="{{ row.credit_party_type or '' }}" />
     <input type="hidden" id="faCreditPartyCode" name="credit_party_code" value="{{ row.credit_party_code or '' }}" />
@@ -125,10 +126,13 @@
       </div>
       {% else %}
       <div class="fa-post-panel">
-        <p style="margin:0 0 10px; font-size:13px; color:#495057;">Save the asset first, then post acquisition to GL.</p>
-        <label class="checkbox-inline" style="margin-bottom:0;">
-          <input type="checkbox" name="post_acq" value="1" /> Post acquisition to GL on save
-        </label>
+        <p style="margin:0; font-size:13px; color:#495057;">
+          {% if edit_mode %}
+          Asset is saved as <strong>draft</strong>. Use <strong>Post acquisition</strong> below when ready to capitalize to GL.
+          {% else %}
+          Save creates a <strong>draft</strong> asset. After save, open the asset and use <strong>Post acquisition</strong> to post to GL.
+          {% endif %}
+        </p>
       </div>
       {% endif %}
     </section>
@@ -164,6 +168,21 @@
       partyCode.value = '';
     }
   });
+
+  var assetForm = document.getElementById('faAssetForm');
+  if (assetForm) {
+    var assetSubmitting = false;
+    assetForm.addEventListener('submit', function (e) {
+      if (assetSubmitting) {
+        e.preventDefault();
+        return;
+      }
+      assetSubmitting = true;
+      document.querySelectorAll('[form="faAssetForm"], #faAssetForm button[type="submit"]').forEach(function (btn) {
+        btn.disabled = true;
+      });
+    });
+  }
 })();
 </script>
 {% endblock %}

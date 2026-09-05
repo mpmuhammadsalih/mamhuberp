@@ -140,14 +140,14 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/qz_printer_prefs.js') }}"></script>
-<script src="{{ url_for('static', filename='js/qz_invoice_print.js') }}"></script>
+<script src="{{ url_for('static', filename='js/qz_invoice_print.js') }}?v=2"></script>
 <script src="{{ url_for('static', filename='js/qz_barcode_print.js') }}"></script>
-<script src="https://cdn.jsdelivr.net/npm/qz-tray/qz-tray.js"></script>
 <script>
-window.__BC_QZ_URLS__ = {
+window.__SALES_QZ_URLS__ = {
   certificate: {{ url_for('reports.qz_certificate')|tojson }},
   sign: {{ url_for('reports.qz_sign')|tojson }}
 };
+window.__BC_QZ_URLS__ = window.__SALES_QZ_URLS__;
 </script>
 <script>
 (function() {
@@ -179,7 +179,6 @@ window.__BC_QZ_URLS__ = {
 
   let printerRows = [];
   let targetPrinterInput = null;
-  let qzSecurityConfigured = false;
 
   function flashBadge(el) {
     if (!el) return;
@@ -281,45 +280,13 @@ window.__BC_QZ_URLS__ = {
     }
   };
 
+  const QZ_URLS = window.__SALES_QZ_URLS__ || window.__BC_QZ_URLS__ || {};
+
   const ensureQzConnected = async () => {
-    if (!window.qz) {
-      throw new Error('QZ Tray library not loaded. Check network/CDN access.');
+    if (!window.SalesQzPrint || typeof window.SalesQzPrint.ensureQzSecurity !== 'function') {
+      throw new Error('QZ print helper not loaded. Reload the page.');
     }
-    if (!qz.security) {
-      throw new Error('QZ security API unavailable.');
-    }
-    if (!qzSecurityConfigured) {
-      qz.security.setCertificatePromise((resolve, reject) => {
-        fetch("{{ url_for('reports.qz_certificate') }}", { credentials: 'same-origin' })
-          .then((res) => {
-            if (!res.ok) throw new Error(`Certificate fetch failed (HTTP ${res.status})`);
-            return res.text();
-          })
-          .then((txt) => resolve(txt))
-          .catch((err) => reject(err));
-      });
-      qz.security.setSignatureAlgorithm("SHA512");
-      qz.security.setSignaturePromise((toSign) => (resolve, reject) => {
-        fetch("{{ url_for('reports.qz_sign') }}", {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ request: toSign }),
-        })
-          .then(async (res) => {
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok || !data.success || !data.signature) {
-              throw new Error((data && (data.error || data.message)) || `Signature failed (HTTP ${res.status})`);
-            }
-            resolve(data.signature);
-          })
-          .catch((err) => reject(err));
-      });
-      qzSecurityConfigured = true;
-    }
-    if (!qz.websocket.isActive()) {
-      await qz.websocket.connect();
-    }
+    await window.SalesQzPrint.ensureQzSecurity(QZ_URLS);
   };
 
   const loadQzPrinters = async () => {

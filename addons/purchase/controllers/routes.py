@@ -34,7 +34,7 @@ except Exception:
     REPORTLAB_AVAILABLE = False
 from config.settings import is_multi_db_mode
 from db import set_active_db_key
-from db import _detect_column, _detect_table, _fetch_rows, _get_connection, _get_table_columns, _table_exists, fetch_sales_invoice_lines_for_po_import, get_all_chart_of_accounts, get_inventory_valuation_pivot_report, get_inventory_valuation_report, get_location_master_row, get_stk_adj_account_config, get_stk_adj_opening_stock_mode_enabled, upsert_stk_adj_account_config, ensure_gl_tables, ensure_itemjournal_surrogate_pk, ensure_itemjournal_averagecost_column, ensure_itemjournal_batch_columns, ensure_itemjournal_storage_id_column, ensure_itemjournal_warehouse_columns, ensure_itemjournal_hdr_table, ITEMJOURNAL_HDR_TABLE, ensure_receipt_warehouse_id_columns, ensure_returndtl_warehouse_columns, ensure_returndtl_discount_amount_columns, ensure_tempreturn_tables, warm_purchase_return_schema_cache, item_lot_id_for_batch_at_location_cur, itemjournal_warehouse_code_column, receiptdtl_warehouse_code_column, lpodtl_warehouse_code_column, ensure_receiptdtl_warehouse_columns, ensure_lpodtl_warehouse_columns, ensure_receiptdtl_batch_mfg_expiry_columns, ensure_receiptdtl_storage_id_column, ensure_receiptdtl_previous_cost_columns, ensure_receiptdtl_foc_column, ensure_receiptdtl_barcode_retail_columns, ensure_receiptdtl_grn_columns, ensure_receipthdr_savetime_column, ensure_receipthdr_lpono_column, ensure_receipthdr_inventory_posted_column, ensure_receipthdr_posting_date_column, ensure_returnhdr_posting_date_column, ensure_tempreturnhdr_posting_date_column, ensure_returnhdr_inventory_posted_column, ensure_returnhdr_discount_column, ensure_returnhdr_extension_columns, ensure_tempreturnhdr_discount_column, apply_bin_stock_delta_cur, apply_warehouse_stock_delta_cur, ensure_warehouse_stock_table, ensure_warehouse_stock_table_cur, reverse_grn_lot_posting_for_receipt_cur, sync_warehouse_stock_from_item_lots_cur, fefo_issue_out_for_item_cur, grn_line_has_batch_intent, is_item_batch_tracked, is_item_bin_configured, is_location_batch_tracking_enabled, is_location_bin_tracking_enabled, is_location_warehouse_enabled, parse_grn_receipt_header_datetime, receipt_apply_lot_on_grn_line_cur, resolve_grn_line_lot_batch_mfg_expiry, resolve_warehouse_loc_key_for_location_code, resolve_warehouse_master_table, resolve_warehouse_id, get_warehouse_master_store_picker_rows, get_warehouse_master_by_id, get_warehouse_master_by_code, list_warehouse_master_rows, list_warehouse_picker_bins, ensure_lpo_po_standard_columns, get_lpo_header_warehouse_code, get_lpo_header_warehouse_id, LPODTL_BARCODE_COLUMN_DETECT, undo_item_lot_movements_for_ref_cur, item_lot_putaway_to_bin_cur, get_categories, get_item_store_inventory, get_item_store_rows_from_itemmaster, get_item_stores_stock, get_storeinventory_stock_summary_for_items, get_location_info_by_dbkey, get_locationmaster_itemmaster_branch_flags, get_purchase_locations, get_user_allowed_tenant_ids, get_user_multilocations_view, get_user_transit_only, get_active_usernames, get_tenant_list, get_tenant_by_id, get_item_lot_by_id, get_item_lot_bin_breakdown, get_item_lot_bin_shelf_stock_grid, get_item_lot_movements, get_item_lot_stock_list, list_item_lots_for_qc_hold, item_lot_putaway_to_bin, get_warehouse_location_sites, get_warehouse_storage_rows, stock_adjustment_apply_batch_lot_cur, set_item_batch_tracked, set_item_lot_blocked_state, ensure_templpo_tables, get_next_templpono, load_templpo_cart, save_templpo_cart, set_templpo_saved, start_templpo_cart, update_templpo_supplier, ITEM_LOT_TABLE, ITEM_LOT_BALANCE_TABLE, WAREHOUSE_STOCK_TABLE, ensure_item_lot_tables, _item_lot_insert_movement_cur, repost_itemjournal_grn, repost_itemjournal_purchase_return, reverse_itemjournal_document, ITEMJOURNAL_SOURCE_GRN, ITEMJOURNAL_SOURCE_PURCHASE_RETURN, verify_user, get_username_by_employeecode, coerce_lpono, parse_lpono_from_request, lpono_is_valid, lpono_equal, normalize_lpono, lpono_uses_varchar_storage, ensure_lpono_varchar_columns, ensure_purchase_approval_docno_varchar, purchase_log_doc_no_bind, purchase_log_doc_no_is_valid, get_next_lpo_no, get_next_lpo_no_cur, peek_next_lpo_no, _lpo_sql_literal, _lpo_approval_doc_no, _purchase_approval_doc_no, DOC_TYPE_LPO, DOC_TYPE_GRN, coerce_receiptno, parse_receiptno_from_request, receiptno_is_valid, receiptno_equal, normalize_receiptno, receiptno_uses_varchar_storage, ensure_receiptno_varchar_columns, get_next_grn_receipt_no, get_next_grn_receipt_no_cur, peek_next_grn_receipt_no, _receiptno_sql_literal, _grn_approval_doc_no, ensure_goodsreturnno_varchar_columns, goodsreturnno_uses_varchar_storage, coerce_goodsreturnno, parse_goodsreturnno_from_request, goodsreturnno_is_valid, goodsreturnno_equal, format_goodsreturnno_display, get_next_return_order_no_cur, get_next_purchase_return_no_cur, peek_next_return_order_no, peek_next_purchase_return_no, _goodsreturnno_sql_literal, _goodsreturnno_txn_sql_literal, _receiptno_sql_literal_for_table, _transferno_sql_literal, _transferno_sql_literal_for_table, _adjno_sql_literal, _adjno_sql_literal_for_table, DOC_TYPE_RETURN_ORDER, DOC_TYPE_PURCHASE_RETURN, billno_numeric_part, billno_journal_receipt_no, returnhdr_goodsreturnno_uses_varchar_storage, coerce_returnhdr_goodsreturnno, returnhdr_goodsreturnno_is_valid, returnhdr_goodsreturnno_match_sql, returnhdr_goodsreturnno_match_params, returnhdr_goodsreturnno_is_valid_match
+from db import _detect_column, _detect_table, _fetch_rows, _get_connection, _get_table_columns, _table_exists, _itemjournal_read_tables, _resolve_itemjournal_post_table, fetch_sales_invoice_lines_for_po_import, get_all_chart_of_accounts, get_inventory_valuation_pivot_report, get_inventory_valuation_report, get_location_master_row, get_stk_adj_account_config, get_stk_adj_opening_stock_mode_enabled, upsert_stk_adj_account_config, ensure_gl_tables, ensure_itemjournal_surrogate_pk, ensure_itemjournal_averagecost_column, ensure_itemjournal_batch_columns, ensure_itemjournal_storage_id_column, ensure_itemjournal_warehouse_columns, ensure_itemjournal_hdr_table, ITEMJOURNAL_HDR_TABLE, ensure_receipt_warehouse_id_columns, ensure_returndtl_warehouse_columns, ensure_returndtl_discount_amount_columns, ensure_tempreturn_tables, warm_purchase_return_schema_cache, item_lot_id_for_batch_at_location_cur, itemjournal_warehouse_code_column, receiptdtl_warehouse_code_column, lpodtl_warehouse_code_column, ensure_receiptdtl_warehouse_columns, ensure_lpodtl_warehouse_columns, ensure_receiptdtl_batch_mfg_expiry_columns, ensure_receiptdtl_storage_id_column, ensure_receiptdtl_previous_cost_columns, ensure_receiptdtl_foc_column, ensure_receiptdtl_barcode_retail_columns, ensure_receiptdtl_grn_columns, ensure_receipthdr_savetime_column, ensure_receipthdr_lpono_column, ensure_receipthdr_inventory_posted_column, ensure_receipthdr_posting_date_column, ensure_returnhdr_posting_date_column, ensure_tempreturnhdr_posting_date_column, ensure_returnhdr_inventory_posted_column, ensure_returnhdr_discount_column, ensure_returnhdr_extension_columns, ensure_tempreturnhdr_discount_column, apply_bin_stock_delta_cur, apply_warehouse_stock_delta_cur, ensure_warehouse_stock_table, ensure_warehouse_stock_table_cur, reverse_grn_lot_posting_for_receipt_cur, sync_warehouse_stock_from_item_lots_cur, fefo_issue_out_for_item_cur, grn_line_has_batch_intent, is_item_batch_tracked, is_item_bin_configured, is_location_batch_tracking_enabled, is_location_bin_tracking_enabled, is_location_warehouse_enabled, parse_grn_receipt_header_datetime, receipt_apply_lot_on_grn_line_cur, resolve_grn_line_lot_batch_mfg_expiry, resolve_warehouse_loc_key_for_location_code, resolve_warehouse_master_table, resolve_warehouse_id, get_warehouse_master_store_picker_rows, get_warehouse_master_by_id, get_warehouse_master_by_code, list_warehouse_master_rows, list_warehouse_picker_bins, ensure_lpo_po_standard_columns, get_lpo_header_warehouse_code, get_lpo_header_warehouse_id, LPODTL_BARCODE_COLUMN_DETECT, undo_item_lot_movements_for_ref_cur, item_lot_putaway_to_bin_cur, get_categories, get_item_store_inventory, get_item_store_rows_from_itemmaster, get_item_stores_stock, get_storeinventory_stock_summary_for_items, get_location_info_by_dbkey, get_locationmaster_itemmaster_branch_flags, get_purchase_locations, get_user_allowed_tenant_ids, get_user_multilocations_view, get_user_transit_only, get_active_usernames, get_tenant_list, get_tenant_by_id, get_item_lot_by_id, get_item_lot_bin_breakdown, get_item_lot_bin_shelf_stock_grid, get_item_lot_movements, get_item_lot_stock_list, list_item_lots_for_qc_hold, item_lot_putaway_to_bin, get_warehouse_location_sites, get_warehouse_storage_rows, stock_adjustment_apply_batch_lot_cur, set_item_batch_tracked, set_item_lot_blocked_state, ensure_templpo_tables, get_next_templpono, load_templpo_cart, save_templpo_cart, set_templpo_saved, start_templpo_cart, update_templpo_supplier, ITEM_LOT_TABLE, ITEM_LOT_BALANCE_TABLE, WAREHOUSE_STOCK_TABLE, ensure_item_lot_tables, _item_lot_insert_movement_cur, repost_itemjournal_grn, repost_itemjournal_purchase_return, reverse_itemjournal_document, ITEMJOURNAL_SOURCE_GRN, ITEMJOURNAL_SOURCE_PURCHASE_RETURN, verify_user, get_username_by_employeecode, coerce_lpono, parse_lpono_from_request, lpono_is_valid, lpono_equal, normalize_lpono, lpono_uses_varchar_storage, ensure_lpono_varchar_columns, ensure_purchase_approval_docno_varchar, purchase_log_doc_no_bind, purchase_log_doc_no_is_valid, get_next_lpo_no, get_next_lpo_no_cur, peek_next_lpo_no, _lpo_sql_literal, _lpo_approval_doc_no, _purchase_approval_doc_no, DOC_TYPE_LPO, DOC_TYPE_GRN, coerce_receiptno, parse_receiptno_from_request, receiptno_is_valid, receiptno_equal, normalize_receiptno, receiptno_uses_varchar_storage, ensure_receiptno_varchar_columns, get_next_grn_receipt_no, get_next_grn_receipt_no_cur, peek_next_grn_receipt_no, _receiptno_sql_literal, _grn_approval_doc_no, ensure_goodsreturnno_varchar_columns, goodsreturnno_uses_varchar_storage, coerce_goodsreturnno, parse_goodsreturnno_from_request, goodsreturnno_is_valid, goodsreturnno_equal, format_goodsreturnno_display, get_next_return_order_no_cur, get_next_purchase_return_no_cur, peek_next_return_order_no, peek_next_purchase_return_no, _goodsreturnno_sql_literal, _goodsreturnno_txn_sql_literal, _receiptno_sql_literal_for_table, _transferno_sql_literal, _transferno_sql_literal_for_table, _adjno_sql_literal, _adjno_sql_literal_for_table, DOC_TYPE_RETURN_ORDER, DOC_TYPE_PURCHASE_RETURN, billno_numeric_part, billno_journal_receipt_no, returnhdr_goodsreturnno_uses_varchar_storage, coerce_returnhdr_goodsreturnno, returnhdr_goodsreturnno_is_valid, returnhdr_goodsreturnno_match_sql, returnhdr_goodsreturnno_match_params, returnhdr_goodsreturnno_is_valid_match
 from save_nonce import GLOBAL_SAVE_NONCE_SESSION_KEY, commit_form_save_nonce, extract_submitted_save_nonce, issue_save_nonce, json_response_keep_global_nonce, json_response_rotate_global, peek_save_nonce, reject_invalid_form_save_nonce, replay_blocked_response_global, verify_consume_save_nonce
 from db.inventory_doc_numbers import (
     ADJNO_SPEC,
@@ -69,6 +69,8 @@ from addons.purchase.purchase_verification import (
     list_purchase_verification_documents,
     verify_document_detail,
 )
+from addons.purchase.itemjournal_missing_db import scan_missing_itemjournal_lines
+from db import backfill_itemjournal_from_documents
 from addons.purchase.po_ai import (
     build_po_insights,
     generate_po_ai_narrative,
@@ -473,15 +475,43 @@ def _grn_line_landing_unit(
         land = float(landing_from_line or 0)
     except (TypeError, ValueError):
         land = 0.0
+    cf = float(conv_factor or 0)
+    rate_f = float(rate or 0)
+    # Guard: client sometimes posts pack/purchase-UOM rate as landingcost.
+    if land > 0 and cf > 1.0 + 1e-9 and rate_f > 0 and abs(land - rate_f) <= max(0.01, abs(rate_f) * 0.001):
+        return land / cf
     if land > 0:
         return land
     bq = abs(float(stock_qty_base or 0))
     if bq > 1e-12:
         return (float(amount or 0) + float(other_charge or 0)) / bq
-    cf = float(conv_factor or 0)
     if cf > 0:
-        return float(rate or 0) / cf
-    return float(rate or 0)
+        return rate_f / cf
+    return rate_f
+
+
+def _purchase_line_base_unit_avg(rate: float, factor: float, line_avg: float = 0.0) -> float:
+    """Per-base-UOM cost for purchase-return ITEMJOURNAL (never pack rate with base qty)."""
+    try:
+        f = float(factor or 1)
+    except (TypeError, ValueError):
+        f = 1.0
+    if f <= 0:
+        f = 1.0
+    try:
+        r = float(rate or 0)
+    except (TypeError, ValueError):
+        r = 0.0
+    try:
+        a = float(line_avg or 0)
+    except (TypeError, ValueError):
+        a = 0.0
+    unit = a if a > 0 else r
+    if unit <= 0:
+        return 0.0
+    if f > 1.0 + 1e-9 and r > 0 and abs(unit - r) <= max(0.01, abs(r) * 0.001):
+        return round(unit / f, 6)
+    return round(unit, 6)
 
 
 def _grn_accumulate_item_cost(
@@ -592,6 +622,23 @@ def _grn_item_previous_cost_snapshot(
             if row:
                 prev_avg = float(row[0] or 0)
                 prev_land = float(row[1] or 0)
+        except Exception:
+            pass
+    # Match sales COGS basis: NVL(AVERAGECOST, COSTPRICE).
+    if prev_avg <= 1e-12 and im_tbl and im_code_col and im_cost_col:
+        try:
+            where_parts = [f'{im_code_col} = :icode']
+            params2: Dict[str, Any] = {'icode': ic}
+            if im_loc_col:
+                where_parts.append(f'{im_loc_col} = :iloc')
+                params2['iloc'] = loc_code
+            cur.execute(
+                f'SELECT NVL({im_cost_col}, 0) FROM {im_tbl} WHERE {" AND ".join(where_parts)}',
+                params2,
+            )
+            crow = cur.fetchone()
+            if crow:
+                prev_avg = float(crow[0] or 0)
         except Exception:
             pass
     if prev_land <= 0 and prev_avg > 0:
@@ -795,6 +842,7 @@ _PURCHASE_TXN_CODES: Dict[str, int] = {
     'purchase': 2,
     'grn': 5,
     'purchase_return': 4,
+    'transfer': 6,
 }
 
 
@@ -825,6 +873,7 @@ def _purchase_txn_date_block_message(doc_kind: str) -> str:
         'purchase': 'Purchase Order',
         'grn': 'GRN',
         'purchase_return': 'Purchase Return',
+        'transfer': 'Stock Transfer',
     }
     doc = labels.get(str(doc_kind or '').strip().lower(), 'Purchase document')
     try:
@@ -832,8 +881,9 @@ def _purchase_txn_date_block_message(doc_kind: str) -> str:
     except Exception:
         setup_url = '/setup/transaction-date'
     return (
-        f'No open transaction date range for {doc}. '
-        f'Open a From–To range in Transaction Date Setup ({setup_url}) before posting.'
+        f'Setup date is missing for {doc}. '
+        f'No open From–To date range in Transaction Date Setup ({setup_url}). '
+        f'Open a date range before posting.'
     )
 
 
@@ -1261,6 +1311,7 @@ def _get_items_for_location_filtered(search: Optional[str]=None, limit: Optional
     uom_col = _detect_column(tbl, ['BASEUOM', 'BASE_UOM', 'baseuom'])
     barcode_col = _detect_column(tbl, ['MANUFACTURERID', 'MANUFACTURER_ID', 'manufacturerid', 'BARCODE', 'barcode'])
     cost_col = _detect_column(tbl, ['COSTPRICE', 'COST_PRICE', 'costprice', 'COST', 'cost'])
+    avg_col = _detect_column(tbl, ['AVERAGECOST', 'AVERAGE_COST', 'averagecost', 'AVGCOST', 'avgcost'])
     loc_col = _detect_column(tbl, ['LOCATIONCODE', 'LOCATION_CODE', 'locationcode'])
     if not code_col:
         return []
@@ -1272,7 +1323,20 @@ def _get_items_for_location_filtered(search: Optional[str]=None, limit: Optional
         sel.append('NULL AS uom')
     if barcode_col:
         sel.append(f'{barcode_col} AS barcode')
+    # Separate avg + cost price for mobile list; ``cost`` stays default line rate (avg preferred).
+    if avg_col:
+        sel.append(f'NVL({avg_col}, 0) AS averagecost')
+    else:
+        sel.append('0 AS averagecost')
     if cost_col:
+        sel.append(f'NVL({cost_col}, 0) AS costprice')
+    else:
+        sel.append('0 AS costprice')
+    if avg_col and cost_col:
+        sel.append(f'NVL(NULLIF({avg_col}, 0), NVL({cost_col}, 0)) AS cost')
+    elif avg_col:
+        sel.append(f'NVL({avg_col}, 0) AS cost')
+    elif cost_col:
         sel.append(f'NVL({cost_col}, 0) AS cost')
     else:
         sel.append('0 AS cost')
@@ -1333,13 +1397,31 @@ def _map_item_picker_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             stock = float(r.get('currentstock') if r.get('currentstock') is not None else r.get('CURRENTSTOCK') or r.get('stock') or 0)
         except (TypeError, ValueError):
             stock = 0.0
+        try:
+            avg = float(r.get('averagecost') if r.get('averagecost') is not None else r.get('AVERAGECOST') or 0)
+        except (TypeError, ValueError):
+            avg = 0.0
+        try:
+            cprice = float(r.get('costprice') if r.get('costprice') is not None else r.get('COSTPRICE') or 0)
+        except (TypeError, ValueError):
+            cprice = 0.0
+        try:
+            cost = float(r.get('cost') or 0)
+        except (TypeError, ValueError):
+            cost = 0.0
+        if avg <= 0:
+            avg = cost
+        if cprice <= 0:
+            cprice = cost if cost > 0 else avg
         out.append({
             'code': r.get('code'),
             'name': disp_name,
             'itemname': disp_name,
             'uom': (r.get('uom') or '').strip() or 'NOS',
             'barcode': r.get('barcode') or '',
-            'cost': float(r.get('cost') or 0),
+            'cost': cost if cost > 0 else (avg if avg > 0 else cprice),
+            'averagecost': avg,
+            'costprice': cprice,
             'retail': float(r.get('retail') or 0),
             'currentstock': stock,
         })
@@ -1375,7 +1457,7 @@ def _item_picker_search_clause(
 
 
 def _get_items_with_alternate_uoms_filtered(search: Optional[str]=None, limit: Optional[int]=None, supplier_code: Optional[int]=None) -> List[Dict[str, Any]]:
-    """PO/GRN item picker: alternate UOM variants plus ITEMMASTER base rows when map is missing."""
+    """PO/GRN item picker: one row per UOM — alternate map rows plus base UOM when not in map."""
     im_tbl = _detect_table(['ITEMMASTER', 'itemmaster', 'ITEM_MASTER'])
     if not im_tbl:
         return []
@@ -1501,15 +1583,18 @@ def _get_items_with_alternate_uoms_filtered(search: Optional[str]=None, limit: O
     im_where = ' 1=1 '
     if im_loc:
         im_where += f' AND {im}.{im_loc} = :loc'
-    not_exists = f"""
+    # Include ITEMMASTER base UOM when that UOM is not already in the alternate map
+    # (legacy logic hid the entire item once any alternate row existed).
+    base_uom_exists = f"""
         NOT EXISTS (
             SELECT 1 FROM {a} alt_miss
             WHERE alt_miss.{alt_item} = {im}.{im_code}
+              AND UPPER(TRIM(alt_miss.{alt_uom})) = UPPER(TRIM({im_uom_sql}))
     """
     if alt_loc and im_loc:
-        not_exists += f' AND alt_miss.{alt_loc} = {im}.{im_loc}'
-    not_exists += ')'
-    im_where += f' AND {not_exists}'
+        base_uom_exists += f' AND alt_miss.{alt_loc} = {im}.{im_loc}'
+    base_uom_exists += ')'
+    im_where += f' AND {base_uom_exists}'
     im_where += _item_picker_search_clause(
         params=params,
         search=search,
@@ -3168,6 +3253,7 @@ def _save_lpo(lpo_no: Any, lpo_date: str, supplier_code: int, discount: float, o
     disc_col = _detect_column(hdr, ['DISCOUNT', 'discount'])
     other_col = _detect_column(hdr, ['OTHERCHARGE', 'OTHER_CHARGE', 'othercharge'])
     total_amt_col = _detect_column(hdr, ['TOTALAMOUNT', 'TOTAL_AMOUNT', 'totalamount'])
+    net_col = _detect_column(hdr, ['NETAMOUNT', 'netamount'])
     del_col = _detect_column(hdr, ['DELFLAG', 'DEL_FLAG', 'delflag'])
     lrflag_col = _detect_column(hdr, ['LRFLAG', 'lrflag', 'LR_FLAG', 'lr_flag'])
     created_col = _detect_column(hdr, ['CREATEDBY', 'CREATED_BY', 'createdby'])
@@ -3245,6 +3331,9 @@ def _save_lpo(lpo_no: Any, lpo_date: str, supplier_code: int, discount: float, o
                 if total_amt_col and (not amt_col or total_amt_col.upper() != amt_col.upper()):
                     ins_cols.append(total_amt_col)
                     ins_vals.append(str(total))
+                if net_col:
+                    ins_cols.append(net_col)
+                    ins_vals.append(str(round(total, 3)))
                 if disc_col:
                     ins_cols.append(disc_col)
                     ins_vals.append(str(discount or 0))
@@ -4290,6 +4379,34 @@ def _grn_hdr_line_discount_sql(hdr_alias: str, hdr_tbl: str) -> str:
         f'(SELECT NVL(SUM(NVL(d.{d_disc}, 0)), 0) FROM {dtl_tbl} d WHERE {" AND ".join(d_where)})'
     )
 
+
+def _grn_hdr_discount_list_expr(hdr_alias: str, hdr_tbl: str) -> str:
+    """Fast list-screen discount (header column only — no per-row RECEIPTDTL subquery)."""
+    disc_col = _detect_column(hdr_tbl, ['DISCOUNT', 'discount'])
+    if disc_col:
+        return f'NVL({hdr_alias}.{disc_col}, 0) AS discount'
+    return '0 AS discount'
+
+
+def _grn_receipt_keys_for_batch(receipt_nos: List[Any]) -> List[Any]:
+    nos: List[Any] = []
+    seen: Set[str] = set()
+    for x in receipt_nos or []:
+        rno = coerce_receiptno(x)
+        if not receiptno_is_valid(rno):
+            continue
+        key = str(rno)
+        if key not in seen:
+            seen.add(key)
+            nos.append(rno)
+    return nos
+
+
+def _grn_receiptno_sql_in_list(keys: Set[str]) -> str:
+    return ', '.join(
+        f"'{s.replace(chr(39), chr(39) + chr(39))}'" for s in sorted(k for k in keys if k and k != '0')
+    )
+
 def _pr_hdr_line_discount_sql(hdr_alias: str, hdr_tbl: str, *, temp: bool=False) -> str:
     """Scalar subquery: sum RETURNDTL / TEMPRETURNDTL line discounts for one return header row."""
     dtl_tbl = _detect_table(['TEMPRETURNDTL', 'tempreturndtl'] if temp else ['RETURNDTL', 'returndtl'])
@@ -4430,13 +4547,7 @@ def _get_receipt_list_page(page: int=1, per_page: int=50, search: Optional[str]=
         where_parts.append(f'TRUNC({h}.{date_col}) <= TO_DATE(:date_to, \'YYYY-MM-DD\')')
         params['date_to'] = date_to[:10]
     where_sql = ' AND '.join(where_parts) if where_parts else '1=1'
-    line_disc_subq = _grn_hdr_line_discount_sql(h, tbl)
-    if disc_col:
-        discount_expr = f'NVL(NULLIF({h}.{disc_col}, 0), {line_disc_subq}) AS discount'
-    elif line_disc_subq != '0':
-        discount_expr = f'{line_disc_subq} AS discount'
-    else:
-        discount_expr = '0 AS discount'
+    discount_expr = _grn_hdr_discount_list_expr(h, tbl)
     cols = [
         f'{h}.{no_col} AS receiptno',
         f'{h}.{date_col} AS receiptdate' if date_col else 'NULL AS receiptdate',
@@ -4451,13 +4562,12 @@ def _get_receipt_list_page(page: int=1, per_page: int=50, search: Optional[str]=
     count_q = f'SELECT COUNT(*) AS cnt FROM {tbl} {h} WHERE {where_sql}'
     base_q = f'SELECT {", ".join(cols)} {base_from}'
     cache_key = ('grn_completed', inv_tab, int(loc_code), (search or '').strip().upper(), date_from or '', date_to or '')
-    total_count = _lpo_list_count_cache_get(cache_key)
-    if total_count is None:
-        total_count = 0
+    cached_total = _lpo_list_count_cache_get(cache_key)
+    total_count = cached_total if cached_total is not None else 0
     try:
         with _get_connection() as conn:
             with conn.cursor() as cur:
-                if total_count == 0:
+                if cached_total is None:
                     count_rows = _lpo_list_fetch_rows_cur(cur, count_q, dict(params))
                     total_count = int(count_rows[0].get('cnt') or 0) if count_rows else 0
                     _lpo_list_count_cache_set(cache_key, total_count)
@@ -4479,46 +4589,7 @@ def _get_receipt_list_page(page: int=1, per_page: int=50, search: Optional[str]=
                             r['discount'] = round(float(r.get('discount') or 0), 2)
                         except (TypeError, ValueError):
                             r['discount'] = 0.0
-                if rows and _table_exists('PURCHASE_APPROVAL_TXN'):
-                    receipt_keys = [
-                        coerce_receiptno(r.get('receiptno'))
-                        for r in rows
-                        if receiptno_is_valid(r.get('receiptno'))
-                    ]
-                    if receipt_keys:
-                        status_map = _get_grn_status_map(receipt_keys)
-                        for r in rows:
-                            rno_key = str(coerce_receiptno(r.get('receiptno')))
-                            doc_key = str(_grn_approval_doc_no(r.get('receiptno')))
-                            r['approval_status'] = status_map.get(rno_key) or status_map.get(doc_key) or 'DRAFT'
-                if rows:
-                    if inv_tab == 'reversed':
-                        for r in rows:
-                            r['account_posted'] = False
-                            r['inventory_posted'] = False
-                            r['is_reversed'] = True
-                            r['can_edit'] = False
-                            r['can_delete'] = False
-                            r['can_post_inventory'] = False
-                    else:
-                        receipt_keys = [
-                            coerce_receiptno(r.get('receiptno'))
-                            for r in rows
-                            if receiptno_is_valid(r.get('receiptno'))
-                        ]
-                        posted_map = _grn_account_posted_map(receipt_keys, location_code=loc_code)
-                        inv_posted_map = _grn_inventory_posted_map(receipt_keys, location_code=loc_code)
-                        for r in rows:
-                            rno_key = str(coerce_receiptno(r.get('receiptno')))
-                            acct_posted = bool(posted_map.get(rno_key))
-                            inv_posted = bool(inv_posted_map.get(rno_key))
-                            r['account_posted'] = acct_posted
-                            r['inventory_posted'] = inv_posted
-                            r['is_reversed'] = False
-                            is_draft = not inv_posted and not acct_posted
-                            r['can_edit'] = is_draft
-                            r['can_delete'] = is_draft
-                            r['can_post_inventory'] = is_draft
+                _grn_list_enrich_rows_cur(cur, rows, loc_code=loc_code, inv_tab=inv_tab)
                 return (rows, total_count)
     except Exception as e:
         print(f'[_get_receipt_list_page] {e}')
@@ -8790,18 +8861,36 @@ def _grn_is_account_posted(receipt_no: Any, *, location_code: Optional[int]=None
     return False
 
 
-def _grn_account_posted_map(receipt_nos: List[Any], *, location_code: Optional[int]=None) -> Dict[str, bool]:
-    """Batch account-posted flags for GRN list rows (supports formatted receipt numbers)."""
-    nos: List[Any] = []
+def _grn_list_status_map_cur(cur: Any, receipt_nos: List[Any], loc_code: int) -> Dict[str, str]:
+    docnos: List[Any] = []
     seen: Set[str] = set()
     for x in receipt_nos or []:
-        rno = coerce_receiptno(x)
-        if not receiptno_is_valid(rno):
+        if not receiptno_is_valid(x):
             continue
-        key = str(rno)
+        docno = _grn_approval_doc_no(x)
+        key = str(docno)
         if key not in seen:
             seen.add(key)
-            nos.append(rno)
+            docnos.append(docno)
+    if not docnos or not _table_exists('PURCHASE_APPROVAL_TXN'):
+        return {}
+    if any(isinstance(d, str) and not str(d).lstrip('-').isdigit() for d in docnos):
+        in_list = ', '.join(f"'{str(d).replace(chr(39), chr(39) + chr(39))}'" for d in docnos)
+    else:
+        in_list = ', '.join(str(d) for d in docnos)
+    q = f"SELECT DOC_NO AS docno, STATUS AS status FROM PURCHASE_APPROVAL_TXN WHERE DOC_TYPE = 'GRN' AND LOCATIONCODE = :loc AND DOC_NO IN ({in_list})"
+    out: Dict[str, str] = {}
+    try:
+        for r in _lpo_list_fetch_rows_cur(cur, q, {'loc': loc_code}):
+            out[str(r.get('docno'))] = str(r.get('status') or 'DRAFT').upper()
+    except Exception:
+        pass
+    return out
+
+
+def _grn_account_posted_map_cur(cur: Any, receipt_nos: List[Any], *, location_code: Optional[int]=None) -> Dict[str, bool]:
+    """Batch account-posted flags for GRN list rows (same cursor — no extra round trips)."""
+    nos = _grn_receipt_keys_for_batch(receipt_nos)
     if not nos:
         return {}
     loc = int(location_code if location_code is not None else _resolve_location_code())
@@ -8818,7 +8907,8 @@ def _grn_account_posted_map(receipt_nos: List[Any], *, location_code: Optional[i
                 f"'{v.replace(chr(39), chr(39) + chr(39))}'" for v in voucher_candidates
             )
             try:
-                _, rows = _fetch_rows(
+                rows = _lpo_list_fetch_rows_cur(
+                    cur,
                     f'SELECT {gl_vno} AS voucher_no FROM {gl_tbl} WHERE {gl_vno} IN ({voucher_list})',
                     {},
                 )
@@ -8843,14 +8933,15 @@ def _grn_account_posted_map(receipt_nos: List[Any], *, location_code: Optional[i
             posting_keys.discard('')
             posting_keys.discard('0')
             if posting_keys:
-                in_list = ', '.join(sorted(posting_keys))
+                in_list = _grn_receiptno_sql_in_list(posting_keys)
                 prm: Dict[str, Any] = {'loc': loc}
                 wh = [f'{p_loc} = :loc', f'TO_CHAR({p_no}) IN ({in_list})']
                 if p_reset:
                     wh.append(f'NVL({p_reset}, 1) = :rn')
                     prm['rn'] = RESET_NO
                 try:
-                    _, rows = _fetch_rows(
+                    rows = _lpo_list_fetch_rows_cur(
+                        cur,
                         f'SELECT {p_no} AS receiptno FROM {post_tbl} WHERE {" AND ".join(wh)}',
                         prm,
                     )
@@ -8867,18 +8958,9 @@ def _grn_account_posted_map(receipt_nos: List[Any], *, location_code: Optional[i
     return out
 
 
-def _grn_inventory_posted_map(receipt_nos: List[Any], *, location_code: Optional[int]=None) -> Dict[str, bool]:
-    """Batch inventory-posted flags for GRN list rows."""
-    nos: List[Any] = []
-    seen: Set[str] = set()
-    for x in receipt_nos or []:
-        rno = coerce_receiptno(x)
-        if not receiptno_is_valid(rno):
-            continue
-        key = str(rno)
-        if key not in seen:
-            seen.add(key)
-            nos.append(rno)
+def _grn_inventory_posted_map_cur(cur: Any, receipt_nos: List[Any], *, location_code: Optional[int]=None) -> Dict[str, bool]:
+    """Batch inventory-posted flags for GRN list rows (same cursor — no extra round trips)."""
+    nos = _grn_receipt_keys_for_batch(receipt_nos)
     if not nos:
         return {}
     loc = int(location_code if location_code is not None else _resolve_location_code())
@@ -8901,7 +8983,7 @@ def _grn_inventory_posted_map(receipt_nos: List[Any], *, location_code: Optional
         rno_keys.discard('')
         rno_keys.discard('0')
         if rno_keys:
-            in_list = ', '.join(sorted(rno_keys))
+            in_list = _grn_receiptno_sql_in_list(rno_keys)
             wh = [f'{loc_col} = :loc', f'TO_CHAR({no_col}) IN ({in_list})']
             prm: Dict[str, Any] = {'loc': loc}
             if reset_col:
@@ -8910,7 +8992,8 @@ def _grn_inventory_posted_map(receipt_nos: List[Any], *, location_code: Optional
             if del_col:
                 wh.append(f"NVL({del_col}, 'N') = 'N'")
             try:
-                _, rows = _fetch_rows(
+                rows = _lpo_list_fetch_rows_cur(
+                    cur,
                     f'SELECT TO_CHAR({no_col}) AS receiptno, NVL({inv_col}, \'N\') AS invp FROM {tbl} WHERE {" AND ".join(wh)}',
                     prm,
                 )
@@ -8948,16 +9031,15 @@ def _grn_inventory_posted_map(receipt_nos: List[Any], *, location_code: Optional
                         sn_candidates.add(str(posting_n))
                 sn_candidates.discard('')
                 if sn_candidates:
-                    in_sn = ', '.join(
-                        f"'{s.replace(chr(39), chr(39) + chr(39))}'" for s in sorted(sn_candidates)
-                    )
+                    in_sn = _grn_receiptno_sql_in_list(sn_candidates)
                     wh_ij = [f'{ij_loc} = :loc', f"UPPER(TRIM({sd_col})) = 'GRN'", f'TO_CHAR({sn_col}) IN ({in_sn})']
                     prm_ij: Dict[str, Any] = {'loc': loc}
                     if ij_reset:
                         wh_ij.append(f'NVL({ij_reset}, 1) = :rn')
                         prm_ij['rn'] = RESET_NO
                     try:
-                        _, ij_rows = _fetch_rows(
+                        ij_rows = _lpo_list_fetch_rows_cur(
+                            cur,
                             f'SELECT DISTINCT TO_CHAR({sn_col}) AS sn FROM {ij_tbl} WHERE {" AND ".join(wh_ij)}',
                             prm_ij,
                         )
@@ -8974,6 +9056,59 @@ def _grn_inventory_posted_map(receipt_nos: List[Any], *, location_code: Optional
     return out
 
 
+def _grn_list_enrich_rows_cur(cur: Any, rows: List[Dict[str, Any]], *, loc_code: int, inv_tab: str) -> None:
+    """Apply approval/posted flags to one GRN list page using the list query cursor."""
+    if not rows:
+        return
+    receipt_keys = _grn_receipt_keys_for_batch([r.get('receiptno') for r in rows])
+    status_map: Dict[str, str] = {}
+    if receipt_keys and _table_exists('PURCHASE_APPROVAL_TXN'):
+        status_map = _grn_list_status_map_cur(cur, receipt_keys, loc_code)
+    if inv_tab == 'reversed':
+        for r in rows:
+            rno_key = str(coerce_receiptno(r.get('receiptno')))
+            doc_key = str(_grn_approval_doc_no(r.get('receiptno')))
+            if status_map:
+                r['approval_status'] = status_map.get(rno_key) or status_map.get(doc_key) or 'DRAFT'
+            r['account_posted'] = False
+            r['inventory_posted'] = False
+            r['is_reversed'] = True
+            r['can_edit'] = False
+            r['can_delete'] = False
+            r['can_post_inventory'] = False
+        return
+    posted_map = _grn_account_posted_map_cur(cur, receipt_keys, location_code=loc_code) if receipt_keys else {}
+    inv_posted_map = _grn_inventory_posted_map_cur(cur, receipt_keys, location_code=loc_code) if receipt_keys else {}
+    for r in rows:
+        rno_key = str(coerce_receiptno(r.get('receiptno')))
+        doc_key = str(_grn_approval_doc_no(r.get('receiptno')))
+        if status_map:
+            r['approval_status'] = status_map.get(rno_key) or status_map.get(doc_key) or 'DRAFT'
+        acct_posted = bool(posted_map.get(rno_key))
+        inv_posted = bool(inv_posted_map.get(rno_key))
+        r['account_posted'] = acct_posted
+        r['inventory_posted'] = inv_posted
+        r['is_reversed'] = False
+        is_draft = not inv_posted and not acct_posted
+        r['can_edit'] = is_draft
+        r['can_delete'] = is_draft
+        r['can_post_inventory'] = is_draft
+
+
+def _grn_account_posted_map(receipt_nos: List[Any], *, location_code: Optional[int]=None) -> Dict[str, bool]:
+    """Batch account-posted flags for GRN list rows (supports formatted receipt numbers)."""
+    with _get_connection() as conn:
+        with conn.cursor() as cur:
+            return _grn_account_posted_map_cur(cur, receipt_nos, location_code=location_code)
+
+
+def _grn_inventory_posted_map(receipt_nos: List[Any], *, location_code: Optional[int]=None) -> Dict[str, bool]:
+    """Batch inventory-posted flags for GRN list rows."""
+    with _get_connection() as conn:
+        with conn.cursor() as cur:
+            return _grn_inventory_posted_map_cur(cur, receipt_nos, location_code=location_code)
+
+
 def _get_grn_status_map(receipt_nos: List[Any]) -> Dict[str, str]:
     docnos: List[Any] = []
     seen: Set[str] = set()
@@ -8988,21 +9123,11 @@ def _get_grn_status_map(receipt_nos: List[Any]) -> Dict[str, str]:
     if not docnos:
         return {}
     loc_code = _resolve_location_code()
-    with _get_connection() as conn:
-        _ensure_purchase_approval_tables(conn)
-    if any(isinstance(d, str) and not str(d).lstrip('-').isdigit() for d in docnos):
-        in_list = ', '.join(f"'{str(d).replace(chr(39), chr(39) + chr(39))}'" for d in docnos)
-    else:
-        in_list = ', '.join(str(d) for d in docnos)
-    q = f"SELECT DOC_NO AS docno, STATUS AS status FROM PURCHASE_APPROVAL_TXN WHERE DOC_TYPE = 'GRN' AND LOCATIONCODE = :loc AND DOC_NO IN ({in_list})"
-    try:
-        _, rows = _fetch_rows(q, {'loc': loc_code})
-        out: Dict[str, str] = {}
-        for r in rows or []:
-            out[str(r.get('docno'))] = str(r.get('status') or 'DRAFT').upper()
-        return out
-    except Exception:
+    if not _table_exists('PURCHASE_APPROVAL_TXN'):
         return {}
+    with _get_connection() as conn:
+        with conn.cursor() as cur:
+            return _grn_list_status_map_cur(cur, receipt_nos, loc_code)
 
 def _set_grn_approval_status(receipt_no: Any, status: str, action: str, remarks: str='') -> None:
     ensure_purchase_approval_docno_varchar()
@@ -9614,6 +9739,7 @@ def _save_receipt(receipt_no: Any, receipt_date: str, supplier_code: int, invoic
     inv_no_col = _detect_column(hdr, ['INVOICENO', 'INVOICE_NO', 'invoiceno'])
     inv_date_col = _detect_column(hdr, ['INVOICEDATE', 'INVOICE_DATE', 'invoicedate'])
     amt_col = _detect_column(hdr, ['INVOICEAMOUNT', 'INVOICE_AMOUNT', 'invoiceamount'])
+    net_col = _detect_column(hdr, ['NETAMOUNT', 'netamount'])
     rem_col = _detect_column(hdr, ['REMARKS', 'remarks'])
     disc_col = _detect_column(hdr, ['DISCOUNT', 'discount'])
     hdr_other_col = _detect_column(hdr, ['OTHERCHARGE', 'OTHER_CHARGE', 'othercharge'])
@@ -9903,6 +10029,9 @@ def _save_receipt(receipt_no: Any, receipt_date: str, supplier_code: int, invoic
                 if amt_col:
                     ins_cols.append(amt_col)
                     ins_vals.append(str(invoice_amount or 0))
+                if net_col:
+                    ins_cols.append(net_col)
+                    ins_vals.append(str(round(float(invoice_amount or 0), 3)))
                 if rem_col:
                     ins_cols.append(rem_col)
                     ins_vals.append(f"'{str(remarks or '')[:200].replace(chr(39), chr(39) + chr(39))}'")
@@ -10356,6 +10485,7 @@ def _save_receipt(receipt_no: Any, receipt_date: str, supplier_code: int, invoic
                         item_codes_for_cost = set(item_new_base_cost.keys()) | set(item_grn_agg_qty.keys())
                 else:
                     item_codes_for_cost = set()
+                grn_cogs_catchup_lines: List[Dict[str, Any]] = []
                 if apply_inventory_effects and im_tbl and im_code_col and item_codes_for_cost and (im_cost_col or im_landing_col or im_avg_col):
                     for item_code in item_codes_for_cost:
                         new_grn_qty = 0.0 if delete_only else float(item_grn_agg_qty.get(item_code, 0.0) or 0.0)
@@ -10365,10 +10495,12 @@ def _save_receipt(receipt_no: Any, receipt_date: str, supplier_code: int, invoic
                             continue
                         qty_on_hand = 0.0
                         avg_on_hand = 0.0
+                        cost_on_hand = 0.0
                         im_cached_cost = im_row_cache.get(int(item_code))
                         if im_cached_cost:
                             qty_on_hand = float(im_cached_cost.get('cstock') or 0)
                             avg_on_hand = float(im_cached_cost.get('avgc') or 0)
+                            cost_on_hand = float(im_cached_cost.get('ccost') or 0)
                         else:
                             where_parts = [f'{im_code_col} = :icode']
                             params: Dict[str, Any] = {'icode': int(item_code)}
@@ -10388,12 +10520,17 @@ def _save_receipt(receipt_no: Any, receipt_date: str, supplier_code: int, invoic
                                 sel_parts.append(f'NVL({im_cost_col}, 0) AS avgc')
                             else:
                                 sel_parts.append('0 AS avgc')
+                            if im_cost_col:
+                                sel_parts.append(f'NVL({im_cost_col}, 0) AS ccost')
+                            else:
+                                sel_parts.append('0 AS ccost')
                             try:
                                 cur.execute(f"SELECT {', '.join(sel_parts)} FROM {im_tbl} WHERE {' AND '.join(where_parts)}", params)
                                 im_row = cur.fetchone()
                                 if im_row:
                                     qty_on_hand = float(im_row[0] or 0)
                                     avg_on_hand = float(im_row[1] or 0)
+                                    cost_on_hand = float(im_row[2] or 0)
                             except Exception:
                                 pass
                         where_parts = [f'{im_code_col} = :icode']
@@ -10404,15 +10541,41 @@ def _save_receipt(receipt_no: Any, receipt_date: str, supplier_code: int, invoic
                         old_grn_qty = float(old_receipt_item_qty_base.get(int(item_code), 0.0) or 0.0)
                         old_grn_landing = _grn_weighted_landing(old_receipt_item_qty_base, old_receipt_item_land_value, int(item_code))
                         if old_grn_landing <= 0 and old_grn_qty > 0:
-                            old_grn_landing = avg_on_hand
+                            old_grn_landing = avg_on_hand if avg_on_hand > 0 else cost_on_hand
                         new_avg = _grn_compute_item_average_cost(
                             qty_on_hand=qty_on_hand,
-                            avg_on_hand=avg_on_hand,
+                            avg_on_hand=avg_on_hand if avg_on_hand > 0 else cost_on_hand,
                             old_grn_qty=old_grn_qty,
                             old_grn_landing=old_grn_landing,
                             new_grn_qty=new_grn_qty,
                             new_grn_landing=new_grn_landing,
                         )
+                        # BC-style: when receipt covers prior negative stock, catch up COGS
+                        # for qty already sold at provisional cost (NVL avg, costprice).
+                        if not delete_only and new_grn_qty > 1e-12:
+                            try:
+                                from addons.purchase.grn_cogs_catchup import (
+                                    compute_negative_stock_cogs_catchup,
+                                )
+                                cu = compute_negative_stock_cogs_catchup(
+                                    qty_on_hand=qty_on_hand,
+                                    old_grn_qty=old_grn_qty,
+                                    new_grn_qty=new_grn_qty,
+                                    avg_on_hand=avg_on_hand,
+                                    new_grn_landing=new_grn_landing,
+                                    cost_on_hand=cost_on_hand,
+                                )
+                                if abs(float(cu.get('adjustment') or 0)) >= 0.005:
+                                    grn_cogs_catchup_lines.append({
+                                        'item_code': int(item_code),
+                                        'covered_qty': cu['covered_qty'],
+                                        'adjustment': cu['adjustment'],
+                                        'stock_before': cu['stock_before'],
+                                        'unit_diff': cu['unit_diff'],
+                                    })
+                            except Exception as _cu_ex:
+                                _log = __import__('logging').getLogger('nexa.grn')
+                                _log.warning('GRN COGS catch-up compute item %s: %s', item_code, _cu_ex)
                         base_cost = float(item_new_base_cost.get(item_code, 0.0) or 0.0)
                         set_parts: List[str] = []
                         if im_cost_col:
@@ -10449,6 +10612,40 @@ def _save_receipt(receipt_no: Any, receipt_date: str, supplier_code: int, invoic
                                 )
                             except Exception:
                                 pass
+                # Post or clear BC-style GRN COGS catch-up voucher (same transaction).
+                if apply_inventory_effects:
+                    try:
+                        from addons.purchase.grn_cogs_catchup import (
+                            clear_grn_cogs_catchup_gl_cur,
+                            post_grn_cogs_catchup_gl_cur,
+                        )
+                        if delete_only:
+                            clear_grn_cogs_catchup_gl_cur(
+                                cur, location_code=int(loc_code), receipt_no=receipt_no
+                            )
+                        else:
+                            _cu_user = str(session.get('user') or 'web')[:50]
+                            _cu_vno = post_grn_cogs_catchup_gl_cur(
+                                cur,
+                                location_code=int(loc_code),
+                                receipt_no=receipt_no,
+                                voucher_date=posting_date or receipt_date,
+                                lines=grn_cogs_catchup_lines,
+                                posted_by=_cu_user,
+                            )
+                            if _cu_vno:
+                                try:
+                                    summary = getattr(_save_receipt, '_last_posting_summary', None) or {}
+                                    if isinstance(summary, dict):
+                                        summary['grn_cogs_catchup_voucher'] = _cu_vno
+                                        summary['grn_cogs_catchup_lines'] = len(grn_cogs_catchup_lines)
+                                        _save_receipt._last_posting_summary = summary
+                                except Exception:
+                                    pass
+                    except Exception as _cu_post_ex:
+                        _log = __import__('logging').getLogger('nexa.grn')
+                        _log.exception('GRN COGS catch-up GL failed: %s', _cu_post_ex)
+                        return f'GRN COGS catch-up failed: {_cu_post_ex}'
                 alt_uom_rows_updated = 0
                 if do_inventory_posting and alt_tbl and alt_item_col and alt_factor_col and alt_cost_col and item_grn_agg_qty:
                     for item_code in item_grn_agg_qty.keys():
@@ -10737,7 +10934,7 @@ def _save_receipt(receipt_no: Any, receipt_date: str, supplier_code: int, invoic
                 )
             if commit:
                 conn.commit()
-        except ValueError as ve:
+        except (ValueError, RuntimeError) as ve:
             try:
                 conn.rollback()
             except Exception:
@@ -13395,17 +13592,22 @@ def _lines_for_stock_post_from_order_details(details: List[Dict[str, Any]]) -> L
         line_rate = float(ln.get('rate') or ln.get('costprice') or 0)
         line_disc = float(ln.get('discount') or 0)
         line_amt = max(0.0, qty * line_rate - line_disc) if line_rate else 0.0
+        line_cf = float(ln.get('conversionfactor') or ln.get('uomfactor') or 1) or 1.0
+        if line_cf <= 0:
+            line_cf = 1.0
+        # ITEMJOURNAL.AVERAGECOST is per base UOM (journal qty is base).
+        base_unit_avg = (line_rate / line_cf) if line_cf > 1.0 + 1e-9 and line_rate > 0 else line_rate
         row: Dict[str, Any] = {
             'itemcode': itemcode,
             'uom': (ln.get('uom') or 'NOS'),
-            'conversionfactor': float(ln.get('conversionfactor') or 1),
+            'conversionfactor': line_cf,
             'quantity': qty,
             'rate': line_rate,
             'discount': line_disc,
             'amount': line_amt,
             'store': str(ln.get('store') or '').strip(),
             'storecode': 0,
-            'averagecost': float(ln.get('costprice') or ln.get('rate') or 0),
+            'averagecost': float(base_unit_avg or 0),
             'remarks': '',
         }
         for key in ('warehouse_id', 'storage_id', 'lot_id'):
@@ -14784,16 +14986,18 @@ def _purchase_return_load_saved_state(goods_return_no: int) -> Tuple[Optional[st
         except (TypeError, ValueError):
             l_storage_id = None
         if base is None:
-            merged_lines[item_key] = {'item': item, 'qty': qty, 'rate': rate, 'discount': float(line.get('discount') or 0), 'conversionfactor': float(line.get('conversionfactor') or line.get('uomfactor') or 1), 'uom': line.get('uom') or 'NOS', 'store': line.get('store') or '', 'storecode': int(line.get('storecode') or 0), 'averagecost': float(line.get('averagecost') or rate or 0), 'remarks': line.get('remarks') or remarks_txt, 'lot_id': lot_id_parsed, 'warehouse_id': l_wh_id, 'storage_id': l_storage_id}
+            _cf = float(line.get('conversionfactor') or line.get('uomfactor') or 1) or 1.0
+            merged_lines[item_key] = {'item': item, 'qty': qty, 'rate': rate, 'discount': float(line.get('discount') or 0), 'conversionfactor': _cf, 'uom': line.get('uom') or 'NOS', 'store': line.get('store') or '', 'storecode': int(line.get('storecode') or 0), 'averagecost': _purchase_line_base_unit_avg(rate, _cf, float(line.get('averagecost') or 0)), 'remarks': line.get('remarks') or remarks_txt, 'lot_id': lot_id_parsed, 'warehouse_id': l_wh_id, 'storage_id': l_storage_id}
         else:
             base['qty'] = float(base.get('qty') or 0) + qty
             base['rate'] = rate
             base['uom'] = line.get('uom') or base.get('uom') or 'NOS'
             base['store'] = line.get('store') or base.get('store') or ''
             base['storecode'] = int(line.get('storecode') or base.get('storecode') or 0)
-            base['averagecost'] = float(line.get('averagecost') or base.get('averagecost') or rate or 0)
+            _cf = float(line.get('conversionfactor') or line.get('uomfactor') or base.get('conversionfactor') or 1) or 1.0
+            base['averagecost'] = _purchase_line_base_unit_avg(rate, _cf, float(line.get('averagecost') or base.get('averagecost') or 0))
             base['discount'] = float(line.get('discount') or base.get('discount') or 0)
-            base['conversionfactor'] = float(line.get('conversionfactor') or line.get('uomfactor') or base.get('conversionfactor') or 1)
+            base['conversionfactor'] = _cf
             base['remarks'] = line.get('remarks') or base.get('remarks') or remarks_txt
             if lot_id_parsed is not None:
                 base['lot_id'] = lot_id_parsed
@@ -14804,19 +15008,26 @@ def _purchase_return_load_saved_state(goods_return_no: int) -> Tuple[Optional[st
     return (None, hdr_row, lines, merged_lines, loc_code, supplier_code, ret_dt, date_fmt, remarks_txt)
 
 def _purchase_return_line_conversion_factor(line: Dict[str, Any], item_int: int, uom: str) -> float:
-    """Resolve line conversion factor (DB/form); fall back to item UOM map like lot posting."""
+    """Resolve line conversion factor — prefer ITEMALTERNATEUOMMAP over stale stored 1."""
+    map_f = 1.0
+    if item_int > 0:
+        try:
+            map_f = float(_get_uom_factor_for_item(item_int, uom) or 1.0)
+        except Exception:
+            map_f = 1.0
+    if map_f <= 0:
+        map_f = 1.0
     cf_raw = line.get('conversionfactor')
     if cf_raw is None:
         cf_raw = line.get('uomfactor')
     try:
-        cf_f = float(cf_raw) if cf_raw is not None else 0.0
+        client_f = float(cf_raw) if cf_raw is not None else 0.0
     except (TypeError, ValueError):
-        cf_f = 0.0
-    if cf_f <= 0 and item_int > 0:
-        cf_f = float(_get_uom_factor_for_item(item_int, uom) or 0.0)
-    if cf_f <= 0:
-        cf_f = 1.0
-    return cf_f
+        client_f = 0.0
+    # Same rule as mobile GRN: map wins; client pack size only if map is ~1
+    if client_f > 1.0 + 1e-12 and map_f <= 1.0 + 1e-12:
+        return client_f
+    return map_f
 
 def _purchase_return_infer_header_warehouse(
     hdr_row: Optional[Dict[str, Any]],
@@ -15179,7 +15390,7 @@ def _apply_purchase_return_inventory_only(goods_return_no: Any, *, conn=None, sa
                         raise ValueError(f'Item journal update failed: {ij_exc}') from ij_exc
             if own_conn and commit:
                 conn.commit()
-        except ValueError as ve:
+        except (ValueError, RuntimeError) as ve:
             if own_conn:
                 try:
                     conn.rollback()
@@ -15613,7 +15824,7 @@ def _apply_pr_financial_posting_only(goods_return_no: Any, source_return_order_n
                     pr_line_no += 1
                 cur.execute('\n                INSERT INTO TBLPRPOSTINGDTL\n                (LOCATIONCODE, RESETNO, GOODSRETURNNO, LINENO, ACCOUNTCODE, DRAMOUNT, CRAMOUNT, NARRATION, CREATEDDATE)\n                VALUES\n                (:loc, :rn, :grn, :ln, :acc, :dr, 0, :nar, SYSDATE)\n                ', {'loc': loc_code, 'rn': RESET_NO, 'grn': posting_grn, 'ln': pr_line_no, 'acc': (supplier_account or '2100')[:30], 'dr': round(gl_total, 3), 'nar': f'PR {goods_return_no} Supplier reversal'[:500]})
                 ensure_gl_tables()
-                gl_voucher_no = f'PR-{loc_code}-{goods_return_no}'[:30]
+                gl_voucher_no = f'PR-{loc_code}-{_pr_posting_tbl_grn(goods_return_no) or goods_return_no}'[:30]
                 gl_ref_no = f'PR-{goods_return_no}'[:50]
                 gl_narration = f'Purchase Return {goods_return_no}'[:500]
                 gl_user = (session.get('user') or 'web')[:50]
@@ -15629,14 +15840,12 @@ def _apply_pr_financial_posting_only(goods_return_no: Any, source_return_order_n
                     cur.execute('SELECT GL_VOUCHER_DTL_SEQ.NEXTVAL FROM DUAL')
                     gl_line_id = cur.fetchone()[0]
                     cur.execute('\n                    INSERT INTO GL_VOUCHER_DTL\n                        (LINE_ID, VOUCHER_NO, LINE_NO, ACCOUNT_CODE, DEBIT, CREDIT, REMARKS)\n                    VALUES\n                        (:lid, :vno, :ln, :acc, 0, :cr, :rm)\n                    ', {'lid': gl_line_id, 'vno': gl_voucher_no, 'ln': gl_line_no, 'acc': (inv_acc or '1300')[:20], 'cr': round(float(cr_amt), 2), 'rm': f'PR {goods_return_no} Inventory reversal'[:250]})
-                    if gl_party_type_col and gl_party_code_col:
-                        cur.execute('\n                        UPDATE GL_VOUCHER_DTL\n                        SET PARTY_TYPE = :pty, PARTY_CODE = :pcode\n                        WHERE LINE_ID = :lid\n                        ', {'pty': 'SUPPLIER', 'pcode': str(supplier_code), 'lid': gl_line_id})
                     gl_line_no += 1
                 cur.execute('SELECT GL_VOUCHER_DTL_SEQ.NEXTVAL FROM DUAL')
                 gl_line_id = cur.fetchone()[0]
                 cur.execute('\n                INSERT INTO GL_VOUCHER_DTL\n                    (LINE_ID, VOUCHER_NO, LINE_NO, ACCOUNT_CODE, DEBIT, CREDIT, REMARKS)\n                VALUES\n                    (:lid, :vno, :ln, :acc, :dr, 0, :rm)\n                ', {'lid': gl_line_id, 'vno': gl_voucher_no, 'ln': gl_line_no, 'acc': (supplier_account or '2100')[:20], 'dr': round(gl_total, 2), 'rm': f'PR {goods_return_no} Supplier reversal'[:250]})
                 if gl_party_type_col and gl_party_code_col:
-                    cur.execute('\n                    UPDATE GL_VOUCHER_DTL\n                    SET PARTY_TYPE = :pty, PARTY_CODE = :pcode\n                    WHERE LINE_ID = :lid\n                    ', {'pty': 'SUPPLIER', 'pcode': str(supplier_code), 'lid': gl_line_id})
+                    cur.execute('\n                    UPDATE GL_VOUCHER_DTL\n                    SET PARTY_TYPE = :pty, PARTY_CODE = :pcode\n                    WHERE LINE_ID = :lid\n                    ', {'pty': 'SUPPLIER', 'pcode': str(supplier_code).strip(), 'lid': gl_line_id})
             conn.commit()
         except Exception:
             try:
@@ -15674,6 +15883,7 @@ def _save_purchase_return(goods_return_no: Any, return_date: str, supplier_code:
     h_supplier = _detect_column(hdr, ['SUPPLIERCODE', 'suppliercode'])
     h_receipt = _detect_column(hdr, ['RECEIPTNO', 'receiptno'])
     h_amount = _detect_column(hdr, ['RETURNAMOUNT', 'returnamount'])
+    h_net = _detect_column(hdr, ['NETAMOUNT', 'netamount'])
     h_disc = _detect_column(hdr, ['DISCOUNT', 'discount'])
     h_delflag = _detect_column(hdr, ['DELFLAG', 'delflag'])
     h_created_by = _detect_column(hdr, ['CREATEDBY', 'createdby'])
@@ -15737,6 +15947,24 @@ def _save_purchase_return(goods_return_no: Any, return_date: str, supplier_code:
         post_date_fmt = date_fmt
     user = (session.get('user') or 'web')[:20].replace("'", "''")
     loc_code = _resolve_location_code()
+    try:
+        net_amount = float(return_amount or 0)
+    except (TypeError, ValueError):
+        net_amount = 0.0
+    if lines:
+        line_total = 0.0
+        for ln in lines:
+            if not isinstance(ln, dict):
+                continue
+            try:
+                line_total += float(ln.get('amount') or 0)
+            except (TypeError, ValueError):
+                pass
+        if line_total > 1e-09:
+            try:
+                net_amount = line_total - float(discount or 0)
+            except (TypeError, ValueError):
+                net_amount = line_total
     return_type_val = (return_type or 'P').strip()[:1] or 'P'
     remarks_txt = (remarks or '')[:200].replace("'", "''")
     grn_bind = coerce_goodsreturnno(goods_return_no)
@@ -15777,7 +16005,10 @@ def _save_purchase_return(goods_return_no: Any, return_date: str, supplier_code:
                         h_vals.append('0')
                 if h_amount:
                     h_cols.append(h_amount)
-                    h_vals.append(str(float(return_amount or 0)))
+                    h_vals.append(str(round(net_amount, 3)))
+                if h_net:
+                    h_cols.append(h_net)
+                    h_vals.append(str(round(net_amount, 3)))
                 if h_disc:
                     h_cols.append(h_disc)
                     h_vals.append(str(float(discount or 0)))
@@ -15858,14 +16089,14 @@ def _save_purchase_return(goods_return_no: Any, return_date: str, supplier_code:
                         line_storage_id = None
                     line_store_val = _line_warehouse_code_from_payload(line, line_wh_id) or str(line.get('store') or '')
                     if base is None:
-                        merged_lines[item_key] = {'item': item, 'qty': qty, 'rate': rate, 'discount': float(line.get('discount') or 0), 'conversionfactor': line_cf, 'uom': uom_line, 'store': line_store_val, 'storecode': int(line.get('storecode') or 0), 'averagecost': float(line.get('averagecost') or rate or 0), 'remarks': line.get('remarks') or remarks_txt, 'lot_id': lot_id_parsed, 'warehouse_id': line_wh_id, 'storage_id': line_storage_id}
+                        merged_lines[item_key] = {'item': item, 'qty': qty, 'rate': rate, 'discount': float(line.get('discount') or 0), 'conversionfactor': line_cf, 'uom': uom_line, 'store': line_store_val, 'storecode': int(line.get('storecode') or 0), 'averagecost': _purchase_line_base_unit_avg(rate, line_cf, float(line.get('averagecost') or 0)), 'remarks': line.get('remarks') or remarks_txt, 'lot_id': lot_id_parsed, 'warehouse_id': line_wh_id, 'storage_id': line_storage_id}
                     else:
                         base['qty'] = float(base.get('qty') or 0) + qty
                         base['rate'] = rate
                         base['uom'] = uom_line or base.get('uom') or 'NOS'
                         base['store'] = line_store_val or base.get('store') or ''
                         base['storecode'] = int(line.get('storecode') or base.get('storecode') or 0)
-                        base['averagecost'] = float(line.get('averagecost') or base.get('averagecost') or rate or 0)
+                        base['averagecost'] = _purchase_line_base_unit_avg(rate, line_cf, float(line.get('averagecost') or base.get('averagecost') or 0))
                         base['discount'] = float(line.get('discount') or base.get('discount') or 0)
                         base['conversionfactor'] = line_cf
                         base['remarks'] = line.get('remarks') or base.get('remarks') or remarks_txt
@@ -15890,7 +16121,7 @@ def _save_purchase_return(goods_return_no: Any, return_date: str, supplier_code:
                     raw_line_store = _line_warehouse_code_from_payload(ln, ln_wh_id) or str(ln.get('store') or ln.get('location') or '')[:50]
                     line_store = raw_line_store.replace("'", "''")
                     store_code = int(ln.get('storecode') or 0)
-                    avg_cost = float(ln.get('averagecost') or rate or 0)
+                    avg_cost = _purchase_line_base_unit_avg(rate, line_conv, float(ln.get('averagecost') or 0))
                     line_remarks = str(ln.get('remarks') or remarks_txt)[:200].replace("'", "''")
                     d_cols = [d_loc, d_no, d_item]
                     d_vals = [str(loc_code), grn_lit, str(item)]
@@ -17555,6 +17786,11 @@ def _item_journal_list_filters(
     return ' AND '.join(where_parts), params, transtype_col
 
 
+def _itemjournal_list_tables() -> List[str]:
+    """Physical journal tables for list/totals (primary + legacy mirror when both exist)."""
+    return _itemjournal_read_tables()
+
+
 def _get_item_journal_list_totals(
     search: Optional[str] = None,
     trans_type_filter: Optional[str] = None,
@@ -17563,41 +17799,40 @@ def _get_item_journal_list_totals(
     source_no_filter: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Qty / amount totals for the current item journal filters (all matching rows, not page limit)."""
-    tbl = _detect_table(['ITEMJOURNAL', 'itemjournal', 'ITEMJOURNEL', 'itemjournel'])
-    if not tbl:
+    tables = _itemjournal_list_tables()
+    if not tables:
         return {'line_count': 0, 'total_qty': 0.0, 'total_amount': 0.0}
-    qty_col = _detect_column(tbl, ['QTY', 'QUANTITY', 'qty', 'quantity'])
-    amount_col = _detect_column(tbl, ['AMOUNT', 'amount'])
-    where_sql, params, _ = _item_journal_list_filters(
-        tbl, search=search, trans_type_filter=trans_type_filter, item_code=item_code,
-        source_doc_filter=source_doc_filter, source_no_filter=source_no_filter,
-    )
-    sum_qty = f'NVL(SUM({qty_col}), 0) AS total_qty' if qty_col else '0 AS total_qty'
-    sum_amt = f'NVL(SUM({amount_col}), 0) AS total_amount' if amount_col else '0 AS total_amount'
-    q = f'SELECT COUNT(*) AS line_count, {sum_qty}, {sum_amt} FROM {tbl} WHERE {where_sql}'
-    try:
-        _, rows = _fetch_rows(q, params)
-        if not rows:
-            return {'line_count': 0, 'total_qty': 0.0, 'total_amount': 0.0}
-        r0 = rows[0]
+    total_lc = 0
+    total_tq = 0.0
+    total_ta = 0.0
+    for tbl in tables:
+        qty_col = _detect_column(tbl, ['QTY', 'QUANTITY', 'qty', 'quantity'])
+        amount_col = _detect_column(tbl, ['AMOUNT', 'amount'])
+        where_sql, params, _ = _item_journal_list_filters(
+            tbl, search=search, trans_type_filter=trans_type_filter, item_code=item_code,
+            source_doc_filter=source_doc_filter, source_no_filter=source_no_filter,
+        )
+        sum_qty = f'NVL(SUM({qty_col}), 0) AS total_qty' if qty_col else '0 AS total_qty'
+        sum_amt = f'NVL(SUM({amount_col}), 0) AS total_amount' if amount_col else '0 AS total_amount'
+        q = f'SELECT COUNT(*) AS line_count, {sum_qty}, {sum_amt} FROM {tbl} WHERE {where_sql}'
         try:
-            lc = int(r0.get('line_count') or 0)
-        except (TypeError, ValueError):
-            lc = 0
-        try:
-            tq = float(r0.get('total_qty') or 0)
-        except (TypeError, ValueError):
-            tq = 0.0
-        try:
-            ta = float(r0.get('total_amount') or 0)
-        except (TypeError, ValueError):
-            ta = 0.0
-        return {'line_count': lc, 'total_qty': round(tq, 4), 'total_amount': round(ta, 4)}
-    except Exception:
-        return {'line_count': 0, 'total_qty': 0.0, 'total_amount': 0.0}
+            _, rows = _fetch_rows(q, params)
+            if rows:
+                r0 = rows[0]
+                total_lc += int(r0.get('line_count') or 0)
+                total_tq += float(r0.get('total_qty') or 0)
+                total_ta += float(r0.get('total_amount') or 0)
+        except Exception:
+            continue
+    return {
+        'line_count': total_lc,
+        'total_qty': round(total_tq, 4),
+        'total_amount': round(total_ta, 4),
+    }
 
 
-def _get_item_journal_rows(
+def _get_item_journal_rows_one_table(
+    tbl: str,
     limit: int = 500,
     search: Optional[str] = None,
     trans_type_filter: Optional[str] = None,
@@ -17605,9 +17840,6 @@ def _get_item_journal_rows(
     source_doc_filter: Optional[str] = None,
     source_no_filter: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    tbl = _detect_table(['ITEMJOURNAL', 'itemjournal', 'ITEMJOURNEL', 'itemjournel'])
-    if not tbl:
-        return []
     loc_col = _detect_column(tbl, ['LOCATIONCODE', 'LOCATION_CODE', 'locationcode'])
     reset_col = _detect_column(tbl, ['RESETNO', 'RESET_NO', 'resetno'])
     receipt_col = _detect_column(tbl, ['RECEIPTNO', 'RECEIPT_NO', 'receiptno'])
@@ -17704,43 +17936,81 @@ def _get_item_journal_rows(
     except Exception:
         return []
 
+
+def _get_item_journal_rows(
+    limit: int = 500,
+    search: Optional[str] = None,
+    trans_type_filter: Optional[str] = None,
+    item_code: Optional[str] = None,
+    source_doc_filter: Optional[str] = None,
+    source_no_filter: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    tables = _itemjournal_list_tables()
+    if not tables:
+        return []
+    cap = max(1, min(int(limit or 500), 2000))
+    merged: List[Dict[str, Any]] = []
+    for tbl in tables:
+        merged.extend(_get_item_journal_rows_one_table(
+            tbl,
+            limit=cap,
+            search=search,
+            trans_type_filter=trans_type_filter,
+            item_code=item_code,
+            source_doc_filter=source_doc_filter,
+            source_no_filter=source_no_filter,
+        ))
+    merged.sort(key=lambda r: str(r.get('createddate') or ''), reverse=True)
+    return merged[:cap]
+
 def _get_item_journal_trans_type_summary() -> List[Dict[str, Any]]:
     """Distinct TRANSTYPE values with line counts and qty/amount totals for current location."""
-    tbl = _detect_table(['ITEMJOURNAL', 'itemjournal', 'ITEMJOURNEL', 'itemjournel'])
-    if not tbl:
+    tables = _itemjournal_list_tables()
+    if not tables:
         return []
-    loc_col = _detect_column(tbl, ['LOCATIONCODE', 'LOCATION_CODE', 'locationcode'])
-    transtype_col = _detect_column(tbl, ['TRANSTYPE', 'TRANS_TYPE', 'transtype', 'trans_type'])
-    qty_col = _detect_column(tbl, ['QTY', 'QUANTITY', 'qty', 'quantity'])
-    amount_col = _detect_column(tbl, ['AMOUNT', 'amount'])
-    if not transtype_col:
-        return []
-    where_parts = ['1=1']
-    params: Dict[str, Any] = {}
-    if loc_col:
-        where_parts.append(f'{loc_col} = :loc')
-        params['loc'] = _resolve_location_code()
-    where_sql = ' AND '.join(where_parts)
-    disp = f"NVL(TRIM(TO_CHAR({transtype_col})), '(none)') AS transtype"
-    sum_qty = f'NVL(SUM({qty_col}), 0) AS total_qty' if qty_col else '0 AS total_qty'
-    sum_amt = f'NVL(SUM({amount_col}), 0) AS total_amount' if amount_col else '0 AS total_amount'
-    q = f"\n        SELECT {disp},\n               COUNT(*) AS line_count,\n               {sum_qty},\n               {sum_amt}\n        FROM {tbl}\n        WHERE {where_sql}\n        GROUP BY {transtype_col}\n        ORDER BY NVL(TRIM(TO_CHAR({transtype_col})), '(none)') ASC\n    "
-    try:
-        _, rows = _fetch_rows(q, params)
-        out: List[Dict[str, Any]] = []
-        for r in rows or []:
-            try:
-                tq = float(r.get('total_qty') or 0)
-            except (TypeError, ValueError):
-                tq = 0.0
-            try:
-                ta = float(r.get('total_amount') or 0)
-            except (TypeError, ValueError):
-                ta = 0.0
-            out.append({'transtype': str(r.get('transtype') or '').strip() or '(none)', 'line_count': int(r.get('line_count') or 0), 'total_qty': tq, 'total_amount': ta})
-        return out
-    except Exception:
-        return []
+    by_tt: Dict[str, Dict[str, Any]] = {}
+    for tbl in tables:
+        loc_col = _detect_column(tbl, ['LOCATIONCODE', 'LOCATION_CODE', 'locationcode'])
+        transtype_col = _detect_column(tbl, ['TRANSTYPE', 'TRANS_TYPE', 'transtype', 'trans_type'])
+        qty_col = _detect_column(tbl, ['QTY', 'QUANTITY', 'qty', 'quantity'])
+        amount_col = _detect_column(tbl, ['AMOUNT', 'amount'])
+        if not transtype_col:
+            continue
+        where_parts = ['1=1']
+        params: Dict[str, Any] = {}
+        if loc_col:
+            where_parts.append(f'{loc_col} = :loc')
+            params['loc'] = _resolve_location_code()
+        where_sql = ' AND '.join(where_parts)
+        disp = f"NVL(TRIM(TO_CHAR({transtype_col})), '(none)') AS transtype"
+        sum_qty = f'NVL(SUM({qty_col}), 0) AS total_qty' if qty_col else '0 AS total_qty'
+        sum_amt = f'NVL(SUM({amount_col}), 0) AS total_amount' if amount_col else '0 AS total_amount'
+        q = f"""
+        SELECT {disp},
+               COUNT(*) AS line_count,
+               {sum_qty},
+               {sum_amt}
+        FROM {tbl}
+        WHERE {where_sql}
+        GROUP BY {transtype_col}
+        """
+        try:
+            _, rows = _fetch_rows(q, params)
+            for r in rows or []:
+                tt = str(r.get('transtype') or '').strip() or '(none)'
+                bucket = by_tt.setdefault(tt, {'transtype': tt, 'line_count': 0, 'total_qty': 0.0, 'total_amount': 0.0})
+                bucket['line_count'] += int(r.get('line_count') or 0)
+                try:
+                    bucket['total_qty'] += float(r.get('total_qty') or 0)
+                except (TypeError, ValueError):
+                    pass
+                try:
+                    bucket['total_amount'] += float(r.get('total_amount') or 0)
+                except (TypeError, ValueError):
+                    pass
+        except Exception:
+            continue
+    return sorted(by_tt.values(), key=lambda x: str(x.get('transtype') or ''))
 
 def _repair_stock_adjustment_schema(cur) -> None:
     """Drop mistaken FK STKADJDTL.SLNO -> TBLPAYMENTFOLLOWUP (blocks line inserts)."""
@@ -22303,6 +22573,151 @@ def item_journal_export():
     )
 
 
+def _enrich_itemjournal_row_itemnames(rows: List[Dict[str, Any]]) -> None:
+    """Fill itemname on journal-like row dicts from ITEMMASTER."""
+    if not rows:
+        return
+    missing_codes: List[str] = []
+    for r in rows:
+        code = str(r.get('itemcode') or '').strip()
+        if code and code not in missing_codes:
+            missing_codes.append(code)
+    if not missing_codes:
+        return
+    im_tbl = _detect_table(['ITEMMASTER', 'itemmaster', 'ITEM_MASTER'])
+    im_code_col = _detect_column(im_tbl, ['ITEMCODE', 'ITEM_CODE', 'itemcode']) if im_tbl else None
+    im_name_col = _detect_column(im_tbl, ['ITEMNAME', 'ITEM_NAME', 'itemname']) if im_tbl else None
+    im_loc_col = _detect_column(im_tbl, ['LOCATIONCODE', 'LOCATION_CODE', 'locationcode']) if im_tbl else None
+    if not im_tbl or not im_code_col or not im_name_col:
+        return
+    bnames = []
+    bparams: Dict[str, Any] = {}
+    for i, code in enumerate(missing_codes):
+        k = f'c{i}'
+        bnames.append(f':{k}')
+        bparams[k] = code
+    where_im = [f"TO_CHAR({im_code_col}) IN ({', '.join(bnames)})"]
+    if im_loc_col:
+        where_im.append(f'{im_loc_col} = :loc')
+        bparams['loc'] = _resolve_location_code()
+    iq = f"SELECT TO_CHAR({im_code_col}) AS itemcode, {im_name_col} AS itemname FROM {im_tbl} WHERE {' AND '.join(where_im)}"
+    _, im_rows = _fetch_rows(iq, bparams)
+    name_by_code = {
+        str(x.get('itemcode') or '').strip(): str(x.get('itemname') or '').strip()
+        for x in im_rows or []
+    }
+    for r in rows:
+        c = str(r.get('itemcode') or '').strip()
+        r['itemname'] = name_by_code.get(c, '')
+
+
+@bp.route('/purchase/item-journal/missing')
+def item_journal_missing_list():
+    """Posted transaction lines with no matching item journal entry."""
+    if not session.get('user'):
+        return redirect(url_for('auth.login'))
+    _apply_db()
+    search = (request.args.get('search') or '').strip()
+    itemcode = (request.args.get('itemcode') or '').strip()
+    selected_transtype = (request.args.get('transtype') or '').strip()
+    list_limit = 800
+    rows, trans_type_summary, list_totals = scan_missing_itemjournal_lines(
+        location_code=_resolve_location_code(),
+        limit=list_limit,
+        transtype_filter=selected_transtype or None,
+        search=search or None,
+        item_code=itemcode or None,
+    )
+    _enrich_itemjournal_row_itemnames(rows)
+    total_missing_count = sum(int(s.get('line_count') or 0) for s in trans_type_summary)
+    return render_template(
+        'purchase/item_journal_missing_list.html',
+        rows=rows,
+        search=search,
+        itemcode=itemcode,
+        selected_transtype=selected_transtype,
+        trans_type_summary=trans_type_summary,
+        list_totals=list_totals,
+        total_missing_count=total_missing_count,
+        list_limit=list_limit,
+    )
+
+
+@bp.route('/purchase/item-journal/missing/export')
+def item_journal_missing_export():
+    if not session.get('user'):
+        return redirect(url_for('auth.login'))
+    _apply_db()
+    search = (request.args.get('search') or '').strip()
+    itemcode = (request.args.get('itemcode') or '').strip()
+    selected_transtype = (request.args.get('transtype') or '').strip()
+    rows, _, _ = scan_missing_itemjournal_lines(
+        location_code=_resolve_location_code(),
+        limit=2000,
+        transtype_filter=selected_transtype or None,
+        search=search or None,
+        item_code=itemcode or None,
+    )
+    _enrich_itemjournal_row_itemnames(rows)
+
+    def _num(value, decimals):
+        try:
+            return f'{float(value or 0):.{decimals}f}'
+        except (TypeError, ValueError):
+            return ''
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        'Source Doc', 'Source No', 'Line', 'Item Code', 'Item Name', 'UOM',
+        'Qty', 'Rate', 'Avg Cost', 'Amount', 'Warehouse Code', 'Batch', 'Expiry', 'Trans Type',
+    ])
+    for r in rows:
+        writer.writerow([
+            r.get('source_doc') or '',
+            r.get('source_no') or r.get('receiptno') or '',
+            r.get('lineno') or '',
+            r.get('itemcode') or '',
+            r.get('itemname') or '',
+            r.get('uom') or '',
+            _num(r.get('qty'), 3),
+            _num(r.get('rate'), 3),
+            _num(r.get('averagecost'), 4),
+            _num(r.get('amount'), 3),
+            r.get('warehouse_code') or '',
+            r.get('batch_no') or '',
+            r.get('expiry_date') or '',
+            r.get('transtype') or '',
+        ])
+    ts = datetime.now().strftime('%Y%m%d-%H%M%S')
+    suffix = f'-{selected_transtype}' if selected_transtype else ''
+    fname = f'item-journal-missing{suffix}-{ts}.csv'
+    return Response(
+        buf.getvalue().encode('utf-8-sig'),
+        headers={'Content-Disposition': f'attachment; filename="{fname}"'},
+        mimetype='text/csv; charset=utf-8',
+    )
+
+
+@bp.route('/purchase/item-journal/missing/backfill', methods=['POST'])
+def item_journal_missing_backfill():
+    if not session.get('user'):
+        return redirect(url_for('auth.login'))
+    _apply_db()
+    loc = _resolve_location_code()
+    ok, msg, stats = backfill_itemjournal_from_documents(None, location_code=loc)
+    if ok:
+        flash(
+            f"Backfill complete: GRN={stats.get('grn', 0)}, "
+            f"sales={stats.get('sales', 0)}, "
+            f"purchase_return={stats.get('purchase_return', 0)}. {msg}",
+            'success',
+        )
+    else:
+        flash(f'Backfill failed: {msg}', 'error')
+    return redirect(url_for('purchase.item_journal_missing_list'))
+
+
 _PV_EXPORT_FIELDS = (
     'doc_type', 'doc_no', 'doc_date', 'suppliercode', 'amount', 'reference',
     'status', 'issue_count', 'issue_summary',
@@ -23848,17 +24263,21 @@ def _store_transfer_header_exists(transfer_no: Any) -> bool:
 
 def _store_transfer_row_api_dict(r: Dict[str, Any]) -> Dict[str, Any]:
     """JSON-safe row for lazy-loaded All tab (+ navigation URLs)."""
-    try:
-        tn = int(float(r.get('transferno') or 0))
-    except (TypeError, ValueError):
-        tn = 0
+    tn = coerce_transferno(r.get('transferno'))
+    if isinstance(tn, str):
+        tn_out: Any = tn.strip()
+    else:
+        try:
+            tn_out = int(tn or 0)
+        except (TypeError, ValueError):
+            tn_out = str(r.get('transferno') or '').strip() or 0
     td = r.get('transferdate')
     if td is not None and hasattr(td, 'strftime'):
         td_s = td.strftime('%Y-%m-%d %I:%M %p')
     else:
         td_s = str(td or '').strip()
     st = str(r.get('status') or 'P').strip()
-    return {'transferno': tn, 'transferdate': td_s, 'fromstore': str(r.get('fromstore') or '').strip(), 'tostore': str(r.get('tostore') or '').strip(), 'status': st, 'createdby': str(r.get('createdby') or '').strip(), 'transferredby': str(r.get('transferredby') or '').strip(), 'approvedby': str(r.get('approvedby') or '').strip(), 'remarks': str(r.get('remarks') or '').strip(), 'url_view': url_for('purchase.stock_transfer_query', transfer_no=tn, from_all=1), 'url_pdf': url_for('purchase.stock_transfer_pdf', transfer_no=tn, copy=1)}
+    return {'transferno': tn_out, 'transferdate': td_s, 'fromstore': str(r.get('fromstore') or '').strip(), 'tostore': str(r.get('tostore') or '').strip(), 'status': st, 'createdby': str(r.get('createdby') or '').strip(), 'transferredby': str(r.get('transferredby') or '').strip(), 'approvedby': str(r.get('approvedby') or '').strip(), 'remarks': str(r.get('remarks') or '').strip(), 'url_view': url_for('purchase.stock_transfer_query', transfer_no=tn_out, from_all=1), 'url_pdf': url_for('purchase.stock_transfer_pdf', transfer_no=tn_out, copy=1)}
 
 def _get_store_transfer_rows(status: str, allowed_stores: Optional[List[str]]=None, date_from: Optional[str]=None, date_to: Optional[str]=None, from_store: Optional[str]=None, to_store: Optional[str]=None, row_limit: Optional[int]=None, *, order_transferno_desc: bool=True) -> List[Dict[str, Any]]:
     hdr = _detect_table(['STKTRFHDR', 'stktrfhdr'])
@@ -25290,7 +25709,7 @@ def _fetch_item_uoms_master_fallback(schema: Dict[str, Any], item_code: int, loc
         return []
 
 def _fetch_item_uoms_union(schema: Dict[str, Any], item_code: int) -> List[Dict[str, Any]]:
-    """UOM list from ITEMALTERNATEUOMMAP; falls back to ITEMMASTER BASEUOM when map rows are missing."""
+    """UOM list: alternate map rows plus ITEMMASTER base UOM when not already mapped."""
     try:
         ic = int(item_code)
     except (TypeError, ValueError):
@@ -25353,13 +25772,20 @@ def _fetch_item_uoms_union(schema: Dict[str, Any], item_code: int) -> List[Dict[
         _, rows = _fetch_rows(q, params)
         rows = _normalize_item_uom_rows(rows)
         if rows:
+            base_rows = _fetch_item_uoms_master_fallback(schema, ic, loc_code)
+            if base_rows:
+                alt_uoms = {str(r.get('uom') or '').strip().upper() for r in rows if r.get('uom')}
+                for br in base_rows:
+                    bu = str(br.get('uom') or '').strip().upper()
+                    if bu and bu not in alt_uoms:
+                        rows.insert(0, br)
             return rows
         return _fetch_item_uoms_master_fallback(schema, ic, loc_code)
     except Exception:
         return _fetch_item_uoms_master_fallback(schema, ic, loc_code)
 
 def _get_item_uoms_with_cost(item_code: int) -> List[Dict[str, Any]]:
-    """Return { uom, cost, retail, barcode, factor } from alternate UOM map, or ITEMMASTER base UOM as fallback."""
+    """Return { uom, cost, retail, barcode, factor } — alternate map rows plus base UOM when missing."""
     try:
         ic = int(item_code)
     except (TypeError, ValueError):
@@ -26732,6 +27158,17 @@ def api_receipt_grn_quick_item():
             next_code = None
         units = _grn_quick_item_units_from_table(loc_code)[:200]
         cat_lookups = _grn_quick_item_category_lookups(loc_code)
+        suppliers = []
+        for s in (_get_suppliers() or [])[:500]:
+            try:
+                code = int(float(s.get('code')))
+            except (TypeError, ValueError):
+                continue
+            suppliers.append({
+                'code': code,
+                'name': str(s.get('name') or '').strip(),
+                'parent_id': None,
+            })
         return jsonify({
             'success': True,
             'next_item_code': next_code,
@@ -26742,6 +27179,7 @@ def api_receipt_grn_quick_item():
             'categories': cat_lookups['categories'],
             'micro_categories': cat_lookups['micro_categories'],
             'brands': cat_lookups['brands'],
+            'suppliers': suppliers,
         })
     data = request.get_json(silent=True) or {}
     barcode = str(data.get('barcode') or data.get('manufacturer_id') or '').strip()
@@ -26787,6 +27225,10 @@ def api_receipt_grn_quick_item():
     department_code = _grn_quick_item_int_code(data.get('department_code'))
     category_code = _grn_quick_item_int_code(data.get('category_code') or data.get('micro_category'))
     brand_code = _grn_quick_item_int_code(data.get('brand_code'))
+    try:
+        vat_percent = float(data.get('vat_percent') if data.get('vat_percent') is not None else data.get('vat') or 0)
+    except (TypeError, ValueError):
+        vat_percent = 0.0
     gl = _grn_quick_item_default_gl_accounts()
     try:
         from db import save_grn_quick_item_new
@@ -26805,7 +27247,7 @@ def api_receipt_grn_quick_item():
             'branch_price': 0,
             'maximum_level': 0,
             'reorder_level': 0,
-            'vat_percent': 0,
+            'vat_percent': vat_percent,
             'discount_flag': 'N',
             'item_flag': 'Y',
             'main_category': main_category,

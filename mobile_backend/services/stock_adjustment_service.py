@@ -44,13 +44,31 @@ def get_open_context() -> dict[str, Any]:
     with _erp_session_scope() as username:
         p = _purchase()
         p._apply_db()
-        next_no = p._stock_adjustment_next_no(allocate=False)
-        txn = p._purchase_txn_date_context("purchase")
-        open_date = str(
-            txn.get("open_transaction_date")
-            or p._purchase_open_transaction_date("purchase")
-            or datetime.now().strftime("%Y-%m-%d")
-        ).strip()[:10]
+        from mobile_backend.services.doc_peek import fresh_doc_no
+        from mobile_backend.services.transaction_date_helper import (
+            missing_setup_date_message,
+            open_context as txn_open_context,
+        )
+
+        def _adj_exists(n: Any) -> bool:
+            try:
+                return bool(p._get_stock_adjustment_payload(n))
+            except Exception:
+                return False
+
+        next_no = fresh_doc_no(
+            peek_fn=lambda: p._stock_adjustment_next_no(allocate=False),
+            exists_fn=_adj_exists,
+            allocate_fn=lambda _n: p._stock_adjustment_next_no(allocate=True),
+        )
+
+        txn = txn_open_context("stock_adjustment")
+        open_date = str(txn.get("preferred_date") or "")[:10]
+        if not open_date:
+            raise ValueError(
+                txn.get("transaction_date_error")
+                or missing_setup_date_message("stock_adjustment")
+            )
         opening_mode = False
         try:
             from db import get_stk_adj_opening_stock_mode_enabled
@@ -65,6 +83,9 @@ def get_open_context() -> dict[str, Any]:
         return {
             "adj_no": str(next_no or "").strip(),
             "adj_date": open_date,
+            "open_date_from": str(txn.get("open_date_from") or open_date)[:10],
+            "open_date_to": str(txn.get("open_date_to") or open_date)[:10],
+            "transaction_date_blocked": bool(txn.get("transaction_date_blocked")),
             "created_by": username,
             "opening_stock_mode": opening_mode,
             "default_store": default_store,
@@ -360,13 +381,13 @@ def save_adjustment(payload: dict[str, Any]) -> dict[str, Any]:
             if not adjno_is_valid(adj_no):
                 adj_no = coerce_adjno(p._stock_adjustment_next_no(allocate=False))
 
-            adj_date = str(header.get("adj_date") or header.get("adjdate") or "")[:10]
-            open_date, txn_err = p._enforce_purchase_open_date(adj_date, "purchase")
-            if txn_err:
-                open_date, txn_err = p._enforce_purchase_open_date("", "purchase")
-            if txn_err:
-                raise ValueError(txn_err)
-            adj_date = open_date or adj_date or datetime.now().strftime("%Y-%m-%d")
+            from mobile_backend.services.transaction_date_helper import resolve_doc_date
+
+            adj_date = resolve_doc_date(
+                "stock_adjustment",
+                header.get("adj_date") or header.get("adjdate"),
+                snap_out_of_range=True,
+            )
             remarks = str(header.get("remarks") or "").strip()
             opening_stock = bool(header.get("opening_stock"))
             if "opening_stock" not in header:
@@ -386,14 +407,9 @@ def save_adjustment(payload: dict[str, Any]) -> dict[str, Any]:
                 )
                 if abs(adj_qty) < 1e-09:
                     continue
-                factor = _to_float(ln.get("factor") or ln.get("conversionfactor") or 1, 1.0)
-                if factor <= 0:
-                    factor = 1.0
-                base_qty = ln.get("base_qty")
-                if base_qty in (None, ""):
-                    base_qty = adj_qty * factor
-                else:
-                    base_qty = _to_float(base_qty)
+                from mobile_backend.services.uom_factor import apply_line_stock_base
+
+                uom = str(ln.get("uom") or "NOS").strip() or "NOS"
                 current_qty = _to_float(
                     ln.get("current_qty") if ln.get("current_qty") is not None else ln.get("currentqty")
                 )
@@ -402,20 +418,25 @@ def save_adjustment(payload: dict[str, Any]) -> dict[str, Any]:
                     new_qty = current_qty + adj_qty
                 else:
                     new_qty = _to_float(new_qty)
-                lines.append(
-                    {
-                        "item_code": item,
-                        "item_name": str(ln.get("item_name") or ln.get("itemname") or "").strip(),
-                        "uom": str(ln.get("uom") or "NOS").strip() or "NOS",
-                        "store": str(ln.get("store") or ln.get("warehouse_code") or "").strip().upper(),
-                        "current_qty": current_qty,
-                        "adjust_qty": adj_qty,
-                        "new_qty": new_qty,
-                        "base_qty": base_qty,
-                        "cost": _to_float(ln.get("cost") or ln.get("rate") or ln.get("costprice")),
-                        "remarks": str(ln.get("remarks") or ln.get("line_remarks") or "").strip(),
-                    }
+                row: dict[str, Any] = {
+                    "item_code": item,
+                    "item_name": str(ln.get("item_name") or ln.get("itemname") or "").strip(),
+                    "uom": uom,
+                    "store": str(ln.get("store") or ln.get("warehouse_code") or "").strip().upper(),
+                    "current_qty": current_qty,
+                    "adjust_qty": adj_qty,
+                    "new_qty": new_qty,
+                    "cost": _to_float(ln.get("cost") or ln.get("rate") or ln.get("costprice")),
+                    "remarks": str(ln.get("remarks") or ln.get("line_remarks") or "").strip(),
+                    "factor": ln.get("factor") or ln.get("conversionfactor"),
+                    "conversionfactor": ln.get("conversionfactor") or ln.get("factor"),
+                }
+                # ERP posts stock with base_qty; always recompute from UOM map (ignore stale client 1).
+                base = apply_line_stock_base(
+                    row, item_code=item, uom=uom, qty=adj_qty, st=p, signed=True
                 )
+                row["base_qty"] = base
+                lines.append(row)
             if not lines:
                 raise ValueError("Add at least one line with a non-zero adjust quantity.")
 
