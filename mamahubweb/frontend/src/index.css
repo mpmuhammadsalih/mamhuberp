@@ -1,0 +1,323 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Nunito", "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Nunito", "Segoe UI", system-ui, sans-serif;
+  --font-nav: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-catalog: "Inter", "Segoe UI", system-ui, sans-serif;
+
+  /* MamaHub toy-shop palette — pink CTA, sunny play colors */
+  --color-brand-cream: #fff8ee;
+  --color-brand-cream-alt: #fff3dc;
+  --color-brand-tan: #e91e63;
+  --color-brand-tan-dark: #c2185b;
+  --color-brand-cocoa: #334155;
+  --color-brand-rose: #e91e63;
+  --color-brand-sage: #64748b;
+  --color-brand-accent: #e91e63;
+  --color-brand-accent-hover: #c2185b;
+  --color-brand-tint: #ffe8c8;
+  --color-brand-border: #f5d0a8;
+  --color-brand-ink: #1e293b;
+  --color-brand-orange: #ff9f43;
+  --color-brand-teal: #14b8a6;
+  --color-brand-purple: #8b5cf6;
+  --color-brand-yellow: #ffd54f;
+  --color-brand-sky: #38bdf8;
+}
+
+:root {
+  font-family: var(--font-sans);
+  color: var(--color-brand-ink);
+  background: var(--color-brand-cream);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  background: var(--color-brand-cream);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.storefront-shell {
+  background: var(--color-brand-cream);
+}
+
+[dir='rtl'] {
+  font-family: 'Noto Sans Arabic', 'Nunito', 'Segoe UI', system-ui, sans-serif;
+}
+
+[dir='rtl'] .font-display,
+[dir='rtl'] .font-sans {
+  font-family: 'Noto Sans Arabic', 'Nunito', 'Segoe UI', system-ui, sans-serif;
+}
+
+[dir='rtl'] .font-catalog,
+[dir='rtl'] .font-nav {
+  font-family: 'Noto Sans Arabic', 'Inter', 'Segoe UI', system-ui, sans-serif;
+}
+
+.storefront-main {
+  min-height: calc(100vh - 8rem);
+  background-color: var(--color-brand-cream);
+  background-image:
+    radial-gradient(circle at 18px 16px, color-mix(in srgb, var(--color-brand-orange) 22%, transparent) 1.6px, transparent 2px),
+    radial-gradient(circle at 72px 44px, color-mix(in srgb, var(--color-brand-teal) 18%, transparent) 1.6px, transparent 2px),
+    radial-gradient(circle at 118px 22px, color-mix(in srgb, var(--color-brand-accent) 16%, transparent) 1.6px, transparent 2px),
+    radial-gradient(circle at 48px 68px, color-mix(in srgb, var(--color-brand-yellow) 28%, transparent) 1.6px, transparent 2px);
+  background-size: 140px 86px;
+}
+
+.has-mobile-nav .storefront-main {
+  padding-bottom: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .has-mobile-nav .storefront-main {
+    padding-bottom: 0;
+  }
+}
+
+.mobile-bottom-nav {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (min-width: 768px) {
+  .storefront-main {
+    min-height: auto;
+  }
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.social-icon {
+  color: inherit;
+}
+
+.social-icon svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-nav {
+  font-family: var(--font-nav);
+}
+
+.font-catalog {
+  font-family: var(--font-catalog);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes heroProgressFill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.hero-slide-progress {
+  animation: heroProgressFill var(--hero-autoplay-ms, 5000ms) linear forwards;
+  transform-origin: left center;
+}
+
+.hero-slide-progress.is-paused {
+  animation-play-state: paused;
+}
+
+@keyframes promo-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.promo-marquee-track {
+  animation: promo-marquee var(--promo-marquee-duration, 28s) linear infinite;
+}
+
+.promo-strip-marquee,
+.promo-strip-marquee a,
+.promo-strip-marquee span {
+  color: var(--color-brand-ink);
+}
+
+.promo-strip-marquee:hover .promo-marquee-track,
+.promo-strip-marquee:focus-within .promo-marquee-track {
+  animation-play-state: paused;
+}
+
+[dir='rtl'] .promo-marquee-track {
+  animation-direction: reverse;
+}
+
+@keyframes product-3d-sway {
+  0%,
+  100% {
+    transform: rotateX(3deg) rotateY(-10deg);
+  }
+  50% {
+    transform: rotateX(-2deg) rotateY(10deg);
+  }
+}
+
+.product-3d-sway {
+  animation: product-3d-sway 5.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .product-3d-sway {
+    animation: none;
+    transform: rotateX(0deg) rotateY(0deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .promo-marquee-track {
+    animation: none;
+    width: 100%;
+    justify-content: center;
+    transform: none;
+  }
+
+  .promo-marquee-copy {
+    display: none;
+  }
+}
+
+/* CMS pages — HTML from MH_CMS_PAGE */
+.cms-content {
+  color: var(--color-brand-cocoa);
+  font-size: 0.9375rem;
+  line-height: 1.65;
+}
+
+.cms-content h2 {
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-brand-tan-dark);
+}
+
+.cms-content h2:first-child {
+  margin-top: 0;
+}
+
+.cms-content h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-brand-ink);
+}
+
+.cms-content p {
+  margin: 0.5rem 0 1rem;
+  color: var(--color-brand-sage);
+}
+
+.cms-content a {
+  color: var(--color-brand-tan);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.cms-content a:hover {
+  color: var(--color-brand-tan-dark);
+  text-decoration: underline;
+}
+
+.cms-content details {
+  border-bottom: 1px solid color-mix(in srgb, var(--color-brand-border) 60%, transparent);
+  padding: 0.25rem 0;
+}
+
+.cms-content details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-brand-ink);
+  padding: 0.75rem 0;
+  list-style: none;
+}
+
+.cms-content details summary::-webkit-details-marker {
+  display: none;
+}
+
+.cms-content details[open] summary {
+  color: var(--color-brand-tan-dark);
+}
+
+.cms-contact-grid {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .cms-contact-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .cms-contact-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.cms-contact-card {
+  border: 1px solid var(--color-brand-border);
+  border-radius: 1rem;
+  background: #fff;
+  padding: 1.25rem;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+}
+
+.cms-contact-card p {
+  margin: 0.35rem 0;
+}
+
+/* Leaflet panes/controls use z-index 400–1000 and would cover the sticky header. */
+.delivery-map-root,
+.delivery-map-root .leaflet-container {
+  z-index: 0;
+}

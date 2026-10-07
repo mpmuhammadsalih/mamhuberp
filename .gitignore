@@ -1,32 +1,11 @@
-# Secrets and local config
+/html/
 .env
 .env.local
-*.pem
-Wallet/
-wallet/
-
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-.Python
-.venv/
-venv/
-env/
-*.egg-info/
-.dist/
-build/
-
-# Logs and runtime
-logs/
-*.log
-
-# IDE / OS
-.idea/
-.vscode/
-*.swp
-.DS_Store
-Thumbs.db
-
-# Oracle client cache
-.oracle/
+**/.env
+**/.env.local
+**/.venv/
+**/venv/
+**/node_modules/
+**/__pycache__/
+*.pyc
+mamahubweb/.git/

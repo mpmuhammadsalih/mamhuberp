@@ -1,0 +1,19 @@
+[Unit]
+Description=MamaHub WhatsApp CRM frontend (Next.js)
+After=network.target mamahub-whatsapp-api.service
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/mamahub-whatsapp/frontend
+Environment=PATH=/root/.nvm/versions/node/v22.23.2/bin:/usr/bin:/bin
+ExecStart=/root/.nvm/versions/node/v22.23.2/bin/npm run dev -- --port 3090 --hostname 127.0.0.1
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+User=root
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mamahub-whatsapp-web
+
+[Install]
+WantedBy=multi-user.target

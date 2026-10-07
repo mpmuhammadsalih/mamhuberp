@@ -1,0 +1,19 @@
+[Unit]
+Description=MamaHub WhatsApp CRM API (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/mamahub-whatsapp/backend
+Environment=PYTHONPATH=.
+ExecStart=/var/www/mamahub-whatsapp/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8090
+Restart=always
+RestartSec=3
+TimeoutStopSec=15
+User=root
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mamahub-whatsapp-api
+
+[Install]
+WantedBy=multi-user.target

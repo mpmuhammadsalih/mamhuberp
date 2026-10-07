@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" sizes="48x48" href="https://www.mamahub.store/google-favicon-48.png" />
+    <link rel="icon" type="image/png" sizes="96x96" href="https://www.mamahub.store/google-favicon-96.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="https://www.mamahub.store/google-favicon-192.png" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/mh-apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta property="og:image" content="https://www.mamahub.store/mamahub-logo.png" />
+    <meta property="og:image:alt" content="MamaHub" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#FFF8EE" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="canonical" href="https://www.mamahub.store/" />
+    <meta name="description" content="Shop quality toys, games, and gifts for children in Qatar. Fast delivery and secure checkout at MamaHub." />
+    <meta property="og:site_name" content="MamaHub" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://www.mamahub.store/" />
+    <meta property="og:locale" content="en_QA" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&family=Nunito:wght@400;500;600;700;800;900&display=optional"
+      rel="stylesheet"
+    />
+    <link rel="preload" as="image" href="/images/hero-banner.png" />
+    <!-- Load Tailwind/CSS before React to prevent unstyled white flash -->
+    <link rel="stylesheet" href="/src/index.css" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #fff8ee;
+      }
+      #root {
+        min-height: 100vh;
+        background: #fff8ee;
+      }
+      /* Keep background color while React loads; do not hide the whole app (slows logo paint). */
+      html:not(.app-ready) #root {
+        min-height: 100vh;
+      }
+    </style>
+    <meta name="mamahub-build" content="20260906-0855" />
+    <title>MamaHub — Mom's Love</title>
+    <script type="application/ld+json">
+      {"@context":"https://schema.org","@type":"Organization","name":"MamaHub","url":"https://www.mamahub.store/","logo":"https://www.mamahub.store/mamahub-logo.png"}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx?v=20260905-2"></script>
+  </body>
+</html>
