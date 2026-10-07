@@ -275,6 +275,11 @@ def apply_coupon(*, user_id: int, coupon_code: str) -> dict[str, Any]:
     return data
 
 
+def set_gift_wrap(*, user_id: int, gift_wrap_code: str) -> dict[str, Any]:
+    _require_session(user_id)
+    return review(user_id=user_id)
+
+
 def apply_loyalty_points(*, user_id: int, points: int) -> dict[str, Any]:
     _require_session(user_id)
     cart_data = cart_svc.get_cart(user_id=user_id)
@@ -480,6 +485,7 @@ def place_order(
     address_id: Optional[int] = None,
     delivery_zone_id: Optional[int] = None,
     delivery_slot_id: Optional[int] = None,
+    gift_wrap_code: Optional[str] = None,
     payment_result: Optional[PaymentResult] = None,
     preallocated_order_id: Optional[int] = None,
     preallocated_order_number: Optional[str] = None,
@@ -617,6 +623,7 @@ def confirm(
     address_id: Optional[int] = None,
     delivery_zone_id: Optional[int] = None,
     delivery_slot_id: Optional[int] = None,
+    gift_wrap_code: Optional[str] = None,
 ) -> dict[str, Any]:
     method = (payment_method or 'COD').upper()
     if method == 'TAP':
@@ -629,6 +636,7 @@ def confirm(
         address_id=address_id,
         delivery_zone_id=delivery_zone_id,
         delivery_slot_id=delivery_slot_id,
+        gift_wrap_code=gift_wrap_code,
     )
     complete_order_side_effects(**side_effects)
     return response
@@ -661,6 +669,7 @@ def init_tap_payment(
     address_id: Optional[int] = None,
     delivery_zone_id: Optional[int] = None,
     delivery_slot_id: Optional[int] = None,
+    gift_wrap_code: Optional[str] = None,
 ) -> dict[str, Any]:
     if not tap_svc.tap_configured():
         raise ValueError('Tap Payments is not configured.')
@@ -798,6 +807,7 @@ def complete_tap_payment(
         address_id=(pending or {}).get('address_id'),
         delivery_zone_id=(pending or {}).get('delivery_zone_id'),
         delivery_slot_id=(pending or {}).get('delivery_slot_id'),
+        gift_wrap_code=(pending or {}).get('gift_wrap_code'),
         payment_result=payment,
         preallocated_order_id=int(pre_id) if pre_id else None,
         preallocated_order_number=str(pre_number) if pre_number else None,

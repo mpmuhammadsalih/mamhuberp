@@ -18,7 +18,7 @@ FAQ_SECTIONS: List[Dict[str, Any]] = [
             },
             {
                 'question': 'Do you offer gift wrapping?',
-                'answer': 'Yes. Select gift wrap at checkout and add a personal message. Gift receipts hide item prices for the recipient.',
+                'answer': 'Yes. Choose gift wrap on the product page when you add an item to your cart. Gift receipts hide item prices for the recipient.',
             },
         ],
     },

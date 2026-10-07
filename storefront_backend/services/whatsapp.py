@@ -69,7 +69,15 @@ def _meta_post(payload: Dict[str, Any]) -> Tuple[bool, str]:
             return True, str(message_id or 'sent')
         err = data.get('error') if isinstance(data, dict) else None
         if isinstance(err, dict):
-            return False, str(err.get('message') or err)
+            code = err.get('code')
+            sub = err.get('error_subcode')
+            msg = err.get('message') or err.get('error_user_msg') or str(err)
+            parts = [str(msg)]
+            if code is not None:
+                parts.append(f'code={code}')
+            if sub is not None:
+                parts.append(f'sub={sub}')
+            return False, ' '.join(parts)
         return False, response.text or f'HTTP {response.status_code}'
     except Exception as exc:  # noqa: BLE001
         return False, str(exc)

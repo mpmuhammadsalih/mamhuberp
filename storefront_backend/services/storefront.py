@@ -8,13 +8,37 @@ from addons.ecommerce import settings_store
 from addons.ecommerce.services import media as media_svc
 
 
+def _text(store: Dict[str, Any], key: str, fallback: str) -> str:
+    value = str(store.get(key) or '').strip()
+    return value or fallback
+
+
 def get_storefront_settings() -> Dict[str, Any]:
     store = settings_store.load_store_settings()
     return {
         'coupons_enabled': bool(store.get('coupons_enabled')),
+        'free_gift_wrap': bool(store.get('free_gift_wrap')),
         'checkout_enabled': bool(store.get('checkout_enabled', True)),
         'pickup_enabled': bool(store.get('pickup_enabled', True)),
         'delivery_enabled': bool(store.get('delivery_enabled', True)),
+        'header_trust_delivery': _text(
+            store, 'header_trust_delivery', settings_store.DEFAULT_SETTINGS['header_trust_delivery']
+        ),
+        'header_trust_original': _text(
+            store, 'header_trust_original', settings_store.DEFAULT_SETTINGS['header_trust_original']
+        ),
+        'header_trust_returns': _text(
+            store, 'header_trust_returns', settings_store.DEFAULT_SETTINGS['header_trust_returns']
+        ),
+        'header_trust_delivery_ar': _text(
+            store, 'header_trust_delivery_ar', settings_store.DEFAULT_SETTINGS['header_trust_delivery_ar']
+        ),
+        'header_trust_original_ar': _text(
+            store, 'header_trust_original_ar', settings_store.DEFAULT_SETTINGS['header_trust_original_ar']
+        ),
+        'header_trust_returns_ar': _text(
+            store, 'header_trust_returns_ar', settings_store.DEFAULT_SETTINGS['header_trust_returns_ar']
+        ),
     }
 
 

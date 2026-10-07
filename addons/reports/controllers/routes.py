@@ -5433,7 +5433,18 @@ def qz_cert_info():
         subject = cert.subject.rfc4514_string()
         issuer = cert.issuer.rfc4514_string()
         fingerprint_hex = cert.fingerprint(hashes.SHA256()).hex()
-        return jsonify({'success': True, 'subject': subject, 'issuer': issuer, 'valid_from': cert.not_valid_before.strftime('%Y-%m-%d %H:%M:%S'), 'valid_to': cert.not_valid_after.strftime('%Y-%m-%d %H:%M:%S'), 'fingerprint_sha256': fingerprint_hex, 'cert_file': _QZ_CERT_FILE})
+        # Prefer *_utc (cryptography >=42); fall back for older wheels.
+        valid_from_dt = getattr(cert, 'not_valid_before_utc', None) or cert.not_valid_before
+        valid_to_dt = getattr(cert, 'not_valid_after_utc', None) or cert.not_valid_after
+        return jsonify({
+            'success': True,
+            'subject': subject,
+            'issuer': issuer,
+            'valid_from': valid_from_dt.strftime('%Y-%m-%d %H:%M:%S'),
+            'valid_to': valid_to_dt.strftime('%Y-%m-%d %H:%M:%S'),
+            'fingerprint_sha256': fingerprint_hex,
+            'cert_file': _QZ_CERT_FILE,
+        })
     except Exception as exc:
         logger.exception('QZ cert-info failed: %s', exc)
         return jsonify({'success': False, 'error': f'QZ cert-info failed: {exc}'}, 500)

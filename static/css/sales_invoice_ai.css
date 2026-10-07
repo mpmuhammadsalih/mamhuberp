@@ -70,6 +70,30 @@
   white-space: nowrap;
 }
 
+.si-ai-snoonu-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: 8px;
+  border: 1px solid #0f766e;
+  background: #ccfbf1;
+  color: #0f766e;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.si-ai-snoonu-btn:hover {
+  background: #99f6e4;
+}
+
+.si-ai-snoonu-hint {
+  margin: 0;
+  padding: 10px 12px 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #334155;
+}
+
 .si-ai-capture-expand {
   margin-bottom: 10px;
   display: flex;

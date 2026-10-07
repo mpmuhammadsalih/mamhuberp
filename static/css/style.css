@@ -561,13 +561,18 @@ body {
 /* Ecommerce — unique E* codes (menu group + submenus) */
 .sidebar [data-icon="EC"]::before { content: "\f543"; }    /* shop — Ecommerce menu */
 .sidebar [data-icon="ED"]::before { content: "\f580"; }   /* speedometer2 — Dashboard */
+.sidebar [data-icon="ELO"]::before { content: "\f1d6"; }  /* broadcast — Live orders */
 .sidebar [data-icon="EO"]::before { content: "\f45c"; }    /* basket — Online orders */
 .sidebar [data-icon="EP"]::before { content: "\f1c7"; }    /* box-seam — Products */
+.sidebar [data-icon="ECS"]::before { content: "\f12b"; }  /* arrow-left-right — Compare stores */
+.sidebar [data-icon="ESN"]::before { content: "\f179"; }  /* bag — Snoonu */
 .sidebar [data-icon="ECAT"]::before { content: "\f2ec"; }  /* diagram-2 — Categories */
 .sidebar [data-icon="ECU"]::before { content: "\f4db"; }  /* person-lines-fill — Customers */
+.sidebar [data-icon="EAS"]::before { content: "\f618"; }  /* whatsapp — Assist */
 .sidebar [data-icon="EPR"]::before { content: "\f3da"; }   /* megaphone — Promotions */
 .sidebar [data-icon="ERV"]::before { content: "\f586"; }  /* star — Reviews */
 .sidebar [data-icon="EMD"]::before { content: "\f42b"; }  /* image — Media */
+.sidebar [data-icon="ECMS"]::before { content: "\f2f5"; } /* file-earmark-text — CMS pages */
 .sidebar [data-icon="EIV"]::before { content: "\f685"; }  /* boxes — Inventory */
 .sidebar [data-icon="ERP"]::before { content: "\f17c"; }  /* bar-chart-line — Reports */
 .sidebar [data-icon="ESG"]::before { content: "\f3e5"; }  /* gear — Settings */

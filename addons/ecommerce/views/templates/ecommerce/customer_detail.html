@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ title }}{% endblock %}
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=4" />
+<link rel="stylesheet" href="{{ url_for('ecommerce.static', filename='css/ecommerce.css') }}?v=7" />
 {% endblock %}
 {% block content %}
 {% set acct = (customer.account_status or '')|upper %}
@@ -16,6 +16,21 @@
       </p>
     </div>
     <div class="page-po__topbar-actions">
+      {% if customer.user_id %}
+      <form method="post" action="{{ url_for('ecommerce.assist_notify') }}" class="ecommerce-assist-form">
+        <input type="hidden" name="user_id" value="{{ customer.user_id }}" />
+        <input type="hidden" name="message" value="{{ customer.assist_message }}" />
+        <button type="submit" class="ecommerce-notify-btn">Notify</button>
+      </form>
+      <form method="post" action="{{ url_for('ecommerce.assist_chat') }}" class="ecommerce-assist-form">
+        <input type="hidden" name="user_id" value="{{ customer.user_id }}" />
+        <input type="hidden" name="message" value="{{ customer.assist_message }}" />
+        <button type="submit" class="ecommerce-chat-btn">Chat</button>
+      </form>
+      {% endif %}
+      {% if customer.whatsapp_href %}
+      <a href="{{ customer.whatsapp_href }}" target="_blank" rel="noopener noreferrer" class="ecommerce-wa-btn">WhatsApp</a>
+      {% endif %}
       <a href="{{ url_for('ecommerce.customers') }}" class="page-po__btn-secondary">← Back to customers</a>
       <span class="ecommerce-flag ecommerce-flag-{% if acct == 'ACTIVE' %}Y{% elif acct in ('INACTIVE', 'LOCKED', 'SUSPENDED', 'BLOCKED') %}N{% else %}M{% endif %} ecommerce-order-detail__status-badge">
         {{ customer.account_status or '—' }}

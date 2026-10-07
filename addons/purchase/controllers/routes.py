@@ -3063,12 +3063,26 @@ def _enrich_po_detail_rows_for_grn(rows: List[Dict[str, Any]], lpo_no: Any, loc_
     except Exception:
         po_wh_code = None
         po_wid = None
-    item_uom_cache: Dict[int, List[Dict[str, Any]]] = {}
     wh_code_cache: Dict[int, str] = {}
+    factor_pairs: List[Tuple[Any, Optional[str]]] = []
     for row in rows:
         v = row.get('foc')
         row['foc'] = v in (1, '1', 'Y', 'y', True, 'TRUE', 'True')
-        _apply_item_uom_extras_from_cache(row, item_uom_cache)
+        try:
+            ic = int(row.get('itemcode') or 0)
+        except (TypeError, ValueError):
+            ic = 0
+        if ic > 0:
+            factor_pairs.append((ic, row.get('uom')))
+    factors = _batch_uom_factors_for_items(factor_pairs)
+    for row in rows:
+        try:
+            ic = int(row.get('itemcode') or 0)
+        except (TypeError, ValueError):
+            ic = 0
+        uom_key = _grn_normalize_uom_key(row.get('uom'))
+        factor = factors.get((ic, uom_key), 1.0) if ic > 0 else 1.0
+        row['uomfactor'] = factor if factor and factor > 0 else 1.0
         qty_val = float(row.get('quantity') or 0)
         bonus_val = float(row.get('bonus') or 0)
         factor = float(row.get('uomfactor') or 1)
@@ -3113,19 +3127,25 @@ def _enrich_receipt_detail_rows(rows: List[Dict[str, Any]]) -> None:
     """Batch UOM factor / landing cost enrichment for GRN query mode (avoid N+1 queries)."""
     if not rows:
         return
-    item_uom_cache: Dict[int, List[Dict[str, Any]]] = {}
+    factor_pairs: List[Tuple[Any, Optional[str]]] = []
     for row in rows:
         row['foc'] = row.get('foc') in (1, '1', 'Y', 'y', True, 'TRUE', 'True')
         try:
             ic = int(row.get('itemcode') or 0)
         except (TypeError, ValueError):
             ic = 0
-        uom = (row.get('uom') or '').strip()
-        if ic > 0 and ic not in item_uom_cache:
-            item_uom_cache[ic] = _get_item_uoms_with_cost(ic)
-        factor = _uom_factor_from_uoms_list(item_uom_cache.get(ic) or [], uom)
-        if factor == 1.0 and uom and ic > 0:
-            factor = _get_uom_factor_for_item(ic, uom)
+        if ic > 0:
+            factor_pairs.append((ic, row.get('uom')))
+    factors = _batch_uom_factors_for_items(factor_pairs)
+    for row in rows:
+        try:
+            ic = int(row.get('itemcode') or 0)
+        except (TypeError, ValueError):
+            ic = 0
+        uom_key = _grn_normalize_uom_key(row.get('uom'))
+        factor = factors.get((ic, uom_key), 1.0) if ic > 0 else 1.0
+        if not factor or factor <= 0:
+            factor = 1.0
         row['uomfactor'] = factor
         qty_val = float(row.get('quantity') or 0)
         bonus = float(row.get('bonus') or 0)
@@ -8674,52 +8694,28 @@ def _pr_accounts_posted_filter_sql(hdr_alias: str, *, posted: bool, hdr_no_col: 
     return exists_sql if posted else f'NOT ({exists_sql})'
 
 def _grn_is_inventory_posted(receipt_no: Any, *, location_code: Optional[int]=None) -> bool:
-    """True when stock/lots/item journal were posted for this GRN."""
+    """True when this GRN actually posted stock (ITEMJOURNAL SOURCE_DOC=GRN)."""
     bind_val = coerce_receiptno(receipt_no)
     if not receiptno_is_valid(bind_val):
         return False
     loc = int(location_code if location_code is not None else _resolve_location_code())
-    ensure_receipthdr_inventory_posted_column()
-    tbl = _detect_table(['RECEIPTHDR', 'receipthdr'])
-    inv_col = _detect_column(tbl, ['INVENTORY_POSTED', 'INVENTORY_POSTED_FLAG', 'inventory_posted']) if tbl else None
-    no_col = _detect_column(tbl, ['RECEIPTNO', 'RECEIPT_NO', 'receiptno']) if tbl else None
-    loc_col = _detect_column(tbl, ['LOCATIONCODE', 'LOCATION_CODE', 'locationcode']) if tbl else None
-    reset_col = _detect_column(tbl, ['RESETNO', 'RESET_NO', 'resetno']) if tbl else None
-    del_col = _detect_column(tbl, ['DELFLAG', 'DEL_FLAG', 'delflag']) if tbl else None
-    if inv_col and no_col:
-        wh = [f'{no_col} = :rno']
-        prm: Dict[str, Any] = {'rno': bind_val}
-        if loc_col:
-            wh.append(f'{loc_col} = :loc')
-            prm['loc'] = loc
-        if reset_col:
-            wh.append(f'{reset_col} = :rn')
-            prm['rn'] = RESET_NO
-        if del_col:
-            wh.append(f"NVL({del_col}, 'N') = 'N'")
-        try:
-            _, rows = _fetch_rows(
-                f'SELECT NVL({inv_col}, \'N\') AS invp FROM {tbl} WHERE {" AND ".join(wh)}',
-                prm,
-            )
-            if rows:
-                flag = str(rows[0].get('invp') or 'N').strip().upper()
-                if flag in ('Y', '1', 'YES', 'TRUE'):
-                    return True
-                if flag in ('N', '0', 'NO', 'FALSE'):
-                    return _grn_receipt_has_item_journal(receipt_no, location_code=loc)
-        except Exception:
-            pass
     return _grn_receipt_has_item_journal(receipt_no, location_code=loc)
 
 def _grn_inventory_posted_filter_sql(hdr_alias: str, *, posted: bool) -> str:
-    """SQL predicate: inventory posted (Y) vs draft (N, no GRN journal)."""
-    ensure_receipthdr_inventory_posted_column()
+    """List/nav filter: use RECEIPTHDR.INVENTORY_POSTED (indexed header flag).
+
+    Do not correlate ITEMJOURNAL here — EXISTS + TO_CHAR(SOURCE_NO) scans the journal
+    for every header and makes posted/draft GRN lists extremely slow.
+    """
     tbl = _detect_table(['RECEIPTHDR', 'receipthdr'])
-    inv_col = _detect_column(tbl, ['INVENTORY_POSTED', 'inventory_posted']) if tbl else None
+    inv_col = _detect_column(tbl, ['INVENTORY_POSTED', 'INVENTORY_POSTED_FLAG', 'inventory_posted']) if tbl else None
+    if inv_col:
+        if posted:
+            return f"NVL({hdr_alias}.{inv_col}, 'N') = 'Y'"
+        return f"NVL({hdr_alias}.{inv_col}, 'N') <> 'Y'"
     no_col = _detect_column(tbl, ['RECEIPTNO', 'RECEIPT_NO', 'receiptno']) if tbl else None
     loc_col = _detect_column(tbl, ['LOCATIONCODE', 'LOCATION_CODE', 'locationcode']) if tbl else None
-    if not (inv_col and no_col and loc_col):
+    if not (no_col and loc_col):
         return '1=1'
     ij_tbl = _detect_table(['ITEMJOURNAL', 'itemjournal', 'ITEMJOURNEL', 'itemjournel']) or 'ITEMJOURNAL'
     ij_loc = _detect_column(ij_tbl, ['LOCATIONCODE', 'LOCATION_CODE', 'locationcode']) or 'LOCATIONCODE'
@@ -8730,9 +8726,7 @@ def _grn_inventory_posted_filter_sql(hdr_alias: str, *, posted: bool) -> str:
         f" AND UPPER(TRIM(NVL(ij.{ij_sd}, ''))) = 'GRN'"
         f" AND TO_CHAR(ij.{ij_sn}) = TO_CHAR({hdr_alias}.{no_col}))"
     )
-    if posted:
-        return f"(NVL({hdr_alias}.{inv_col}, 'N') = 'Y' OR {journal_exists})"
-    return f"(NVL({hdr_alias}.{inv_col}, 'N') = 'N' AND NOT ({journal_exists}))"
+    return journal_exists if posted else f'NOT ({journal_exists})'
 
 def _get_adjacent_posted_grn_receipt_no(
     receipt_no: Any,
@@ -10896,16 +10890,26 @@ def _save_receipt(receipt_no: Any, receipt_date: str, supplier_code: int, invoic
                                 except Exception:
                                     supplier_journal_name = ''
                         # Empty stock_rows clears ITEMJOURNAL for this GRN (hard delete / unpost).
-                        repost_itemjournal_grn(
+                        _rev_n, _ins_n = repost_itemjournal_grn(
                             cur, conn, loc_code, RESET_NO, receipt_no, stock_rows,
                             supplier_code=supplier_code, supplier_name=supplier_journal_name,
                         )
+                        if stock_rows and int(_ins_n or 0) <= 0:
+                            raise ValueError(
+                                f'GRN {receipt_no}: item journal was not written ({len(stock_rows)} stock line(s)). '
+                                'Inventory was not posted.'
+                            )
                     if inv_posted_col and not delete_only:
+                        inv_flag = 'Y' if (stock_rows and do_inventory_posting) else 'N'
                         try:
                             cur.execute(
-                                f"UPDATE {hdr} SET {inv_posted_col} = 'Y' WHERE {loc_col} = :loc AND {no_col} = :rno"
+                                f"UPDATE {hdr} SET {inv_posted_col} = :invp WHERE {loc_col} = :loc AND {no_col} = :rno"
                                 + (f' AND {reset_col} = :rn' if reset_col else ''),
-                                {'loc': loc_code, 'rno': receipt_no, 'rn': RESET_NO} if reset_col else {'loc': loc_code, 'rno': receipt_no},
+                                (
+                                    {'invp': inv_flag, 'loc': loc_code, 'rno': receipt_no, 'rn': RESET_NO}
+                                    if reset_col
+                                    else {'invp': inv_flag, 'loc': loc_code, 'rno': receipt_no}
+                                ),
                             )
                         except Exception:
                             pass

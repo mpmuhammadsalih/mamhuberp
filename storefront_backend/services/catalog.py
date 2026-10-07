@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -329,6 +330,18 @@ def _map_item_row(
     image_url = public_item_image_url(image_path)
     en_name, ara_name = _item_name_fields(row)
     brand_ara = _normalize_brand_name_ar(row.get('brandnameara') or row.get('BRANDNAMEARA'))
+    category_name = row.get('categoryname') or row.get('CATEGORYNAME') or ''
+    description = str(row.get('description') or row.get('DESCRIPTION') or '').strip()
+    meta = {}
+    if meta_map is not None and item_code is not None:
+        meta = meta_map.get(str(item_code), {}) or {}
+    seo = web_meta_svc.resolve_listing_seo(
+        item_name=en_name,
+        description=description,
+        category_name=str(category_name or ''),
+        price=offer_price if offer_price is not None else retail,
+        meta=meta,
+    )
 
     return {
         'location_code': row.get('locationcode') or row.get('LOCATIONCODE'),
@@ -342,11 +355,18 @@ def _map_item_row(
         'current_stock': float(row.get('currentstock') or row.get('CURRENTSTOCK') or 0),
         'brand_code': row.get('brandcode') or row.get('BRANDCODE'),
         'category_code': row.get('categorycode') or row.get('CATEGORYCODE'),
-        'category_name': row.get('categoryname') or row.get('CATEGORYNAME') or '',
+        'category_name': category_name,
         'brand_name': row.get('brandname') or row.get('BRANDNAME') or '',
         'brand_name_ar': brand_ara,
         'image_url': image_url,
         'primary_image_url': image_url,
+        'seo_title': seo['seo_title'],
+        'seo_description': seo['seo_description'],
+        'show_on_web': web_meta_svc.show_on_web_from_meta(meta),
+        'is_featured': web_meta_svc.is_featured_from_meta(meta),
+        'is_addon': web_meta_svc.is_addon_from_meta(meta),
+        'addon_type': web_meta_svc.addon_type_from_meta(meta) or None,
+        'addon_code': web_meta_svc.addon_code_from_meta(meta) or None,
     }
 
 
@@ -385,6 +405,14 @@ def list_products(
             meta = build_pagination_meta(page=page, page_size=page_size, total_records=0)
             return [], meta
 
+    meta_map = web_meta_svc.product_web_meta_map()
+    hidden_codes = list(
+        {
+            *web_meta_svc.hidden_item_codes(meta_map),
+            *web_meta_svc.addon_item_codes(meta_map),
+        }
+    ) or None
+
     rows, total = get_items_list(
         location_code=loc,
         search=(search or '').strip() or None,
@@ -394,6 +422,7 @@ def list_products(
         brand_code=brand_code,
         stock_filter=sf,
         item_codes=filtered_codes,
+        exclude_item_codes=hidden_codes,
         order_by=sort,
         order_direction=order,
         include_lookup_names=True,
@@ -408,6 +437,7 @@ def list_products(
             brand_code=brand_code,
             stock_filter=None,
             item_codes=filtered_codes,
+            exclude_item_codes=hidden_codes,
             order_by=sort,
             order_direction=order,
             include_lookup_names=True,
@@ -415,7 +445,7 @@ def list_products(
     row_dicts = [dict(r) for r in rows]
     _attach_arabic_names(row_dicts, loc)
     _attach_brand_name_ar(row_dicts, loc)
-    items = [_map_item_row(r, meta_map=web_meta_svc.product_web_meta_map()) for r in row_dicts]
+    items = [_map_item_row(r, meta_map=meta_map) for r in row_dicts]
     if min_price is not None:
         items = [i for i in items if float(i.get('retail_price') or 0) >= float(min_price)]
     if max_price is not None:
@@ -424,7 +454,12 @@ def list_products(
     return items, meta
 
 
-def get_product(item_code: int, *, location_code: Optional[int] = None) -> Optional[Dict[str, Any]]:
+def get_product(
+    item_code: int,
+    *,
+    location_code: Optional[int] = None,
+    include_hidden: bool = False,
+) -> Optional[Dict[str, Any]]:
     loc = resolve_location_code(location_code)
     row = get_item_by_code(int(item_code), loc)
     if not row:
@@ -432,9 +467,20 @@ def get_product(item_code: int, *, location_code: Optional[int] = None) -> Optio
     row_dict = dict(row)
     _attach_brand_name_ar([row_dict], loc)
     meta_map = web_meta_svc.product_web_meta_map()
+    if not include_hidden and web_meta_svc.is_hidden_from_web(int(item_code), meta_map):
+        return None
     mapped = _map_item_row(row_dict, meta_map=meta_map)
     mapped['description'] = str(row.get('description') or row.get('DESCRIPTION') or '').strip()
     meta = meta_map.get(str(item_code), {})
+    seo = web_meta_svc.resolve_listing_seo(
+        item_name=str(mapped.get('item_name') or ''),
+        description=mapped['description'],
+        category_name=str(mapped.get('category_name') or ''),
+        price=mapped.get('offer_price') or mapped.get('retail_price'),
+        meta=meta,
+    )
+    mapped['seo_title'] = seo['seo_title']
+    mapped['seo_description'] = seo['seo_description']
     mapped['description_ar'] = str(meta.get('description_ar') or '').strip() or None
     mapped['base_uom'] = row.get('baseuom') or row.get('BASEUOM') or ''
     mapped['packing'] = str(row.get('packing') or row.get('PACKING') or '').strip()
@@ -443,7 +489,165 @@ def get_product(item_code: int, *, location_code: Optional[int] = None) -> Optio
     mapped['specifications'] = _product_specifications(row, int(item_code))
     specs_ar = _product_specifications_ar(int(item_code))
     mapped['specifications_ar'] = specs_ar if specs_ar else None
+    if not web_meta_svc.is_addon_from_meta(meta):
+        mapped['addons'] = list_product_addons(
+            location_code=loc,
+            addon_type='gift_wrap',
+            meta_map=meta_map,
+        )
     return mapped
+
+
+_ADDON_CACHE: Dict[Tuple[Any, ...], Tuple[float, List[Dict[str, Any]]]] = {}
+_ADDON_CACHE_TTL_SEC = 120.0
+
+
+def list_product_addons(
+    *,
+    location_code: Optional[int] = None,
+    addon_type: str = 'gift_wrap',
+    meta_map: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    from storefront_backend.services import gift_wrap as gift_wrap_svc
+
+    loc = resolve_location_code(location_code)
+    try:
+        from addons.ecommerce import settings_store
+        free_wrap = bool(settings_store.free_gift_wrap_enabled())
+    except Exception:
+        free_wrap = False
+    cache_key = (int(loc), str(addon_type or ''), free_wrap)
+    now = time.monotonic()
+    cached = _ADDON_CACHE.get(cache_key)
+    if cached and now - cached[0] < _ADDON_CACHE_TTL_SEC:
+        return [dict(item) for item in cached[1]]
+
+    mapping = meta_map if meta_map is not None else web_meta_svc.product_web_meta_map()
+    codes = web_meta_svc.addon_item_codes(mapping, addon_type=addon_type)
+    if not codes:
+        try:
+            gift_wrap_svc.ensure_addon_items()
+        except Exception:
+            pass
+        mapping = web_meta_svc.product_web_meta_map()
+        codes = web_meta_svc.addon_item_codes(mapping, addon_type=addon_type)
+    if not codes:
+        _ADDON_CACHE[cache_key] = (now, [])
+        return []
+
+    placeholders = ', '.join(f':c{i}' for i in range(len(codes)))
+    params: Dict[str, Any] = {'loc': int(loc)}
+    for i, code in enumerate(codes):
+        params[f'c{i}'] = int(code)
+    rows = _safe_rows(
+        f"""
+        SELECT
+            im.LOCATIONCODE,
+            im.ITEMCODE,
+            im.ITEMNAME,
+            im.ITEMNAMEARA,
+            im.RETAILPRICE,
+            im.WHOLESALEPRICE,
+            im.CURRENTSTOCK,
+            im.BRANDCODE,
+            im.CATEGORYCODE
+        FROM ITEMMASTER im
+        WHERE im.LOCATIONCODE = :loc
+          AND im.ITEMCODE IN ({placeholders})
+        """,
+        params,
+    )
+    items: List[Dict[str, Any]] = []
+    for row in rows or []:
+        mapped = _map_item_row(row, meta_map=mapping)
+        mapped['addon_enabled'] = gift_wrap_svc.addon_is_enabled(
+            mapped,
+            item_code=int(mapped.get('item_code') or 0),
+            meta_map=mapping,
+        )
+        items.append(mapped)
+    items.sort(
+        key=lambda item: (
+            web_meta_svc.addon_sort_from_meta(mapping.get(str(item.get('item_code')))),
+            float(item.get('retail_price') or 0),
+            str(item.get('item_name') or ''),
+        )
+    )
+    _ADDON_CACHE[cache_key] = (now, items)
+    return [dict(item) for item in items]
+
+
+def list_suggested_products(
+    item_code: int,
+    *,
+    location_code: Optional[int] = None,
+    limit: int = 12,
+) -> List[Dict[str, Any]]:
+    """Cross-sell picks: other categories first (same brand), then featured / best sellers."""
+    loc = resolve_location_code(location_code)
+    row = get_item_by_code(int(item_code), loc)
+    if not row:
+        return []
+
+    try:
+        brand_code = int(row.get('brandcode') or row.get('BRANDCODE') or 0)
+    except (TypeError, ValueError):
+        brand_code = 0
+    try:
+        category_code = int(row.get('categorycode') or row.get('CATEGORYCODE') or 0)
+    except (TypeError, ValueError):
+        category_code = 0
+
+    wanted = max(1, min(int(limit), 24))
+    seen = {int(item_code)}
+    out: List[Dict[str, Any]] = []
+
+    def _take(items: List[Dict[str, Any]], *, skip_same_category: bool) -> None:
+        for item in items:
+            if len(out) >= wanted:
+                return
+            try:
+                code = int(item.get('item_code') or 0)
+            except (TypeError, ValueError):
+                continue
+            if code <= 0 or code in seen:
+                continue
+            if skip_same_category and category_code:
+                try:
+                    item_cat = int(item.get('category_code') or 0)
+                except (TypeError, ValueError):
+                    item_cat = 0
+                if item_cat == category_code:
+                    continue
+            seen.add(code)
+            out.append(item)
+
+    if brand_code > 0:
+        brand_items, _ = list_products(
+            location_code=loc,
+            brand_code=brand_code,
+            stock_filter='in_stock',
+            page=1,
+            page_size=40,
+        )
+        _take(brand_items, skip_same_category=True)
+
+    if len(out) < wanted:
+        featured, _ = get_collection('featured', location_code=loc, page=1, page_size=24)
+        _take(featured.get('products') or [], skip_same_category=True)
+
+    if len(out) < wanted:
+        sellers, _ = get_collection('best-sellers', location_code=loc, page=1, page_size=24)
+        _take(sellers.get('products') or [], skip_same_category=True)
+
+    if not out:
+        featured, _ = get_collection('featured', location_code=loc, page=1, page_size=24)
+        _take(featured.get('products') or [], skip_same_category=False)
+        if len(out) < wanted:
+            sellers, _ = get_collection('best-sellers', location_code=loc, page=1, page_size=24)
+            _take(sellers.get('products') or [], skip_same_category=False)
+
+    return out[:wanted]
 
 
 def _product_gallery_images(item_code: int, primary_url: str | None) -> List[Dict[str, Any]]:
@@ -505,9 +709,10 @@ def _parse_custom_specifications_text(custom: Any) -> List[Dict[str, str]]:
                 label, value = text.split(':', 1)
                 add(label.strip(), value.strip())
             else:
-                feature_lines.append(text)
+                feature_lines.append(re.sub(r'^[•●▪►\-\s]+', '', text).strip())
         for feature in feature_lines:
-            add('Details', feature)
+            if feature and feature.lower() not in {'key features', 'features', 'highlights'}:
+                add('Details', feature)
     return specs
 
 
@@ -590,6 +795,39 @@ def get_category_tree(*, location_code: Optional[int] = None) -> List[Dict[str, 
     return tree
 
 
+_DUMMY_BRAND_NAMES = {'', 'nil', 'n/a', 'na', 'none', '-', 'null', '0'}
+
+
+def _brand_filter_code(row: Dict[str, Any]) -> int:
+    for key in ('erp_brand_code', 'brand_code', 'code', 'brand_id'):
+        raw = row.get(key)
+        try:
+            code = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if code > 0:
+            return code
+    return 0
+
+
+def _is_listed_brand(row: Dict[str, Any]) -> bool:
+    name = str(row.get('brand_name') or row.get('name') or '').strip()
+    if name.lower() in _DUMMY_BRAND_NAMES:
+        return False
+    return _brand_filter_code(row) > 0
+
+
+def _normalize_brand_payload(row: Dict[str, Any]) -> Dict[str, Any]:
+    code = _brand_filter_code(row)
+    name = str(row.get('brand_name') or row.get('name') or '').strip()
+    out = dict(row)
+    out['code'] = code
+    out['brand_code'] = code
+    out['brand_name'] = name
+    out['name'] = name
+    return out
+
+
 def list_brands() -> List[Dict[str, Any]]:
     loc = resolve_location_code(None)
     _ensure_mh_brand_name_ar_column()
@@ -644,7 +882,7 @@ def list_brands() -> List[Dict[str, Any]]:
                 erp_code = 0
             if erp_code and erp_code in erp_map:
                 row['name_ar'] = erp_map[erp_code]
-        return rows
+        return [_normalize_brand_payload(row) for row in rows if _is_listed_brand(row)]
 
     ensure_category_nameara_column()
     cat_cols = {str(c).upper() for c in (_get_table_columns('CATEGORY') or [])}
@@ -653,7 +891,7 @@ def list_brands() -> List[Dict[str, Any]]:
         if 'NAMEARA' in cat_cols
         else 'CAST(NULL AS VARCHAR2(100)) AS name_ar'
     )
-    return _safe_rows(
+    rows = _safe_rows(
         f"""
         SELECT CODE AS brand_code, NAME AS brand_name, {name_ar_sel}
         FROM CATEGORY
@@ -663,6 +901,7 @@ def list_brands() -> List[Dict[str, Any]]:
         """,
         {'loc': int(loc)},
     )
+    return [_normalize_brand_payload(row) for row in rows if _is_listed_brand(row)]
 
 
 def _public_media_url(image_url: str | None) -> str | None:
@@ -743,6 +982,10 @@ COLLECTION_META: Dict[str, Dict[str, str]] = {
         'title': 'Best sellers',
         'description': 'Customer favourites flying off the shelves.',
     },
+    'featured': {
+        'title': 'Featured',
+        'description': 'Hand-picked toys our team wants you to see first.',
+    },
     'offers': {
         'title': 'Offers & deals',
         'description': 'Special prices on selected toys.',
@@ -782,6 +1025,8 @@ def _offer_item_codes(location_code: int) -> List[int]:
             meta_map=meta_map,
         )
         if resolved_wholesale is None:
+            continue
+        if web_meta_svc.is_hidden_from_web(item_code, meta_map):
             continue
         if resolve_offer_price(retail, resolved_wholesale) is not None:
             codes.append(item_code)
@@ -855,6 +1100,21 @@ def get_collection(
                 sort='currentstock',
                 order='DESC',
             )
+    elif slug == 'featured':
+        codes = web_meta_svc.featured_item_codes()
+        if codes:
+            products, meta = list_products(
+                location_code=location_code,
+                page=page,
+                page_size=page_size,
+                stock_filter='all',
+                item_codes=codes,
+            )
+            order_map = {code: idx for idx, code in enumerate(codes)}
+            products.sort(key=lambda p: order_map.get(int(p.get('item_code') or 0), 999999))
+        else:
+            products = []
+            meta = build_pagination_meta(page=page, page_size=page_size, total_records=0)
     else:
         loc = resolve_location_code(location_code)
         offer_codes = _offer_item_codes(loc)

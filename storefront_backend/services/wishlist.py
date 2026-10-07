@@ -8,9 +8,11 @@ from db import _get_connection, _safe_rows, _table_exists
 from storefront_backend.deps import resolve_location_code
 from storefront_backend.services import cart as cart_svc
 from storefront_backend.services import catalog as catalog_svc
+from storefront_backend.services.schema_bootstrap import ensure_wishlist_schema
 
 
 def _ready() -> bool:
+    ensure_wishlist_schema()
     return _table_exists('MH_WISHLIST') and _table_exists('MH_WISHLIST_ITEM')
 
 

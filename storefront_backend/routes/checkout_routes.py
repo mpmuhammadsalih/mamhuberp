@@ -32,6 +32,10 @@ class LoyaltyRedeemBody(BaseModel):
     points: int = Field(ge=10)
 
 
+class GiftWrapBody(BaseModel):
+    gift_wrap_code: str = Field(min_length=1, max_length=40)
+
+
 class CheckoutConfirmBody(BaseModel):
     customer_notes: Optional[str] = Field(default=None, max_length=1000)
     payment_method: str = Field(default='COD', max_length=30)
@@ -39,6 +43,7 @@ class CheckoutConfirmBody(BaseModel):
     address_id: Optional[int] = Field(default=None, gt=0)
     delivery_zone_id: Optional[int] = Field(default=None, gt=0)
     delivery_slot_id: Optional[int] = Field(default=None, gt=0)
+    gift_wrap_code: Optional[str] = Field(default=None, max_length=40)
 
 
 class TapInitBody(CheckoutConfirmBody):
@@ -103,6 +108,16 @@ async def apply_coupon(payload: CouponApplyBody, claims: dict = Depends(require_
     return success_response(data=data, message='Coupon applied')
 
 
+@router.post('/gift-wrap')
+def set_gift_wrap(payload: GiftWrapBody, claims: dict = Depends(require_customer)):
+    user_id = customer_user_id(claims)
+    try:
+        data = checkout_svc.set_gift_wrap(user_id=user_id, gift_wrap_code=payload.gift_wrap_code)
+    except ValueError as exc:
+        raise _handle(exc) from exc
+    return success_response(data=data, message='Gift wrap saved')
+
+
 @router.post('/loyalty-points')
 async def apply_loyalty_points(payload: LoyaltyRedeemBody, claims: dict = Depends(require_customer)):
     user_id = customer_user_id(claims)
@@ -147,6 +162,7 @@ def confirm_checkout(
             address_id=payload.address_id,
             delivery_zone_id=payload.delivery_zone_id,
             delivery_slot_id=payload.delivery_slot_id,
+            gift_wrap_code=payload.gift_wrap_code,
         )
         background_tasks.add_task(checkout_svc.complete_order_side_effects, **side_effects)
     except ValueError as exc:
@@ -167,6 +183,7 @@ def init_tap_payment(payload: TapInitBody, claims: dict = Depends(require_custom
             address_id=payload.address_id,
             delivery_zone_id=payload.delivery_zone_id,
             delivery_slot_id=payload.delivery_slot_id,
+            gift_wrap_code=payload.gift_wrap_code,
         )
     except ValueError as exc:
         raise _handle(exc) from exc

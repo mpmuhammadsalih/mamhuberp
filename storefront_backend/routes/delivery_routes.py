@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Header, Query
 
 from storefront_backend.services import delivery as delivery_svc
 from storefront_backend.services import geocoding as geocoding_svc
@@ -16,10 +16,22 @@ DEFAULT_ETA_MIN = 60
 DEFAULT_ETA_MAX = 75
 
 
-def _estimate_for_coords(lat: float, lng: float, place: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    city = (place or {}).get('city') or 'Doha'
-    area = (place or {}).get('area') or (place or {}).get('street') or 'Your area'
-    zones = delivery_svc.list_zones(city=city) or delivery_svc.list_zones()
+def _request_lang(lang: Optional[str], accept_language: Optional[str]) -> str:
+    return geocoding_svc.normalize_lang(lang or accept_language)
+
+
+def _estimate_for_coords(
+    lat: float,
+    lng: float,
+    place: Optional[Dict[str, Any]] = None,
+    lang: str = 'en',
+) -> Dict[str, Any]:
+    city = (place or {}).get('city') or ('الدوحة' if lang == 'ar' else 'Doha')
+    area = (place or {}).get('area') or (place or {}).get('street') or ('منطقتك' if lang == 'ar' else 'Your area')
+    try:
+        zones = delivery_svc.list_zones(city='Doha') or delivery_svc.list_zones()
+    except Exception:  # noqa: BLE001
+        zones = []
     zone = zones[0] if zones else None
     return {
         'latitude': lat,
@@ -27,7 +39,7 @@ def _estimate_for_coords(lat: float, lng: float, place: Optional[Dict[str, Any]]
         'area_label': area,
         'city': city,
         'street': (place or {}).get('street') or area,
-        'country': (place or {}).get('country') or 'Qatar',
+        'country': (place or {}).get('country') or ('قطر' if lang == 'ar' else 'Qatar'),
         'full_label': (place or {}).get('label') or f'{area}, {city}',
         'delivery_zone_id': zone.get('delivery_zone_id') if zone else None,
         'zone_name': zone.get('zone_name') if zone else None,
@@ -42,8 +54,14 @@ def _estimate_for_coords(lat: float, lng: float, place: Optional[Dict[str, Any]]
 async def geocode_search(
     q: str = Query(..., min_length=2),
     country: str = Query('qa'),
+    lang: Optional[str] = Query(None),
+    accept_language: Optional[str] = Header(None, alias='Accept-Language'),
 ):
-    results = geocoding_svc.search_places(q, country=country)
+    results = geocoding_svc.search_places(
+        q,
+        country=country,
+        lang=_request_lang(lang, accept_language),
+    )
     return success_response(data=results, message='Places retrieved')
 
 
@@ -51,15 +69,18 @@ async def geocode_search(
 async def geocode_reverse(
     lat: float = Query(..., ge=-90, le=90),
     lng: float = Query(..., ge=-180, le=180),
+    lang: Optional[str] = Query(None),
+    accept_language: Optional[str] = Header(None, alias='Accept-Language'),
 ):
-    place = geocoding_svc.reverse_geocode(lat, lng)
+    locale = _request_lang(lang, accept_language)
+    place = geocoding_svc.reverse_geocode(lat, lng, lang=locale)
     if not place:
         return success_response(
-            data=_estimate_for_coords(lat, lng),
+            data=_estimate_for_coords(lat, lng, lang=locale),
             message='Coordinates accepted with default area',
         )
     return success_response(
-        data=_estimate_for_coords(lat, lng, place),
+        data=_estimate_for_coords(lat, lng, place, lang=locale),
         message='Location resolved',
     )
 
@@ -68,9 +89,12 @@ async def geocode_reverse(
 async def delivery_estimate(
     lat: float = Query(..., ge=-90, le=90),
     lng: float = Query(..., ge=-180, le=180),
+    lang: Optional[str] = Query(None),
+    accept_language: Optional[str] = Header(None, alias='Accept-Language'),
 ):
-    place = geocoding_svc.reverse_geocode(lat, lng)
-    data = _estimate_for_coords(lat, lng, place)
+    locale = _request_lang(lang, accept_language)
+    place = geocoding_svc.reverse_geocode(lat, lng, lang=locale)
+    data = _estimate_for_coords(lat, lng, place, lang=locale)
     return success_response(data=data, message='Delivery estimate calculated')
 
 

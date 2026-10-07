@@ -879,6 +879,7 @@ def advance_document_series_after_save_cur(
         return
     last = max(0, int(row[0] or 0))
     if saved_n <= last:
+        invalidate_document_series_cache()
         return
     cur.execute(
         f"""
@@ -888,6 +889,7 @@ def advance_document_series_after_save_cur(
         """,
         {'n': saved_n, 'id': sid, 'u': (user or 'system')[:100]},
     )
+    invalidate_document_series_cache()
 
 
 def allocate_document_no(

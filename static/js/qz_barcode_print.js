@@ -20,23 +20,20 @@
     'max-height:3mm;overflow:hidden;width:100%;text-align:center;word-break:break-word;}' +
     '.bc-print-cap{font-size:6.5pt;font-weight:700;color:#000;margin:0;line-height:1.05;' +
     'max-height:3.8mm;overflow:hidden;width:100%;text-align:center;word-break:break-word;}' +
-    '.bc-print-cap-ar{font-size:6pt;font-weight:600;color:#000;margin:0.2mm 0 0;line-height:1.1;' +
-    'max-height:4mm;overflow:hidden;width:100%;text-align:center;direction:rtl;unicode-bidi:embed;' +
-    'word-break:break-word;font-family:Tahoma,\"Segoe UI\",Arial,sans-serif;}' +
     '.bc-print-meta{font-size:5.5pt;color:#000;margin:0 0 0.4mm;line-height:1.1;text-align:center;' +
     'max-height:3.5mm;overflow:hidden;width:100%;}' +
     '.bc-print-info-row{display:flex;flex-direction:row;align-items:center;justify-content:center;' +
     'width:100%;gap:2mm;margin:0.3mm 0 0;flex:0 0 auto;max-height:11mm;overflow:hidden;text-align:center;}' +
     '.bc-print-info-right{text-align:center;flex:0 0 auto;line-height:1.12;}' +
     '.bc-print-uom{font-size:5.5pt;font-weight:600;color:#000;}' +
+    '.bc-print-cost-code{font-size:9pt;font-weight:800;color:#000;letter-spacing:0.08em;' +
+    'text-transform:lowercase;margin:0;line-height:1.05;}' +
     '.bc-print-prices{display:flex;flex-direction:row;align-items:center;justify-content:center;' +
     'flex:0 0 auto;text-align:center;margin:0;line-height:1.05;max-height:10mm;overflow:hidden;gap:1mm;}' +
     '.bc-print-price-text{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.05;}' +
     '.bc-print-ean{width:100%;text-align:center;font-size:6pt;font-weight:600;color:#000;' +
     'letter-spacing:0.04em;margin-top:0.25mm;max-height:3mm;overflow:hidden;flex:0 0 auto;}' +
     '.bc-print-price{font-size:11pt;font-weight:800;color:#000;letter-spacing:0.02em;}' +
-    '.bc-print-price-ar{font-size:9pt;font-weight:700;color:#000;direction:rtl;unicode-bidi:embed;' +
-    'font-family:Tahoma,\"Segoe UI\",Arial,sans-serif;margin-top:0.2mm;}' +
     '.bc-print-bar-wrap{flex:0 0 auto;width:100%;max-width:44mm;display:flex;justify-content:center;' +
     'align-items:center;margin:0 auto;line-height:0;}' +
     '.bc-print-bar-wrap svg{max-width:100%!important;width:auto!important;height:auto!important;' +

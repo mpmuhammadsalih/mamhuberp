@@ -107,7 +107,7 @@ def category_mix(*, location_code: int, limit: int = 8) -> List[Dict[str, Any]]:
         {'location_code': int(location_code), 'limit': max(1, int(limit))},
     )
     total = sum(float(r.get('total_amount') or 0) for r in rows) or 1.0
-    palette = ['#F8467D', '#60a5fa', '#34d399', '#fbbf24', '#a78bfa', '#fb7185', '#38bdf8', '#4ade80']
+    palette = ['#E91E63', '#60a5fa', '#34d399', '#fbbf24', '#a78bfa', '#fb7185', '#38bdf8', '#4ade80']
     result = []
     for idx, row in enumerate(rows):
         amount = float(row.get('total_amount') or 0)

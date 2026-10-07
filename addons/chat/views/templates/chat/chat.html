@@ -96,7 +96,11 @@
     overflow: hidden;
   }
   .wa-main-top { flex: 0 0 auto; }
-  .wa-head { display: grid; grid-template-columns: 46px 1fr; gap: 10px; align-items: center; padding: 10px 12px; background: #f0f2f5; border-bottom: 1px solid #dce3dd; }
+  .wa-head { display: grid; grid-template-columns: 46px 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; background: #f0f2f5; border-bottom: 1px solid #dce3dd; }
+  .wa-head-actions { display: flex; align-items: center; gap: 6px; }
+  .wa-clear-btn { border: 1px solid #ccd6cc; background: #fff; color: #334155; border-radius: 14px; padding: 6px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+  .wa-clear-btn:hover { background: #f8fafc; color: #111827; }
+  .wa-clear-btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .wa-title { font-size: 14px; font-weight: 700; color: #111827; }
   .wa-last-seen { font-size: 12px; color: #6b7280; }
   .wa-typing { font-size: 12px; color: #16a34a; min-height: 16px; }
@@ -243,6 +247,9 @@
         <div class="wa-title" id="chatMainTitle">Chatbox</div>
         <div class="wa-last-seen" id="chatLastSeen">Select a conversation</div>
         <div class="wa-typing" id="chatTypingIndicator"></div>
+      </div>
+      <div class="wa-head-actions">
+        <button type="button" class="wa-clear-btn" id="chatClearBtn" hidden>Clear chat</button>
       </div>
     </div>
     <div class="wa-reply-bar" id="chatReplyBar">
@@ -675,9 +682,11 @@
     box.innerHTML = rows.map(c => {
       const isActive = Number(c.conversation_id) === Number(activeConversationId);
       const lastTxt = c.last_text ? String(c.last_text) : (c.last_image_url ? "[Image]" : (c.last_file_name ? `[File] ${c.last_file_name}` : ""));
-      const convName = (String(c.conversation_type || "").toUpperCase() === "DIRECT")
-        ? chatUserLabel(c.display_name || "user")
-        : String(c.display_name || "Chat");
+      const convName = c.is_shop_customer
+        ? String(c.display_name || "Shop customer")
+        : ((String(c.conversation_type || "").toUpperCase() === "DIRECT")
+          ? chatUserLabel(c.display_name || "user")
+          : String(c.display_name || "Chat"));
       const initials = chatInitials(convName || "User");
       const isFav = chatIsFavourite(c.conversation_id);
       return `
@@ -685,7 +694,7 @@
           <div class="wa-avatar">${chatEsc(initials)}</div>
           <div>
             <div class="wa-name">${chatEsc(convName || "Chat")}</div>
-            <div class="wa-sub">${chatEsc(lastTxt)}</div>
+            <div class="wa-sub">${c.is_shop_customer ? "Shop · " : ""}${chatEsc(lastTxt)}</div>
           </div>
           <div class="wa-item-meta">
             <button type="button" class="wa-star ${isFav ? "on" : ""}" data-star-id="${c.conversation_id}" title="Favourite">${isFav ? "★" : "☆"}</button>
@@ -721,20 +730,25 @@
           const a = String(u.username || "").toLowerCase();
           const b = String(u.employeecode || "").toLowerCase();
           const t = String(u.tenant_id || "").toLowerCase();
-          return a.includes(q) || b.includes(q) || t.includes(q);
+          const d = String(u.display_name || "").toLowerCase();
+          return a.includes(q) || b.includes(q) || t.includes(q) || d.includes(q);
         });
-    if (head) head.textContent = q ? "Matches" : "All users";
+    if (head) head.textContent = q ? "Matches" : (rows.some(u => u.is_shop_customer) ? "Shop customers & staff" : "All users");
     if (!rows.length) {
       box.innerHTML = '<div class="wa-empty" style="padding: 8px 10px;">' + (q ? "No users found" : "No users") + "</div>";
       return;
     }
     box.innerHTML = rows.map(u => {
       const uname = u.username || "";
-      const unameLabel = chatUserLabel(uname);
-      const initials = chatInitials(uname);
+      const unameLabel = u.display_name || chatUserLabel(uname);
+      const initials = chatInitials(unameLabel || uname);
       const seen = chatRelativeTime(u.last_seen_date);
       const tid = String(u.tenant_id || "").trim();
-      const sub = [seen, (chatAllTenantsMode && tid) ? ("Tenant: " + tid) : ""].filter(Boolean).join(" · ");
+      const sub = [
+        u.is_shop_customer ? "Shop customer" : "",
+        seen,
+        (chatAllTenantsMode && tid && !u.is_shop_customer) ? ("Tenant: " + tid) : "",
+      ].filter(Boolean).join(" · ");
       return `
         <div class="wa-item" data-u="${chatEsc(uname)}">
           <div class="wa-avatar">${chatEsc(initials)}</div>
@@ -777,14 +791,21 @@
     }
     const active = chatConversations.find(c => Number(c.conversation_id) === Number(activeConversationId));
     const activeTitle = active
-      ? ((String(active.conversation_type || "").toUpperCase() === "DIRECT")
+      ? (active.is_shop_customer
+          ? String(active.display_name || "Shop customer")
+          : ((String(active.conversation_type || "").toUpperCase() === "DIRECT")
           ? chatUserLabel(active.display_name || "user")
-          : String(active.display_name || "Chatbox"))
+          : String(active.display_name || "Chatbox")))
       : "Chatbox";
     document.getElementById("chatMainTitle").textContent = activeTitle;
     document.getElementById("chatHeaderAvatar").textContent = chatInitials(activeTitle || "Chat");
     const lastSeenTxt = active && active.direct_other_last_seen ? chatRelativeTime(active.direct_other_last_seen) : (active ? "online" : "Select a conversation");
     document.getElementById("chatLastSeen").textContent = lastSeenTxt;
+    const clearBtn = document.getElementById("chatClearBtn");
+    if (clearBtn) {
+      clearBtn.hidden = !activeConversationId;
+      clearBtn.disabled = !activeConversationId;
+    }
     chatRenderConversations();
     } finally {
       isLoadingConversations = false;
@@ -1100,6 +1121,9 @@
   }
 
   async function chatInit() {
+    const params = new URLSearchParams(window.location.search);
+    const openId = Number(params.get("c") || params.get("open") || 0);
+    if (openId > 0) activeConversationId = openId;
     await chatLoadUsers();
     await chatLoadConversations(false);
     if (activeConversationId) await chatLoadMessages(false);
@@ -1116,6 +1140,24 @@
         chatTriggerSend();
       }
     });
+    const chatClearBtn = document.getElementById("chatClearBtn");
+    if (chatClearBtn) {
+      chatClearBtn.addEventListener("click", async () => {
+        if (!activeConversationId) return;
+        if (!confirm("Clear this chat box? Messages will be hidden from your view only.")) return;
+        chatClearBtn.disabled = true;
+        try {
+          await chatFetchJson(`/chat/api/conversations/${activeConversationId}/clear`, { method: "POST" });
+          lastMessageSignature = "";
+          await chatLoadMessages(false);
+          await chatLoadConversations(true);
+        } catch (e) {
+          alert(e.message || "Failed to clear chat.");
+        } finally {
+          chatClearBtn.disabled = !activeConversationId;
+        }
+      });
+    }
     document.getElementById("chatSendBtn").addEventListener("click", (ev) => {
       chatTriggerSend();
     });

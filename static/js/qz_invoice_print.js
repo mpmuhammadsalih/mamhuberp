@@ -4,11 +4,13 @@
  * Optional: window.__SALES_QZ_SCRIPT_URL__ overrides script URL (default: jsDelivr).
  */
 (function (global) {
-  const DEFAULT_QZ_SCRIPT = 'https://cdn.jsdelivr.net/npm/qz-tray/qz-tray.js';
+  // Prefer same-origin copy (pinned 2.2.6). Override with window.__SALES_QZ_SCRIPT_URL__.
+  const DEFAULT_QZ_SCRIPT = '/static/js/vendor/qz-tray.js';
   const QZ_SCRIPT_TIMEOUT_MS = 20000;
 
   let securityConfigured = false;
   let qzScriptInflight = null;
+  let connectInflight = null;
 
   /**
    * Inject qz-tray.js once; WebSocket connection only happens in ensureQzSecurity.
@@ -75,14 +77,22 @@
 
   function formatQzConnectError(err) {
     const raw = String((err && (err.message || err)) || err || 'Unknown error');
-    if (/establish connection|connection refused|ECONNREFUSED|WebSocket|websocket|closed before/i.test(raw)) {
+    if (/establish connection|connection refused|ECONNREFUSED|WebSocket|websocket|closed before|Timed out connecting/i.test(raw)) {
+      const origin = (typeof location !== 'undefined' && location.origin) ? location.origin : 'this site';
       return (
         'Cannot connect to QZ Tray on this PC.\n\n' +
-        'Checklist:\n' +
-        '• QZ Tray is installed (https://qz.io/download/) and running (system tray icon visible)\n' +
-        '• You use Chrome or Edge on the same PC where QZ Tray runs (not a remote desktop session on another machine)\n' +
-        '• From Reports → Printer Setup: download the QZ certificate and trust/allow it in QZ Tray\n' +
-        '• Windows firewall/antivirus is not blocking localhost ports 8181/8182\n\n' +
+        'MOST COMMON FIX (Chrome / Edge Local Network Access):\n' +
+        '1. Click the lock / tune icon left of the address bar\n' +
+        '2. Open Site settings / Permissions\n' +
+        '3. Set "Local network access" (or "Apps on this device") to Allow\n' +
+        '4. Refresh the page (Ctrl+Shift+R) and try again\n' +
+        '5. If a popup asks to access local network / apps on this device → click Allow\n\n' +
+        'Also check:\n' +
+        '• QZ Tray is installed (https://qz.io/download/) and running (tray icon)\n' +
+        '• Browser is on the SAME PC as QZ Tray (not a remote session to another machine)\n' +
+        '• Download & trust the QZ certificate from Printer Setup in QZ Tray\n' +
+        '• Firewall is not blocking localhost ports 8181 / 8182\n\n' +
+        'Site: ' + origin + '\n' +
         'Technical detail: ' + raw
       );
     }
@@ -98,21 +108,123 @@
     return raw;
   }
 
+  function withTimeout(promise, ms, message) {
+    return Promise.race([
+      promise,
+      new Promise(function (_, reject) {
+        setTimeout(function () {
+          reject(new Error(message || ('Timed out after ' + ms + 'ms')));
+        }, ms);
+      }),
+    ]);
+  }
+
+  function isStaleQzSocketError(err) {
+    const msg = String((err && (err.message || err)) || err || '');
+    return /sendData is not a function|connection\.version|Cannot read propert(?:y|ies).*null|WebSocket is already in CLOSING|CLOSED|not open|ready check timeout|has not been established/i.test(
+      msg
+    );
+  }
+
   /**
-   * Open WebSocket to local QZ Tray (localhost — works with cloud-hosted Nova too).
+   * QZ isActive() is true while CONNECTING — before sendData exists. Probe with getVersion.
    */
-  async function connectQzWebsocket() {
+  async function qzSocketCanSend() {
+    if (!global.qz || !global.qz.websocket || !global.qz.websocket.isActive()) {
+      return false;
+    }
+    if (!global.qz.api || typeof global.qz.api.getVersion !== 'function') {
+      return false;
+    }
+    try {
+      await withTimeout(global.qz.api.getVersion(), 2500, 'QZ ready check timeout');
+      return true;
+    } catch (_e) {
+      return false;
+    }
+  }
+
+  async function safeDisconnectQz() {
+    if (!global.qz || !global.qz.websocket || !global.qz.websocket.isActive()) {
+      return;
+    }
+    try {
+      await withTimeout(global.qz.websocket.disconnect(), 2500, 'QZ disconnect timeout');
+    } catch (_e) {
+      /* ignore — next connect will replace the socket */
+    }
+  }
+
+  /**
+   * Open WebSocket to local QZ Tray (localhost on the browser PC).
+   * @param {{ force?: boolean }} [options]
+   */
+  async function connectQzWebsocket(options) {
+    const force = !!(options && options.force);
     if (!global.qz || !global.qz.websocket) {
       throw new Error('QZ Tray library not loaded.');
     }
-    if (global.qz.websocket.isActive()) {
+
+    if (connectInflight) {
+      try {
+        await connectInflight;
+      } catch (_e) {
+        /* retry below */
+      }
+      if (!force && (await qzSocketCanSend())) {
+        return;
+      }
+    } else if (!force && (await qzSocketCanSend())) {
       return;
     }
-    const connectOpts = { retries: 3, delay: 1 };
+
+    // Keep retries low so a missing QZ Tray fails quickly instead of hanging the UI.
+    const pageIsHttps = typeof location !== 'undefined' && location.protocol === 'https:';
+    const connectOpts = {
+      host: ['localhost', '127.0.0.1'],
+      usingSecure: pageIsHttps,
+      retries: 3,
+      delay: 1,
+    };
+    connectInflight = (async function () {
+      try {
+        if (force || global.qz.websocket.isActive()) {
+          await safeDisconnectQz();
+        }
+        await withTimeout(
+          global.qz.websocket.connect(connectOpts),
+          15000,
+          'Timed out connecting to QZ Tray (15s). Allow Local network access for this site, ensure QZ Tray is running, then try again.'
+        );
+        const ok = await qzSocketCanSend();
+        if (!ok) {
+          throw new Error(
+            'QZ Tray connected but is not ready. Restart QZ Tray, allow/trust this site certificate, then try again.'
+          );
+        }
+      } catch (err) {
+        throw new Error(formatQzConnectError(err));
+      } finally {
+        connectInflight = null;
+      }
+    })();
+    await connectInflight;
+  }
+
+  /**
+   * Connect if needed, run fn; on stale-socket errors force reconnect once and retry.
+   * @template T
+   * @param {() => Promise<T>} fn
+   * @returns {Promise<T>}
+   */
+  async function withQzReady(fn) {
+    await connectQzWebsocket({ force: false });
     try {
-      await global.qz.websocket.connect(connectOpts);
+      return await fn();
     } catch (err) {
-      throw new Error(formatQzConnectError(err));
+      if (!isStaleQzSocketError(err)) throw err;
+      await connectQzWebsocket({ force: true });
+      return await fn();
     }
   }
 
@@ -158,7 +270,7 @@
       );
       securityConfigured = true;
     }
-    await connectQzWebsocket();
+    await connectQzWebsocket({ force: !(await qzSocketCanSend()) });
   }
 
   /**
@@ -335,6 +447,8 @@
   global.SalesQzPrint = {
     loadQzTrayLibrary,
     connectQzWebsocket,
+    withQzReady,
+    withTimeout,
     ensureQzSecurity,
     printCashBillToDefaultPrinter,
     printPosReceiptViaQz,

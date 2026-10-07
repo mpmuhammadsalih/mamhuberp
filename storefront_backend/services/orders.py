@@ -8,6 +8,12 @@ from db import _get_connection, _safe_rows, _table_exists
 
 from storefront_backend.services.cart import _lookup_cart_product_meta
 from storefront_backend.services.schema_bootstrap import ensure_order_schema
+from storefront_backend.services import gift_wrap as gift_wrap_svc
+
+try:
+    from addons.ecommerce.schema_bootstrap import ensure_order_erp_columns
+except ImportError:  # pragma: no cover
+    ensure_order_erp_columns = None
 
 CANCELLABLE = frozenset({'PENDING', 'AWAITING_PAYMENT', 'PAYMENT_CONFIRMED', 'CONFIRMED'})
 _ORDER_SCHEMA_OK: bool | None = None
@@ -18,6 +24,11 @@ def _orders_ready() -> bool:
     if _ORDER_SCHEMA_OK is True:
         return True
     ensure_order_schema()
+    if ensure_order_erp_columns is not None:
+        try:
+            ensure_order_erp_columns()
+        except Exception:
+            pass
     ready = _table_exists('MH_ORDER')
     _ORDER_SCHEMA_OK = ready
     return ready
@@ -74,14 +85,14 @@ def create_order_header(
                     SUBTOTAL, DISCOUNT_TOTAL, TAX_TOTAL, DELIVERY_FEE, GRAND_TOTAL,
                     CURRENCY_CODE, COUPON_CODE, DELIVERY_ZONE_ID, DELIVERY_SLOT_ID,
                     PICKUP_STORE_ID, ADDRESS_ID, ADDRESS_SNAPSHOT, CUSTOMER_NOTES,
-                    CREATED_AT, CREATED_BY
+                    CREATED_AT, CREATED_BY, CREATED_BY_NAME
                 ) VALUES (
                     :order_id, :order_number, :user_id, :cart_id, :location_code,
                     :order_status, :fulfillment_type, :payment_status,
                     :subtotal, :discount_total, :tax_total, :delivery_fee, :grand_total,
                     :currency_code, :coupon_code, :delivery_zone_id, :delivery_slot_id,
                     :pickup_store_id, :address_id, :address_snapshot, :customer_notes,
-                    SYSTIMESTAMP, :created_by
+                    SYSTIMESTAMP, :created_by, :created_by_name
                 )
                 """,
                 {
@@ -89,6 +100,7 @@ def create_order_header(
                     'order_number': order_number,
                     'user_id': user_id,
                     'created_by': user_id,
+                    'created_by_name': data.pop('created_by_name', None) or 'Website',
                     **data,
                 },
             )
@@ -170,14 +182,14 @@ def create_confirmed_order_batch(
                     SUBTOTAL, DISCOUNT_TOTAL, TAX_TOTAL, DELIVERY_FEE, GRAND_TOTAL,
                     CURRENCY_CODE, COUPON_CODE, DELIVERY_ZONE_ID, DELIVERY_SLOT_ID,
                     PICKUP_STORE_ID, ADDRESS_ID, ADDRESS_SNAPSHOT, CUSTOMER_NOTES,
-                    CREATED_AT, CREATED_BY
+                    CREATED_AT, CREATED_BY, CREATED_BY_NAME
                 ) VALUES (
                     :order_id, :order_number, :user_id, :cart_id, :location_code,
                     :order_status, :fulfillment_type, :payment_status,
                     :subtotal, :discount_total, :tax_total, :delivery_fee, :grand_total,
                     :currency_code, :coupon_code, :delivery_zone_id, :delivery_slot_id,
                     :pickup_store_id, :address_id, :address_snapshot, :customer_notes,
-                    SYSTIMESTAMP, :created_by
+                    SYSTIMESTAMP, :created_by, :created_by_name
                 )
                 """,
                 {
@@ -185,6 +197,7 @@ def create_confirmed_order_batch(
                     'order_number': order_number,
                     'user_id': user_id,
                     'created_by': user_id,
+                    'created_by_name': header.pop('created_by_name', None) or 'Website',
                     **header,
                 },
             )
@@ -340,13 +353,16 @@ def _to_detail(row: Dict[str, Any]) -> Dict[str, Any]:
     items = row.get('items') or _fetch_items(int(row['order_id']))
     history = row.get('status_history') or _fetch_history(int(row['order_id']))
     summary = _to_summary(row, item_count=len(items))
+    wrap, remaining_notes = gift_wrap_svc.split_notes(row.get('customer_notes'))
     summary.update({
         'subtotal': float(row.get('subtotal') or 0),
         'discount_total': float(row.get('discount_total') or 0),
         'tax_total': float(row.get('tax_total') or 0),
         'delivery_fee': float(row.get('delivery_fee') or 0),
         'coupon_code': row.get('coupon_code'),
-        'customer_notes': row.get('customer_notes'),
+        'customer_notes': remaining_notes,
+        'gift_wrap': wrap,
+        'gift_wrap_fee': float((wrap or {}).get('fee') or 0),
         'items': [
             {
                 'order_item_id': int(i['order_item_id']),

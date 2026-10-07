@@ -1,17 +1,19 @@
 {% extends "base.html" %}
 {% block title %}{{ title }}{% endblock %}
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=4" />
+<link rel="stylesheet" href="{{ url_for('ecommerce.static', filename='css/ecommerce.css') }}?v=42" />
 {% endblock %}
 {% block content %}
-<div class="page-po nexa-list-page ecommerce-page" style="max-width:1300px;">
-  <div class="page-po__topbar">
+{% set q = search or request.args.get('q', '') %}
+{% set channel = channel or request.args.get('channel', 'all') %}
+<div class="page-po ecommerce-history-page">
+  <div class="ecommerce-history-top">
     <div>
-      <h1 class="page-po__title">Orders</h1>
-      <p class="page-po__muted">Online orders from MH_ORDER · {{ total }} total</p>
+      <h1 class="ecommerce-history-title">Order history</h1>
+      <p class="ecommerce-history-sub">Track and manage your orders</p>
     </div>
-    <div class="page-po__topbar-actions">
-      <a href="{{ url_for('ecommerce.reports') }}" class="po-nav-link">Reports</a>
+    <div class="ecommerce-history-top__actions">
+      <a href="{{ url_for('ecommerce.live_orders') }}" class="page-po__btn-primary">Live orders</a>
       <a href="{{ url_for('ecommerce.dashboard') }}" class="page-po__btn-secondary">Dashboard</a>
     </div>
   </div>
@@ -20,64 +22,146 @@
   <div class="ecommerce-alert">{{ warning }}</div>
   {% endif %}
 
-  <form method="get" class="nexa-list-toolbar">
-    <input type="text" name="q" value="{{ request.args.get('q', '') }}" placeholder="Order # or email…"
-           class="input" style="min-width:220px; max-width:320px;" autocomplete="off" />
-    <select name="status" class="input" style="width:160px;">
-      <option value="">All statuses</option>
-      {% for s in status_options %}
-      <option value="{{ s }}" {% if request.args.get('status') == s %}selected{% endif %}>{{ s.replace('_', ' ') }}</option>
-      {% endfor %}
-    </select>
-    <button type="submit" class="page-po__btn-primary" style="padding:4px 12px; font-size:11px;">Filter</button>
-    <a href="{{ url_for('ecommerce.orders') }}" class="page-po__btn-secondary" style="padding:4px 10px; font-size:11px;">Clear</a>
-    <span class="nexa-num">{{ total }} record{{ '' if total == 1 else 's' }}</span>
+  <section class="ecommerce-history-summary">
+    <div class="ecommerce-history-summary__head">
+      <div>
+        <h2>Overall orders summary</h2>
+        <p>Aggregated data for the selected dates</p>
+      </div>
+      <div class="ecommerce-history-periods" role="group" aria-label="Date range">
+        {% for key, label in [
+          ('today', 'Today'),
+          ('yesterday', 'Yesterday'),
+          ('last_7', 'Last 7 days'),
+          ('last_30', 'Last 30 days'),
+          ('last_180', 'Last 6 months'),
+          ('custom', 'Custom'),
+        ] %}
+        <a
+          class="ecommerce-history-period{% if period == key %} is-active{% endif %}"
+          href="{{ url_for('ecommerce.orders', period=key, tab=tab, q=q or None, date_from=date_from or None, date_to=date_to or None, channel=channel or None) }}"
+        >{{ label }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    {% if period == 'custom' %}
+    <form method="get" class="ecommerce-history-custom">
+      <input type="hidden" name="tab" value="{{ tab }}" />
+      <input type="hidden" name="period" value="custom" />
+      <input type="hidden" name="q" value="{{ q }}" />
+      <input type="hidden" name="channel" value="{{ channel }}" />
+      <label>From <input type="date" name="date_from" value="{{ date_from }}" class="input" /></label>
+      <label>To <input type="date" name="date_to" value="{{ date_to }}" class="input" /></label>
+      <button type="submit" class="page-po__btn-primary">Apply</button>
+    </form>
+    {% endif %}
+    <div class="ecommerce-history-kpis">
+      <article class="ecommerce-history-kpi">
+        <p>Total orders</p>
+        <strong>{{ stats.total_orders }}</strong>
+        <span>QAR {{ '%.2f'|format(stats.total_amount or 0) }}</span>
+      </article>
+      <article class="ecommerce-history-kpi">
+        <p>Completed orders</p>
+        <strong>{{ stats.completed_orders }}</strong>
+        <span>QAR {{ '%.2f'|format(stats.completed_amount or 0) }}</span>
+      </article>
+      <article class="ecommerce-history-kpi">
+        <p>Orders in progress</p>
+        <strong>{{ stats.in_progress_orders }}</strong>
+        <span>QAR {{ '%.2f'|format(stats.in_progress_amount or 0) }}</span>
+      </article>
+      <article class="ecommerce-history-kpi">
+        <p>Cancelled orders</p>
+        <strong>{{ stats.cancelled_orders }}</strong>
+        <span>QAR {{ '%.2f'|format(stats.cancelled_amount or 0) }}</span>
+      </article>
+      <article class="ecommerce-history-kpi">
+        <p>Cancellation rate</p>
+        <strong>{{ '%.1f'|format(stats.cancellation_rate) }}%</strong>
+        <span>QAR {{ '%.2f'|format(stats.cancelled_amount or 0) }} cancelled</span>
+      </article>
+    </div>
+    <p class="ecommerce-history-note">Updates live when you refresh or a new order arrives</p>
+  </section>
+
+  <form method="get" class="ecommerce-history-tools">
+    <input type="hidden" name="period" value="{{ period }}" />
+    <input type="hidden" name="tab" value="{{ tab }}" />
+    <input type="hidden" name="date_from" value="{{ date_from }}" />
+    <input type="hidden" name="date_to" value="{{ date_to }}" />
+    <input type="hidden" name="channel" value="{{ channel }}" />
+    <input type="search" name="q" value="{{ q }}" class="ecommerce-history-search" placeholder="Search by order ID…" autocomplete="off" />
+    <span class="ecommerce-history-branch">Branch: {{ branch_name }}</span>
+    <a
+      class="page-po__btn-secondary"
+      href="{{ url_for('ecommerce.orders_export', period=period, tab=tab, q=q or None, date_from=date_from or None, date_to=date_to or None, channel=channel or None) }}"
+    >Export xlsx</a>
   </form>
 
-  <div class="co-table-wrap">
-    <table class="co-table co-table--th-hint">
+  <nav class="ecommerce-history-tabs" aria-label="Order status">
+    {% for key, label in [
+      ('all', 'All'),
+      ('preparing', 'Preparing'),
+      ('ready', 'Ready'),
+      ('delivered', 'Delivered'),
+      ('cancelled', 'Cancelled'),
+    ] %}
+    <a
+      class="ecommerce-history-tab{% if tab == key %} is-active{% endif %}"
+      href="{{ url_for('ecommerce.orders', period=period, tab=key, q=q or None, date_from=date_from or None, date_to=date_to or None, channel=channel or None) }}"
+    >{{ label }}</a>
+    {% endfor %}
+  </nav>
+
+  <nav class="ecommerce-history-tabs" aria-label="Order channel">
+    {% for key, label in [
+      ('all', 'All channels'),
+      ('web', 'Web'),
+      ('whatsapp', 'WhatsApp'),
+    ] %}
+    <a
+      class="ecommerce-history-tab{% if channel == key %} is-active{% endif %}"
+      href="{{ url_for('ecommerce.orders', period=period, tab=tab, q=q or None, date_from=date_from or None, date_to=date_to or None, channel=key) }}"
+    >{{ label }}</a>
+    {% endfor %}
+  </nav>
+
+  <div class="ecommerce-history-table">
+    <table class="ecommerce-history-grid">
       <thead>
         <tr>
-          <th style="text-align:center; width:56px; cursor:default;">Sl.No</th>
-          <th>Order #</th>
-          <th>Customer</th>
-          <th>Status</th>
-          <th>Payment</th>
-          <th style="text-align:center;">Items</th>
-          <th style="text-align:right;">Total</th>
-          <th>Created</th>
-          <th style="text-align:center; cursor:default;">Action</th>
+          <th class="ecommerce-history-grid__id">Order ID</th>
+          <th class="ecommerce-history-grid__channel">Channel</th>
+          <th class="ecommerce-history-grid__status">Status</th>
+          <th class="ecommerce-history-grid__total">Order total</th>
+          <th class="ecommerce-history-grid__branch">Branch</th>
+          <th class="ecommerce-history-grid__details">Details</th>
         </tr>
       </thead>
       <tbody>
         {% for row in orders %}
-        {% set st = (row.order_status or '')|upper %}
-        {% set pay = (row.payment_status or '')|upper %}
         <tr>
-          <td class="sl-no">{{ loop.index + (page - 1) * page_size }}</td>
-          <td><strong>{{ row.order_number }}</strong></td>
-          <td>{{ row.customer_email or '—' }}</td>
-          <td>
-            <span class="ecommerce-flag ecommerce-flag-{% if st in ('CONFIRMED', 'DELIVERED', 'COMPLETED') %}Y{% elif st in ('CANCELLED', 'REFUNDED') %}N{% else %}M{% endif %}">
-              {{ row.order_status or '—' }}
-            </span>
+          <td class="ecommerce-history-grid__id">
+            <a class="ecommerce-history-id" href="{{ url_for('ecommerce.order_detail', order_id=row.order_id) }}">#{{ row.order_number }}</a>
+            <span class="ecommerce-history-customer">{{ row.customer_name }}</span>
           </td>
-          <td>
-            <span class="ecommerce-flag ecommerce-flag-{% if pay == 'PAID' %}Y{% elif pay in ('FAILED', 'REFUNDED') %}N{% else %}M{% endif %}">
-              {{ row.payment_status or '—' }}
-            </span>
+          <td class="ecommerce-history-grid__channel">
+            <span class="ecommerce-channel ecommerce-channel--{{ row.channel or 'web' }}">{{ row.channel_label or 'Web' }}</span>
           </td>
-          <td style="text-align:center;">{{ row.item_count or 0 }}</td>
-          <td class="num">{{ row.currency_code or 'QAR' }} {{ '%.2f'|format(row.grand_total or 0) }}</td>
-          <td>{{ (row.created_at|string)[:19].replace('T', ' ') if row.created_at else '—' }}</td>
-          <td style="text-align:center;">
-            <a href="{{ url_for('ecommerce.order_detail', order_id=row.order_id) }}" class="btn-view">View</a>
+          <td class="ecommerce-history-grid__status">
+            <span class="ecommerce-history-status ecommerce-history-status--{{ row.status_tone }}">{{ row.display_status }}</span>
+          </td>
+          <td class="ecommerce-history-grid__total">{{ row.currency_code or 'QAR' }} {{ '%.2f'|format(row.grand_total or 0) }}</td>
+          <td class="ecommerce-history-grid__branch">{{ row.branch_name or '—' }}</td>
+          <td class="ecommerce-history-grid__details">
+            <a href="{{ url_for('ecommerce.order_detail', order_id=row.order_id) }}" class="ecommerce-history-view">View</a>
           </td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="9" style="text-align:center;padding:20px;color:#64748b;">
-            {% if tables_ready %}No orders found.{% else %}Orders table not available.{% endif %}
+          <td colspan="6" class="ecommerce-history-grid__empty">
+            {% if tables_ready %}No orders for this filter.{% else %}Orders table not available.{% endif %}
           </td>
         </tr>
         {% endfor %}
@@ -89,14 +173,20 @@
   <div class="nexa-list-toolbar" style="margin-top:10px; justify-content:space-between;">
     <div style="display:flex; gap:6px; align-items:center;">
       {% if page > 1 %}
-      <a href="{{ url_for('ecommerce.orders', page=page-1, status=request.args.get('status',''), q=request.args.get('q','')) }}" class="btn-view">← Previous</a>
+      <a href="{{ url_for('ecommerce.orders', page=page-1, period=period, tab=tab, q=q or None, date_from=date_from or None, date_to=date_to or None, channel=channel or None) }}" class="btn-view">← Previous</a>
       {% endif %}
       {% if page < total_pages %}
-      <a href="{{ url_for('ecommerce.orders', page=page+1, status=request.args.get('status',''), q=request.args.get('q','')) }}" class="btn-view">Next →</a>
+      <a href="{{ url_for('ecommerce.orders', page=page+1, period=period, tab=tab, q=q or None, date_from=date_from or None, date_to=date_to or None, channel=channel or None) }}" class="btn-view">Next →</a>
       {% endif %}
     </div>
     <span class="nexa-num">Page {{ page }} of {{ total_pages }}</span>
   </div>
   {% endif %}
 </div>
+<script>
+window.addEventListener('mamahub:new-order', function () {
+  window.location.reload();
+});
+</script>
+{% include 'ecommerce/_order_status_modal.html' %}
 {% endblock %}

@@ -329,7 +329,13 @@
                         if (!r || !r.matched || !r.item) continue;
                         var qInp = card.querySelector('.si-ai-drawer-qty');
                         var qtyVal = qInp && qInp.value !== '' ? qInp.value : r.qty;
-                        var ok = await api.addLineFromItem(r.item, qtyVal);
+                        var extras = {};
+                        var unit = Number(r.unit_price);
+                        var lineAmt = Number(r.amount);
+                        var qtyForRate = Number(r.qty) > 0 ? Number(r.qty) : Number(qtyVal);
+                        if (unit > 0) extras.rate = unit;
+                        else if (lineAmt > 0 && qtyForRate > 0) extras.rate = lineAmt / qtyForRate;
+                        var ok = await api.addLineFromItem(r.item, qtyVal, extras);
                         if (ok) added += 1;
                     }
                     closeSiAiScreenshotDrawer();
@@ -560,13 +566,159 @@
         }, true);
     }
 
+    function bindSiAiSnoonuImport() {
+        var url = typeof window.__SALES_AI_SNOONU_URL__ === 'string' ? window.__SALES_AI_SNOONU_URL__.trim() : '';
+        var customerUrl = typeof window.__SALES_AI_SNOONU_CUSTOMER_URL__ === 'string' ? window.__SALES_AI_SNOONU_CUSTOMER_URL__.trim() : '';
+        var btn = document.getElementById('siAiSnoonuBtn');
+        var panel = document.getElementById('siAiSnoonuPanel');
+        var pasteTa = document.getElementById('siAiSnoonuPaste');
+        var fileEl = document.getElementById('siAiSnoonuFile');
+        var pick = document.getElementById('siAiSnoonuPick');
+        var importBtn = document.getElementById('siAiSnoonuImport');
+        var statusEl = document.getElementById('siAiSnoonuStatus');
+        if (!btn || !panel || !importBtn) return;
+
+        bindSiAiScreenshotDrawerUiOnce();
+
+        function setStatus(t) {
+            if (statusEl) statusEl.textContent = t || '';
+        }
+
+        function applySnoonuPeople(data) {
+            var api = getSalesAiApi();
+            if (!api || !data) return;
+            if (data.customer && typeof api.applyCustomer === 'function') {
+                api.applyCustomer(data.customer);
+            }
+            if (data.loyalty_customer && typeof api.applyLoyaltyCustomer === 'function') {
+                api.applyLoyaltyCustomer(data.loyalty_customer);
+            }
+            if (data.warehouse && typeof api.applyWarehouse === 'function') {
+                api.applyWarehouse(data.warehouse);
+            }
+        }
+
+        async function fetchSnoonuCustomer() {
+            if (!customerUrl) return;
+            try {
+                var res = await fetch(customerUrl, { credentials: 'same-origin' });
+                var data = await res.json().catch(function () { return {}; });
+                if (!data.success) {
+                    setStatus(data.error || 'Could not fetch customer Snoonu.');
+                    return;
+                }
+                applySnoonuPeople(data);
+                setStatus(data.customer_note || 'Customer Snoonu selected.');
+            } catch (err) {
+                setStatus(err && err.message ? String(err.message) : 'Could not fetch customer Snoonu.');
+            }
+        }
+
+        btn.addEventListener('click', function () {
+            panel.classList.toggle('hidden');
+            if (!panel.classList.contains('hidden')) {
+                if (pasteTa) pasteTa.focus();
+                fetchSnoonuCustomer();
+            }
+        });
+        if (pick && fileEl) pick.addEventListener('click', function () { fileEl.click(); });
+
+        async function runSnoonu(spec) {
+            var blob = spec && spec.blob && spec.blob.size ? spec.blob : null;
+            var textOnly = spec && spec.textOnly ? String(spec.textOnly).trim() : '';
+            if (!url) {
+                showSiAiMessage('AI - Snoonu', 'OpenAI is not configured on the server.');
+                return;
+            }
+            if (!blob && !textOnly) {
+                showSiAiMessage('AI - Snoonu', 'Paste a Snoonu invoice or choose a screenshot / PDF.');
+                return;
+            }
+            importBtn.disabled = true;
+            if (pick) pick.disabled = true;
+            setStatus(blob ? 'Reading Snoonu invoice…' : 'Importing Snoonu invoice…');
+            try {
+                var res;
+                if (blob) {
+                    var fd = new FormData();
+                    fd.append('image', blob, blob instanceof File && blob.name ? blob.name : 'snoonu.png');
+                    if (textOnly) fd.append('text', textOnly.slice(0, 32000));
+                    res = await fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' });
+                } else {
+                    res = await fetch(url, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: textOnly.slice(0, 32000) }),
+                    });
+                }
+                var data = await res.json().catch(function () { return {}; });
+                if (!data.success) {
+                    var errMsg = data.already_saved
+                        ? 'already saved'
+                        : (data.error || ('Import failed (HTTP ' + res.status + ').'));
+                    showSiAiMessage(data.already_saved ? '' : 'AI - Snoonu', errMsg);
+                    setStatus(data.already_saved ? 'already saved' : '');
+                    return;
+                }
+                applySnoonuPeople(data);
+                var api = getSalesAiApi();
+                if (api && typeof api.applyDates === 'function') {
+                    api.applyDates({ bill_date: data.bill_date, delivery_date: data.delivery_date || data.bill_date });
+                }
+                if (data.order_no) {
+                    var orderEl = document.getElementById('order_no');
+                    if (orderEl && !String(orderEl.value || '').trim()) orderEl.value = String(data.order_no);
+                    var remarksEl = document.getElementById('remarks');
+                    if (remarksEl && !String(remarksEl.value || '').trim()) {
+                        remarksEl.value = 'Snoonu ' + String(data.order_no);
+                    }
+                }
+                var results = data.results || [];
+                if (typeof siAiScreenshotDrawerOpen === 'function' && results.length) {
+                    siAiScreenshotDrawerOpen(results);
+                }
+                var note = data.customer_note || '';
+                var bits = [];
+                if (data.customer) bits.push('customer Snoonu');
+                if (data.loyalty_customer && data.loyalty_customer.created) bits.push('loyalty created');
+                else if (data.loyalty_customer) bits.push('loyalty matched');
+                bits.push((data.matched || 0) + ' item(s) matched');
+                if (data.unmatched) bits.push(data.unmatched + ' unmatched');
+                setStatus((note ? note + ' ' : '') + bits.join(' · ') + '. Review lines, then Add to invoice.');
+                if (!data.customer) {
+                    showSiAiMessage('AI - Snoonu', note || 'Items imported. Select customer Snoonu if it was not filled.');
+                }
+            } catch (err) {
+                showSiAiMessage('AI - Snoonu', err && err.message ? String(err.message) : 'Request failed.');
+                setStatus('');
+            } finally {
+                importBtn.disabled = false;
+                if (pick) pick.disabled = false;
+            }
+        }
+
+        importBtn.addEventListener('click', function () {
+            runSnoonu({ textOnly: (pasteTa && pasteTa.value) || '' });
+        });
+        if (fileEl) {
+            fileEl.addEventListener('change', function () {
+                var f = fileEl.files && fileEl.files[0];
+                fileEl.value = '';
+                if (!f) return;
+                runSnoonu({ blob: f, textOnly: (pasteTa && pasteTa.value) || '' });
+            });
+        }
+    }
+
     function boot() {
-        if (!document.getElementById('siAiCaptureToggle')) return;
+        if (!document.getElementById('siAiCaptureToggle') && !document.getElementById('siAiSnoonuBtn')) return;
         if (!getSalesAiApi() || typeof getSalesAiApi().addLineFromItem !== 'function') {
             setTimeout(boot, 50);
             return;
         }
         bindSiAiScreenshotCapture();
+        bindSiAiSnoonuImport();
     }
 
     if (document.readyState === 'loading') {

@@ -11,7 +11,11 @@ from storefront_backend.services.catalog import effective_unit_price, _float_pri
 from addons.ecommerce.services import product_web_meta as web_meta_svc
 from storefront_backend.services.item_images import public_item_image_url
 from storefront_backend.services import promotions as promo_svc
-from storefront_backend.services.schema_bootstrap import ensure_cart_schema, _invalidate_cart_table_cache
+from storefront_backend.services.schema_bootstrap import (
+    ensure_cart_item_parent_column,
+    ensure_cart_schema,
+    _invalidate_cart_table_cache,
+)
 
 try:
     from addons.ecommerce import settings_store as ecommerce_settings
@@ -25,6 +29,51 @@ def _coupons_enabled() -> bool:
     return ecommerce_settings.coupons_enabled()
 
 _CART_SCHEMA_OK: bool | None = None
+_PARENT_COL_OK: bool | None = None
+
+
+def _has_parent_column() -> bool:
+    global _PARENT_COL_OK
+    if _PARENT_COL_OK is True:
+        return True
+    try:
+        ensure_cart_item_parent_column()
+        _PARENT_COL_OK = True
+        return True
+    except Exception:
+        _PARENT_COL_OK = False
+        return False
+
+
+def _parent_int(value: Any) -> Optional[int]:
+    if value is None or value == '':
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _cart_item_select_sql() -> str:
+    parent_sql = (
+        'PARENT_ITEM_CODE AS parent_item_code'
+        if _has_parent_column()
+        else 'NULL AS parent_item_code'
+    )
+    return f"""
+        SELECT
+            CART_ITEM_ID AS cart_item_id,
+            ITEM_CODE AS item_code,
+            LOCATION_CODE AS location_code,
+            QUANTITY AS quantity,
+            UNIT_PRICE AS unit_price,
+            LINE_STATUS AS line_status,
+            {parent_sql}
+        FROM MH_CART_ITEM
+        WHERE CART_ID = :cart_id AND LINE_STATUS = 'ACTIVE'
+        ORDER BY CART_ITEM_ID
+    """
 
 
 def _lookup_item_price(item_code: int, location_code: int) -> Optional[float]:
@@ -60,10 +109,15 @@ def _cart_ready() -> bool:
     if _CART_SCHEMA_OK is True:
         return True
     if _table_exists('MH_CART') and _table_exists('MH_CART_ITEM'):
+        try:
+            ensure_cart_item_parent_column()
+        except Exception:
+            pass
         _CART_SCHEMA_OK = True
         return True
     try:
         ensure_cart_schema()
+        ensure_cart_item_parent_column()
     except Exception:
         _invalidate_cart_table_cache()
         _CART_SCHEMA_OK = False
@@ -97,18 +151,7 @@ def _fetch_cart(cart_id: int) -> Optional[Dict[str, Any]]:
         return None
     cart = dict(headers[0])
     items = _safe_rows(
-        """
-        SELECT
-            CART_ITEM_ID AS cart_item_id,
-            ITEM_CODE AS item_code,
-            LOCATION_CODE AS location_code,
-            QUANTITY AS quantity,
-            UNIT_PRICE AS unit_price,
-            LINE_STATUS AS line_status
-        FROM MH_CART_ITEM
-        WHERE CART_ID = :cart_id AND LINE_STATUS = 'ACTIVE'
-        ORDER BY CART_ITEM_ID
-        """,
+        _cart_item_select_sql(),
         {'cart_id': int(cart_id)},
     )
     cart['items'] = items
@@ -258,6 +301,9 @@ def _build_response(
         item_code = int(item['item_code'])
         line_loc = int(item.get('location_code') or cart_loc)
         details = product_meta.get((line_loc, item_code), {})
+        parent_item_code = _parent_int(
+            item.get('parent_item_code') or item.get('PARENT_ITEM_CODE')
+        )
         lines.append({
             'cart_item_id': int(item['cart_item_id']),
             'item_code': item_code,
@@ -266,12 +312,29 @@ def _build_response(
             'unit_price': unit,
             'line_total': line_total,
             'line_status': item.get('line_status') or 'ACTIVE',
+            'parent_item_code': parent_item_code,
+            'is_addon': bool(parent_item_code) or web_meta_svc.is_addon_item(item_code),
             'product': {
                 'item_code': item_code,
                 'item_name': details.get('item_name') or '',
                 'primary_image_url': details.get('primary_image_url'),
             },
         })
+    children_by_parent: Dict[int, List[Dict[str, Any]]] = {}
+    mains: List[Dict[str, Any]] = []
+    for line in lines:
+        parent = _parent_int(line.get('parent_item_code'))
+        if parent:
+            children_by_parent.setdefault(parent, []).append(line)
+        else:
+            mains.append(line)
+    ordered: List[Dict[str, Any]] = []
+    for main in mains:
+        ordered.append(main)
+        ordered.extend(children_by_parent.pop(int(main['item_code']), []))
+    for leftover in children_by_parent.values():
+        ordered.extend(leftover)
+    lines = ordered
     if discount_total is None:
         discount_total = _cart_coupon_discount(int(cart['cart_id']))
     taxable = max(subtotal - discount_total, 0)
@@ -424,12 +487,7 @@ def _fetch_cart_with_cursor(cur: Any, cart_id: int) -> Optional[Dict[str, Any]]:
         'currency_code': header[5] or 'QAR',
     }
     cur.execute(
-        """
-        SELECT CART_ITEM_ID, ITEM_CODE, LOCATION_CODE, QUANTITY, UNIT_PRICE, LINE_STATUS
-        FROM MH_CART_ITEM
-        WHERE CART_ID = :cart_id AND LINE_STATUS = 'ACTIVE'
-        ORDER BY CART_ITEM_ID
-        """,
+        _cart_item_select_sql(),
         {'cart_id': int(cart_id)},
     )
     items = []
@@ -441,6 +499,7 @@ def _fetch_cart_with_cursor(cur: Any, cart_id: int) -> Optional[Dict[str, Any]]:
             'quantity': float(row[3] or 0),
             'unit_price': float(row[4] or 0),
             'line_status': row[5] or 'ACTIVE',
+            'parent_item_code': _parent_int(row[6] if len(row) > 6 else None),
         })
     cart['items'] = items
     return cart
@@ -453,11 +512,14 @@ def add_item(
     user_id: Optional[int] = None,
     guest_token: Optional[str] = None,
     location_code: Optional[int] = None,
+    parent_item_code: Optional[int] = None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     if not _cart_ready():
         return False, 'Cart tables not available', None
     if quantity <= 0:
         return False, 'Quantity must be positive', None
+    if web_meta_svc.is_hidden_from_web(int(item_code)) and not web_meta_svc.is_addon_item(int(item_code)):
+        return False, 'Product is not available', None
     loc = resolve_location_code(location_code)
     try:
         with _get_connection() as conn:
@@ -544,15 +606,33 @@ def add_item(
                     )
 
                 assert cart_id is not None
-                cur.execute(
-                    """
-                    SELECT CART_ITEM_ID, QUANTITY
-                    FROM MH_CART_ITEM
-                    WHERE CART_ID = :cart_id AND ITEM_CODE = :item_code AND LOCATION_CODE = :loc
-                      AND LINE_STATUS = 'ACTIVE'
-                    """,
-                    {'cart_id': cart_id, 'item_code': int(item_code), 'loc': loc},
-                )
+                parent = _parent_int(parent_item_code)
+                if _has_parent_column():
+                    cur.execute(
+                        """
+                        SELECT CART_ITEM_ID, QUANTITY
+                        FROM MH_CART_ITEM
+                        WHERE CART_ID = :cart_id AND ITEM_CODE = :item_code AND LOCATION_CODE = :loc
+                          AND LINE_STATUS = 'ACTIVE'
+                          AND NVL(PARENT_ITEM_CODE, 0) = :parent
+                        """,
+                        {
+                            'cart_id': cart_id,
+                            'item_code': int(item_code),
+                            'loc': loc,
+                            'parent': int(parent or 0),
+                        },
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT CART_ITEM_ID, QUANTITY
+                        FROM MH_CART_ITEM
+                        WHERE CART_ID = :cart_id AND ITEM_CODE = :item_code AND LOCATION_CODE = :loc
+                          AND LINE_STATUS = 'ACTIVE'
+                        """,
+                        {'cart_id': cart_id, 'item_code': int(item_code), 'loc': loc},
+                    )
                 existing = cur.fetchone()
                 if existing:
                     new_qty = float(existing[1]) + quantity
@@ -571,25 +651,47 @@ def add_item(
                 else:
                     cur.execute('SELECT SEQ_MH_CART_ITEM_ID.NEXTVAL FROM DUAL')
                     item_id = int((cur.fetchone() or [0])[0])
-                    cur.execute(
-                        """
-                        INSERT INTO MH_CART_ITEM (
-                            CART_ITEM_ID, CART_ID, LOCATION_CODE, ITEM_CODE,
-                            QUANTITY, UNIT_PRICE, LINE_STATUS, CREATED_AT
-                        ) VALUES (
-                            :item_id, :cart_id, :loc, :item_code,
-                            :qty, :price, 'ACTIVE', SYSTIMESTAMP
+                    if _has_parent_column():
+                        cur.execute(
+                            """
+                            INSERT INTO MH_CART_ITEM (
+                                CART_ITEM_ID, CART_ID, LOCATION_CODE, ITEM_CODE,
+                                QUANTITY, UNIT_PRICE, LINE_STATUS, CREATED_AT, PARENT_ITEM_CODE
+                            ) VALUES (
+                                :item_id, :cart_id, :loc, :item_code,
+                                :qty, :price, 'ACTIVE', SYSTIMESTAMP, :parent
+                            )
+                            """,
+                            {
+                                'item_id': item_id,
+                                'cart_id': cart_id,
+                                'loc': loc,
+                                'item_code': int(item_code),
+                                'qty': quantity,
+                                'price': unit_price,
+                                'parent': parent,
+                            },
                         )
-                        """,
-                        {
-                            'item_id': item_id,
-                            'cart_id': cart_id,
-                            'loc': loc,
-                            'item_code': int(item_code),
-                            'qty': quantity,
-                            'price': unit_price,
-                        },
-                    )
+                    else:
+                        cur.execute(
+                            """
+                            INSERT INTO MH_CART_ITEM (
+                                CART_ITEM_ID, CART_ID, LOCATION_CODE, ITEM_CODE,
+                                QUANTITY, UNIT_PRICE, LINE_STATUS, CREATED_AT
+                            ) VALUES (
+                                :item_id, :cart_id, :loc, :item_code,
+                                :qty, :price, 'ACTIVE', SYSTIMESTAMP
+                            )
+                            """,
+                            {
+                                'item_id': item_id,
+                                'cart_id': cart_id,
+                                'loc': loc,
+                                'item_code': int(item_code),
+                                'qty': quantity,
+                                'price': unit_price,
+                            },
+                        )
 
                 updated = _fetch_cart_with_cursor(cur, cart_id)
                 discount_total = 0.0
@@ -636,6 +738,24 @@ def update_item_quantity(
     try:
         with _get_connection() as conn:
             with conn.cursor() as cur:
+                parent_code = None
+                line_item_code = None
+                if _has_parent_column():
+                    cur.execute(
+                        """
+                        SELECT ITEM_CODE, PARENT_ITEM_CODE
+                        FROM MH_CART_ITEM
+                        WHERE CART_ITEM_ID = :cart_item_id AND CART_ID = :cart_id
+                        """,
+                        {
+                            'cart_item_id': int(cart_item_id),
+                            'cart_id': int(cart['cart_id']),
+                        },
+                    )
+                    line_row = cur.fetchone()
+                    if line_row:
+                        line_item_code = int(line_row[0])
+                        parent_code = _parent_int(line_row[1])
                 cur.execute(
                     """
                     UPDATE MH_CART_ITEM
@@ -648,6 +768,21 @@ def update_item_quantity(
                         'cart_id': int(cart['cart_id']),
                     },
                 )
+                if _has_parent_column() and line_item_code and not parent_code:
+                    cur.execute(
+                        """
+                        UPDATE MH_CART_ITEM
+                        SET QUANTITY = :qty, MODIFIED_AT = SYSTIMESTAMP
+                        WHERE CART_ID = :cart_id
+                          AND PARENT_ITEM_CODE = :parent
+                          AND LINE_STATUS = 'ACTIVE'
+                        """,
+                        {
+                            'qty': quantity,
+                            'cart_id': int(cart['cart_id']),
+                            'parent': int(line_item_code),
+                        },
+                    )
             conn.commit()
         updated = _fetch_cart(int(cart['cart_id']))
         return True, 'Cart item updated', _build_response(updated or cart, include_product_meta=True)
@@ -669,6 +804,30 @@ def remove_item(
     try:
         with _get_connection() as conn:
             with conn.cursor() as cur:
+                if _has_parent_column():
+                    cur.execute(
+                        """
+                        SELECT ITEM_CODE, PARENT_ITEM_CODE
+                        FROM MH_CART_ITEM
+                        WHERE CART_ITEM_ID = :cart_item_id AND CART_ID = :cart_id
+                        """,
+                        {
+                            'cart_item_id': int(cart_item_id),
+                            'cart_id': int(cart['cart_id']),
+                        },
+                    )
+                    line_row = cur.fetchone()
+                    if line_row and not _parent_int(line_row[1]):
+                        cur.execute(
+                            """
+                            DELETE FROM MH_CART_ITEM
+                            WHERE CART_ID = :cart_id AND PARENT_ITEM_CODE = :parent
+                            """,
+                            {
+                                'cart_id': int(cart['cart_id']),
+                                'parent': int(line_row[0]),
+                            },
+                        )
                 cur.execute(
                     """
                     DELETE FROM MH_CART_ITEM
@@ -681,6 +840,67 @@ def remove_item(
         return True, 'Cart item removed', _build_response(updated or cart, include_product_meta=True)
     except Exception as exc:  # noqa: BLE001
         return False, str(exc), None
+
+
+def set_parent_addon(
+    *,
+    parent_item_code: int,
+    addon_item_code: Optional[int] = None,
+    user_id: Optional[int] = None,
+    guest_token: Optional[str] = None,
+    location_code: Optional[int] = None,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    if not _cart_ready():
+        return False, 'Cart tables not available', None
+    cart = _find_active_cart(user_id=user_id, guest_token=guest_token)
+    if not cart:
+        return False, 'Add the product to the cart first', None
+
+    parent = int(parent_item_code)
+    parent_line = None
+    for item in cart.get('items') or []:
+        if int(item.get('item_code') or 0) != parent:
+            continue
+        if _parent_int(item.get('parent_item_code')):
+            continue
+        parent_line = item
+        break
+    if not parent_line:
+        return False, 'Add the product to the cart first', None
+
+    qty = float(parent_line.get('quantity') or 1)
+    if qty <= 0:
+        qty = 1.0
+
+    try:
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                if _has_parent_column():
+                    cur.execute(
+                        """
+                        DELETE FROM MH_CART_ITEM
+                        WHERE CART_ID = :cart_id AND PARENT_ITEM_CODE = :parent
+                        """,
+                        {'cart_id': int(cart['cart_id']), 'parent': parent},
+                    )
+            conn.commit()
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc), None
+
+    if not addon_item_code:
+        updated = _fetch_cart(int(cart['cart_id']))
+        return True, 'Gift wrap removed', _build_response(
+            updated or cart, include_product_meta=True
+        )
+
+    return add_item(
+        item_code=int(addon_item_code),
+        quantity=qty,
+        user_id=user_id,
+        guest_token=guest_token,
+        location_code=location_code,
+        parent_item_code=parent,
+    )
 
 
 def apply_coupon(

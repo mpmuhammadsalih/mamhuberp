@@ -907,7 +907,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const syncCustomerDetailsModal = () => {
         setDetailText(customerDetailsPhone, customerPhone?.value);
-        setDetailText(customerDetailsBillType, billType?.value);
+        const btLabel = String(outstandingAmount?.dataset.customerBillingType || '').toUpperCase() === 'CREDIT'
+            || String(billType?.value || '').toUpperCase() === 'R'
+            ? 'Credit'
+            : (billType?.value ? 'Cash' : '');
+        setDetailText(customerDetailsBillType, btLabel);
         setDetailText(customerDetailsCreditLimit, creditLimit?.value);
         setDetailText(customerDetailsCategory, customerCategory?.value);
         setDetailText(customerDetailsOutstanding, outstandingAmount?.value);
@@ -991,27 +995,47 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
-    const fetchNextBillNo = async (retrying = false) => {
+    const applyNextBillNo = (value) => {
+        const next = value == null ? '' : String(value).trim();
+        if (!next) return false;
+        setValue(billNo, next);
+        if (billNo) billNo.defaultValue = next;
+        return true;
+    };
+
+    const fetchNextBillNo = async (retrying = false, skipBillno = '') => {
         // Peek on open (no BILLNOTABLE lock/insert). Save allocates/reserves the final number.
+        const skip = String(skipBillno || '').trim();
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 45000);
         try {
             const sep = String(nextBillBase || '').includes('?') ? '&' : '?';
             const res = await fetch(`${nextBillBase}/next-billno${sep}peek=1`, { signal: controller.signal });
             const data = await res.json();
-            if (data.success) {
-                setValue(billNo, data.billno);
+            const next = data && data.billno != null ? String(data.billno).trim() : '';
+            if (data.success && next && next !== skip) {
+                applyNextBillNo(next);
                 return;
+            }
+            if (data.success && next && next === skip && !retrying) {
+                await new Promise(function (resolve) { setTimeout(resolve, 400); });
+                return fetchNextBillNo(true, skip);
             }
             if (data.billno_busy && !retrying) {
-                setTimeout(() => fetchNextBillNo(true), 1500);
+                setTimeout(() => fetchNextBillNo(true, skip), 1500);
                 return;
             }
-            alert(data.error || 'Could not load next bill number. Click New to try again.');
+            if (!retrying && !next) {
+                setTimeout(() => fetchNextBillNo(true, skip), 1500);
+                return;
+            }
+            if (!next) {
+                alert(data.error || 'Could not load next bill number. Click New to try again.');
+            }
         } catch (e) {
             console.error('Failed to fetch next bill number', e);
             if (!retrying) {
-                setTimeout(() => fetchNextBillNo(true), 1500);
+                setTimeout(() => fetchNextBillNo(true, skip), 1500);
                 return;
             }
             alert('Could not load next bill number (database busy). Click New to try again.');
@@ -3785,11 +3809,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     const applyCustomerBillingType = (billingType) => {
-        const bt = billingType != null && String(billingType).trim() !== '' ? billingType : 'CASH';
+        const raw = billingType != null && String(billingType).trim() !== '' ? billingType : 'CASH';
+        const normalized = window.NexaCustomerBilling
+            ? window.NexaCustomerBilling.normalizeBillingType(raw)
+            : (String(raw).toUpperCase() === 'CREDIT' || String(raw).toUpperCase() === 'R' ? 'CREDIT' : 'CASH');
+        if (outstandingAmount) {
+            outstandingAmount.dataset.customerBillingType = normalized;
+        }
         if (window.NexaCustomerBilling) {
-            NexaCustomerBilling.applyBillTypeFromBillingType(billType, bt);
+            NexaCustomerBilling.applyBillTypeFromBillingType(billType, normalized);
         } else {
-            setValue(billType, String(bt).toUpperCase() === 'CREDIT' ? 'R' : 'C');
+            setValue(billType, normalized === 'CREDIT' ? 'R' : 'C');
         }
         updateOutstandingByBillType();
     };
@@ -4222,7 +4252,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         openSavedInvoicePdf(data2.billno, data2.pdf_url);
                         if (!data2.billno_reassigned && data2.message) alert(data2.message);
                         clearDraft();
-                        await resetForm({ nextBillno: data2.next_billno });
+                        await resetForm({ nextBillno: data2.next_billno, savedBillno: data2.billno });
                         return;
                     }
                 }
@@ -4257,7 +4287,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 setValue(sourceOrderBillnosEl, '');
                 setValue(sourceOrderBillnoEl, '');
             }
-            await resetForm({ nextBillno: data.next_billno });
+            await resetForm({ nextBillno: data.next_billno, savedBillno: data.billno });
         } catch (e) {
             console.error('Save failed', e);
             alert(e?.message || 'Save failed.');
@@ -4286,13 +4316,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (warehouseEnabled) resetWarehouse(true);
         updateBillDefaults();
         setDefaultPriceMode(true);
+        const savedNo = opts.savedBillno != null ? String(opts.savedBillno).trim() : '';
         const nextFromServer = opts.nextBillno != null && String(opts.nextBillno).trim() !== ''
             ? String(opts.nextBillno).trim()
             : '';
-        if (nextFromServer) {
-            setValue(billNo, nextFromServer);
-        } else {
-            await fetchNextBillNo();
+        if (billNo) {
+            billNo.value = '';
+            billNo.defaultValue = '';
+        }
+        if (nextFromServer && nextFromServer !== savedNo) {
+            applyNextBillNo(nextFromServer);
+        }
+        if (!String(billNo?.value || '').trim() || (savedNo && String(billNo.value).trim() === savedNo)) {
+            await fetchNextBillNo(false, savedNo);
+        }
+        if (!String(billNo?.value || '').trim() && nextFromServer && nextFromServer !== savedNo) {
+            applyNextBillNo(nextFromServer);
         }
         applyUserDefaultWarehouse();
         applySalesOrderActionState();
@@ -5538,11 +5577,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!initialOrderLoaded && !draftLoaded) {
         updateBillDefaults();
         setDefaultPriceMode();
-        if (!String(billNo?.value || '').trim()) {
-            fetchNextBillNo();
-        } else {
-            syncRefDisplay();
-        }
+        void fetchNextBillNo();
         clearTable();
         applyUserDefaultWarehouse();
         if (customerDisplay) {
@@ -5551,8 +5586,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else if (draftLoaded) {
         syncBillDateFromOpen();
         updateTotals();
-        // Draft keeps the reserved bill no; only fetch if draft was saved before async reservation finished.
-        if (!String(billNo?.value || '').trim() || (isSalesOrderScreen && !salesOrderEditMode)) {
+        if (!isSalesOrderScreen || !salesOrderEditMode) {
+            void fetchNextBillNo();
+        } else if (!String(billNo?.value || '').trim()) {
             void fetchNextBillNo();
         } else {
             syncRefDisplay();
@@ -5566,7 +5602,64 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     window.SalesInvoiceAi = {
         formatNumber,
-        async addLineFromItem(item, qtyRaw) {
+        applyCustomer(cust) {
+            if (!cust) return false;
+            const code = String(cust.code || cust.customer_code || '').trim();
+            const name = String(cust.name || cust.customer_name || '').trim();
+            if (!code) return false;
+            setValue(customerDisplay, formatCustomerDisplay(code, name));
+            setValue(customerCode, code);
+            setValue(customerName, name);
+            setValue(customerPhone, cust.phone || cust.mobile || '');
+            setValue(customerAddress, cust.address || '');
+            setValue(creditLimit, cust.credit_limit || cust.creditlimit || 0);
+            showClear(customerClear, true);
+            applyCustomerBillingType(cust.billing_type || cust.customer_billing_type || 'CASH');
+            saveDraft();
+            return true;
+        },
+        applyLoyaltyCustomer(loy) {
+            if (!loy) return false;
+            const code = String(loy.code || loy.customer_code || '').trim();
+            const name = String(loy.name || loy.customer_name || '').trim();
+            if (!code) return false;
+            setValue(loyaltyCustomerDisplay, formatCustomerDisplay(code, name));
+            setValue(loyaltyCustomerCode, code);
+            const pts = loy.totalpoints != null ? loy.totalpoints : loy.totalPoints;
+            if (pts != null && loyaltyPoints) setValue(loyaltyPoints, pts);
+            showClear(loyaltyCustomerClear, true);
+            saveDraft();
+            return true;
+        },
+        applyWarehouse(wh) {
+            if (!warehouseEnabled || !wh) return false;
+            if (siHasDocumentLines()) return false;
+            const id = String(wh.id || wh.warehouse_id || '').trim();
+            const code = String(wh.code || wh.warehouse_code || '').trim();
+            const name = String(wh.name || wh.warehouse_name || '').trim();
+            if (!id && !code) return false;
+            setValue(warehouseIdEl, id);
+            setValue(warehouseCodeEl, code);
+            setValue(warehouseNameEl, name);
+            setValue(warehouseDisplay, formatWarehouseDisplay(code, name));
+            showClear(warehouseClear, true);
+            applyHeaderWarehouseToLineStore();
+            saveDraft();
+            siSyncHeaderWarehouseLock();
+            return true;
+        },
+        applyDates(dates) {
+            const iso = String((dates && (dates.bill_date || dates.delivery_date)) || '').trim();
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+            if (billDate) setValue(billDate, iso);
+            if (deliveryDate) {
+                setValue(deliveryDate, iso);
+                deliveryDate.min = iso;
+            }
+            saveDraft();
+            return true;
+        },
+        async addLineFromItem(item, qtyRaw, extras) {
             if (!item || item.itemcode == null) return false;
             if (!ensureHeaderSelections()) return false;
 
@@ -5597,7 +5690,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             let rate = 0;
             let factor = 1;
             let averageCost = 0;
-            if (item.barcode_uom != null && item.barcode_retail_price != null) {
+            const overrideRate = extras && extras.rate != null ? Number(extras.rate) : NaN;
+            if (Number.isFinite(overrideRate) && overrideRate > 0) {
+                rate = overrideRate;
+            } else if (item.barcode_uom != null && item.barcode_retail_price != null) {
                 rate = Number(item.barcode_retail_price) || 0;
             } else {
                 const pricing = await getLineUomPricing(itemCode, uom);

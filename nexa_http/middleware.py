@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import HTTPConnection, Request
 from starlette.responses import Response
@@ -7,6 +9,9 @@ from starlette.responses import Response
 from nexa_http import context as ctx
 from nexa_http.g_obj import NexaG
 from nexa_http.lifecycle import apply_tenant_and_location_from_session
+
+# Starlette 1.x defaults max_part_size to 1 MB, which rejects bulk image ZIPs.
+_MAX_FORM_PART_SIZE = 2 * 1024 * 1024 * 1024
 
 
 class NexaHttpMiddleware(BaseHTTPMiddleware):
@@ -27,8 +32,9 @@ class NexaHttpMiddleware(BaseHTTPMiddleware):
             ct = (request.headers.get("content-type") or "").lower()
             if "application/x-www-form-urlencoded" in ct or "multipart/form-data" in ct:
                 try:
-                    request.state._nexa_form = await request.form()
-                except Exception:
+                    request.state._nexa_form = await request.form(max_part_size=_MAX_FORM_PART_SIZE)
+                except Exception as exc:
+                    logging.getLogger(__name__).warning('form parse failed: %s', exc)
                     request.state._nexa_form = None
             elif "application/json" in ct:
                 try:

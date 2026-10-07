@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('ecommerce.static', filename='css/ecommerce.css') }}?v=7" />
+{% endblock %}
+{% macro assist_actions(row) %}
+  <div class="ecommerce-assist-actions">
+    {% if row.can_in_app %}
+    <form method="post" action="{{ url_for('ecommerce.assist_notify') }}" class="ecommerce-assist-form">
+      <input type="hidden" name="user_id" value="{{ row.user_id }}" />
+      <input type="hidden" name="message" value="{{ row.assist_message }}" />
+      <button type="submit" class="ecommerce-notify-btn">Notify</button>
+    </form>
+    <form method="post" action="{{ url_for('ecommerce.assist_chat') }}" class="ecommerce-assist-form">
+      <input type="hidden" name="user_id" value="{{ row.user_id }}" />
+      <input type="hidden" name="message" value="{{ row.assist_message }}" />
+      <button type="submit" class="ecommerce-chat-btn">Chat</button>
+    </form>
+    {% endif %}
+    {% if row.whatsapp_href %}
+    <a href="{{ row.whatsapp_href }}" target="_blank" rel="noopener noreferrer" class="ecommerce-wa-btn">WhatsApp</a>
+    {% elif not row.can_in_app %}
+    <span class="page-po__muted">Guest</span>
+    {% endif %}
+  </div>
+{% endmacro %}
+{% block content %}
+<div class="page-po nexa-list-page ecommerce-page" style="max-width:1300px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Assist</h1>
+      <p class="page-po__muted">
+        Customers who need a follow-up · {{ counts.total }} open signal{{ '' if counts.total == 1 else 's' }}.
+        <strong>Notify</strong> writes to the shop inbox.
+        <strong>Chat</strong> opens your existing staff chat with that customer.
+        WhatsApp still opens a ready message.
+      </p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('ecommerce.customers') }}" class="page-po__btn-secondary">Customers</a>
+      <a href="{{ url_for('ecommerce.dashboard') }}" class="page-po__btn-secondary">Dashboard</a>
+    </div>
+  </div>
+
+  <div class="ecommerce-kpi-grid ecommerce-order-summary" style="margin-bottom:20px;">
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Abandoned carts</div>
+      <div class="ecommerce-kpi-val">{{ counts.carts }}</div>
+    </div>
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Checkout / unpaid</div>
+      <div class="ecommerce-kpi-val">{{ counts.checkouts }}</div>
+    </div>
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Logged in, no add</div>
+      <div class="ecommerce-kpi-val">{{ counts.idle }}</div>
+    </div>
+    <div class="ecommerce-kpi-card">
+      <div class="ecommerce-kpi-label">Search, no results</div>
+      <div class="ecommerce-kpi-val">{{ counts.searches }}</div>
+    </div>
+  </div>
+
+  <div class="page-po__section">
+    <h2 class="page-po__section-title">Abandoned carts</h2>
+    <p class="page-po__muted">Items in cart for 15+ minutes, no completed order after the last cart change.</p>
+    <div class="co-table-wrap">
+      <table class="co-table co-table--th-hint">
+        <thead>
+          <tr>
+            <th style="text-align:center; width:56px;">Sl.No</th>
+            <th>Customer</th>
+            <th>Mobile</th>
+            <th style="text-align:center;">Items</th>
+            <th style="text-align:right;">Total</th>
+            <th>Last activity</th>
+            <th style="text-align:center;">Reach</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in abandoned_carts %}
+          <tr>
+            <td class="sl-no">{{ loop.index }}</td>
+            <td>
+              <strong>{{ row.customer_name }}</strong>
+              {% if row.user_id %}
+              <div><a href="{{ url_for('ecommerce.customer_detail', user_id=row.user_id) }}">{{ row.email or 'View' }}</a></div>
+              {% endif %}
+            </td>
+            <td>{{ row.mobile or '—' }}</td>
+            <td style="text-align:center;">{{ row.item_count }}</td>
+            <td style="text-align:right;">QAR {{ '%.2f'|format(row.cart_total or 0) }}</td>
+            <td>{{ (row.last_activity|string)[:19].replace('T', ' ') if row.last_activity else '—' }}</td>
+            <td style="text-align:center;">{{ assist_actions(row) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" style="text-align:center;padding:20px;color:#64748b;">No abandoned carts right now.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="page-po__section">
+    <h2 class="page-po__section-title">Checkout started, payment not finished</h2>
+    <p class="page-po__muted">Carts left on checkout, or orders still pending / failed payment.</p>
+    <div class="co-table-wrap">
+      <table class="co-table co-table--th-hint">
+        <thead>
+          <tr>
+            <th style="text-align:center; width:56px;">Sl.No</th>
+            <th>Customer</th>
+            <th>Mobile</th>
+            <th>Detail</th>
+            <th style="text-align:right;">Amount</th>
+            <th>When</th>
+            <th style="text-align:center;">Reach</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in failed_checkouts %}
+          <tr>
+            <td class="sl-no">{{ loop.index }}</td>
+            <td>
+              <strong>{{ row.customer_name }}</strong>
+              {% if row.user_id %}
+              <div><a href="{{ url_for('ecommerce.customer_detail', user_id=row.user_id) }}">{{ row.email or 'View' }}</a></div>
+              {% endif %}
+            </td>
+            <td>{{ row.mobile or '—' }}</td>
+            <td>
+              {% if row.order_id %}
+              <a href="{{ url_for('ecommerce.order_detail', order_id=row.order_id) }}">{{ row.order_number or ('Order #' ~ row.order_id) }}</a>
+              {% else %}
+              Checkout cart
+              {% endif %}
+            </td>
+            <td style="text-align:right;">QAR {{ '%.2f'|format(row.amount or 0) }}</td>
+            <td>{{ (row.last_activity|string)[:19].replace('T', ' ') if row.last_activity else '—' }}</td>
+            <td style="text-align:center;">{{ assist_actions(row) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" style="text-align:center;padding:20px;color:#64748b;">No unfinished checkouts.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="page-po__section">
+    <h2 class="page-po__section-title">Logged in, did not add to cart</h2>
+    <p class="page-po__muted">Signed in during the last 72 hours, no active cart items and no order after that login.</p>
+    <div class="co-table-wrap">
+      <table class="co-table co-table--th-hint">
+        <thead>
+          <tr>
+            <th style="text-align:center; width:56px;">Sl.No</th>
+            <th>Customer</th>
+            <th>Mobile</th>
+            <th>Last login</th>
+            <th style="text-align:center;">Reach</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in idle_logins %}
+          <tr>
+            <td class="sl-no">{{ loop.index }}</td>
+            <td>
+              <strong>{{ row.customer_name }}</strong>
+              {% if row.user_id %}
+              <div><a href="{{ url_for('ecommerce.customer_detail', user_id=row.user_id) }}">{{ row.email or 'View' }}</a></div>
+              {% endif %}
+            </td>
+            <td>{{ row.mobile or '—' }}</td>
+            <td>{{ (row.last_login_at|string)[:19].replace('T', ' ') if row.last_login_at else '—' }}</td>
+            <td style="text-align:center;">{{ assist_actions(row) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" style="text-align:center;padding:20px;color:#64748b;">No idle logins in the last 72 hours.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="page-po__section">
+    <h2 class="page-po__section-title">Searched, no products found</h2>
+    <p class="page-po__muted">Storefront searches that returned zero results. Guest searches have no in-app chat until they log in.</p>
+    <div class="co-table-wrap">
+      <table class="co-table co-table--th-hint">
+        <thead>
+          <tr>
+            <th style="text-align:center; width:56px;">Sl.No</th>
+            <th>Customer</th>
+            <th>Search</th>
+            <th>When</th>
+            <th style="text-align:center;">Reach</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in zero_searches %}
+          <tr>
+            <td class="sl-no">{{ loop.index }}</td>
+            <td>
+              {% if row.user_id %}
+              <strong>{{ row.customer_name }}</strong>
+              <div><a href="{{ url_for('ecommerce.customer_detail', user_id=row.user_id) }}">{{ row.email or 'View' }}</a></div>
+              {% else %}
+              <span class="page-po__muted">Guest</span>
+              {% endif %}
+            </td>
+            <td><strong>{{ row.query_text }}</strong></td>
+            <td>{{ (row.created_at|string)[:19].replace('T', ' ') if row.created_at else '—' }}</td>
+            <td style="text-align:center;">{{ assist_actions(row) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" style="text-align:center;padding:20px;color:#64748b;">No empty searches logged yet. New misses are stored when shoppers search the store.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

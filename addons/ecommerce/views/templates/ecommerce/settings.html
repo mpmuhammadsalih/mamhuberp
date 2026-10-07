@@ -56,11 +56,54 @@
         <label for="tax_rate">Tax rate (%)</label>
         <input id="tax_rate" name="tax_rate" type="number" min="0" step="0.01" class="input" value="{{ store.tax_rate }}" />
       </div>
+      <div class="form-group">
+        <label for="erp_customer_code">ERP customer code (web invoices)</label>
+        <input id="erp_customer_code" name="erp_customer_code" class="input" value="{{ store.erp_customer_code or '' }}" placeholder="Cash customer code from Customer master" />
+      </div>
+      <div class="form-group">
+        <label for="erp_delivery_item_code">Delivery item code (optional)</label>
+        <input id="erp_delivery_item_code" name="erp_delivery_item_code" class="input" value="{{ store.erp_delivery_item_code or '' }}" placeholder="Item used for delivery fee on the invoice" />
+      </div>
+      <p class="page-po__muted span-full" style="margin:0;">
+        Create sales invoice on an order uses this ERP customer. Set a cash customer. If delivery has a fee, set a delivery item so the fee becomes a line on the invoice.
+      </p>
       <div class="form-group span-full" style="display:flex; flex-wrap:wrap; gap:16px;">
         <label><input type="checkbox" name="checkout_enabled" value="1" {% if store.checkout_enabled %}checked{% endif %} /> Checkout enabled</label>
         <label><input type="checkbox" name="pickup_enabled" value="1" {% if store.pickup_enabled %}checked{% endif %} /> Pickup enabled</label>
         <label><input type="checkbox" name="delivery_enabled" value="1" {% if store.delivery_enabled %}checked{% endif %} /> Delivery enabled</label>
         <label><input type="checkbox" name="coupons_enabled" value="1" {% if store.coupons_enabled %}checked{% endif %} /> Coupons enabled</label>
+        <label><input type="checkbox" name="free_gift_wrap" value="1" {% if store.free_gift_wrap %}checked{% endif %} /> Free gift wrapping</label>
+      </div>
+      <p class="page-po__muted span-full" style="margin:0;">
+        Free gift wrapping: when checked, shoppers can only pick <strong>No gift wrap</strong> or <strong>Free Gift Wrap</strong>. Paid wrap options stay on the product page but their buttons are disabled. Turn this off to let customers choose Classic / Premium / Newborn / Birthday wrap.
+      </p>
+      <h3 class="page-po__section-title span-full" style="margin-top:8px;">Website top bar</h3>
+      <p class="page-po__muted span-full" style="margin:0;">
+        These three lines show in the pink bar at the top of mamahub.store. Leave a field empty to keep the default text.
+      </p>
+      <div class="form-group">
+        <label for="header_trust_delivery">Free delivery (English)</label>
+        <input id="header_trust_delivery" name="header_trust_delivery" class="input" value="{{ store.header_trust_delivery or '' }}" />
+      </div>
+      <div class="form-group">
+        <label for="header_trust_delivery_ar">Free delivery (Arabic)</label>
+        <input id="header_trust_delivery_ar" name="header_trust_delivery_ar" class="input" dir="rtl" value="{{ store.header_trust_delivery_ar or '' }}" />
+      </div>
+      <div class="form-group">
+        <label for="header_trust_original">Original toys (English)</label>
+        <input id="header_trust_original" name="header_trust_original" class="input" value="{{ store.header_trust_original or '' }}" />
+      </div>
+      <div class="form-group">
+        <label for="header_trust_original_ar">Original toys (Arabic)</label>
+        <input id="header_trust_original_ar" name="header_trust_original_ar" class="input" dir="rtl" value="{{ store.header_trust_original_ar or '' }}" />
+      </div>
+      <div class="form-group">
+        <label for="header_trust_returns">Easy returns (English)</label>
+        <input id="header_trust_returns" name="header_trust_returns" class="input" value="{{ store.header_trust_returns or '' }}" />
+      </div>
+      <div class="form-group">
+        <label for="header_trust_returns_ar">Easy returns (Arabic)</label>
+        <input id="header_trust_returns_ar" name="header_trust_returns_ar" class="input" dir="rtl" value="{{ store.header_trust_returns_ar or '' }}" />
       </div>
       <div class="form-group span-full ecommerce-form-actions">
         <button type="submit" class="page-po__btn-primary">Save changes</button>

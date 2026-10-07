@@ -10,6 +10,7 @@ from db import (
     get_locations_list,
     list_location_master_rows,
 )
+from storefront_backend.services.schema_bootstrap import ensure_delivery_schema
 
 
 def _row_value(row: Dict[str, Any], *keys: str) -> Any:
@@ -103,6 +104,7 @@ def _mh_pickup_rows(*, active_only: bool) -> List[Dict[str, Any]]:
 
 
 def list_zones(*, city: Optional[str] = None) -> List[Dict[str, Any]]:
+    ensure_delivery_schema()
     if not _table_exists('MH_DELIVERY_ZONE'):
         return []
     if city:
@@ -160,6 +162,7 @@ def get_zone(zone_id: int) -> Optional[Dict[str, Any]]:
 
 
 def list_slots() -> List[Dict[str, Any]]:
+    ensure_delivery_schema()
     if not _table_exists('MH_DELIVERY_SLOT'):
         return []
     return _safe_rows(

@@ -45,7 +45,10 @@ _KNOWN_STATIC_PATHS: dict[str, str] = {
     "ecommerce.products_web_catalog": "/ecommerce/products/web-catalog",
     "ecommerce.products_image_import_template": "/ecommerce/products/images/template.xlsx",
     "ecommerce.products_image_import": "/ecommerce/products/images/import",
+    "ecommerce.products_image_import_progress": "/ecommerce/products/images/import/progress",
     "ecommerce.products_image_fetch_web": "/ecommerce/products/images/fetch-web",
+    "ecommerce.compare_stores": "/ecommerce/compare-stores",
+    "ecommerce.compare_store_new": "/ecommerce/compare-stores/new",
 }
 
 

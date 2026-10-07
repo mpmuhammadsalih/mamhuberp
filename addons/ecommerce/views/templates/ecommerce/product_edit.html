@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ title }}{% endblock %}
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('ecommerce.static', filename='css/ecommerce.css') }}?v=16" />
+<link rel="stylesheet" href="{{ url_for('ecommerce.static', filename='css/ecommerce.css') }}?v=28" />
 {% endblock %}
 {% block content %}
 <div class="page-po nexa-list-page ecommerce-page ecommerce-product-edit-page">
@@ -10,14 +10,35 @@
       <h1 class="page-po__title">Edit product</h1>
       <p class="page-po__muted">
         Code {{ product.item_code }}
+        {% if product.barcode %} · Barcode {{ product.barcode }}{% endif %}
         {% if product.category_name %} · {{ product.category_name }}{% endif %}
         {% if product.brand_name %} · {{ product.brand_name }}{% endif %}
         · Stock {{ product.current_stock }}
       </p>
     </div>
     <div class="page-po__topbar-actions">
+      {% if prev_item_code %}
       <a
-        href="{{ url_for('ecommerce.products', q=back_q or None, page=back_page if back_page > 1 else None, sort=back_sort or None, order=back_order if back_order in ('asc', 'desc') else None) }}"
+        href="{{ url_for('ecommerce.product_edit', item_code=prev_item_code, **nav_kwargs) }}"
+        class="page-po__btn-secondary"
+      >← Previous</a>
+      {% else %}
+      <span class="page-po__btn-secondary is-disabled" aria-disabled="true">← Previous</span>
+      {% endif %}
+      {% if next_item_code %}
+      <a
+        href="{{ url_for('ecommerce.product_edit', item_code=next_item_code, **nav_kwargs) }}"
+        class="page-po__btn-secondary"
+      >Next →</a>
+      {% else %}
+      <span class="page-po__btn-secondary is-disabled" aria-disabled="true">Next →</span>
+      {% endif %}
+      <a
+        href="{{ url_for('ecommerce.product_compare', item_code=product.item_code, **nav_kwargs) }}"
+        class="page-po__btn-secondary"
+      >Comparison</a>
+      <a
+        href="{{ url_for('ecommerce.products', q=back_q or None, page=back_page if back_page > 1 else None, sort=back_sort or None, order=back_order if back_order in ('asc', 'desc') else None, web=back_web if back_web and back_web != 'all' else None, image=back_image if back_image and back_image != 'all' else None) }}"
         class="page-po__btn-secondary"
       >← Back to products</a>
     </div>
@@ -29,7 +50,14 @@
     enctype="multipart/form-data"
     class="ecommerce-product-edit"
   >
-    <input type="hidden" name="return_to" value="edit" />
+    <input type="hidden" name="return_to" value="products" />
+    <input type="hidden" name="touch_web_flags" value="1" />
+    <input type="hidden" name="q" value="{{ back_q or '' }}" />
+    <input type="hidden" name="page" value="{{ back_page or 1 }}" />
+    <input type="hidden" name="sort" value="{{ back_sort or '' }}" />
+    <input type="hidden" name="order" value="{{ back_order or '' }}" />
+    <input type="hidden" name="web" value="{{ back_web or '' }}" />
+    <input type="hidden" name="image" value="{{ back_image or '' }}" />
 
     <div class="ecommerce-product-edit__layout">
       <section class="ecommerce-form-panel ecommerce-product-edit__media">
@@ -54,24 +82,91 @@
               Remove main image
             </label>
             {% endif %}
-            <button
-              type="button"
-              class="page-po__btn-secondary ecommerce-product-edit__fetch-web"
-              data-fetch-url="/ecommerce/products/{{ product.item_code }}/fetch-image-web"
-            >Fetch from web</button>
-            <span class="ecommerce-product-edit__fetch-status" aria-live="polite"></span>
           </div>
           <p class="page-po__muted">Main image shown on listings and as the first product photo. Recommended: 800 × 800 px.</p>
         </div>
 
+        <div class="ecommerce-barcode-folder">
+          <h3 class="ecommerce-product-edit__gallery-title">Upload images from barcode folder</h3>
+          <p class="page-po__muted">
+            Images only. Name the folder with the barcode
+            {% if product.barcode %}<strong>{{ product.barcode }}</strong>{% else %}for this product{% endif %},
+            or name files <code>{% if product.barcode %}{{ product.barcode }}-1.jpg{% else %}1200000001035-1.jpg{% endif %}</code>.
+            First photo becomes the main image <strong>only if this product has no image</strong>. Extra photos go to the gallery.
+          </p>
+          <input form="barcodeFolderForm" type="hidden" name="q" value="{{ back_q or '' }}" />
+          <input form="barcodeFolderForm" type="hidden" name="page" value="{{ back_page or 1 }}" />
+          <input form="barcodeFolderForm" type="hidden" name="sort" value="{{ back_sort or '' }}" />
+          <input form="barcodeFolderForm" type="hidden" name="order" value="{{ back_order or '' }}" />
+          <input form="barcodeFolderForm" type="hidden" name="web" value="{{ back_web or '' }}" />
+          <input form="barcodeFolderForm" type="hidden" name="image" value="{{ back_image or '' }}" />
+          <label class="page-po__btn-secondary ecommerce-product-edit__file-btn">
+            Choose barcode folder
+            <input
+              id="barcodeFolderInput"
+              form="barcodeFolderForm"
+              type="file"
+              name="image_files"
+              accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+              multiple
+              webkitdirectory
+              directory
+            />
+          </label>
+          <p class="page-po__muted" id="barcodeFolderStatus" aria-live="polite"></p>
+          <button form="barcodeFolderForm" type="submit" class="page-po__btn-primary" id="barcodeFolderSubmit">Upload images</button>
+        </div>
+
+        <div class="ecommerce-barcode-folder">
+          <h3 class="ecommerce-product-edit__gallery-title">Fetch from Google Drive</h3>
+          <p class="page-po__muted">
+            Paste a public Drive file or folder link. Images are saved
+            <strong>only if this product has no image</strong>.
+            Name files <code>{% if product.barcode %}{{ product.barcode }}-1.jpg{% else %}1200000001035-1.jpg{% endif %}</code>.
+          </p>
+          <input form="driveImagesForm" type="hidden" name="q" value="{{ back_q or '' }}" />
+          <input form="driveImagesForm" type="hidden" name="page" value="{{ back_page or 1 }}" />
+          <input form="driveImagesForm" type="hidden" name="sort" value="{{ back_sort or '' }}" />
+          <input form="driveImagesForm" type="hidden" name="order" value="{{ back_order or '' }}" />
+          <input form="driveImagesForm" type="hidden" name="web" value="{{ back_web or '' }}" />
+          <input form="driveImagesForm" type="hidden" name="image" value="{{ back_image or '' }}" />
+          <label class="ecommerce-bulk-images-panel__field" style="width:100%">
+            <span class="visually-hidden">Google Drive link</span>
+            <input
+              id="driveImagesUrl"
+              form="driveImagesForm"
+              type="url"
+              name="drive_url"
+              class="input"
+              inputmode="url"
+              autocomplete="url"
+              placeholder="https://drive.google.com/…"
+              spellcheck="false"
+              required
+            />
+          </label>
+          <p class="page-po__muted" id="driveImagesStatus" aria-live="polite"></p>
+          <button form="driveImagesForm" type="submit" class="page-po__btn-primary" id="driveImagesSubmit">Fetch from Drive</button>
+        </div>
+
         <div class="ecommerce-product-edit__gallery">
-          <h3 class="ecommerce-product-edit__gallery-title">Gallery images</h3>
+          <div class="ecommerce-product-edit__gallery-head">
+            <h3 class="ecommerce-product-edit__gallery-title">Gallery images</h3>
+            <label
+              class="ecommerce-product-edit__remove-all"
+              id="removeAllGalleryWrap"
+              {% if not product.gallery_images %}hidden{% endif %}
+            >
+              <input type="checkbox" name="remove_all_gallery" value="1" id="removeAllGallery" />
+              Remove all
+            </label>
+          </div>
           <p class="page-po__muted ecommerce-product-edit__gallery-hint">
             Extra photos shown on the product page (after the main image). Recommended: 800 × 800 px, JPG or PNG.
           </p>
 
           {% if product.gallery_images %}
-          <div class="ecommerce-product-edit__gallery-grid">
+          <div class="ecommerce-product-edit__gallery-grid" id="productGalleryGrid">
             {% for img in product.gallery_images %}
             <label class="ecommerce-product-edit__gallery-item">
               {% if img.image_url %}
@@ -86,7 +181,7 @@
             {% endfor %}
           </div>
           {% else %}
-          <p class="page-po__muted ecommerce-product-edit__gallery-empty">No gallery images yet.</p>
+          <p class="page-po__muted ecommerce-product-edit__gallery-empty" id="productGalleryEmpty">No gallery images yet.</p>
           {% endif %}
 
           <label class="ecommerce-product-edit__gallery-upload page-po__btn-secondary">
@@ -106,8 +201,51 @@
         <h2 class="ecommerce-product-edit__section-title">Product details</h2>
 
         <div class="ecommerce-form-grid">
+          <div class="form-group span-full ecommerce-page-import">
+            <label for="import_page_url">Import from a product page</label>
+            <p class="page-po__muted" style="margin:0 0 8px;">
+              Paste a supplier or store product URL.
+              <strong>Fetch details</strong> fills product name, description, and specifications — current photos stay.
+              <strong>Fetch from URL</strong> also downloads photos and replaces the existing ones.
+              Review, then Save.
+            </p>
+            <div class="ecommerce-page-import__row">
+              <input
+                id="import_page_url"
+                name="import_page_url"
+                type="text"
+                class="input"
+                inputmode="url"
+                autocomplete="url"
+                placeholder="https://…"
+                spellcheck="false"
+                value="{{ product.import_page_url or '' }}"
+              />
+              <button
+                type="button"
+                class="page-po__btn-secondary"
+                id="importDetailsFromPageBtn"
+                data-import-url="/ecommerce/products/{{ product.item_code }}/import-from-url"
+              >Fetch details</button>
+              <button
+                type="button"
+                class="page-po__btn-secondary"
+                id="importFromPageBtn"
+                data-import-url="/ecommerce/products/{{ product.item_code }}/import-from-url"
+              >Fetch from URL</button>
+            </div>
+            <p class="page-po__muted ecommerce-page-import__status" id="importFromPageStatus" aria-live="polite"></p>
+          </div>
+
           <div class="form-group span-full">
-            <label for="item_name">Product name</label>
+            <div class="ecommerce-field-toolbar">
+              <label for="item_name">Product name</label>
+              <span class="ecommerce-field-toolbar__actions">
+                <button type="button" class="page-po__btn-secondary" id="itemNameCopyBtn">Copy</button>
+                <button type="button" class="page-po__btn-secondary" id="itemNameTitleCaseBtn">Title case</button>
+                <button type="button" class="page-po__btn-secondary" id="itemNameSnoonuBtn">Snoonu</button>
+              </span>
+            </div>
             <input id="item_name" name="item_name" class="input" value="{{ product.item_name }}" maxlength="200" required />
           </div>
 
@@ -128,6 +266,121 @@
           </div>
 
           <div class="form-group span-full">
+            <fieldset class="ecommerce-web-flags">
+              <legend class="ecommerce-product-edit__section-title">Website</legend>
+              <p class="page-po__muted" style="margin:0 0 8px;">
+                Hide this SKU from the store, mark it featured, or flag it as a product-page add-on (gift wrap).
+              </p>
+              <div class="ecommerce-web-flags__checks">
+                <label class="ecommerce-web-flags__item" for="show_on_web">
+                  <input
+                    type="checkbox"
+                    id="show_on_web"
+                    name="show_on_web"
+                    value="1"
+                    {% if product.show_on_web %}checked{% endif %}
+                  />
+                  <span>Show on website</span>
+                </label>
+                <label class="ecommerce-web-flags__item" for="is_featured">
+                  <input
+                    type="checkbox"
+                    id="is_featured"
+                    name="is_featured"
+                    value="1"
+                    {% if product.is_featured %}checked{% endif %}
+                  />
+                  <span>Featured on website</span>
+                </label>
+                <label class="ecommerce-web-flags__item" for="is_addon">
+                  <input
+                    type="checkbox"
+                    id="is_addon"
+                    name="is_addon"
+                    value="1"
+                    {% if product.is_addon %}checked{% endif %}
+                  />
+                  <span>Add-on (gift wrap)</span>
+                </label>
+              </div>
+            </fieldset>
+          </div>
+
+          <div class="form-group span-full">
+            <label>Shop by age (app)</label>
+            <p class="page-po__muted" style="margin:0 0 8px;">Tick ages for Shop by age on the app. Use <strong>All ages</strong> to show this item in every age.</p>
+            <div class="ecommerce-age-checks">
+              {% if product.age_groups %}
+              <label class="ecommerce-age-checks__item ecommerce-age-checks__item--all">
+                <input type="checkbox" name="age_group_id" value="all" data-age-all {% if product.age_all_selected %}checked{% endif %} />
+                <span>All ages</span>
+              </label>
+              {% for ag in product.age_groups %}
+              <label class="ecommerce-age-checks__item">
+                <input
+                  type="checkbox"
+                  name="age_group_id"
+                  value="{{ ag.age_group_id }}"
+                  data-age-item
+                  {% if ag.age_group_id|int in product.age_group_ids %}checked{% endif %}
+                />
+                <span>{{ ag.age_group_name }}</span>
+              </label>
+              {% endfor %}
+              {% else %}
+              <p class="page-po__muted">Age groups are not set up yet.</p>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="form-group span-full ecommerce-seo">
+            <h2 class="ecommerce-product-edit__section-title">Search engine listing</h2>
+            <p class="page-po__muted" style="margin:0 0 12px;">
+              MamaHub writes a title and meta description for Google automatically — including when you Fetch from URL. Leave the fields blank to keep the auto text, or type your own. Click the preview to open the live product page.
+            </p>
+            <a
+              class="ecommerce-seo__preview"
+              href="https://www.mamahub.store/products/{{ product.item_code }}"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-live="polite"
+            >
+              <p class="ecommerce-seo__preview-label">Google preview</p>
+              <p class="ecommerce-seo__preview-url">www.mamahub.store › products › {{ product.item_code }}</p>
+              <p class="ecommerce-seo__preview-title" id="seo-preview-title">{{ product.seo_title or product.seo_title_auto }}</p>
+              <p class="ecommerce-seo__preview-desc" id="seo-preview-desc">{{ product.seo_description or product.seo_description_auto }}</p>
+            </a>
+            <div class="ecommerce-form-grid">
+              <div class="form-group span-full">
+                <label for="seo_title">Page title</label>
+                <input
+                  id="seo_title"
+                  name="seo_title"
+                  class="input"
+                  value="{{ product.seo_title }}"
+                  maxlength="70"
+                  placeholder="{{ product.seo_title_auto }}"
+                  data-seo-auto="{{ product.seo_title_auto }}"
+                />
+                <p class="page-po__muted ecommerce-seo__count" id="seo-title-count">0 of 70 characters used</p>
+              </div>
+              <div class="form-group span-full">
+                <label for="seo_description">Meta description</label>
+                <textarea
+                  id="seo_description"
+                  name="seo_description"
+                  class="input"
+                  rows="3"
+                  maxlength="160"
+                  placeholder="{{ product.seo_description_auto }}"
+                  data-seo-auto="{{ product.seo_description_auto }}"
+                >{{ product.seo_description }}</textarea>
+                <p class="page-po__muted ecommerce-seo__count" id="seo-desc-count">0 of 160 characters used</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group span-full">
             <div class="ecommerce-field-toolbar">
               <label for="description">Description</label>
               <button type="button" class="page-po__btn-secondary ecommerce-translate-ar" data-target="description">Convert to Arabic</button>
@@ -137,8 +390,8 @@
               name="description"
               class="input"
               rows="5"
-              maxlength="500"
-              placeholder="Short description shown on the product page"
+              maxlength="2000"
+              placeholder="Description shown on the product page"
             >{{ product.description_text }}</textarea>
           </div>
 
@@ -185,10 +438,20 @@
           </div>
 
           <div class="form-group span-full ecommerce-product-edit__actions">
+            {% if prev_item_code %}
+            <a href="{{ url_for('ecommerce.product_edit', item_code=prev_item_code, **nav_kwargs) }}" class="page-po__btn-secondary">← Previous</a>
+            {% else %}
+            <span class="page-po__btn-secondary is-disabled" aria-disabled="true">← Previous</span>
+            {% endif %}
+            {% if next_item_code %}
+            <a href="{{ url_for('ecommerce.product_edit', item_code=next_item_code, **nav_kwargs) }}" class="page-po__btn-secondary">Next →</a>
+            {% else %}
+            <span class="page-po__btn-secondary is-disabled" aria-disabled="true">Next →</span>
+            {% endif %}
             <button type="button" class="page-po__btn-secondary ecommerce-translate-ar" data-target="both">Convert all to Arabic</button>
             <button type="submit" class="page-po__btn-primary">Save product</button>
             <a
-              href="{{ url_for('ecommerce.products', q=back_q or None, page=back_page if back_page > 1 else None, sort=back_sort or None, order=back_order if back_order in ('asc', 'desc') else None) }}"
+              href="{{ url_for('ecommerce.products', q=back_q or None, page=back_page if back_page > 1 else None, sort=back_sort or None, order=back_order if back_order in ('asc', 'desc') else None, web=back_web if back_web and back_web != 'all' else None, image=back_image if back_image and back_image != 'all' else None) }}"
               class="page-po__btn-secondary"
             >Cancel</a>
           </div>
@@ -196,26 +459,335 @@
       </section>
     </div>
   </form>
+  <form
+    id="barcodeFolderForm"
+    method="post"
+    action="{{ url_for('ecommerce.product_images_from_folder', item_code=product.item_code) }}"
+    enctype="multipart/form-data"
+    hidden
+  ></form>
+  <form
+    id="driveImagesForm"
+    method="post"
+    action="{{ url_for('ecommerce.product_images_from_drive', item_code=product.item_code) }}"
+    hidden
+  ></form>
 </div>
 
 <script>
 (function () {
-  var btn = document.querySelector('.ecommerce-product-edit__fetch-web');
-  if (!btn) return;
-  var statusEl = document.querySelector('.ecommerce-product-edit__fetch-status');
-  var preview = document.querySelector('.ecommerce-product-edit__preview');
+  var folderForm = document.getElementById('barcodeFolderForm');
+  var folderInput = document.getElementById('barcodeFolderInput');
+  var folderStatus = document.getElementById('barcodeFolderStatus');
+  var folderSubmit = document.getElementById('barcodeFolderSubmit');
+  if (folderForm && folderInput) {
+    function folderCount() {
+      return folderInput.files ? folderInput.files.length : 0;
+    }
+    folderInput.addEventListener('change', function () {
+      if (!folderStatus) return;
+      var n = folderCount();
+      folderStatus.textContent = n ? (n + ' image file(s) selected') : '';
+    });
+    folderForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      if (!folderCount()) {
+        window.alert('Choose a folder named with the barcode.');
+        return;
+      }
+      var data = new FormData(folderForm);
+      data.delete('image_files');
+      Array.prototype.forEach.call(folderInput.files, function (file) {
+        var rel = file.webkitRelativePath || file.name;
+        data.append('image_files', file, rel);
+      });
+      if (folderSubmit) {
+        folderSubmit.disabled = true;
+        folderSubmit.textContent = 'Uploading…';
+      }
+      if (folderStatus) folderStatus.textContent = 'Uploading images…';
+      fetch(folderForm.getAttribute('action'), {
+        method: 'POST',
+        body: data,
+        credentials: 'same-origin',
+        redirect: 'follow'
+      }).then(function (res) {
+        window.location = res.url || window.location.href;
+      }).catch(function () {
+        if (folderSubmit) {
+          folderSubmit.disabled = false;
+          folderSubmit.textContent = 'Upload images';
+        }
+        if (folderStatus) folderStatus.textContent = 'Upload failed. Try again.';
+      });
+    });
+  }
+})();
+</script>
+<script>
+(function () {
+  var driveForm = document.getElementById('driveImagesForm');
+  var driveUrl = document.getElementById('driveImagesUrl');
+  var driveStatus = document.getElementById('driveImagesStatus');
+  var driveSubmit = document.getElementById('driveImagesSubmit');
+  if (!driveForm || !driveUrl) return;
+  driveForm.addEventListener('submit', function (event) {
+    var link = String(driveUrl.value || '').trim();
+    if (!link) {
+      event.preventDefault();
+      window.alert('Paste a Google Drive link.');
+      return;
+    }
+    if (driveSubmit) {
+      driveSubmit.disabled = true;
+      driveSubmit.textContent = 'Fetching…';
+    }
+    if (driveStatus) driveStatus.textContent = 'Fetching images from Google Drive…';
+  });
+})();
+</script>
+<script>
+(function () {
+  var allBox = document.getElementById('removeAllGallery');
+  var allWrap = document.getElementById('removeAllGalleryWrap');
 
-  btn.addEventListener('click', async function () {
-    var url = btn.getAttribute('data-fetch-url');
-    if (!url) return;
-    var prevLabel = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Fetching…';
-    if (statusEl) statusEl.textContent = '';
+  function galleryRemoveBoxes() {
+    return document.querySelectorAll('input[name="remove_gallery"]');
+  }
 
+  function syncRemoveAllState() {
+    var boxes = galleryRemoveBoxes();
+    if (allWrap) allWrap.hidden = boxes.length === 0;
+    if (!allBox || !boxes.length) return;
+    var checked = 0;
+    boxes.forEach(function (box) {
+      if (box.checked) checked += 1;
+    });
+    allBox.checked = checked === boxes.length;
+  }
+
+  window.syncGalleryRemoveAll = syncRemoveAllState;
+
+  if (allBox) {
+    allBox.addEventListener('change', function () {
+      galleryRemoveBoxes().forEach(function (box) {
+        box.checked = allBox.checked;
+      });
+    });
+  }
+  document.addEventListener('change', function (event) {
+    if (event.target && event.target.name === 'remove_gallery') {
+      syncRemoveAllState();
+    }
+  });
+  syncRemoveAllState();
+})();
+</script>
+<script>
+(function () {
+  var btn = document.getElementById('itemNameTitleCaseBtn');
+  var input = document.getElementById('item_name');
+  if (!btn || !input) return;
+
+  function toTitleCase(value) {
+    return String(value || '').replace(/\S+/g, function (word) {
+      return word.split('-').map(function (part) {
+        if (!part) return part;
+        return part.charAt(0).toLocaleUpperCase() + part.slice(1).toLocaleLowerCase();
+      }).join('-');
+    });
+  }
+
+  btn.addEventListener('click', function () {
+    input.value = toTitleCase(input.value);
+    input.dispatchEvent(new Event('input'));
+    input.focus();
+  });
+
+  var copyBtn = document.getElementById('itemNameCopyBtn');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', async function () {
+      var name = (input.value || '').trim();
+      if (!name) {
+        input.focus();
+        return;
+      }
+      var prev = copyBtn.textContent;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(name);
+        } else {
+          input.select();
+          document.execCommand('copy');
+          input.blur();
+        }
+        copyBtn.textContent = 'Copied';
+      } catch (err) {
+        copyBtn.textContent = 'Copy failed';
+      }
+      setTimeout(function () {
+        copyBtn.textContent = prev;
+      }, 1500);
+    });
+  }
+
+  var snoonuBtn = document.getElementById('itemNameSnoonuBtn');
+  if (snoonuBtn) {
+    snoonuBtn.addEventListener('click', function () {
+      var name = (input.value || '').trim();
+      if (!name) {
+        input.focus();
+        return;
+      }
+      var slug = name
+        .toLowerCase()
+        .replace(/&/g, ' and ')
+        .replace(/\./g, '')
+        .replace(/['’]/g, '')
+        .replace(/\s*-\s*/g, '---')
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/-{4,}/g, '---')
+        .replace(/^-+|-+$/g, '');
+      var url = 'https://snoonu.com/product/' + slug;
+      var importInput = document.getElementById('import_page_url');
+      var fetchBtn = document.getElementById('importFromPageBtn');
+      if (importInput) {
+        importInput.value = url;
+        importInput.dispatchEvent(new Event('input'));
+      }
+      if (fetchBtn) fetchBtn.click();
+    });
+  }
+})();
+</script>
+<script>
+(function () {
+  var btn = document.getElementById('importFromPageBtn');
+  var detailsBtn = document.getElementById('importDetailsFromPageBtn');
+  var input = document.getElementById('import_page_url');
+  var statusEl = document.getElementById('importFromPageStatus');
+  if ((!btn && !detailsBtn) || !input) return;
+
+  function setStatus(message, ok) {
+    if (!statusEl) return;
+    statusEl.textContent = message || '';
+    statusEl.className = 'page-po__muted ecommerce-page-import__status' + (ok === true ? ' is-ok' : ok === false ? ' is-error' : '');
+  }
+
+  function fillField(id, value) {
+    if (!value) return;
+    var el = document.getElementById(id);
+    if (el) el.value = value;
+  }
+
+  function setMainPreview(url) {
+    var preview = document.querySelector('.ecommerce-product-edit__preview');
+    if (!preview) return;
+    preview.replaceChildren();
+    if (!url) {
+      var empty = document.createElement('span');
+      empty.className = 'ecommerce-product-edit__preview-empty';
+      empty.textContent = 'No main image';
+      preview.appendChild(empty);
+      return;
+    }
+    var img = document.createElement('img');
+    img.src = url;
+    img.alt = '';
+    img.width = 120;
+    img.height = 120;
+    preview.appendChild(img);
+    var removeBox = document.querySelector('input[name="remove_image"]');
+    if (removeBox) removeBox.checked = false;
+  }
+
+  function replaceGallery(items) {
+    var gallery = document.querySelector('.ecommerce-product-edit__gallery');
+    if (!gallery) return;
+    var grid = document.getElementById('productGalleryGrid');
+    var empty = document.getElementById('productGalleryEmpty');
+    if (grid) grid.replaceChildren();
+    var list = items || [];
+    if (!list.length) {
+      if (grid) grid.remove();
+      if (window.syncGalleryRemoveAll) window.syncGalleryRemoveAll();
+      if (!document.getElementById('productGalleryEmpty')) {
+        var p = document.createElement('p');
+        p.className = 'page-po__muted ecommerce-product-edit__gallery-empty';
+        p.id = 'productGalleryEmpty';
+        p.textContent = 'No gallery images yet.';
+        var upload = gallery.querySelector('.ecommerce-product-edit__gallery-upload');
+        gallery.insertBefore(p, upload);
+      }
+      return;
+    }
+    if (empty) empty.remove();
+    list.forEach(addGalleryThumb);
+  }
+
+  function addGalleryThumb(item) {
+    if (!item || !item.image_url) return;
+    var empty = document.getElementById('productGalleryEmpty');
+    var grid = document.getElementById('productGalleryGrid');
+    if (!grid) {
+      var gallery = document.querySelector('.ecommerce-product-edit__gallery');
+      if (!gallery) return;
+      if (empty) empty.remove();
+      grid = document.createElement('div');
+      grid.className = 'ecommerce-product-edit__gallery-grid';
+      grid.id = 'productGalleryGrid';
+      var upload = gallery.querySelector('.ecommerce-product-edit__gallery-upload');
+      gallery.insertBefore(grid, upload);
+    }
+    var label = document.createElement('label');
+    label.className = 'ecommerce-product-edit__gallery-item';
+    var img = document.createElement('img');
+    img.src = item.image_url;
+    img.alt = '';
+    img.loading = 'lazy';
+    img.width = 72;
+    img.height = 72;
+    var order = document.createElement('span');
+    order.className = 'ecommerce-product-edit__gallery-order';
+    order.textContent = '#' + (grid.children.length + 1);
+    var remove = document.createElement('span');
+    remove.className = 'ecommerce-product-edit__gallery-remove';
+    var box = document.createElement('input');
+    box.type = 'checkbox';
+    box.name = 'remove_gallery';
+    box.value = String(item.media_id || '');
+    remove.appendChild(box);
+    remove.appendChild(document.createTextNode(' Remove'));
+    label.appendChild(img);
+    label.appendChild(order);
+    label.appendChild(remove);
+    grid.appendChild(label);
+    if (window.syncGalleryRemoveAll) window.syncGalleryRemoveAll();
+  }
+
+  async function runPageImport(triggerBtn, saveImages) {
+    var pageUrl = (input.value || '').trim();
+    if (!pageUrl) {
+      input.focus();
+      setStatus('Paste a product page URL first.', false);
+      return;
+    }
+    var importUrl = (triggerBtn && triggerBtn.getAttribute('data-import-url'))
+      || (btn && btn.getAttribute('data-import-url'))
+      || (detailsBtn && detailsBtn.getAttribute('data-import-url'));
+    var buttons = [btn, detailsBtn].filter(Boolean);
+    var prevLabels = buttons.map(function (el) { return el.textContent; });
+    buttons.forEach(function (el) {
+      el.disabled = true;
+    });
+    if (triggerBtn) triggerBtn.textContent = 'Reading page…';
+    setStatus(saveImages ? 'Reading the page…' : 'Reading details…');
     try {
-      var body = new URLSearchParams({ download_images: '1' });
-      var resp = await fetch(url, {
+      var body = new URLSearchParams({
+        page_url: pageUrl,
+        save_images: saveImages ? '1' : '0',
+      });
+      var resp = await fetch(importUrl, {
         method: 'POST',
         credentials: 'same-origin',
         headers: {
@@ -227,23 +799,75 @@
       });
       var data = await resp.json();
       if (!resp.ok || !data.ok) {
-        throw new Error(data.error || data.message || 'Could not fetch image.');
+        throw new Error(data.error || data.message || 'Could not import that page.');
       }
-      if (preview && data.image_url) {
-        preview.innerHTML = '<img src="' + data.image_url + '" alt="" width="120" height="120" />';
+      fillField('import_page_url', data.page_url || pageUrl);
+      fillField('item_name', data.item_name || data.source_title);
+      var nameEl = document.getElementById('item_name');
+      if (nameEl && (data.item_name || data.source_title)) {
+        nameEl.dispatchEvent(new Event('input'));
       }
-      if (statusEl) {
-        statusEl.textContent = 'Image saved.';
-        statusEl.className = 'ecommerce-product-edit__fetch-status is-ok';
+      fillField('description', data.description);
+      fillField('specifications', data.specifications);
+      if (data.seo_title) {
+        fillField('seo_title', data.seo_title);
+        var seoTitle = document.getElementById('seo_title');
+        if (seoTitle) seoTitle.setAttribute('data-seo-auto', data.seo_title);
       }
+      if (data.seo_description) {
+        fillField('seo_description', data.seo_description);
+        var seoDesc = document.getElementById('seo_description');
+        if (seoDesc) seoDesc.setAttribute('data-seo-auto', data.seo_description);
+      }
+      if (data.description || data.seo_description || data.seo_title) {
+        var descEl = document.getElementById('description');
+        if (descEl) descEl.dispatchEvent(new Event('input'));
+        var seoTitleEl = document.getElementById('seo_title');
+        if (seoTitleEl) seoTitleEl.dispatchEvent(new Event('input'));
+        var seoDescEl = document.getElementById('seo_description');
+        if (seoDescEl) seoDescEl.dispatchEvent(new Event('input'));
+      }
+      if (saveImages) {
+        if (data.image_url) {
+          setMainPreview(data.image_url + (data.image_url.indexOf('?') >= 0 ? '&' : '?') + 'v=' + Date.now());
+        }
+        if (data.gallery_images && data.gallery_images.length) {
+          replaceGallery(data.gallery_images);
+        } else if (data.images_saved) {
+          replaceGallery([]);
+        }
+      }
+      var statusMsg = data.message || 'Imported. Review and Save.';
+      if (data.image_errors && data.image_errors.length && !data.images_saved) {
+        statusMsg = statusMsg + ' ' + data.image_errors[0];
+      }
+      setStatus(statusMsg, true);
     } catch (err) {
-      if (statusEl) {
-        statusEl.textContent = (err && err.message) ? err.message : 'Failed';
-        statusEl.className = 'ecommerce-product-edit__fetch-status is-error';
-      }
+      setStatus((err && err.message) ? err.message : 'Import failed.', false);
     } finally {
-      btn.disabled = false;
-      btn.textContent = prevLabel;
+      buttons.forEach(function (el, index) {
+        el.disabled = false;
+        el.textContent = prevLabels[index];
+      });
+    }
+  }
+
+  if (btn) {
+    btn.addEventListener('click', function () {
+      runPageImport(btn, true);
+    });
+  }
+  if (detailsBtn) {
+    detailsBtn.addEventListener('click', function () {
+      runPageImport(detailsBtn, false);
+    });
+  }
+
+  input.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (detailsBtn) detailsBtn.click();
+      else if (btn) btn.click();
     }
   });
 })();
@@ -327,6 +951,95 @@
   });
 })();
 </script>
+<script>
+(function () {
+  var root = document.querySelector('.ecommerce-age-checks');
+  if (!root) return;
+  var allBox = root.querySelector('[data-age-all]');
+  var itemBoxes = Array.prototype.slice.call(root.querySelectorAll('[data-age-item]'));
+  if (!allBox || !itemBoxes.length) return;
+
+  function syncAllBox() {
+    allBox.checked = itemBoxes.every(function (box) { return box.checked; });
+  }
+
+  allBox.addEventListener('change', function () {
+    itemBoxes.forEach(function (box) {
+      box.checked = allBox.checked;
+    });
+  });
+  itemBoxes.forEach(function (box) {
+    box.addEventListener('change', syncAllBox);
+  });
+  syncAllBox();
+})();
+</script>
+<script>
+(function () {
+  var showBox = document.getElementById('show_on_web');
+  var featuredBox = document.getElementById('is_featured');
+  if (!showBox || !featuredBox) return;
+  featuredBox.addEventListener('change', function () {
+    if (featuredBox.checked) showBox.checked = true;
+  });
+  showBox.addEventListener('change', function () {
+    if (!showBox.checked) featuredBox.checked = false;
+  });
+})();
+</script>
+<script>
+(function () {
+  var titleInput = document.getElementById('seo_title');
+  var descInput = document.getElementById('seo_description');
+  var nameInput = document.getElementById('item_name');
+  var descProduct = document.getElementById('description');
+  var previewTitle = document.getElementById('seo-preview-title');
+  var previewDesc = document.getElementById('seo-preview-desc');
+  var titleCount = document.getElementById('seo-title-count');
+  var descCount = document.getElementById('seo-desc-count');
+  if (!titleInput || !descInput) return;
+
+  function clean(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function autoTitle() {
+    var fromField = clean(titleInput.getAttribute('data-seo-auto'));
+    var name = clean(nameInput && nameInput.value);
+    if (name) {
+      name = clean(name.split('|')[0]).replace(/\s*(?:[|–—-]\s*)?mamahub\s*$/i, '');
+      var suffix = ' | MamaHub';
+      var room = 70 - suffix.length;
+      if (name.length > room) name = name.slice(0, Math.max(0, room - 1)).replace(/\s+$/, '') + '…';
+      return (name ? name + suffix : 'MamaHub').slice(0, 70);
+    }
+    return fromField || 'MamaHub — toys and gifts in Qatar';
+  }
+
+  function autoDesc() {
+    var fromField = clean(descInput.getAttribute('data-seo-auto'));
+    var text = clean(descProduct && descProduct.value);
+    if (text) return text.slice(0, 160);
+    var name = clean(nameInput && nameInput.value) || 'this item';
+    return ('Buy ' + name + ' online at MamaHub. Toys and gifts for children, delivered in Qatar.').slice(0, 160) || fromField;
+  }
+
+  function paint() {
+    var title = clean(titleInput.value) || autoTitle();
+    var desc = clean(descInput.value) || autoDesc();
+    if (previewTitle) previewTitle.textContent = title;
+    if (previewDesc) previewDesc.textContent = desc;
+    if (titleCount) titleCount.textContent = (clean(titleInput.value) || title).length + ' of 70 characters used';
+    if (descCount) descCount.textContent = (clean(descInput.value) || desc).length + ' of 160 characters used';
+  }
+
+  [titleInput, descInput, nameInput, descProduct].forEach(function (el) {
+    if (!el) return;
+    el.addEventListener('input', paint);
+  });
+  paint();
+})();
+</script>
 <style>
   .ecommerce-field-toolbar {
     display: flex;
@@ -336,6 +1049,11 @@
     margin-bottom: 6px;
   }
   .ecommerce-field-toolbar label { margin: 0; }
+  .ecommerce-field-toolbar__actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
   .im-field-arabic textarea {
     font-family: "Segoe UI", Tahoma, "Arial Unicode MS", "Noto Sans Arabic", Arial, sans-serif;
   }

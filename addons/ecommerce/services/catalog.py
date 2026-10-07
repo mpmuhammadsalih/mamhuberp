@@ -1,11 +1,13 @@
 """Catalog helpers — products and categories from ERP tables."""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from addons.ecommerce import media_db
 from db import (
+    _build_items_list_where,
     _safe_rows,
+    ensure_itemmaster_description_width,
     ensure_itemmaster_image_path_column,
     get_category_master_tree,
     get_item_by_code,
@@ -14,7 +16,24 @@ from db import (
 )
 
 from addons.ecommerce.services.common import resolve_location_code
+from addons.ecommerce.services import item_age_groups as item_age_groups_svc
 from addons.ecommerce.services import product_web_meta as web_meta_svc
+
+# Oracle treats '' as NULL, so TRIM(col) <> '' never matches. Use LENGTH(TRIM(...)).
+_HAS_IMAGE_SQL = 'im.IMAGE_PATH IS NOT NULL AND LENGTH(TRIM(im.IMAGE_PATH)) > 0'
+_MISSING_IMAGE_SQL = (
+    'im.IMAGE_PATH IS NULL OR LENGTH(TRIM(im.IMAGE_PATH)) = 0 '
+    'OR LENGTH(TRIM(im.IMAGE_PATH)) IS NULL'
+)
+
+
+def _image_filter_conditions(image_filter: str | None) -> List[str] | None:
+    value = (image_filter or 'all').strip().lower()
+    if value in ('missing', 'none', 'no', 'without'):
+        return [_MISSING_IMAGE_SQL]
+    if value in ('has', 'with', 'ok'):
+        return [_HAS_IMAGE_SQL]
+    return None
 
 
 def _product_specs_text_map() -> Dict[str, str]:
@@ -33,6 +52,8 @@ def list_products(
     search: str | None = None,
     order_by: str | None = None,
     order_direction: str | None = None,
+    web_filter: str | None = None,
+    image_filter: str | None = None,
 ) -> Tuple[List[Dict[str, Any]], int, int]:
     from addons.ecommerce.services import product_edit as product_edit_svc
 
@@ -40,6 +61,22 @@ def list_products(
     loc = resolve_location_code()
     page = max(1, int(page or 1))
     per_page = max(1, min(int(per_page or 50), 200))
+    meta_map = web_meta_svc.product_web_meta_map()
+    hidden_codes = web_meta_svc.hidden_item_codes(meta_map)
+    featured_codes = web_meta_svc.featured_item_codes(meta_map, require_visible=False)
+    web = (web_filter or 'all').strip().lower()
+    item_codes = None
+    exclude_codes = None
+    if web == 'hidden':
+        item_codes = hidden_codes
+        if not item_codes:
+            return [], 0, loc
+    elif web == 'featured':
+        item_codes = featured_codes
+        if not item_codes:
+            return [], 0, loc
+    elif web in ('on', 'visible', 'shown'):
+        exclude_codes = hidden_codes or None
     items, total = get_items_list(
         location_code=loc,
         search=(search or '').strip() or None,
@@ -48,10 +85,12 @@ def list_products(
         include_lookup_names=True,
         order_by=(order_by or '').strip() or None,
         order_direction=(order_direction or '').strip() or None,
+        item_codes=item_codes,
+        exclude_item_codes=exclude_codes,
+        extra_conditions=_image_filter_conditions(image_filter),
     )
     prepared: List[Dict[str, Any]] = []
     specs_map = _product_specs_text_map()
-    offer_map = web_meta_svc.product_web_meta_map()
     for row in list(items or []):
         item = dict(row)
         image_path = item.get('image_path') or item.get('IMAGE_PATH') or ''
@@ -64,11 +103,15 @@ def list_products(
         meta_offer = web_meta_svc.resolve_offer_price(
             int(code or 0),
             wholesale_price=wholesale,
-            meta_map=offer_map,
+            meta_map=meta_map,
         )
         if meta_offer is not None:
             item['wholesaleprice'] = meta_offer
             item['WHOLESALEPRICE'] = meta_offer
+        meta = meta_map.get(str(code or '').strip(), {})
+        item['show_on_web'] = web_meta_svc.show_on_web_from_meta(meta)
+        item['is_featured'] = web_meta_svc.is_featured_from_meta(meta)
+        item['is_addon'] = web_meta_svc.is_addon_from_meta(meta)
         prepared.append(item)
     return prepared, int(total or 0), loc
 
@@ -80,10 +123,13 @@ def _gallery_admin_url(image_url: str | None) -> str | None:
     if not raw:
         return None
     if raw.startswith('/media/files/'):
-        from nexa_http import url_for
-
         filename = raw.split('/media/files/')[-1].split('?')[0]
-        return url_for('ecommerce.media_file', filename=filename)
+        try:
+            from nexa_http import url_for
+
+            return url_for('ecommerce.media_file', filename=filename)
+        except Exception:
+            return f'/ecommerce/media/files/{filename}'
     return product_edit_svc.product_image_public_url(raw)
 
 
@@ -117,10 +163,78 @@ def _offer_price_for_form(item: Dict[str, Any], item_code: int, meta_map: Dict[s
     return offer if offer is not None else ''
 
 
+def adjacent_product_codes(
+    item_code: int,
+    *,
+    search: str | None = None,
+    web_filter: str | None = None,
+    image_filter: str | None = None,
+    descending: bool = False,
+) -> Tuple[Optional[int], Optional[int]]:
+    """Previous and next ITEMCODE at this location, following item-code order."""
+    loc = resolve_location_code()
+    ic = int(item_code)
+    if ic <= 0:
+        return (None, None)
+
+    meta_map = web_meta_svc.product_web_meta_map()
+    hidden_codes = web_meta_svc.hidden_item_codes(meta_map)
+    featured_codes = web_meta_svc.featured_item_codes(meta_map, require_visible=False)
+    web = (web_filter or 'all').strip().lower()
+    include_codes = None
+    exclude_codes = None
+    if web == 'hidden':
+        include_codes = hidden_codes
+        if not include_codes:
+            return (None, None)
+    elif web == 'featured':
+        include_codes = featured_codes
+        if not include_codes:
+            return (None, None)
+    elif web in ('on', 'visible', 'shown'):
+        exclude_codes = hidden_codes or None
+
+    where_clause, params = _build_items_list_where(
+        'im',
+        location_code=loc,
+        search=(search or '').strip() or None,
+        item_codes=include_codes,
+        exclude_item_codes=exclude_codes,
+        extra_conditions=_image_filter_conditions(image_filter),
+    )
+    params['ic'] = ic
+    extra = 'AND' if where_clause else 'WHERE'
+    lower_rows = _safe_rows(
+        f'SELECT MAX(im.ITEMCODE) AS item_code FROM ITEMMASTER im {where_clause} {extra} im.ITEMCODE < :ic',
+        params,
+    )
+    higher_rows = _safe_rows(
+        f'SELECT MIN(im.ITEMCODE) AS item_code FROM ITEMMASTER im {where_clause} {extra} im.ITEMCODE > :ic',
+        params,
+    )
+
+    def _code(rows: List[Dict[str, Any]]) -> Optional[int]:
+        if not rows:
+            return None
+        raw = rows[0].get('item_code') or rows[0].get('ITEMCODE')
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            return None
+        return value if value > 0 else None
+
+    lower = _code(lower_rows)
+    higher = _code(higher_rows)
+    if descending:
+        return (higher, lower)
+    return (lower, higher)
+
+
 def get_product_for_edit(item_code: int) -> Dict[str, Any] | None:
     from addons.ecommerce.services import product_edit as product_edit_svc
 
     ensure_itemmaster_image_path_column()
+    ensure_itemmaster_description_width()
     loc = resolve_location_code()
     row = get_item_by_code(int(item_code), loc)
     if not row:
@@ -132,6 +246,14 @@ def get_product_for_edit(item_code: int) -> Dict[str, Any] | None:
     meta_map = web_meta_svc.product_web_meta_map()
     code = item.get('itemcode') or item.get('ITEMCODE') or item.get('code') or item_code
     meta = meta_map.get(str(code), {})
+    age_groups = item_age_groups_svc.list_age_groups()
+    age_group_ids = item_age_groups_svc.get_item_age_group_ids(int(code))
+    all_age_ids = []
+    for row in age_groups:
+        try:
+            all_age_ids.append(int(row.get('age_group_id')))
+        except (TypeError, ValueError):
+            continue
     return {
         'item_code': int(code),
         'item_name': item.get('itemname') or item.get('ITEMNAME') or item.get('name') or '',
@@ -147,6 +269,37 @@ def get_product_for_edit(item_code: int) -> Dict[str, Any] | None:
         'image_url': product_edit_svc.product_image_public_url(image_path),
         'gallery_images': _product_gallery_rows(int(code)),
         'location_code': loc,
+        'age_groups': age_groups,
+        'age_group_ids': age_group_ids,
+        'age_all_selected': bool(all_age_ids) and set(all_age_ids).issubset(set(age_group_ids)),
+        'seo_title': str(meta.get('seo_title') or '').strip(),
+        'seo_description': str(meta.get('seo_description') or '').strip(),
+        'seo_title_auto': web_meta_svc.auto_seo_title(
+            str(item.get('itemname') or item.get('ITEMNAME') or item.get('name') or '')
+        ),
+        'seo_description_auto': web_meta_svc.auto_seo_description(
+            item_name=str(item.get('itemname') or item.get('ITEMNAME') or item.get('name') or ''),
+            description=str(desc).strip() if desc is not None else '',
+            category_name=str(
+                item.get('categoryname') or item.get('CATEGORYNAME') or item.get('category_name') or ''
+            ),
+            price=_offer_price_for_form(item, int(code), meta_map)
+            or item.get('retailprice')
+            or item.get('RETAILPRICE')
+            or 0,
+        ),
+        'show_on_web': web_meta_svc.show_on_web_from_meta(meta),
+        'is_featured': web_meta_svc.is_featured_from_meta(meta),
+        'is_addon': web_meta_svc.is_addon_from_meta(meta),
+        'import_page_url': str(meta.get('import_page_url') or '').strip(),
+        'compare_urls': list(meta.get('compare_urls') or []),
+        'barcode': str(
+            item.get('manufacturerid')
+            or item.get('MANUFACTURERID')
+            or item.get('rawabicode')
+            or item.get('RAWABICODE')
+            or ''
+        ).strip(),
     }
 
 

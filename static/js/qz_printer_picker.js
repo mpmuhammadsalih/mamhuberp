@@ -155,9 +155,9 @@
 
     async function loadPrinters() {
       await ensureQzConnected();
-      var found = [];
-      try {
+      async function fetchNames() {
         var res = await global.qz.printers.find();
+        var found = [];
         if (Array.isArray(res)) {
           found = res
             .map(function (x) {
@@ -171,8 +171,27 @@
             return !!x;
           });
         }
+        return found;
+      }
+      var found = [];
+      try {
+        if (global.SalesQzPrint && typeof global.SalesQzPrint.withQzReady === 'function') {
+          found = await global.SalesQzPrint.withQzReady(fetchNames);
+        } else {
+          found = await fetchNames();
+        }
       } catch (e) {
-        throw new Error('QZ Tray printer fetch failed: ' + (e.message || e));
+        var msg = String((e && (e.message || e)) || e || '');
+        if (/sendData is not a function/i.test(msg) && global.SalesQzPrint && typeof global.SalesQzPrint.connectQzWebsocket === 'function') {
+          try {
+            await global.SalesQzPrint.connectQzWebsocket({ force: true });
+            found = await fetchNames();
+          } catch (e2) {
+            throw new Error('QZ Tray printer fetch failed: ' + (e2.message || e2));
+          }
+        } else {
+          throw new Error('QZ Tray printer fetch failed: ' + (e.message || e));
+        }
       }
       found = Array.from(new Set(found)).sort(function (a, b) {
         return a.localeCompare(b);

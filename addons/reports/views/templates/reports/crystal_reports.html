@@ -35,6 +35,9 @@
   .printer-row:hover { background: #eef5ff; }
   .save-badge { font-size: 11px; color: #198754; margin-left: 6px; display: none; }
   .save-badge.visible { display: inline; }
+  .qz-help { border-left: 4px solid #fd7e14; background: #fff8f0; }
+  .qz-help ol { margin: 6px 0 0 18px; padding: 0; font-size: 12px; color: #495057; line-height: 1.55; }
+  .qz-help code { font-size: 11px; background: #f1f3f5; padding: 1px 4px; border-radius: 3px; }
 </style>
 
 <div class="page">
@@ -49,6 +52,24 @@
     <div class="card"><div class="err">{{ error }}</div></div>
   {% endif %}
 
+  <div class="card qz-help">
+    <h2 class="qz-section__title">QZ Tray: use HTTPS (required)</h2>
+    <p class="qz-section__lead">
+      Chrome/Edge <strong>will not show</strong> a Local network popup on
+      <code>http://IP:8085</code> — they silently block QZ Tray on insecure public HTTP.
+      Open the app with HTTPS instead:
+    </p>
+    <p class="qz-section__lead" style="font-size:14px;">
+      <a href="https://mamahub.nexuserp.store/" target="_blank" rel="noopener noreferrer"><strong>https://mamahub.nexuserp.store/</strong></a>
+    </p>
+    <ol>
+      <li>Open <strong>https://mamahub.nexuserp.store</strong> (not the IP:8085 URL).</li>
+      <li>Start <strong>QZ Tray</strong> on this PC (tray icon visible).</li>
+      <li>If a popup asks for local network / apps on this device → <strong>Allow</strong>.</li>
+      <li>Or: lock icon → Site settings → <strong>Local network access</strong> = Allow, then Ctrl+Shift+R.</li>
+      <li>Download the QZ certificate below and trust it in QZ Tray, then try <strong>Printer list</strong>.</li>
+    </ol>
+  </div>
   <div class="card">
     <h2 class="qz-section__title">Sales invoice — QZ printer</h2>
     <p class="qz-section__lead">Prints the same designed invoice PDF as “open report” / GRN layout (via QZ). Pick a printer that accepts PDF—or use a Windows printer driver—for best results.</p>
@@ -139,10 +160,11 @@
   </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/qz_printer_prefs.js') }}"></script>
-<script src="{{ url_for('static', filename='js/qz_invoice_print.js') }}?v=2"></script>
-<script src="{{ url_for('static', filename='js/qz_barcode_print.js') }}"></script>
+<script src="{{ url_for('static', filename='js/qz_printer_prefs.js') }}?v=5"></script>
+<script src="{{ url_for('static', filename='js/qz_invoice_print.js') }}?v=5"></script>
+<script src="{{ url_for('static', filename='js/qz_barcode_print.js') }}?v=5"></script>
 <script>
+window.__SALES_QZ_SCRIPT_URL__ = {{ url_for('static', filename='js/vendor/qz-tray.js')|tojson }};
 window.__SALES_QZ_URLS__ = {
   certificate: {{ url_for('reports.qz_certificate')|tojson }},
   sign: {{ url_for('reports.qz_sign')|tojson }}
@@ -290,17 +312,56 @@ window.__BC_QZ_URLS__ = window.__SALES_QZ_URLS__;
   };
 
   const loadQzPrinters = async () => {
-    await ensureQzConnected();
-    let found = [];
-    try {
+    const withUiTimeout = (p, label) => {
+      if (window.SalesQzPrint && typeof window.SalesQzPrint.withTimeout === 'function') {
+        return window.SalesQzPrint.withTimeout(p, 20000, label);
+      }
+      return Promise.race([
+        p,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(label)), 20000)
+        ),
+      ]);
+    };
+    await withUiTimeout(
+      ensureQzConnected(),
+      'Timed out connecting to QZ Tray (20s). Is QZ Tray running on THIS PC? Allow/trust this site in QZ Tray.'
+    );
+    const fetchNames = async () => {
       const res = await qz.printers.find();
+      let found = [];
       if (Array.isArray(res)) {
         found = res.map((x) => String(x || '').trim()).filter((x) => !!x);
       } else if (res != null) {
         found = [String(res).trim()].filter((x) => !!x);
       }
+      return found;
+    };
+    let found = [];
+    try {
+      if (window.SalesQzPrint && typeof window.SalesQzPrint.withQzReady === 'function') {
+        found = await withUiTimeout(
+          window.SalesQzPrint.withQzReady(fetchNames),
+          'Timed out fetching printers from QZ Tray (20s). Check QZ Tray is running and this site is allowed.'
+        );
+      } else {
+        found = await withUiTimeout(
+          fetchNames(),
+          'Timed out fetching printers from QZ Tray (20s).'
+        );
+      }
     } catch (e) {
-      throw new Error(`QZ Tray printer fetch failed: ${e.message || e}`);
+      const msg = String((e && (e.message || e)) || e || '');
+      if (/sendData is not a function/i.test(msg) && window.SalesQzPrint && typeof window.SalesQzPrint.connectQzWebsocket === 'function') {
+        try {
+          await window.SalesQzPrint.connectQzWebsocket({ force: true });
+          found = await fetchNames();
+        } catch (e2) {
+          throw new Error(`QZ Tray printer fetch failed: ${e2.message || e2}`);
+        }
+      } else {
+        throw new Error(`QZ Tray printer fetch failed: ${e.message || e}`);
+      }
     }
     found = Array.from(new Set(found)).sort((a, b) => a.localeCompare(b));
     if (!found.length) throw new Error('No printers returned by QZ Tray.');
@@ -407,11 +468,17 @@ window.__BC_QZ_URLS__ = window.__SALES_QZ_URLS__;
   function bindPick(btn, inputEl, title) {
     if (!btn) return;
     btn.addEventListener('click', async function() {
+      const prev = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Loading…';
       try {
         await loadQzPrinters();
         openPrinterPopup(title, inputEl);
       } catch (e) {
         alert(`Printer list error: ${e.message || e}`);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = prev;
       }
     });
   }

@@ -411,7 +411,7 @@
      data-track-root=".im-page"
      data-save-url-pattern="/save">
   {% if openai_configured|default(false) %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/sales_invoice_ai.css') }}?v=1" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/sales_invoice_ai.css') }}?v=2" />
   {% endif %}
   <div class="im-topbar">
     <div class="im-topbar-main">
@@ -425,6 +425,7 @@
             <span class="si-ai-switch-slider"></span>
           </label>
           <button type="button" class="si-ai-review-btn hidden" id="siAiReviewCartBtn" title="Reopen AI line preview">Review AI lines</button>
+          <button type="button" class="si-ai-snoonu-btn" id="siAiSnoonuBtn" title="Import a Snoonu invoice">AI - Snoonu</button>
         </div>
         {% endif %}
         {% if (enable_print if enable_print is defined else '1') != '0' %}
@@ -478,6 +479,21 @@
       </div>
     </div>
     <span class="si-ai-capture-status" id="siAiCaptureStatus"></span>
+  </div>
+  <div class="si-ai-capture-expand hidden" id="siAiSnoonuPanel">
+    <div class="si-ai-unified-card">
+      <p class="si-ai-snoonu-hint">
+        Paste a Snoonu invoice or order, or upload a screenshot / PDF.
+        Invoice customer is Snoonu. Loyalty is created by mobile. Items are matched by barcode.
+      </p>
+      <textarea id="siAiSnoonuPaste" class="si-ai-unified-field" placeholder="Paste Snoonu invoice text or order number…" rows="4" autocomplete="off" aria-label="Snoonu invoice text"></textarea>
+      <div class="si-ai-unified-footer">
+        <input type="file" id="siAiSnoonuFile" accept="image/*,.pdf,application/pdf" hidden aria-hidden="true" />
+        <button type="button" class="si-ai-capture-btn" id="siAiSnoonuPick">Image / PDF</button>
+        <button type="button" class="si-ai-capture-btn" id="siAiSnoonuImport">Import invoice</button>
+      </div>
+    </div>
+    <span class="si-ai-capture-status" id="siAiSnoonuStatus"></span>
   </div>
   {% endif %}
 
@@ -1176,12 +1192,14 @@
     window.__CONVERT_FROM_ORDERS__ = {{ (convert_from_orders_json|default('[]'))|safe }};
     window.__LOAD_FROM_ORDER_API__ = '/sales/load-from-order/';
     window.__SALES_AI_SCREENSHOT_URL__ = {% if openai_configured|default(false) %}{{ url_for('sales.sales_ai_screenshot_lines')|tojson }}{% else %}null{% endif %};
+    window.__SALES_AI_SNOONU_URL__ = {% if openai_configured|default(false) %}{{ url_for('sales.sales_ai_snoonu_invoice')|tojson }}{% else %}null{% endif %};
+    window.__SALES_AI_SNOONU_CUSTOMER_URL__ = {{ url_for('sales.sales_ai_snoonu_customer')|tojson }};
   </script>
   <script src="{{ url_for('static', filename='js/customer_billing_type.js') }}?v=1"></script>
   <script src="{{ url_for('static', filename='js/si_item_picker.js') }}?v=15"></script>
-  <script src="{{ url_for('static', filename='js/sales.js') }}?v=94"></script>
+  <script src="{{ url_for('static', filename='js/sales.js') }}?v=101"></script>
   <script src="{{ url_for('static', filename='js/transaction_recording_client.js') }}?v=7"></script>
   {% if openai_configured|default(false) %}
-  <script src="{{ url_for('static', filename='js/sales_invoice_ai.js') }}?v=1"></script>
+  <script src="{{ url_for('static', filename='js/sales_invoice_ai.js') }}?v=7"></script>
   {% endif %}
 {% endblock %}

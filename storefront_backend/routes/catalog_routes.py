@@ -8,16 +8,17 @@ from typing import Optional
 
 
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 
 
 
 from addons.ecommerce import settings_store
-from storefront_backend.deps import location_query
+from storefront_backend.deps import customer_user_id, location_query, optional_customer
 
 from storefront_backend.services import catalog as catalog_svc
 from storefront_backend.services import item_images as item_images_svc
+from storefront_backend.services import search_events as search_events_svc
 
 from storefront_backend.utils.response import success_response
 
@@ -61,6 +62,8 @@ async def list_products(
 
     order: Optional[str] = Query(None),
 
+    claims: Optional[dict] = Depends(optional_customer),
+
 ):
 
     loc = location_code if location_code is not None else None
@@ -95,6 +98,19 @@ async def list_products(
 
         order=order,
 
+    )
+
+    user_id = None
+    if claims:
+        try:
+            user_id = customer_user_id(claims)
+        except Exception:
+            user_id = None
+    search_events_svc.maybe_log_zero_result(
+        query=search,
+        total=int((meta or {}).get('total_records') or 0),
+        page=page,
+        user_id=user_id,
     )
 
     response.headers['Cache-Control'] = 'public, max-age=60'
@@ -159,6 +175,32 @@ async def serve_product_image(filename: str, response: Response):
         str(path),
         media_type=item_images_svc.item_image_content_type(filename),
     )
+
+
+@router.get('/products/addons')
+async def list_product_addons(
+    addon_type: str = Query('gift_wrap'),
+    location_code: Optional[int] = Query(None),
+):
+    items = catalog_svc.list_product_addons(
+        location_code=location_code,
+        addon_type=addon_type or 'gift_wrap',
+    )
+    return success_response(data=items, message='Product add-ons retrieved')
+
+
+@router.get('/products/suggested')
+async def list_suggested_products(
+    item_code: int = Query(..., gt=0),
+    location_code: Optional[int] = Query(None),
+    page_size: int = Query(12, ge=1, le=24),
+):
+    items = catalog_svc.list_suggested_products(
+        item_code,
+        location_code=location_code,
+        limit=page_size,
+    )
+    return success_response(data=items, message='Suggested products retrieved')
 
 
 @router.get('/products/{item_code}')

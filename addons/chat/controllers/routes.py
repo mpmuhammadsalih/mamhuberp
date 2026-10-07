@@ -10,7 +10,8 @@ from typing import List
 from nexa_http import Blueprint, Response, current_app, jsonify, redirect, render_template, request
 from nexa_http import session, stream_with_context, url_for
 from werkzeug.utils import secure_filename
-from db import chat_create_group_conversation, chat_delete_message, chat_edit_message, chat_get_conversations, chat_get_messages, chat_get_or_create_direct_conversation, chat_get_typing_users, chat_get_user_sync_token, chat_list_users, chat_send_message, chat_set_typing, chat_share_message_to_user, chat_toggle_reaction, chat_user_can_message_all_tenants, ensure_chat_tables
+from db import chat_clear_conversation, chat_create_group_conversation, chat_delete_message, chat_edit_message, chat_get_conversations, chat_get_messages, chat_get_or_create_direct_conversation, chat_get_typing_users, chat_get_user_sync_token, chat_list_users, chat_send_message, chat_set_typing, chat_share_message_to_user, chat_toggle_reaction, chat_user_can_message_all_tenants, ensure_chat_tables
+from storefront_backend.services.inbox import notify_customer_of_staff_message
 _ADDON_ROOT = Path(__file__).resolve().parents[1]
 bp = Blueprint('chat', __name__, template_folder=str(_ADDON_ROOT / 'views' / 'templates'))
 ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
@@ -99,6 +100,17 @@ def chat_api_conversation_group():
         return jsonify({'ok': False, 'error': str(exc)}, 400)
     return jsonify({'ok': True, 'conversation_id': conversation_id})
 
+@bp.route('/chat/api/conversations/<int:conversation_id>/clear', methods=['POST'])
+def chat_api_conversation_clear(conversation_id: int):
+    if not _require_login():
+        return jsonify({'ok': False, 'error': 'Unauthorized'}, 401)
+    try:
+        cleared_to = chat_clear_conversation(int(conversation_id), _current_user())
+    except Exception as exc:
+        return jsonify({'ok': False, 'error': str(exc)}, 400)
+    return jsonify({'ok': True, 'cleared_to': cleared_to})
+
+
 @bp.route('/chat/api/messages', methods=['GET'])
 def chat_api_messages_list():
     if not _require_login():
@@ -159,6 +171,10 @@ def chat_api_message_send():
         row = chat_send_message(conversation_id, _current_user(), text, image_url, file_url=file_url, file_name=file_name, file_mime=file_mime, replied_message_id=replied_message_id)
     except Exception as exc:
         return jsonify({'ok': False, 'error': str(exc)}, 400)
+    try:
+        notify_customer_of_staff_message(conversation_id, text, _current_user())
+    except Exception:
+        pass
     return jsonify({'ok': True, 'row': _to_json_message(row, _current_user())})
 
 @bp.route('/chat/api/messages/<int:message_id>/edit', methods=['POST'])

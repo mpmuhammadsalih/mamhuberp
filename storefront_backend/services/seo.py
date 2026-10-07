@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
 from typing import List, Tuple
 from xml.etree.ElementTree import Element, SubElement, tostring
 
@@ -19,7 +18,6 @@ def _storefront_base_url() -> str:
 def _url_elem(parent: Element, loc: str, *, changefreq: str, priority: str) -> None:
     url = SubElement(parent, 'url')
     SubElement(url, 'loc').text = loc
-    SubElement(url, 'lastmod').text = datetime.now(timezone.utc).strftime('%Y-%m-%d')
     SubElement(url, 'changefreq').text = changefreq
     SubElement(url, 'priority').text = priority
 
@@ -37,6 +35,7 @@ def build_sitemap_xml(base_url: str | None = None) -> str:
         ('/offers', 'daily', '0.85'),
         ('/new-arrivals', 'daily', '0.85'),
         ('/best-sellers', 'daily', '0.85'),
+        ('/featured', 'weekly', '0.8'),
         ('/gift-finder', 'weekly', '0.7'),
     ]
     for path, freq, priority in static_routes:
@@ -49,6 +48,13 @@ def build_sitemap_xml(base_url: str | None = None) -> str:
         _url_elem(urlset, f'{base}/page/{slug}', changefreq='monthly', priority='0.5')
 
     loc = resolve_location_code()
+    hidden_codes = []
+    try:
+        from addons.ecommerce.services import product_web_meta as web_meta_svc
+
+        hidden_codes = web_meta_svc.hidden_item_codes()
+    except Exception:  # noqa: BLE001
+        hidden_codes = []
     page_num = 1
     page_size = 500
     total = 1
@@ -57,6 +63,7 @@ def build_sitemap_xml(base_url: str | None = None) -> str:
             location_code=loc,
             page=page_num,
             items_per_page=page_size,
+            exclude_item_codes=hidden_codes or None,
         )
         if not rows:
             break

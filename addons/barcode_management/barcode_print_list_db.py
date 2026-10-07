@@ -118,6 +118,49 @@ def _clamp_print_qty(raw: Any) -> int:
     return max(1, min(999, n))
 
 
+def _print_list_average_cost(location_code: int, item_code: Any) -> float:
+    try:
+        from db import get_item_by_code
+
+        ic = int(item_code)
+        loc = int(location_code)
+    except (TypeError, ValueError):
+        return 0.0
+    if ic <= 0 or loc <= 0:
+        return 0.0
+    item = get_item_by_code(ic, loc) or {}
+    for key in ('averagecost', 'costprice', 'landingcost'):
+        try:
+            value = float(item.get(key) or 0)
+        except (TypeError, ValueError):
+            value = 0.0
+        if value > 0:
+            return value
+    return 0.0
+
+
+def _print_list_current_stock(location_code: int, item_code: Any) -> float:
+    try:
+        from db import get_item_by_code
+
+        ic = int(item_code)
+        loc = int(location_code)
+    except (TypeError, ValueError):
+        return 0.0
+    if ic <= 0 or loc <= 0:
+        return 0.0
+    item = get_item_by_code(ic, loc) or {}
+    for key in ('currentstock', 'CURRENTSTOCK', 'current_stock'):
+        raw = item.get(key)
+        if raw is None or raw == '':
+            continue
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            continue
+    return 0.0
+
+
 def list_print_lists(
     location_code: Optional[int] = None,
     *,
@@ -276,6 +319,8 @@ def get_print_list_label_rows(location_code: int, print_no: int) -> Dict[str, An
                     "barcode": barcode,
                     "uom": str(ln.get("uom") or "PCS").strip() or "PCS",
                     "retailprice": float(ln.get("retail_price") or 0),
+                    "averagecost": _print_list_average_cost(location_code, ln.get("itemcode")),
+                    "currentstock": _print_list_current_stock(location_code, ln.get("itemcode")),
                     "print_count": _clamp_print_qty(ln.get("print_qty")),
                     "source": "PRINT_LIST",
                 }

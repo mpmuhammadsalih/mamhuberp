@@ -43,6 +43,15 @@ def save_general_settings(form: Dict[str, str]) -> Tuple[bool, str]:
         'pickup_enabled': _checkbox(form.get('pickup_enabled')),
         'delivery_enabled': _checkbox(form.get('delivery_enabled')),
         'coupons_enabled': _checkbox(form.get('coupons_enabled')),
+        'free_gift_wrap': _checkbox(form.get('free_gift_wrap')),
+        'erp_customer_code': (form.get('erp_customer_code') or '').strip(),
+        'erp_delivery_item_code': (form.get('erp_delivery_item_code') or '').strip(),
+        'header_trust_delivery': (form.get('header_trust_delivery') or '').strip(),
+        'header_trust_original': (form.get('header_trust_original') or '').strip(),
+        'header_trust_returns': (form.get('header_trust_returns') or '').strip(),
+        'header_trust_delivery_ar': (form.get('header_trust_delivery_ar') or '').strip(),
+        'header_trust_original_ar': (form.get('header_trust_original_ar') or '').strip(),
+        'header_trust_returns_ar': (form.get('header_trust_returns_ar') or '').strip(),
     })
     return True, 'Store settings saved'
 

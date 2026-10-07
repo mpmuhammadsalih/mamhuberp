@@ -13,6 +13,14 @@ PROMOTION_TYPES = frozenset({'PERCENTAGE', 'FIXED', 'FREE_DELIVERY'})
 
 
 def promotions_tables_ready() -> bool:
+    if _table_exists(PROMOTION_TABLE) and _table_exists(COUPON_TABLE):
+        return True
+    try:
+        from storefront_backend.services.schema_bootstrap import ensure_promotion_schema
+
+        ensure_promotion_schema()
+    except Exception:  # noqa: BLE001
+        return False
     return _table_exists(PROMOTION_TABLE) and _table_exists(COUPON_TABLE)
 
 

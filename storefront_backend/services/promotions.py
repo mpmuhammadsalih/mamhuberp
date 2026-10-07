@@ -7,6 +7,14 @@ from db import _get_connection, _safe_rows, _table_exists
 
 
 def _coupons_ready() -> bool:
+    if _table_exists('MH_COUPON') and _table_exists('MH_PROMOTION'):
+        return True
+    try:
+        from storefront_backend.services.schema_bootstrap import ensure_promotion_schema
+
+        ensure_promotion_schema()
+    except Exception:  # noqa: BLE001
+        return False
     return _table_exists('MH_COUPON') and _table_exists('MH_PROMOTION')
 
 

@@ -3309,8 +3309,23 @@ def _peek_billno_from_series(
     )
     if n is None:
         return None
-    formatted = format_document_no(series, n)
-    return _billno_storage_from_series(int(n), formatted)
+    try:
+        loc = int(location_code) if location_code is not None else 1
+    except (TypeError, ValueError):
+        loc = 1
+    inc = max(1, int(series.get('increment_by') or 1))
+    last_storage = None
+    for _ in range(200):
+        formatted = format_document_no(series, n)
+        storage = _billno_storage_from_series(int(n), formatted)
+        last_storage = storage
+        try:
+            if not billhdr_exists(loc, storage):
+                return storage
+        except Exception:
+            return storage
+        n += inc
+    return last_storage
 
 
 def _table_exists(table: str, db_key: Optional[str]=None) -> bool:
@@ -11571,6 +11586,12 @@ def resolve_customer_billtype(customer_code: Any, header: Optional[Dict[str, Any
 
     Walk-in (customer code 0) → ``C``. Credit customer → ``R``. Cash customer → ``C``.
     """
+    try:
+        cc = int(customer_code or 0)
+    except (TypeError, ValueError):
+        cc = 0
+    if cc > 0:
+        return billtype_from_customer_billing(_get_customer_billing_type(cc))
     h = header or {}
     pt = str(
         h.get('customer_billing_type')
@@ -11580,13 +11601,7 @@ def resolve_customer_billtype(customer_code: Any, header: Optional[Dict[str, Any
     ).strip().upper()
     if pt:
         return billtype_from_customer_billing(pt)
-    try:
-        cc = int(customer_code or 0)
-    except (TypeError, ValueError):
-        cc = 0
-    if cc <= 0:
-        return 'C'
-    return billtype_from_customer_billing(_get_customer_billing_type(cc))
+    return 'C'
 
 
 def _resolve_sales_billtype_from_customer(header: Dict[str, Any], customer_code: int) -> str:
@@ -18129,7 +18144,7 @@ def get_item_barcode_uom_variants(location_code: int, item_code: int, db_key: Op
     variants: List[Dict[str, Any]] = []
     seen_uom: set = set()
 
-    def _add(uom: str, barcode: str, retailprice: Any, source: str) -> None:
+    def _add(uom: str, barcode: str, retailprice: Any, source: str, unit_cost: Any = None) -> None:
         u = (uom or '').strip() or 'PCS'
         key = u.upper()
         if key in seen_uom:
@@ -18140,11 +18155,19 @@ def get_item_barcode_uom_variants(location_code: int, item_code: int, db_key: Op
             rp = float(retailprice or 0)
         except (TypeError, ValueError):
             rp = 0.0
-        variants.append({'uom': u, 'barcode': bc, 'retailprice': rp, 'source': source})
+        try:
+            cp = float(unit_cost or 0)
+        except (TypeError, ValueError):
+            cp = 0.0
+        variants.append({'uom': u, 'barcode': bc, 'retailprice': rp, 'costprice': cp, 'source': source})
 
     base_uom = (item.get('baseuom') or 'PCS').strip() or 'PCS'
     base_bc = str(item.get('manufacturerid') or ic).strip()
-    _add(base_uom, base_bc, item.get('retailprice'), 'BASE')
+    try:
+        base_cost = float(item.get('averagecost') or 0) or float(item.get('costprice') or 0) or float(item.get('landingcost') or 0)
+    except (TypeError, ValueError):
+        base_cost = 0.0
+    _add(base_uom, base_bc, item.get('retailprice'), 'BASE', base_cost)
     if _table_exists('ITEMALTERNATEUOMMAP', db_key=db_key):
         for alt in get_item_alternate_uoms(loc, ic) or []:
             au = (alt.get('alternateuomcode') or '').strip()
@@ -18154,8 +18177,29 @@ def get_item_barcode_uom_variants(location_code: int, item_code: int, db_key: Op
             arp = alt.get('retailprice')
             if arp is None:
                 arp = item.get('retailprice')
-            _add(au, abc, arp, 'ALT')
+            try:
+                alt_cost = float(alt.get('costprice') or 0)
+            except (TypeError, ValueError):
+                alt_cost = 0.0
+            if alt_cost <= 0:
+                alt_cost = base_cost
+            _add(au, abc, arp, 'ALT', alt_cost)
     return variants
+
+
+def _item_current_stock_qty(item: Optional[Dict[str, Any]]) -> float:
+    if not item:
+        return 0.0
+    for key in ('currentstock', 'CURRENTSTOCK', 'current_stock'):
+        raw = item.get(key)
+        if raw is None or raw == '':
+            continue
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            continue
+    return 0.0
+
 
 def search_barcode_management_item_picker(location_code: int, search: str='', limit: int=200, db_key: Optional[str]=None) -> List[Dict[str, Any]]:
     """Fast item popup list: one row per ITEMALTERNATEUOMMAP variant (barcode + retail price)."""
@@ -18180,6 +18224,13 @@ def search_barcode_management_item_picker(location_code: int, search: str='', li
     elif 'RETAILPRICE' not in alt_cols:
         rp_sql = '0'
     ac_sql = 'NVL(im.AVERAGECOST, 0)' if 'AVERAGECOST' in im_cols else '0'
+    cp_sql = 'NVL(im.COSTPRICE, 0)' if 'COSTPRICE' in im_cols else '0'
+    if 'COSTPRICE' in im_cols and 'AVERAGECOST' in im_cols:
+        label_cost_sql = 'NVL(NULLIF(im.AVERAGECOST, 0), NVL(im.COSTPRICE, 0))'
+    elif 'AVERAGECOST' in im_cols:
+        label_cost_sql = ac_sql
+    else:
+        label_cost_sql = cp_sql
     params: Dict[str, Any] = {'loc': loc, 'lim': cap}
     where_extra = ''
     pattern = (search or '').strip().upper()
@@ -18202,7 +18253,8 @@ def search_barcode_management_item_picker(location_code: int, search: str='', li
                        NVL(TRIM(alt.MANUFACTURERID), '') AS barcode,
                        NVL(TRIM(alt.ALTERNATEUOMCODE), 'PCS') AS uom,
                        {rp_sql} AS retailprice,
-                       {ac_sql} AS averagecost
+                       {label_cost_sql} AS averagecost,
+                       {cp_sql} AS costprice
                 FROM ITEMALTERNATEUOMMAP alt
                 JOIN ITEMMASTER im
                   ON im.LOCATIONCODE = alt.LOCATIONCODE
@@ -18230,6 +18282,7 @@ def search_barcode_management_item_picker(location_code: int, search: str='', li
             'uom': (r.get('uom') or '').strip() or 'PCS',
             'retailprice': float(r.get('retailprice') or 0),
             'averagecost': float(r.get('averagecost') or 0),
+            'costprice': float(r.get('costprice') or 0),
             'source': 'ALT',
         })
     return out
@@ -18321,9 +18374,24 @@ def search_barcode_management_products(location_code: int, search: str='', limit
             if name_ara == name:
                 name_ara = str(item.get('itemnameara') or '').strip()
         try:
+            cost_price = float(item.get('costprice') or 0) if item else 0.0
+        except (TypeError, ValueError):
+            cost_price = 0.0
+        try:
             avg_cost = float(item.get('averagecost') or 0) if item else 0.0
         except (TypeError, ValueError):
             avg_cost = 0.0
+        label_cost = avg_cost or cost_price
+        if label_cost <= 0 and item:
+            try:
+                label_cost = float(item.get('landingcost') or 0)
+            except (TypeError, ValueError):
+                label_cost = 0.0
+        if label_cost <= 0 and pick:
+            try:
+                label_cost = float(pick.get('costprice') or 0)
+            except (TypeError, ValueError):
+                label_cost = 0.0
         category_name = str(item.get('categoryname') or '').strip() if item else ''
         out.append({
             'itemcode': ic,
@@ -18333,7 +18401,9 @@ def search_barcode_management_products(location_code: int, search: str='', limit
             'barcode': pick.get('barcode'),
             'uom': pick.get('uom'),
             'retailprice': pick.get('retailprice'),
-            'averagecost': avg_cost,
+            'averagecost': label_cost,
+            'costprice': cost_price,
+            'currentstock': _item_current_stock_qty(item),
             'category': category_name,
             'source': pick.get('source'),
             'uom_options': variants,
@@ -18577,9 +18647,24 @@ def get_goods_receipt_barcode_label_rows(
             if name_ara == name:
                 name_ara = str(item.get('itemnameara') or '').strip()
         try:
+            cost_price = float(item.get('costprice') or 0) if item else 0.0
+        except (TypeError, ValueError):
+            cost_price = 0.0
+        try:
             avg_cost = float(item.get('averagecost') or 0) if item else 0.0
         except (TypeError, ValueError):
             avg_cost = 0.0
+        label_cost = avg_cost or cost_price
+        if label_cost <= 0 and item:
+            try:
+                label_cost = float(item.get('landingcost') or 0)
+            except (TypeError, ValueError):
+                label_cost = 0.0
+        if label_cost <= 0 and pick:
+            try:
+                label_cost = float(pick.get('costprice') or 0)
+            except (TypeError, ValueError):
+                label_cost = 0.0
         category_name = str(item.get('categoryname') or '').strip() if item else ''
         out_rows.append({
             'itemcode': ic,
@@ -18589,7 +18674,9 @@ def get_goods_receipt_barcode_label_rows(
             'barcode': bc,
             'uom': (pick.get('uom') if pick else uom_hint) or uom_hint,
             'retailprice': float(pick.get('retailprice') or 0) if pick else float(item.get('retailprice') or 0) if item else 0.0,
-            'averagecost': avg_cost,
+            'averagecost': label_cost,
+            'costprice': cost_price,
+            'currentstock': _item_current_stock_qty(item),
             'category': category_name,
             'source': (pick.get('source') if pick else 'GRN') or 'GRN',
             'uom_options': variants or [],
@@ -20711,6 +20798,8 @@ def ensure_itemmaster_staging_bin_storage_id_column(_db_key_ignored: Any=None) -
 
 _IM_INV_EXT_COLS_ENSURED_PROCESS = False
 _IM_IMAGE_PATH_COL_ENSURED = False
+_IM_DESCRIPTION_WIDTH_ENSURED = False
+_ITEMMASTER_DESCRIPTION_MAX = 2000
 
 
 def ensure_itemmaster_image_path_column(_db_key_ignored: Any=None) -> None:
@@ -20741,6 +20830,48 @@ def ensure_itemmaster_image_path_column(_db_key_ignored: Any=None) -> None:
             _IM_IMAGE_PATH_COL_ENSURED = True
         else:
             print(f'[ensure_itemmaster_image_path_column] {e}')
+    try:
+        k = im.upper()
+        _TABLE_COLUMNS_CACHE.pop(k, None)
+    except Exception:
+        pass
+
+
+def ensure_itemmaster_description_width(_db_key_ignored: Any=None) -> None:
+    """Widen ITEMMASTER.DESCRIPTION so ecommerce product copy can exceed 250 bytes."""
+    global _IM_DESCRIPTION_WIDTH_ENSURED
+    if _IM_DESCRIPTION_WIDTH_ENSURED:
+        return
+    im = _detect_table(['ITEMMASTER', 'itemmaster', 'ITEM_MASTER'])
+    if not im:
+        return
+    try:
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT NVL(CHAR_LENGTH, DATA_LENGTH) AS width
+                    FROM user_tab_columns
+                    WHERE table_name = :tbl AND column_name = 'DESCRIPTION'
+                    """,
+                    {'tbl': im.upper()},
+                )
+                row = cur.fetchone()
+                current = int((row[0] if row else 0) or 0)
+                if current >= _ITEMMASTER_DESCRIPTION_MAX:
+                    _IM_DESCRIPTION_WIDTH_ENSURED = True
+                    return
+                cur.execute(
+                    f'ALTER TABLE {im} MODIFY DESCRIPTION VARCHAR2({_ITEMMASTER_DESCRIPTION_MAX} CHAR)'
+                )
+            conn.commit()
+        _IM_DESCRIPTION_WIDTH_ENSURED = True
+    except Exception as e:
+        err = str(e).upper()
+        if 'ORA-01442' in err or '01442' in err:
+            _IM_DESCRIPTION_WIDTH_ENSURED = True
+        else:
+            print(f'[ensure_itemmaster_description_width] {e}')
     try:
         k = im.upper()
         _TABLE_COLUMNS_CACHE.pop(k, None)
@@ -21315,11 +21446,29 @@ def set_item_image_path(
     try:
         conn_ctx = _get_connection() if not db_key else _get_tenant_connection(str(db_key))
         with conn_ctx as conn:
-            with conn.cursor() as cur:
-                cur.execute(f"UPDATE {im} SET IMAGE_PATH = :path WHERE {' AND '.join(w)}", p)
-                if cur.rowcount == 0:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(f"UPDATE {im} SET IMAGE_PATH = :path WHERE {' AND '.join(w)}", p)
+                    # Request-scoped Oracle connections often report rowcount 0 after
+                    # earlier SELECTs/UPDATEs on the same connection. Rolling back then
+                    # undoes a successful IMAGE_PATH write and leaves Fetch from URL
+                    # with a file on disk but no listing/preview photo.
+                    if int(cur.rowcount or 0) == 0:
+                        lookup = {k: v for k, v in p.items() if k != 'path'}
+                        cur.execute(
+                            f"SELECT 1 FROM {im} WHERE {' AND '.join(w)} AND ROWNUM = 1",
+                            lookup,
+                        )
+                        if not cur.fetchone():
+                            conn.rollback()
+                            return (False, 'Item row not found for this location.')
+                        cur.execute(f"UPDATE {im} SET IMAGE_PATH = :path WHERE {' AND '.join(w)}", p)
+            except Exception as e:
+                try:
                     conn.rollback()
-                    return (False, 'Item row not found for this location.')
+                except Exception:
+                    pass
+                return (False, str(e))
             conn.commit()
         return (True, '')
     except Exception as e:
@@ -23504,8 +23653,13 @@ def _im_import_optional_price(d: Dict[str, Any], *keys: str) -> Optional[float]:
     v = _im_import_cell(d, *keys)
     if v is None or (isinstance(v, str) and not str(v).strip()):
         return None
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return float(v)
+    s = str(v).strip().replace(',', '')
+    if s.endswith('%'):
+        s = s[:-1].strip()
     try:
-        return float(str(v).strip())
+        return float(s)
     except (TypeError, ValueError):
         return None
 
@@ -23533,7 +23687,10 @@ def import_itemmaster_prices_from_excel_rows(
     max_rows: int = 10000,
 ) -> Dict[str, Any]:
     """Bulk price update by barcode for ITEMMASTER and ITEMALTERNATEUOMMAP."""
-    from .itemmaster_core import update_item_prices_by_barcode as _upd
+    from .itemmaster_core import (
+        _normalize_price_import_barcode,
+        update_item_prices_by_barcode as _upd,
+    )
 
     loc0 = int(location_code)
     errors: List[str] = []
@@ -23551,7 +23708,9 @@ def import_itemmaster_prices_from_excel_rows(
         if not any(v not in (None, '') and str(v).strip() != '' for v in nf.values()):
             continue
         processed += 1
-        bc = str(_im_import_cell(nf, 'barcode', 'manufacturer_id', 'manufacturerid', 'mfr_id') or '').strip()
+        bc = _normalize_price_import_barcode(
+            _im_import_cell(nf, 'barcode', 'manufacturer_id', 'manufacturerid', 'mfr_id', 'ean', 'upc')
+        )
         if not bc:
             errors.append(f'Row {sheet_row}: Barcode is required.')
             failed += 1
@@ -26565,6 +26724,8 @@ def _build_items_list_where(
     category_code: Optional[int]=None,
     supplier_code: Optional[str]=None,
     item_codes: Optional[List[int]]=None,
+    exclude_item_codes: Optional[List[int]]=None,
+    extra_conditions: Optional[List[str]]=None,
 ) -> Tuple[str, Dict[str, Any]]:
     where_conditions = []
     params: Dict[str, Any] = {}
@@ -26641,6 +26802,26 @@ def _build_items_list_where(
         where_conditions.append(f'{tbl_alias}.ITEMCODE IN ({placeholders})')
         for i, code in enumerate(item_codes):
             params[f'item_code_{i}'] = code
+    if exclude_item_codes:
+        excluded = []
+        for raw in exclude_item_codes:
+            try:
+                code = int(raw)
+            except (TypeError, ValueError):
+                continue
+            if code > 0:
+                excluded.append(code)
+        excluded = excluded[:400]
+        if excluded:
+            placeholders = ','.join([f':excl_item_{i}' for i in range(len(excluded))])
+            where_conditions.append(f'{tbl_alias}.ITEMCODE NOT IN ({placeholders})')
+            for i, code in enumerate(excluded):
+                params[f'excl_item_{i}'] = code
+    if extra_conditions:
+        for raw_cond in extra_conditions:
+            cond = str(raw_cond or '').strip()
+            if cond:
+                where_conditions.append(f'({cond})')
     where_clause = 'WHERE ' + ' AND '.join(where_conditions) if where_conditions else ''
     return (where_clause, params)
 
@@ -26680,6 +26861,8 @@ def get_items_list(
     category_code: Optional[int]=None,
     supplier_code: Optional[str]=None,
     item_codes: Optional[List[int]]=None,
+    exclude_item_codes: Optional[List[int]]=None,
+    extra_conditions: Optional[List[str]]=None,
     order_by: Optional[str]=None,
     order_direction: Optional[str]=None,
     page: Optional[int]=None,
@@ -26694,7 +26877,7 @@ def get_items_list(
     COUNT uses the same filters. ROWNUM pagination is Oracle 11g–safe.
     """
     tbl_alias = 'im'
-    where_clause, params = _build_items_list_where(tbl_alias, location_code=location_code, search=search, stock_filter=stock_filter, brand_code=brand_code, category_code=category_code, supplier_code=supplier_code, item_codes=item_codes)
+    where_clause, params = _build_items_list_where(tbl_alias, location_code=location_code, search=search, stock_filter=stock_filter, brand_code=brand_code, category_code=category_code, supplier_code=supplier_code, item_codes=item_codes, exclude_item_codes=exclude_item_codes, extra_conditions=extra_conditions)
     order_by_clause = f'ORDER BY {tbl_alias}.ITEMCODE DESC'
     _sql_cat_name = "(SELECT NVL(MAX(cat.NAME), '') FROM CATEGORY cat WHERE cat.CODE = im.CATEGORYCODE AND cat.FLAG = 'C')"
     _sql_brand_name = "(SELECT NVL(MAX(brand.NAME), '') FROM CATEGORY brand WHERE brand.CODE = im.BRANDCODE AND brand.FLAG = 'B')"
@@ -26741,6 +26924,8 @@ def get_items_list(
             NVL(im.RETAILPRICE, 0) AS RETAILPRICE,
             NVL(im.WHOLESALEPRICE, 0) AS WHOLESALEPRICE,
             im.ITEMFLAG,
+            im.CATEGORYCODE,
+            im.BRANDCODE,
             {name_select}
         FROM ITEMMASTER im
         {where_clause}
@@ -40910,10 +41095,81 @@ def _chat_next_id(cur, table: str, id_col: str) -> int:
     row = cur.fetchone()
     return int((row or [1])[0] or 1)
 
+def _parse_shop_customer_user_id(username: str) -> Optional[int]:
+    uname = (username or '').strip()
+    if not uname.upper().startswith('CUST:'):
+        return None
+    rest = uname.split(':', 1)[1].strip()
+    if not rest.isdigit():
+        return None
+    uid = int(rest)
+    return uid if uid > 0 else None
+
+
+def _is_shop_customer_chat_user(username: str) -> bool:
+    return _parse_shop_customer_user_id(username) is not None
+
+
+def chat_customer_username(user_id: int) -> str:
+    return f'CUST:{int(user_id)}'
+
+
+def _shop_customer_exists(username: str) -> bool:
+    uid = _parse_shop_customer_user_id(username)
+    if uid is None:
+        return False
+    try:
+        if not _table_exists('APP_USER'):
+            return False
+        rows = _safe_rows('SELECT USER_ID FROM APP_USER WHERE USER_ID = :id', {'id': uid})
+        return bool(rows)
+    except Exception:
+        return False
+
+
+def _shop_customer_display_name(username: str) -> str:
+    uid = _parse_shop_customer_user_id(username)
+    if uid is None:
+        return (username or '').strip() or 'Shop customer'
+    try:
+        rows = _safe_rows(
+            """
+            SELECT FIRST_NAME AS first_name, LAST_NAME AS last_name,
+                   EMAIL AS email, USERNAME AS username
+            FROM APP_USER
+            WHERE USER_ID = :id
+            """,
+            {'id': uid},
+        )
+    except Exception:
+        rows = []
+    if not rows:
+        return f'Shop customer #{uid}'
+    name = f"{rows[0].get('first_name') or ''} {rows[0].get('last_name') or ''}".strip()
+    return name or (rows[0].get('email') or rows[0].get('username') or f'Shop customer #{uid}')
+
+
+def chat_shop_customer_id_for_conversation(conversation_id: int) -> Optional[int]:
+    rows = _safe_rows_auth(
+        f"""
+        SELECT USERNAME FROM {CHAT_PARTICIPANTS_TABLE}
+        WHERE CONVERSATION_ID = :id AND NVL(ACTIVE_FLAG, 'Y') = 'Y'
+        """,
+        {'id': int(conversation_id or 0)},
+    )
+    for row in rows or []:
+        uid = _parse_shop_customer_user_id(str(row.get('username') or ''))
+        if uid:
+            return uid
+    return None
+
+
 def _chat_user_exists(username: str) -> bool:
     uname = (username or '').strip()
     if not uname:
         return False
+    if _is_shop_customer_chat_user(uname):
+        return _shop_customer_exists(uname)
     rows = _safe_rows_auth("\n        SELECT username\n        FROM login_users\n        WHERE UPPER(TRIM(username)) = UPPER(TRIM(:u))\n          AND UPPER(NVL(TRIM(active_flag), 'Y')) = 'Y'\n        ", {'u': uname})
     return bool(rows)
 
@@ -40973,11 +41229,14 @@ def ensure_chat_tables() -> None:
                 cur.execute(f"\n                    CREATE TABLE {CHAT_CONVERSATIONS_TABLE} (\n                        CONVERSATION_ID NUMBER PRIMARY KEY,\n                        CONVERSATION_TYPE VARCHAR2(10) DEFAULT 'DIRECT' NOT NULL,\n                        TITLE VARCHAR2(200),\n                        CREATED_BY VARCHAR2(100) NOT NULL,\n                        CREATED_DATE DATE DEFAULT SYSDATE,\n                        UPDATED_DATE DATE\n                    )\n                    ")
             cur.execute('SELECT COUNT(*) FROM user_tables WHERE table_name = :t', {'t': CHAT_PARTICIPANTS_TABLE})
             if int((cur.fetchone() or [0])[0] or 0) == 0:
-                cur.execute(f"\n                    CREATE TABLE {CHAT_PARTICIPANTS_TABLE} (\n                        CONVERSATION_ID NUMBER NOT NULL,\n                        USERNAME VARCHAR2(100) NOT NULL,\n                        JOINED_DATE DATE DEFAULT SYSDATE,\n                        LAST_READ_MSG_ID NUMBER,\n                        LAST_SEEN_DATE DATE,\n                        ACTIVE_FLAG CHAR(1) DEFAULT 'Y',\n                        PRIMARY KEY (CONVERSATION_ID, USERNAME)\n                    )\n                    ")
+                cur.execute(f"\n                    CREATE TABLE {CHAT_PARTICIPANTS_TABLE} (\n                        CONVERSATION_ID NUMBER NOT NULL,\n                        USERNAME VARCHAR2(100) NOT NULL,\n                        JOINED_DATE DATE DEFAULT SYSDATE,\n                        LAST_READ_MSG_ID NUMBER,\n                        LAST_SEEN_DATE DATE,\n                        CLEARED_MSG_ID NUMBER,\n                        ACTIVE_FLAG CHAR(1) DEFAULT 'Y',\n                        PRIMARY KEY (CONVERSATION_ID, USERNAME)\n                    )\n                    ")
             else:
                 cur.execute(f"\n                    SELECT COUNT(*) FROM user_tab_columns\n                    WHERE table_name = '{CHAT_PARTICIPANTS_TABLE}'\n                      AND column_name = 'LAST_SEEN_DATE'\n                    ")
                 if int((cur.fetchone() or [0])[0] or 0) == 0:
                     cur.execute(f'ALTER TABLE {CHAT_PARTICIPANTS_TABLE} ADD LAST_SEEN_DATE DATE')
+                cur.execute(f"\n                    SELECT COUNT(*) FROM user_tab_columns\n                    WHERE table_name = '{CHAT_PARTICIPANTS_TABLE}'\n                      AND column_name = 'CLEARED_MSG_ID'\n                    ")
+                if int((cur.fetchone() or [0])[0] or 0) == 0:
+                    cur.execute(f'ALTER TABLE {CHAT_PARTICIPANTS_TABLE} ADD CLEARED_MSG_ID NUMBER')
             cur.execute('SELECT COUNT(*) FROM user_tables WHERE table_name = :t', {'t': CHAT_MESSAGES_TABLE})
             if int((cur.fetchone() or [0])[0] or 0) == 0:
                 cur.execute(f"\n                    CREATE TABLE {CHAT_MESSAGES_TABLE} (\n                        MESSAGE_ID NUMBER PRIMARY KEY,\n                        CONVERSATION_ID NUMBER NOT NULL,\n                        SENDER_USERNAME VARCHAR2(100) NOT NULL,\n                        MESSAGE_TEXT CLOB,\n                        IMAGE_URL VARCHAR2(500),\n                        FILE_URL VARCHAR2(500),\n                        FILE_NAME VARCHAR2(255),\n                        FILE_MIME VARCHAR2(120),\n                        REPLIED_MESSAGE_ID NUMBER,\n                        EDITED_FLAG CHAR(1) DEFAULT 'N',\n                        EDITED_DATE DATE,\n                        CREATED_DATE DATE DEFAULT SYSDATE,\n                        ACTIVE_FLAG CHAR(1) DEFAULT 'Y'\n                    )\n                    ")
@@ -41318,7 +41577,64 @@ def chat_list_users(current_user: str, search: str='', tenant_id: Optional[str]=
     if q:
         params['q'] = f'%{q.upper()}%'
         where_search = " AND (UPPER(NVL(u.username,'')) LIKE :q OR UPPER(NVL(TO_CHAR(u.employeecode),'')) LIKE :q" + (" OR UPPER(NVL(TO_CHAR(u.tenant_id),'')) LIKE :q" if do_all else '') + ')'
-    return _safe_rows_auth(f"\n        SELECT u.username, u.employeecode, u.tenant_id, ls.last_seen_date\n        FROM login_users u\n        LEFT JOIN (\n            SELECT UPPER(TRIM(USERNAME)) AS uname_n, MAX(LAST_SEEN_DATE) AS LAST_SEEN_DATE\n            FROM {CHAT_PARTICIPANTS_TABLE}\n            GROUP BY UPPER(TRIM(USERNAME))\n        ) ls ON ls.uname_n = UPPER(TRIM(u.username))\n        WHERE UPPER(NVL(TRIM(u.active_flag), 'Y')) = 'Y'\n          AND UPPER(TRIM(u.username)) <> UPPER(TRIM(:u))\n          {where_tenant}\n          {where_search}\n        ORDER BY u.username\n        ", params)
+    staff_rows = _safe_rows_auth(f"\n        SELECT u.username, u.employeecode, u.tenant_id, ls.last_seen_date\n        FROM login_users u\n        LEFT JOIN (\n            SELECT UPPER(TRIM(USERNAME)) AS uname_n, MAX(LAST_SEEN_DATE) AS LAST_SEEN_DATE\n            FROM {CHAT_PARTICIPANTS_TABLE}\n            GROUP BY UPPER(TRIM(USERNAME))\n        ) ls ON ls.uname_n = UPPER(TRIM(u.username))\n        WHERE UPPER(NVL(TRIM(u.active_flag), 'Y')) = 'Y'\n          AND UPPER(TRIM(u.username)) <> UPPER(TRIM(:u))\n          {where_tenant}\n          {where_search}\n        ORDER BY u.username\n        ", params)
+    return list(chat_list_shop_customers(search)) + list(staff_rows or [])
+
+
+def chat_list_shop_customers(search: str = '') -> List[Dict[str, Any]]:
+    if not _table_exists('APP_USER'):
+        return []
+    params: Dict[str, Any] = {}
+    where = "USER_TYPE = 'CUSTOMER' AND NVL(IS_ACTIVE, 1) = 1"
+    q = (search or '').strip()
+    if q:
+        params['q'] = f'%{q.upper()}%'
+        where += (
+            " AND (UPPER(NVL(FIRST_NAME,'') || ' ' || NVL(LAST_NAME,'')) LIKE :q"
+            " OR UPPER(NVL(EMAIL,'')) LIKE :q"
+            " OR UPPER(NVL(USERNAME,'')) LIKE :q"
+            " OR UPPER(NVL(MOBILE,'')) LIKE :q)"
+        )
+    try:
+        rows = _safe_rows(
+            f"""
+            SELECT * FROM (
+                SELECT USER_ID AS user_id,
+                       FIRST_NAME AS first_name,
+                       LAST_NAME AS last_name,
+                       EMAIL AS email,
+                       USERNAME AS username,
+                       LAST_LOGIN_AT AS last_login_at
+                FROM APP_USER
+                WHERE {where}
+                ORDER BY NVL(LAST_LOGIN_AT, CREATED_AT) DESC NULLS LAST, USER_ID DESC
+            ) WHERE ROWNUM <= 80
+            """,
+            params,
+        )
+    except Exception:
+        return []
+    out: List[Dict[str, Any]] = []
+    for row in rows or []:
+        try:
+            uid = int(row.get('user_id') or 0)
+        except (TypeError, ValueError):
+            uid = 0
+        if uid <= 0:
+            continue
+        name = f"{row.get('first_name') or ''} {row.get('last_name') or ''}".strip()
+        name = name or (row.get('email') or row.get('username') or f'Customer #{uid}')
+        out.append(
+            {
+                'username': chat_customer_username(uid),
+                'employeecode': name,
+                'tenant_id': 'SHOP',
+                'display_name': name,
+                'last_seen_date': row.get('last_login_at'),
+                'is_shop_customer': True,
+            }
+        )
+    return out
 
 def chat_get_or_create_direct_conversation(user_a: str, user_b: str, tenant_id: Optional[str]=None) -> int:
     ensure_chat_tables()
@@ -41328,9 +41644,10 @@ def chat_get_or_create_direct_conversation(user_a: str, user_b: str, tenant_id: 
         raise ValueError('Both users are required.')
     if not _chat_user_exists(ua) or not _chat_user_exists(ub):
         raise ValueError('Invalid chat user.')
+    shop_chat = _is_shop_customer_chat_user(ua) or _is_shop_customer_chat_user(ub)
     ta = _chat_normalize_tenant(tenant_id) or _chat_normalize_tenant(_chat_user_tenant(ua))
     tb = _chat_normalize_tenant(_chat_user_tenant(ub))
-    if not chat_user_can_message_all_tenants(ua) and (not _chat_pair_may_direct_message(ta, tb)):
+    if not shop_chat and (not chat_user_can_message_all_tenants(ua)) and (not _chat_pair_may_direct_message(ta, tb)):
         raise ValueError('You can only chat with users from your tenant or HO users.')
     with _get_connection_auth() as conn:
         with conn.cursor() as cur:
@@ -41394,17 +41711,79 @@ def chat_get_conversations(username: str) -> List[Dict[str, Any]]:
     if not uname:
         return []
     _chat_touch_presence(uname)
-    rows = _safe_rows_auth(f"\n        SELECT\n            c.CONVERSATION_ID,\n            c.CONVERSATION_TYPE,\n            c.TITLE,\n            c.UPDATED_DATE,\n            NVL(cp.LAST_READ_MSG_ID, 0) AS LAST_READ_MSG_ID,\n            (\n                SELECT p2.USERNAME\n                FROM {CHAT_PARTICIPANTS_TABLE} p2\n                WHERE p2.CONVERSATION_ID = c.CONVERSATION_ID\n                  AND UPPER(TRIM(p2.USERNAME)) <> UPPER(TRIM(:u))\n                  AND ROWNUM = 1\n            ) AS DIRECT_OTHER_USER,\n            (\n                SELECT p2.LAST_SEEN_DATE\n                FROM {CHAT_PARTICIPANTS_TABLE} p2\n                WHERE p2.CONVERSATION_ID = c.CONVERSATION_ID\n                  AND UPPER(TRIM(p2.USERNAME)) <> UPPER(TRIM(:u))\n                  AND ROWNUM = 1\n            ) AS DIRECT_OTHER_LAST_SEEN,\n            (\n                SELECT m.SENDER_USERNAME\n                FROM {CHAT_MESSAGES_TABLE} m\n                WHERE m.MESSAGE_ID = (\n                    SELECT MAX(m2.MESSAGE_ID)\n                    FROM {CHAT_MESSAGES_TABLE} m2\n                    WHERE m2.CONVERSATION_ID = c.CONVERSATION_ID\n                      AND NVL(m2.ACTIVE_FLAG, 'Y') = 'Y'\n                )\n            ) AS LAST_SENDER,\n            (\n                SELECT m.MESSAGE_TEXT\n                FROM {CHAT_MESSAGES_TABLE} m\n                WHERE m.MESSAGE_ID = (\n                    SELECT MAX(m2.MESSAGE_ID)\n                    FROM {CHAT_MESSAGES_TABLE} m2\n                    WHERE m2.CONVERSATION_ID = c.CONVERSATION_ID\n                      AND NVL(m2.ACTIVE_FLAG, 'Y') = 'Y'\n                )\n            ) AS LAST_TEXT,\n            (\n                SELECT m.IMAGE_URL\n                FROM {CHAT_MESSAGES_TABLE} m\n                WHERE m.MESSAGE_ID = (\n                    SELECT MAX(m2.MESSAGE_ID)\n                    FROM {CHAT_MESSAGES_TABLE} m2\n                    WHERE m2.CONVERSATION_ID = c.CONVERSATION_ID\n                      AND NVL(m2.ACTIVE_FLAG, 'Y') = 'Y'\n                )\n            ) AS LAST_IMAGE_URL,\n            (\n                SELECT m.FILE_NAME\n                FROM {CHAT_MESSAGES_TABLE} m\n                WHERE m.MESSAGE_ID = (\n                    SELECT MAX(m2.MESSAGE_ID)\n                    FROM {CHAT_MESSAGES_TABLE} m2\n                    WHERE m2.CONVERSATION_ID = c.CONVERSATION_ID\n                      AND NVL(m2.ACTIVE_FLAG, 'Y') = 'Y'\n                )\n            ) AS LAST_FILE_NAME,\n            (\n                SELECT m.CREATED_DATE\n                FROM {CHAT_MESSAGES_TABLE} m\n                WHERE m.MESSAGE_ID = (\n                    SELECT MAX(m2.MESSAGE_ID)\n                    FROM {CHAT_MESSAGES_TABLE} m2\n                    WHERE m2.CONVERSATION_ID = c.CONVERSATION_ID\n                      AND NVL(m2.ACTIVE_FLAG, 'Y') = 'Y'\n                )\n            ) AS LAST_CREATED_DATE,\n            (\n                SELECT COUNT(*)\n                FROM {CHAT_MESSAGES_TABLE} um\n                WHERE um.CONVERSATION_ID = c.CONVERSATION_ID\n                  AND NVL(um.ACTIVE_FLAG, 'Y') = 'Y'\n                  AND UPPER(TRIM(um.SENDER_USERNAME)) <> UPPER(TRIM(:u))\n                  AND um.MESSAGE_ID > NVL(cp.LAST_READ_MSG_ID, 0)\n            ) AS UNREAD_COUNT\n        FROM {CHAT_CONVERSATIONS_TABLE} c\n        JOIN {CHAT_PARTICIPANTS_TABLE} cp ON cp.CONVERSATION_ID = c.CONVERSATION_ID\n        WHERE UPPER(TRIM(cp.USERNAME)) = UPPER(TRIM(:u))\n          AND NVL(cp.ACTIVE_FLAG, 'Y') = 'Y'\n        ORDER BY NVL(c.UPDATED_DATE, c.CREATED_DATE) DESC, c.CONVERSATION_ID DESC\n        ", {'u': uname})
+    rows = _safe_rows_auth(f"\n        SELECT\n            c.CONVERSATION_ID,\n            c.CONVERSATION_TYPE,\n            c.TITLE,\n            c.UPDATED_DATE,\n            NVL(cp.LAST_READ_MSG_ID, 0) AS LAST_READ_MSG_ID,\n            NVL(cp.CLEARED_MSG_ID, 0) AS CLEARED_MSG_ID,\n            (\n                SELECT MAX(cm.MESSAGE_ID)\n                FROM {CHAT_MESSAGES_TABLE} cm\n                WHERE cm.CONVERSATION_ID = c.CONVERSATION_ID\n                  AND NVL(cm.ACTIVE_FLAG, 'Y') = 'Y'\n            ) AS LAST_MESSAGE_ID,\n            (\n                SELECT p2.USERNAME FROM (\n                    SELECT p3.USERNAME\n                    FROM {CHAT_PARTICIPANTS_TABLE} p3\n                    WHERE p3.CONVERSATION_ID = c.CONVERSATION_ID\n                      AND UPPER(TRIM(p3.USERNAME)) <> UPPER(TRIM(:u))\n                    ORDER BY CASE WHEN UPPER(TRIM(p3.USERNAME)) LIKE 'CUST:%' THEN 0 ELSE 1 END\n                ) p2 WHERE ROWNUM = 1\n            ) AS DIRECT_OTHER_USER,\n            (\n                SELECT p2.LAST_SEEN_DATE\n                FROM {CHAT_PARTICIPANTS_TABLE} p2\n                WHERE p2.CONVERSATION_ID = c.CONVERSATION_ID\n                  AND UPPER(TRIM(p2.USERNAME)) <> UPPER(TRIM(:u))\n                  AND ROWNUM = 1\n            ) AS DIRECT_OTHER_LAST_SEEN,\n            (\n                SELECT m.SENDER_USERNAME\n                FROM {CHAT_MESSAGES_TABLE} m\n                WHERE m.MESSAGE_ID = (\n                    SELECT MAX(m2.MESSAGE_ID)\n                    FROM {CHAT_MESSAGES_TABLE} m2\n                    WHERE m2.CONVERSATION_ID = c.CONVERSATION_ID\n                      AND NVL(m2.ACTIVE_FLAG, 'Y') = 'Y'\n                )\n            ) AS LAST_SENDER,\n            (\n                SELECT m.MESSAGE_TEXT\n                FROM {CHAT_MESSAGES_TABLE} m\n                WHERE m.MESSAGE_ID = (\n                    SELECT MAX(m2.MESSAGE_ID)\n                    FROM {CHAT_MESSAGES_TABLE} m2\n                    WHERE m2.CONVERSATION_ID = c.CONVERSATION_ID\n                      AND NVL(m2.ACTIVE_FLAG, 'Y') = 'Y'\n                )\n            ) AS LAST_TEXT,\n            (\n                SELECT m.IMAGE_URL\n                FROM {CHAT_MESSAGES_TABLE} m\n                WHERE m.MESSAGE_ID = (\n                    SELECT MAX(m2.MESSAGE_ID)\n                    FROM {CHAT_MESSAGES_TABLE} m2\n                    WHERE m2.CONVERSATION_ID = c.CONVERSATION_ID\n                      AND NVL(m2.ACTIVE_FLAG, 'Y') = 'Y'\n                )\n            ) AS LAST_IMAGE_URL,\n            (\n                SELECT m.FILE_NAME\n                FROM {CHAT_MESSAGES_TABLE} m\n                WHERE m.MESSAGE_ID = (\n                    SELECT MAX(m2.MESSAGE_ID)\n                    FROM {CHAT_MESSAGES_TABLE} m2\n                    WHERE m2.CONVERSATION_ID = c.CONVERSATION_ID\n                      AND NVL(m2.ACTIVE_FLAG, 'Y') = 'Y'\n                )\n            ) AS LAST_FILE_NAME,\n            (\n                SELECT m.CREATED_DATE\n                FROM {CHAT_MESSAGES_TABLE} m\n                WHERE m.MESSAGE_ID = (\n                    SELECT MAX(m2.MESSAGE_ID)\n                    FROM {CHAT_MESSAGES_TABLE} m2\n                    WHERE m2.CONVERSATION_ID = c.CONVERSATION_ID\n                      AND NVL(m2.ACTIVE_FLAG, 'Y') = 'Y'\n                )\n            ) AS LAST_CREATED_DATE,\n            (\n                SELECT COUNT(*)\n                FROM {CHAT_MESSAGES_TABLE} um\n                WHERE um.CONVERSATION_ID = c.CONVERSATION_ID\n                  AND NVL(um.ACTIVE_FLAG, 'Y') = 'Y'\n                  AND UPPER(TRIM(um.SENDER_USERNAME)) <> UPPER(TRIM(:u))\n                  AND um.MESSAGE_ID > NVL(cp.LAST_READ_MSG_ID, 0)\n            ) AS UNREAD_COUNT\n        FROM {CHAT_CONVERSATIONS_TABLE} c\n        LEFT JOIN {CHAT_PARTICIPANTS_TABLE} cp\n          ON cp.CONVERSATION_ID = c.CONVERSATION_ID\n         AND UPPER(TRIM(cp.USERNAME)) = UPPER(TRIM(:u))\n         AND NVL(cp.ACTIVE_FLAG, 'Y') = 'Y'\n        WHERE (\n            cp.USERNAME IS NOT NULL\n            OR (\n              :shop = 'Y'\n              AND EXISTS (\n                SELECT 1 FROM {CHAT_PARTICIPANTS_TABLE} sp\n                WHERE sp.CONVERSATION_ID = c.CONVERSATION_ID\n                  AND UPPER(TRIM(sp.USERNAME)) LIKE 'CUST:%'\n                  AND NVL(sp.ACTIVE_FLAG, 'Y') = 'Y'\n              )\n            )\n        )\n        ORDER BY NVL(c.UPDATED_DATE, c.CREATED_DATE) DESC, c.CONVERSATION_ID DESC\n        ", {'u': uname, 'shop': 'N' if _is_shop_customer_chat_user(uname) else 'Y'})
     for r in rows:
         ctype = (r.get('conversation_type') or '').upper()
         r['last_text'] = _chat_decode_emoji_text(_chat_text_value(r.get('last_text')))
-        r['display_name'] = (r.get('title') or '').strip() if ctype == 'GROUP' else r.get('direct_other_user') or 'Direct Chat'
+        cleared_id = int(r.get('cleared_msg_id') or 0)
+        last_mid = int(r.get('last_message_id') or 0)
+        if last_mid and last_mid <= cleared_id:
+            r['last_text'] = ''
+            r['last_image_url'] = ''
+            r['last_file_name'] = ''
+            r['last_sender'] = ''
+            r['unread_count'] = 0
+        other = str(r.get('direct_other_user') or '').strip()
+        if ctype == 'GROUP':
+            r['display_name'] = (r.get('title') or '').strip() or 'Chat'
+            r['is_shop_customer'] = False
+        elif _is_shop_customer_chat_user(other):
+            r['display_name'] = _shop_customer_display_name(other)
+            r['is_shop_customer'] = True
+        else:
+            r['display_name'] = other or 'Direct Chat'
+            r['is_shop_customer'] = _is_shop_customer_chat_user(uname)
         r['unread_count'] = int(r.get('unread_count') or 0)
     return rows
 
+def _chat_add_participant(conversation_id: int, username: str) -> None:
+    uname = (username or '').strip()
+    cid = int(conversation_id or 0)
+    if not uname or cid <= 0:
+        return
+    with _get_connection_auth() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT 1 FROM {CHAT_PARTICIPANTS_TABLE}
+                WHERE CONVERSATION_ID = :id
+                  AND UPPER(TRIM(USERNAME)) = UPPER(TRIM(:u))
+                """,
+                {'id': cid, 'u': uname},
+            )
+            if cur.fetchone():
+                cur.execute(
+                    f"""
+                    UPDATE {CHAT_PARTICIPANTS_TABLE}
+                    SET ACTIVE_FLAG = 'Y'
+                    WHERE CONVERSATION_ID = :id
+                      AND UPPER(TRIM(USERNAME)) = UPPER(TRIM(:u))
+                    """,
+                    {'id': cid, 'u': uname},
+                )
+            else:
+                cur.execute(
+                    f"""
+                    INSERT INTO {CHAT_PARTICIPANTS_TABLE}
+                        (CONVERSATION_ID, USERNAME, JOINED_DATE, ACTIVE_FLAG)
+                    VALUES (:id, :u, SYSDATE, 'Y')
+                    """,
+                    {'id': cid, 'u': uname},
+                )
+        conn.commit()
+
+
 def _chat_is_participant(conversation_id: int, username: str) -> bool:
-    rows = _safe_rows_auth(f"\n        SELECT 1\n        FROM {CHAT_PARTICIPANTS_TABLE}\n        WHERE CONVERSATION_ID = :id\n          AND UPPER(TRIM(USERNAME)) = UPPER(TRIM(:u))\n          AND NVL(ACTIVE_FLAG, 'Y') = 'Y'\n        ", {'id': conversation_id, 'u': (username or '').strip()})
-    return bool(rows)
+    uname = (username or '').strip()
+    rows = _safe_rows_auth(f"\n        SELECT 1\n        FROM {CHAT_PARTICIPANTS_TABLE}\n        WHERE CONVERSATION_ID = :id\n          AND UPPER(TRIM(USERNAME)) = UPPER(TRIM(:u))\n          AND NVL(ACTIVE_FLAG, 'Y') = 'Y'\n        ", {'id': conversation_id, 'u': uname})
+    if rows:
+        return True
+    if _is_shop_customer_chat_user(uname):
+        return False
+    if _chat_user_exists(uname) and chat_shop_customer_id_for_conversation(conversation_id):
+        _chat_add_participant(conversation_id, uname)
+        return True
+    return False
 
 def _chat_touch_presence(username: str, conversation_id: Optional[int]=None) -> None:
     uname = (username or '').strip()
@@ -41425,8 +41804,20 @@ def chat_get_messages(conversation_id: int, username: str, limit: int=150) -> Li
     ensure_chat_tables()
     if not _chat_is_participant(conversation_id, username):
         raise ValueError('You are not a participant in this conversation.')
+    cleared_rows = _safe_rows_auth(
+        f"""
+        SELECT NVL(CLEARED_MSG_ID, 0) AS CLEARED_MSG_ID
+        FROM {CHAT_PARTICIPANTS_TABLE}
+        WHERE CONVERSATION_ID = :id
+          AND UPPER(TRIM(USERNAME)) = UPPER(TRIM(:u))
+        """,
+        {'id': conversation_id, 'u': username},
+    )
+    cleared_id = int((cleared_rows[0].get('cleared_msg_id') if cleared_rows else 0) or 0)
     rows = _safe_rows_auth(f"\n        SELECT *\n        FROM (\n            SELECT\n                m.MESSAGE_ID,\n                m.CONVERSATION_ID,\n                m.SENDER_USERNAME,\n                m.MESSAGE_TEXT,\n                m.IMAGE_URL,\n                m.FILE_URL,\n                m.FILE_NAME,\n                m.FILE_MIME,\n                m.REPLIED_MESSAGE_ID,\n                (\n                    SELECT rm.SENDER_USERNAME\n                    FROM {CHAT_MESSAGES_TABLE} rm\n                    WHERE rm.MESSAGE_ID = m.REPLIED_MESSAGE_ID\n                ) AS REPLY_TO_SENDER,\n                (\n                    SELECT rm.MESSAGE_TEXT\n                    FROM {CHAT_MESSAGES_TABLE} rm\n                    WHERE rm.MESSAGE_ID = m.REPLIED_MESSAGE_ID\n                ) AS REPLY_TO_TEXT,\n                m.EDITED_FLAG,\n                m.EDITED_DATE,\n                m.CREATED_DATE\n            FROM {CHAT_MESSAGES_TABLE} m\n            WHERE m.CONVERSATION_ID = :id\n              AND NVL(m.ACTIVE_FLAG, 'Y') = 'Y'\n            ORDER BY m.MESSAGE_ID DESC\n        )\n        WHERE ROWNUM <= :lim\n        ", {'id': conversation_id, 'lim': max(1, min(int(limit or 150), 300))})
     rows = list(reversed(rows))
+    if cleared_id:
+        rows = [r for r in rows if int(r.get('message_id') or 0) > cleared_id]
     participant_rows = _safe_rows_auth(f"\n        SELECT USERNAME, NVL(LAST_READ_MSG_ID, 0) AS LAST_READ_MSG_ID\n        FROM {CHAT_PARTICIPANTS_TABLE}\n        WHERE CONVERSATION_ID = :id\n          AND NVL(ACTIVE_FLAG, 'Y') = 'Y'\n        ", {'id': conversation_id})
     readers = {str(p.get('username') or '').strip().upper(): int(p.get('last_read_msg_id') or 0) for p in participant_rows}
     for r in rows:
@@ -41537,6 +41928,44 @@ def chat_edit_message(message_id: int, editor_username: str, new_text: str) -> b
                 cur.execute(f'\n                    UPDATE {CHAT_CONVERSATIONS_TABLE}\n                    SET UPDATED_DATE = SYSDATE\n                    WHERE CONVERSATION_ID = (\n                        SELECT CONVERSATION_ID FROM {CHAT_MESSAGES_TABLE} WHERE MESSAGE_ID = :id\n                    )\n                    ', {'id': message_id})
         conn.commit()
     return bool(updated)
+
+def chat_clear_conversation(conversation_id: int, username: str) -> int:
+    """Hide existing messages from this user's chat box. The other side keeps their history."""
+    ensure_chat_tables()
+    cid = int(conversation_id or 0)
+    uname = (username or '').strip()
+    if cid <= 0 or not uname:
+        raise ValueError('Conversation is required.')
+    if not _chat_is_participant(cid, uname):
+        raise ValueError('You are not a participant in this conversation.')
+    max_rows = _safe_rows_auth(
+        f"""
+        SELECT NVL(MAX(MESSAGE_ID), 0) AS MAX_ID
+        FROM {CHAT_MESSAGES_TABLE}
+        WHERE CONVERSATION_ID = :id
+          AND NVL(ACTIVE_FLAG, 'Y') = 'Y'
+        """,
+        {'id': cid},
+    )
+    max_id = int((max_rows[0].get('max_id') if max_rows else 0) or 0)
+    with _get_connection_auth() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                UPDATE {CHAT_PARTICIPANTS_TABLE}
+                SET CLEARED_MSG_ID = :m,
+                    LAST_READ_MSG_ID = :m
+                WHERE CONVERSATION_ID = :id
+                  AND UPPER(TRIM(USERNAME)) = UPPER(TRIM(:u))
+                """,
+                {'m': max_id, 'id': cid, 'u': uname},
+            )
+            updated = cur.rowcount or 0
+        conn.commit()
+    if not updated:
+        raise ValueError('Could not clear this chat.')
+    return max_id
+
 
 def chat_delete_message(message_id: int, editor_username: str) -> bool:
     ensure_chat_tables()

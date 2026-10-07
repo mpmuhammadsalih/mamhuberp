@@ -23,8 +23,17 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     'checkout_enabled': True,
     'pickup_enabled': True,
     'delivery_enabled': True,
-    'coupons_enabled': False,
+    'coupons_enabled': True,
+    'free_gift_wrap': False,
     'show_all_items_on_web': False,
+    'erp_customer_code': '',
+    'erp_delivery_item_code': '',
+    'header_trust_delivery': 'Free Delivery in Qatar on orders over QAR 200',
+    'header_trust_original': '100% Original Toys',
+    'header_trust_returns': 'Easy Returns',
+    'header_trust_delivery_ar': 'توصيل مجاني في قطر للطلبات فوق 200 ر.ق',
+    'header_trust_original_ar': 'ألعاب أصلية 100%',
+    'header_trust_returns_ar': 'إرجاع سهل',
 }
 
 
@@ -34,6 +43,10 @@ def show_all_items_on_web() -> bool:
 
 def coupons_enabled() -> bool:
     return bool(load_store_settings().get('coupons_enabled'))
+
+
+def free_gift_wrap_enabled() -> bool:
+    return bool(load_store_settings().get('free_gift_wrap'))
 
 
 def _settings_path() -> Path:

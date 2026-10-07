@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('ecommerce.static', filename='css/ecommerce.css') }}?v=33" />
+{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page ecommerce-page ecommerce-snoonu-page">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Snoonu</h1>
+      <p class="page-po__muted">
+        Products with no image · click an item to fetch name, photos, description, and specs from Snoonu.
+      </p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('ecommerce.products', image='missing') }}" class="page-po__btn-secondary">← Products</a>
+    </div>
+  </div>
+
+  <div class="ecommerce-snoonu-split">
+    <aside class="ecommerce-form-panel ecommerce-snoonu-list">
+      <div class="ecommerce-snoonu-list__head">
+        <h2>No-image products</h2>
+        <p class="page-po__muted">{{ items_total }} item{{ '' if items_total == 1 else 's' }}</p>
+      </div>
+      <form method="get" action="{{ url_for('ecommerce.snoonu') }}" class="ecommerce-snoonu-list__search">
+        <label for="snoonuItemSearch">Search item name</label>
+        <input
+          id="snoonuItemSearch"
+          name="q"
+          type="search"
+          class="input"
+          value="{{ items_search }}"
+          placeholder="Search item name or code"
+        />
+        <button type="submit" class="page-po__btn-secondary">Search</button>
+      </form>
+      <ul class="ecommerce-snoonu-list__items">
+        {% for row in items %}
+        <li>
+          <a
+            class="ecommerce-snoonu-list__item{% if selected and selected.item_code == row.item_code %} is-active{% endif %}"
+            href="{{ url_for('ecommerce.snoonu', item_code=row.item_code, q=items_search or None, page=items_page if items_page > 1 else None) }}"
+          >
+            <span class="ecommerce-snoonu-list__code">{{ row.item_code }}</span>
+            <span class="ecommerce-snoonu-list__name">{{ row.item_name or 'Untitled' }}</span>
+          </a>
+        </li>
+        {% else %}
+        <li class="page-po__muted" style="padding:12px;">No products are missing an image.</li>
+        {% endfor %}
+      </ul>
+      {% if items_pages > 1 %}
+      <nav class="ecommerce-snoonu-pager" aria-label="Product pages">
+        {% if items_page > 1 %}
+        <a href="{{ url_for('ecommerce.snoonu', q=items_search or None, page=items_page - 1, item_code=selected.item_code if selected else None) }}">Prev</a>
+        {% endif %}
+        <span>Page {{ items_page }} / {{ items_pages }}</span>
+        {% if items_page < items_pages %}
+        <a href="{{ url_for('ecommerce.snoonu', q=items_search or None, page=items_page + 1, item_code=selected.item_code if selected else None) }}">Next</a>
+        {% endif %}
+      </nav>
+      {% endif %}
+    </aside>
+
+    <section class="ecommerce-form-panel ecommerce-snoonu-detail">
+      {% if selected %}
+      <p class="ecommerce-snoonu-kicker">Selected item</p>
+      <h2 class="ecommerce-snoonu-title">{{ selected.item_name }}</h2>
+      <p class="page-po__muted">
+        Code {{ selected.item_code }}
+        {% if selected.barcode %} · {{ selected.barcode }}{% endif %}
+        {% if selected.price %} · QAR {{ '%.2f'|format(selected.price) }}{% endif %}
+        · <a href="{{ url_for('ecommerce.product_edit', item_code=selected.item_code) }}">Open item</a>
+      </p>
+
+      <form method="post" action="{{ url_for('ecommerce.snoonu') }}" class="ecommerce-snoonu-form">
+        <input type="hidden" name="item_code" value="{{ selected.item_code }}" />
+        <input type="hidden" name="item_name" value="{{ selected.item_name }}" />
+        {% if items_search %}<input type="hidden" name="q" value="{{ items_search }}" />{% endif %}
+        {% if items_page > 1 %}<input type="hidden" name="page" value="{{ items_page }}" />{% endif %}
+        <div class="form-group">
+          <label for="page_url">Snoonu product URL</label>
+          <input
+            id="page_url"
+            name="page_url"
+            type="url"
+            class="input"
+            inputmode="url"
+            autocomplete="url"
+            placeholder="https://snoonu.com/product/…"
+            value="{{ page_url or '' }}"
+          />
+          <p class="page-po__muted">
+            Paste the full Snoonu product link. It must include the ID after the name,
+            like <code>/product/name/6a9139479f3d2f4a580c2b73</code>. A name-only link returns 404.
+          </p>
+        </div>
+        <button type="submit" class="page-po__btn-primary">Fetch from Snoonu</button>
+      </form>
+      {% else %}
+      <p class="ecommerce-snoonu-kicker">Snoonu listing</p>
+      <h2 class="ecommerce-snoonu-title">Pick an item</h2>
+      <p class="page-po__muted">Click a product on the left. We will look up that item name on Snoonu and show the result here.</p>
+      {% endif %}
+
+      {% if result %}
+      <div class="ecommerce-snoonu-result">
+        <p class="ecommerce-snoonu-kicker">Snoonu result</p>
+        <h3 class="ecommerce-snoonu-title">{{ result.title or 'Untitled product' }}</h3>
+        <p class="page-po__muted">
+          {% if result.price %}{{ result.currency or 'QAR' }} {{ '%.2f'|format(result.price) }}{% endif %}
+          {% if result.page_url %}
+            · <a href="{{ result.page_url }}" target="_blank" rel="noopener noreferrer">Open Snoonu link</a>
+          {% endif %}
+        </p>
+        {% if selected %}
+        <p class="ecommerce-snoonu-verdict ecommerce-snoonu-verdict--{{ result.name_verdict or 'different' }}">
+          Your name vs Snoonu: {{ result.name_verdict or 'different' }}
+        </p>
+        {% endif %}
+
+        {% if result.image_urls %}
+        <div class="ecommerce-snoonu-gallery">
+          {% for src in result.image_urls %}
+          <a href="{{ src }}" target="_blank" rel="noopener noreferrer" class="ecommerce-snoonu-gallery__item">
+            <img src="{{ src }}" alt="{{ result.title }}" />
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if result.description %}
+        <div class="ecommerce-snoonu-block">
+          <h3>Description</h3>
+          <p>{{ result.description }}</p>
+        </div>
+        {% endif %}
+
+        {% if result.specifications %}
+        <div class="ecommerce-snoonu-block">
+          <h3>Specifications</h3>
+          <pre>{{ result.specifications }}</pre>
+        </div>
+        {% endif %}
+      </div>
+      {% elif selected %}
+      <p class="page-po__muted" style="margin-top:16px;">
+        Paste the Snoonu product URL for <strong>{{ selected.item_name }}</strong>, then Fetch.
+      </p>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

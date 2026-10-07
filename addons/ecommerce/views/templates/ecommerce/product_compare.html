@@ -1,0 +1,380 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('ecommerce.static', filename='css/ecommerce.css') }}?v=31" />
+{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page ecommerce-page ecommerce-compare-page">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Product comparison</h1>
+      <p class="page-po__muted">
+        {{ product.item_name }} · Code {{ product.item_code }}
+        {% if lowest_price and highest_price and lowest_price != highest_price %}
+        · Lowest QAR {{ '%.2f'|format(lowest_price) }} · Highest QAR {{ '%.2f'|format(highest_price) }}
+        {% endif %}
+      </p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a
+        href="{{ url_for('ecommerce.compare_stores', next=url_for('ecommerce.product_compare', item_code=product.item_code)) }}"
+        class="page-po__btn-secondary"
+      >Store master</a>
+      <a
+        href="{{ url_for('ecommerce.product_edit', item_code=product.item_code, **nav_kwargs) }}"
+        class="page-po__btn-secondary"
+      >← Back to edit</a>
+    </div>
+  </div>
+
+  <form
+    method="post"
+    action="{{ url_for('ecommerce.product_compare', item_code=product.item_code) }}"
+    class="ecommerce-form-panel ecommerce-compare-form"
+    id="compareForm"
+  >
+    {% if nav_kwargs.q %}<input type="hidden" name="q" value="{{ nav_kwargs.q }}" />{% endif %}
+    {% if nav_kwargs.page %}<input type="hidden" name="page" value="{{ nav_kwargs.page }}" />{% endif %}
+    {% if nav_kwargs.sort %}<input type="hidden" name="sort" value="{{ nav_kwargs.sort }}" />{% endif %}
+    {% if nav_kwargs.order %}<input type="hidden" name="order" value="{{ nav_kwargs.order }}" />{% endif %}
+    {% if nav_kwargs.web %}<input type="hidden" name="web" value="{{ nav_kwargs.web }}" />{% endif %}
+    {% if nav_kwargs.image %}<input type="hidden" name="image" value="{{ nav_kwargs.image }}" />{% endif %}
+
+    <fieldset class="ecommerce-compare-form__fieldset">
+      <legend>Compare with other stores</legend>
+      <p class="page-po__muted" id="compare-url-help">
+        Edit the product name, then Find URLs with AI to search Qatar shops. You can also pick a store and paste a URL. Add URL saves. Compare fetches image, description, and price.
+      </p>
+      <div class="ecommerce-compare-search">
+        <label class="ecommerce-compare-urls__label" for="compareSearchName">Product name to search</label>
+        <input
+          id="compareSearchName"
+          name="search_query"
+          type="text"
+          class="input"
+          maxlength="120"
+          autocomplete="off"
+          spellcheck="true"
+          placeholder="Product name"
+          value="{{ search_query or product.item_name }}"
+        />
+        <p class="page-po__muted">This starts as the item name. Shorten or correct it before searching.</p>
+      </div>
+      <div id="compareUrlList">
+        {% for entry in entries %}
+        <div class="ecommerce-compare-urls__row">
+          <div class="ecommerce-compare-urls__field">
+            <label class="ecommerce-compare-urls__label" for="compare_store_id_{{ loop.index }}">Store</label>
+            <select id="compare_store_id_{{ loop.index }}" name="compare_store_id" class="input ecommerce-compare-urls__store">
+              <option value="">Choose store</option>
+              {% for store in compare_stores %}
+              <option value="{{ store.store_id }}" {% if entry.store_id and entry.store_id|int == store.store_id|int %}selected{% endif %}>{{ store.store_name }}</option>
+              {% endfor %}
+            </select>
+            <input type="hidden" name="compare_store" value="{{ entry.store_name or '' }}" />
+          </div>
+          <div class="ecommerce-compare-urls__field ecommerce-compare-urls__field--url">
+            <label class="ecommerce-compare-urls__label" for="compare_url_{{ loop.index }}">Product URL</label>
+            <input
+              id="compare_url_{{ loop.index }}"
+              name="compare_url"
+              type="text"
+              class="input"
+              inputmode="url"
+              autocomplete="url"
+              enterkeyhint="next"
+              placeholder="https://…"
+              spellcheck="false"
+              aria-describedby="compare-url-help"
+              value="{{ entry.url }}"
+            />
+          </div>
+          <button type="button" class="page-po__btn-secondary compare-url-remove">Remove</button>
+        </div>
+        {% endfor %}
+        <div class="ecommerce-compare-urls__row">
+          <div class="ecommerce-compare-urls__field">
+            <label class="ecommerce-compare-urls__label" for="compare_store_id_new">Store</label>
+            <select id="compare_store_id_new" name="compare_store_id" class="input ecommerce-compare-urls__store">
+              <option value="">Choose store</option>
+              {% for store in compare_stores %}
+              <option value="{{ store.store_id }}">{{ store.store_name }}</option>
+              {% endfor %}
+            </select>
+            <input type="hidden" name="compare_store" value="" />
+          </div>
+          <div class="ecommerce-compare-urls__field ecommerce-compare-urls__field--url">
+            <label class="ecommerce-compare-urls__label" for="compare_url_new">Product URL</label>
+            <input
+              id="compare_url_new"
+              name="compare_url"
+              type="text"
+              class="input"
+              inputmode="url"
+              autocomplete="url"
+              enterkeyhint="done"
+              placeholder="https://…"
+              spellcheck="false"
+              aria-describedby="compare-url-help"
+              value=""
+            />
+          </div>
+          <button type="button" class="page-po__btn-secondary compare-url-remove">Remove</button>
+        </div>
+      </div>
+      <div class="ecommerce-compare-form__actions">
+        <button
+          type="button"
+          class="page-po__btn-secondary"
+          id="compareFindBtn"
+          data-find-url="{{ find_urls_url or url_for('ecommerce.product_compare_find_urls', item_code=product.item_code) }}"
+        >Find URLs with AI</button>
+        <button type="submit" class="page-po__btn-secondary" name="compare_action" value="save" id="compareUrlAddBtn">Add URL</button>
+        <a
+          href="{{ url_for('ecommerce.compare_stores', next=url_for('ecommerce.product_compare', item_code=product.item_code)) }}"
+          class="page-po__btn-secondary"
+        >Add store</a>
+        <button type="submit" class="page-po__btn-primary" id="compareSubmitBtn">Compare</button>
+      </div>
+      <p class="page-po__muted ecommerce-compare-find__status" id="compareFindStatus" aria-live="polite"></p>
+    </fieldset>
+    <template id="compareUrlRowTpl">
+      <div class="ecommerce-compare-urls__row">
+        <div class="ecommerce-compare-urls__field">
+          <label class="ecommerce-compare-urls__label">Store</label>
+          <select name="compare_store_id" class="input ecommerce-compare-urls__store">
+            <option value="">Choose store</option>
+            {% for store in compare_stores %}
+            <option value="{{ store.store_id }}">{{ store.store_name }}</option>
+            {% endfor %}
+          </select>
+          <input type="hidden" name="compare_store" value="" />
+        </div>
+        <div class="ecommerce-compare-urls__field ecommerce-compare-urls__field--url">
+          <label class="ecommerce-compare-urls__label">Product URL</label>
+          <input
+            name="compare_url"
+            type="text"
+            class="input"
+            inputmode="url"
+            autocomplete="url"
+            enterkeyhint="next"
+            placeholder="https://…"
+            spellcheck="false"
+            aria-describedby="compare-url-help"
+            value=""
+          />
+        </div>
+        <button type="button" class="page-po__btn-secondary compare-url-remove">Remove</button>
+      </div>
+    </template>
+  </form>
+
+  {% if rows %}
+  <p class="page-po__muted ecommerce-compare-legend">
+    <span class="ecommerce-compare-price is-low">Lowest price</span>
+    <span class="ecommerce-compare-price is-high">Highest price</span>
+  </p>
+
+  <div class="ecommerce-compare-grid">
+    {% for row in rows %}
+    <article class="ecommerce-compare-card{% if row.is_ours %} is-ours{% endif %}">
+      <div class="ecommerce-compare-card__media">
+        {% if row.image_url %}
+        <img
+          src="{{ row.image_url }}"
+          alt=""
+          width="120"
+          height="120"
+          loading="{% if loop.first %}eager{% else %}lazy{% endif %}"
+          referrerpolicy="no-referrer"
+        />
+        {% else %}
+        <span class="ecommerce-compare-card__empty">No image</span>
+        {% endif %}
+      </div>
+      <p class="ecommerce-compare-card__source">{{ row.source }}{% if row.is_ours %} (this product){% endif %}</p>
+      <h2 class="ecommerce-compare-card__title">{{ row.title or 'Untitled' }}</h2>
+      {% if row.price %}
+      <p class="ecommerce-compare-price{% if row.price_rank == 'low' %} is-low{% elif row.price_rank == 'high' %} is-high{% endif %}">
+        {{ row.currency or 'QAR' }} {{ '%.2f'|format(row.price) }}
+        {% if row.price_rank == 'low' %} · lowest{% elif row.price_rank == 'high' %} · highest{% endif %}
+      </p>
+      {% else %}
+      <p class="page-po__muted">No price found</p>
+      {% endif %}
+      {% if row.description %}
+      <p class="ecommerce-compare-card__desc">{{ row.description }}</p>
+      {% endif %}
+      {% if row.error %}
+      <p class="ecommerce-compare-card__error">{{ row.error }}</p>
+      {% endif %}
+      {% if row.page_url %}
+      <a class="ecommerce-compare-card__link" href="{{ row.page_url }}" target="_blank" rel="noopener noreferrer">Open page</a>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+<script>
+(function () {
+  var list = document.getElementById('compareUrlList');
+  var form = document.getElementById('compareForm');
+  var submitBtn = document.getElementById('compareSubmitBtn');
+  var findBtn = document.getElementById('compareFindBtn');
+  var findStatus = document.getElementById('compareFindStatus');
+  var tpl = document.getElementById('compareUrlRowTpl');
+  if (!list) return;
+
+  function setFindStatus(message, ok) {
+    if (!findStatus) return;
+    findStatus.textContent = message || '';
+    findStatus.className = 'page-po__muted ecommerce-compare-find__status' + (
+      ok === true ? ' is-ok' : ok === false ? ' is-error' : ''
+    );
+  }
+
+  function filledUrls() {
+    return Array.prototype.map.call(list.querySelectorAll('input[name="compare_url"]'), function (input) {
+      return String(input.value || '').trim().replace(/\/+$/, '').toLowerCase();
+    }).filter(Boolean);
+  }
+
+  function emptyRow() {
+    var rows = list.querySelectorAll('.ecommerce-compare-urls__row');
+    for (var i = 0; i < rows.length; i += 1) {
+      var input = rows[i].querySelector('input[name="compare_url"]');
+      if (input && !String(input.value || '').trim()) return rows[i];
+    }
+    return null;
+  }
+
+  function addBlankRow() {
+    if (!tpl || list.querySelectorAll('.ecommerce-compare-urls__row').length >= 8) return null;
+    list.appendChild(tpl.content.cloneNode(true));
+    return list.querySelector('.ecommerce-compare-urls__row:last-child');
+  }
+
+  function ensureStoreOption(storeId, storeName) {
+    if (!storeId || !storeName) return;
+    var id = String(storeId);
+    function addOption(select) {
+      if (!select) return;
+      var exists = Array.prototype.some.call(select.options, function (opt) {
+        return opt.value === id;
+      });
+      if (exists) return;
+      var opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = storeName;
+      select.appendChild(opt);
+    }
+    list.querySelectorAll('select[name="compare_store_id"]').forEach(addOption);
+    if (tpl) addOption(tpl.content.querySelector('select[name="compare_store_id"]'));
+  }
+
+  function fillSuggestion(item) {
+    var url = String((item && item.url) || '').trim();
+    if (!url) return false;
+    var key = url.replace(/\/+$/, '').toLowerCase();
+    if (filledUrls().indexOf(key) !== -1) return false;
+    ensureStoreOption(item.store_id, item.store_name);
+    var row = emptyRow() || addBlankRow();
+    if (!row) return false;
+    var store = row.querySelector('select[name="compare_store_id"]');
+    var nameInput = row.querySelector('input[name="compare_store"]');
+    var input = row.querySelector('input[name="compare_url"]');
+    if (store && item.store_id) store.value = String(item.store_id);
+    if (nameInput) nameInput.value = String(item.store_name || '');
+    if (input) input.value = url;
+    return true;
+  }
+
+  if (findBtn) {
+    findBtn.addEventListener('click', function () {
+      var url = findBtn.getAttribute('data-find-url');
+      if (!url) return;
+      var searchInput = document.getElementById('compareSearchName');
+      var searchQuery = searchInput ? String(searchInput.value || '').trim() : '';
+      if (!searchQuery) {
+        setFindStatus('Enter a product name to search.', false);
+        if (searchInput) searchInput.focus();
+        return;
+      }
+      findBtn.disabled = true;
+      findBtn.textContent = 'Finding…';
+      setFindStatus('Searching Qatar stores for “' + searchQuery + '”…');
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({ search_query: searchQuery }),
+      }).then(function (resp) {
+        return resp.json().then(function (data) {
+          return { ok: resp.ok, data: data || {} };
+        });
+      }).then(function (result) {
+        var data = result.data;
+        if (!result.ok || !data.ok) {
+          setFindStatus(data.error || 'Could not find matching product URLs.', false);
+          return;
+        }
+        (data.suggestions || []).forEach(fillSuggestion);
+        if (!emptyRow()) addBlankRow();
+        var query = data.identified && data.identified.search_query
+          ? ' Searched for “' + data.identified.search_query + '”.'
+          : '';
+        setFindStatus((data.message || 'URLs filled.') + query + ' Review, then Add URL or Compare.', true);
+      }).catch(function () {
+        setFindStatus('Could not reach the finder. Try again.', false);
+      }).then(function () {
+        findBtn.disabled = false;
+        findBtn.textContent = 'Find URLs with AI';
+      });
+    });
+  }
+
+  function rowCount() {
+    return list.querySelectorAll('.ecommerce-compare-urls__row').length;
+  }
+
+  list.addEventListener('click', function (event) {
+    var btn = event.target.closest('.compare-url-remove');
+    if (!btn) return;
+    var row = btn.closest('.ecommerce-compare-urls__row');
+    if (!row) return;
+    if (rowCount() <= 1) {
+      row.querySelectorAll('input').forEach(function (input) {
+        input.value = '';
+      });
+      return;
+    }
+    row.remove();
+  });
+  if (form && submitBtn) {
+    form.addEventListener('submit', function (event) {
+      var submitter = event.submitter;
+      var action = (submitter && submitter.getAttribute('name') === 'compare_action')
+        ? String(submitter.value || '')
+        : '';
+      if (action === 'save') {
+        var holder = document.createElement('input');
+        holder.type = 'hidden';
+        holder.name = 'compare_action';
+        holder.value = 'save';
+        form.appendChild(holder);
+        if (submitter) submitter.textContent = 'Saving…';
+        return;
+      }
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Comparing…';
+    });
+  }
+})();
+</script>
+{% endblock %}

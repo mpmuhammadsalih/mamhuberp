@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -21,9 +23,16 @@ from addons.ecommerce.services import cms_admin as cms_svc
 from addons.ecommerce.services import media as media_svc
 from addons.ecommerce.services import promotions as promotions_svc
 from addons.ecommerce.services import reports as reports_svc
+from addons.ecommerce.services import assist as assist_svc
 from addons.ecommerce.services import reviews as reviews_svc
 from addons.ecommerce.services import product_edit as product_edit_svc
 from addons.ecommerce.services import product_images as product_images_svc
+from addons.ecommerce.services import product_page_import as product_page_import_svc
+from addons.ecommerce.services import snoonu as snoonu_svc
+from addons.ecommerce.services import product_compare as product_compare_svc
+from addons.ecommerce.services import product_compare_find as product_compare_find_svc
+from addons.ecommerce.services import product_web_meta as web_meta_svc
+from addons.ecommerce import compare_stores_db
 from addons.ecommerce.services import arabic_translate as arabic_translate_svc
 from addons.ecommerce.services import settings as settings_svc
 
@@ -39,9 +48,11 @@ bp = Blueprint(
 ECOMMERCE_PAGES = (
     'dashboard',
     'orders',
+    'live_orders',
     'products',
     'categories',
     'customers',
+    'assist',
     'promotions',
     'reviews',
     'media',
@@ -49,6 +60,8 @@ ECOMMERCE_PAGES = (
     'inventory',
     'reports',
     'settings',
+    'compare_stores',
+    'snoonu',
 )
 
 
@@ -58,6 +71,71 @@ def _int_query(name: str, default: int = 1) -> int:
         return int(raw)
     except (TypeError, ValueError):
         return default
+
+
+def _web_filter(raw: str | None = None) -> str:
+    value = (raw if raw is not None else request.args.get('web') or request.form.get('web') or '').strip().lower()
+    if value in ('hidden', 'featured', 'on'):
+        return value
+    return 'all'
+
+
+def _image_filter(raw: str | None = None) -> str:
+    value = (
+        raw
+        if raw is not None
+        else request.args.get('image') or request.form.get('image') or ''
+    ).strip().lower()
+    if value in ('missing', 'none', 'no', 'without'):
+        return 'missing'
+    if value in ('has', 'with', 'ok'):
+        return 'has'
+    return 'all'
+
+
+def _as_form_bool(name: str) -> bool:
+    return str(request.form.get(name) or '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def _product_edit_query() -> dict:
+    sort_column = (request.form.get('sort') or request.args.get('sort') or '').strip()
+    sort_order = (request.form.get('order') or request.args.get('order') or '').strip()
+    search = (request.form.get('q') or request.args.get('q') or '').strip()
+    page = request.form.get('page') or request.args.get('page') or 1
+    try:
+        page = max(1, int(page))
+    except (TypeError, ValueError):
+        page = 1
+    web = _web_filter()
+    image = _image_filter()
+    return {
+        'q': search or None,
+        'page': page if page > 1 else None,
+        'sort': sort_column or None,
+        'order': sort_order if sort_order in ('asc', 'desc') else None,
+        'web': web if web != 'all' else None,
+        'image': image if image != 'all' else None,
+    }
+
+
+def _products_redirect_kwargs() -> dict:
+    page = request.form.get('page') or request.args.get('page') or 1
+    sort_column = (request.form.get('sort') or request.args.get('sort') or '').strip()
+    sort_order = (request.form.get('order') or request.args.get('order') or '').strip()
+    try:
+        page = max(1, int(page))
+    except (TypeError, ValueError):
+        page = 1
+    web = _web_filter()
+    image = _image_filter()
+    return {
+        'q': request.form.get('q') or request.args.get('q') or None,
+        'page': page if page > 1 else None,
+        'sort': sort_column or None,
+        'order': sort_order if sort_order in ('asc', 'desc') else None,
+        'web': web if web != 'all' else None,
+        'image': image if image != 'all' else None,
+    }
 
 
 @bp.before_request
@@ -76,17 +154,111 @@ def dashboard():
     )
 
 
+def _orders_filter_args() -> dict:
+    period = (request.args.get('period') or 'today').strip().lower() or 'today'
+    if period not in ('today', 'yesterday', 'last_7', 'last_30', 'last_180', 'custom', 'all'):
+        period = 'today'
+    tab = (request.args.get('tab') or 'all').strip().lower() or 'all'
+    if tab not in ('all', 'preparing', 'ready', 'delivered', 'cancelled'):
+        tab = 'all'
+    channel = (request.args.get('channel') or 'all').strip().lower() or 'all'
+    if channel not in ('all', 'web', 'whatsapp'):
+        channel = 'all'
+    return {
+        'status': (request.args.get('status') or '').strip() or None,
+        'tab': tab,
+        'search': (request.args.get('q') or '').strip() or None,
+        'period': period,
+        'date_from': (request.args.get('date_from') or '').strip() or None,
+        'date_to': (request.args.get('date_to') or '').strip() or None,
+        'channel': channel,
+    }
+
+
 @bp.route('/orders')
 def orders():
     page = _int_query('page', 1)
-    status = (request.args.get('status') or '').strip() or None
-    search = (request.args.get('q') or '').strip() or None
-    data = orders_svc.list_orders_page(page=page, page_size=20, status=status, search=search)
+    data = orders_svc.list_orders_page(page=page, page_size=20, **_orders_filter_args())
     return render_template(
         'ecommerce/orders.html',
-        title='Ecommerce — Orders',
+        title='Ecommerce — Order history',
         **data,
     )
+
+
+@bp.route('/orders/export.xlsx')
+def orders_export():
+    data = orders_svc.list_orders_page(page=1, page_size=2000, **_orders_filter_args())
+    try:
+        from openpyxl import Workbook
+    except ImportError:
+        flash('Excel export requires openpyxl.', 'error')
+        return redirect(url_for('ecommerce.orders', **{k: v for k, v in _orders_filter_args().items() if v}))
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Order history'
+    ws.append(['Order ID', 'Channel', 'Status', 'Order total', 'Branch', 'Customer', 'Payment', 'Created'])
+    for row in data.get('orders') or []:
+        ws.append([
+            row.get('order_number') or '',
+            row.get('channel_label') or row.get('created_by_name') or 'Web',
+            row.get('display_status') or row.get('order_status') or '',
+            float(row.get('grand_total') or 0),
+            row.get('branch_name') or '',
+            row.get('customer_name') or row.get('customer_email') or '',
+            row.get('payment_status') or '',
+            str(row.get('created_at') or '')[:19],
+        ])
+    bio = io.BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    fname = f"order_history_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    return Response(
+        bio.getvalue(),
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': f'attachment; filename="{fname}"'},
+    )
+
+
+@bp.route('/orders/latest-alert')
+def orders_latest_alert():
+    data = orders_db.latest_order_alert()
+    return jsonify({'ok': True, **data})
+
+
+@bp.route('/live-orders')
+def live_orders():
+    data = orders_svc.live_orders_payload()
+    return render_template(
+        'ecommerce/live_orders.html',
+        title='Ecommerce — Live orders',
+        **data,
+    )
+
+
+@bp.route('/live-orders/feed')
+def live_orders_feed():
+    search = (request.args.get('q') or '').strip() or None
+    return jsonify({'ok': True, **orders_svc.live_orders_payload(search=search)})
+
+
+@bp.route('/live-orders/<int:order_id>/status', methods=['POST'])
+def live_order_status(order_id: int):
+    payload = request.get_json(silent=True) or {}
+    status = (payload.get('status') or request.form.get('status') or '').strip()
+    notes = (payload.get('notes') or request.form.get('notes') or '').strip() or None
+    updated_by = session.get('user_id')
+    try:
+        updated_by = int(updated_by) if updated_by is not None else None
+    except (TypeError, ValueError):
+        updated_by = None
+    ok, message = orders_svc.change_order_status(
+        order_id,
+        status,
+        notes=notes,
+        updated_by=updated_by,
+    )
+    return jsonify({'ok': ok, 'message': message}), (200 if ok else 400)
 
 
 @bp.route('/orders/<int:order_id>')
@@ -95,11 +267,37 @@ def order_detail(order_id: int):
     if not order:
         flash('Order not found.', 'error')
         return redirect(url_for('ecommerce.orders'))
+    invoice_pdf_url = ''
+    billno = str(order.get('erp_billno') or '').strip()
+    if billno:
+        try:
+            invoice_pdf_url = url_for(
+                'reports.crystal_reports_open_report',
+                report_name='cashbilldup',
+                billno=billno,
+            )
+        except Exception:
+            invoice_pdf_url = url_for('sales.sales_invoice_list', tab='invoice', q=billno)
     return render_template(
         'ecommerce/order_detail.html',
         title=f"Order {order.get('order_number') or order_id}",
         order=order,
         status_options=sorted(orders_db.ALLOWED_STATUSES),
+        invoice_pdf_url=invoice_pdf_url,
+    )
+
+
+@bp.route('/orders/<int:order_id>/receipt')
+def order_receipt(order_id: int):
+    order = orders_svc.get_order_receipt(order_id)
+    if not order:
+        flash('Order not found.', 'error')
+        return redirect(url_for('ecommerce.orders'))
+    return render_template(
+        'ecommerce/order_receipt.html',
+        title=f"Receipt {order.get('order_number') or order_id}",
+        order=order,
+        auto_print=(request.args.get('print') or '').strip() == '1',
     )
 
 
@@ -122,20 +320,54 @@ def order_status(order_id: int):
     return redirect(url_for('ecommerce.order_detail', order_id=order_id))
 
 
+@bp.route('/orders/<int:order_id>/create-sales-invoice', methods=['POST'])
+def order_create_sales_invoice(order_id: int):
+    """Post this web order to ERP Sales Invoice (BILLHDR) and deduct stock."""
+    updated_by = session.get('user_id')
+    try:
+        updated_by = int(updated_by) if updated_by is not None else None
+    except (TypeError, ValueError):
+        updated_by = None
+    result = orders_svc.create_sales_invoice(
+        order_id,
+        created_by=session.get('user'),
+        updated_by=updated_by,
+    )
+    flash(result.get('message') or result.get('error') or 'Invoice action failed.', 'message' if result.get('ok') else 'error')
+    return redirect(url_for('ecommerce.order_detail', order_id=order_id))
+
+
+@bp.route('/orders/<int:order_id>/remove', methods=['POST'])
+def order_remove(order_id: int):
+    """Delete a website/WhatsApp order only if no ERP bill exists yet."""
+    ok, message = orders_svc.remove_uninvoiced_order(order_id)
+    flash(message, 'message' if ok else 'error')
+    if ok:
+        return redirect(url_for('ecommerce.orders'))
+    return redirect(url_for('ecommerce.order_detail', order_id=order_id))
+
+
 @bp.route('/products')
 def products():
     page = _int_query('page', 1)
     search = (request.args.get('q') or '').strip()
     sort_column = (request.args.get('sort') or '').strip().lower()
     sort_order = (request.args.get('order') or '').strip().lower()
+    if not sort_column:
+        sort_column = 'itemcode'
+        sort_order = 'asc'
     if sort_order not in ('asc', 'desc'):
-        sort_order = ''
+        sort_order = 'asc'
+    web = _web_filter()
+    image = _image_filter()
     items, total, loc = catalog_svc.list_products(
         page=page,
         per_page=50,
         search=search or None,
         order_by=sort_column or None,
         order_direction=sort_order or None,
+        web_filter=web,
+        image_filter=image,
     )
     return render_template(
         'ecommerce/products.html',
@@ -146,8 +378,13 @@ def products():
         search=search,
         sort_column=sort_column,
         sort_order=sort_order,
+        web_filter=web,
+        image_filter=image,
         location_code=loc,
         show_all_items_on_web=settings_store.show_all_items_on_web(),
+        pending_image_skus=product_images_svc.count_items_missing_images(loc),
+        product_image_skus=product_images_svc.count_items_with_images(loc),
+        product_gallery_skus=product_images_svc.count_product_gallery_images(),
     )
 
 
@@ -157,14 +394,33 @@ def product_edit(item_code: int):
     if not product:
         flash('Product not found.', 'error')
         return redirect(url_for('ecommerce.products'))
+    back_q = (request.args.get('q') or '').strip()
+    back_sort = (request.args.get('sort') or '').strip()
+    back_order = (request.args.get('order') or '').strip()
+    back_web = _web_filter()
+    back_image = _image_filter()
+    descending = (back_sort or 'itemcode') == 'itemcode' and back_order == 'desc'
+    prev_item_code, next_item_code = catalog_svc.adjacent_product_codes(
+        item_code,
+        search=back_q or None,
+        web_filter=back_web,
+        image_filter=back_image,
+        descending=descending,
+    )
+    nav_kwargs = _product_edit_query()
     return render_template(
         'ecommerce/product_edit.html',
         title=f'Edit product {item_code}',
         product=product,
-        back_q=(request.args.get('q') or '').strip(),
+        back_q=back_q,
         back_page=_int_query('page', 1),
-        back_sort=(request.args.get('sort') or '').strip(),
-        back_order=(request.args.get('order') or '').strip(),
+        back_sort=back_sort,
+        back_order=back_order,
+        back_web=back_web,
+        back_image=back_image,
+        prev_item_code=prev_item_code,
+        next_item_code=next_item_code,
+        nav_kwargs=nav_kwargs,
     )
 
 
@@ -190,27 +446,22 @@ def products_update_row(item_code: int):
         remove_image=remove_image,
         gallery_uploads=request.files.getlist('gallery_images'),
         remove_gallery_ids=request.form.getlist('remove_gallery'),
+        remove_all_gallery=_as_form_bool('remove_all_gallery'),
+        age_group_ids=request.form.getlist('age_group_id'),
+        seo_title=request.form.get('seo_title'),
+        seo_description=request.form.get('seo_description'),
+        touch_seo='seo_title' in request.form or 'seo_description' in request.form,
+        show_on_web=_as_form_bool('show_on_web'),
+        is_featured=_as_form_bool('is_featured'),
+        is_addon=_as_form_bool('is_addon'),
+        touch_web_flags='touch_web_flags' in request.form,
+        import_page_url=request.form.get('import_page_url'),
+        touch_import_page_url='import_page_url' in request.form,
     )
     flash(message, 'message' if ok else 'error')
-    return_to = (request.form.get('return_to') or '').strip().lower()
-    if return_to == 'edit':
-        return redirect(url_for('ecommerce.product_edit', item_code=item_code))
-    page = request.form.get('page') or request.args.get('page') or 1
-    sort_column = (request.form.get('sort') or request.args.get('sort') or '').strip()
-    sort_order = (request.form.get('order') or request.args.get('order') or '').strip()
-    try:
-        page = max(1, int(page))
-    except (TypeError, ValueError):
-        page = 1
-    return redirect(
-        url_for(
-            'ecommerce.products',
-            q=request.form.get('q') or request.args.get('q') or None,
-            page=page if page > 1 else None,
-            sort=sort_column or None,
-            order=sort_order if sort_order in ('asc', 'desc') else None,
-        )
-    )
+    if not ok:
+        return redirect(url_for('ecommerce.product_edit', item_code=item_code, **_product_edit_query()))
+    return redirect(url_for('ecommerce.products', **_products_redirect_kwargs()))
 
 
 @bp.route('/products/<int:item_code>/translate-arabic', methods=['POST'])
@@ -262,7 +513,7 @@ def product_translate_arabic(item_code: int):
 def products_web_catalog():
     ok, message = settings_svc.save_web_catalog_settings(request.form.to_dict())
     flash(message, 'message' if ok else 'error')
-    return redirect(url_for('ecommerce.products', q=request.form.get('q') or None))
+    return redirect(url_for('ecommerce.products', **_products_redirect_kwargs()))
 
 
 @bp.route('/products/images/template.xlsx', methods=['GET'])
@@ -276,9 +527,21 @@ def products_image_import_template():
     wb = Workbook()
     ws = wb.active
     ws.title = 'Product Images'
-    ws.append(['ItemCode', 'Barcode', 'LocationCode', 'ImageURL', 'ImageFileName', 'Image'])
-    ws.append([1001, '', '', '', '', ''])
-    ws.append(['', '1234567890123', '', '', 'photo-1001.jpg', ''])
+    ws.append([
+        'ItemCode',
+        'Barcode',
+        'LocationCode',
+        'FolderName',
+        'ImageURL',
+        'ImageFileName',
+        'Image',
+        'Description',
+        'DescriptionArabic',
+        'Specifications',
+        'ProductPageURL',
+    ])
+    ws.append([1001, '', '', 'rattle-set', '', '', '', 'Soft baby rattle set for newborns.', 'طقم خشخيشة ناعم للمواليد.', 'Age: 0-12 months\nPieces: 8', ''])
+    ws.append(['', '1234567890123', '', '', '', 'photo-1001.jpg', '', '', '', '', ''])
     bio = io.BytesIO()
     wb.save(bio)
     bio.seek(0)
@@ -290,39 +553,173 @@ def products_image_import_template():
     )
 
 
+def _wants_json_response() -> bool:
+    if str(request.form.get('ajax') or request.args.get('ajax') or '').strip() == '1':
+        return True
+    accept = ''
+    try:
+        accept = str(request.headers.get('accept') or request.headers.get('Accept') or '')
+    except Exception:
+        accept = ''
+    return 'application/json' in accept.lower()
+
+
+def _folder_uploads_from_request() -> list:
+    uploads = []
+    for storage in request.files.getlist('image_files'):
+        name = product_images_svc.safe_upload_relpath(getattr(storage, 'filename', '') or '')
+        if not name:
+            continue
+        data = storage.read()
+        if not isinstance(data, bytes):
+            data = bytes(data) if data else b''
+        if not data:
+            continue
+        uploads.append((name, data))
+    return uploads
+
+
+def _image_import_payload(result: dict, message: str) -> dict:
+    return {
+        'ok': bool(result.get('ok')),
+        'partial': bool(result.get('partial')),
+        'message': message,
+        'processed': int(result.get('processed') or 0),
+        'updated': int(result.get('updated') or 0),
+        'failed': int(result.get('failed') or 0),
+        'errors': (result.get('errors') or [])[:10],
+        'redirect': url_for('ecommerce.products', **_products_redirect_kwargs()),
+    }
+
+
+@bp.route('/products/images/import/progress', methods=['GET'])
+def products_image_import_progress():
+    """Live folder count for a bulk ZIP import (polled while the upload request runs)."""
+    data = product_images_svc.read_import_progress(request.args.get('job_id'))
+    if not data:
+        return jsonify(
+            {
+                'ok': True,
+                'phase': 'waiting',
+                'processed': 0,
+                'updated': 0,
+                'failed': 0,
+                'total': 0,
+                'current': '',
+                'done': False,
+            }
+        )
+    return jsonify(data)
+
+
 @bp.route('/products/images/import', methods=['POST'])
 def products_image_import():
     """Bulk assign ITEMMASTER.IMAGE_PATH from Excel (+ optional ZIP of image files)."""
+    wants_json = _wants_json_response()
+    job_id = product_images_svc.safe_import_job_id(request.form.get('import_job_id'))
+
+    def on_progress(payload):
+        product_images_svc.write_import_progress(job_id, payload)
+
     excel = request.files.get('excel_file') or request.files.get('file')
-    if not excel or not getattr(excel, 'filename', None):
-        flash('Choose an Excel file (.xlsx).', 'error')
-        return redirect(url_for('ecommerce.products', q=request.form.get('q') or None))
-    fname = str(excel.filename or '').lower()
-    if not fname.endswith(('.xlsx', '.xlsm')):
-        flash('Please upload a .xlsx or .xlsm file.', 'error')
-        return redirect(url_for('ecommerce.products', q=request.form.get('q') or None))
-    excel_raw = excel.read()
-    if not isinstance(excel_raw, bytes):
-        excel_raw = bytes(excel_raw) if excel_raw else b''
+    excel_raw = b''
+    if excel and getattr(excel, 'filename', None):
+        fname = str(excel.filename or '').lower()
+        if not fname.endswith(('.xlsx', '.xlsm')):
+            if wants_json:
+                return jsonify({'ok': False, 'message': 'Please upload a .xlsx or .xlsm file.'}, 400)
+            flash('Please upload a .xlsx or .xlsm file.', 'error')
+            return redirect(url_for('ecommerce.products', **_products_redirect_kwargs()))
+        excel_raw = excel.read()
+        if not isinstance(excel_raw, bytes):
+            excel_raw = bytes(excel_raw) if excel_raw else b''
 
     zip_raw = b''
+    zip_path = None
     zip_file = request.files.get('images_zip')
     if zip_file and getattr(zip_file, 'filename', None):
         zip_name = str(zip_file.filename or '').lower()
         if zip_name.endswith('.zip'):
-            zip_raw = zip_file.read()
-            if not isinstance(zip_raw, bytes):
-                zip_raw = bytes(zip_raw) if zip_raw else b''
+            fd, zip_path = tempfile.mkstemp(suffix='.zip', prefix='mh-img-')
+            os.close(fd)
+            zip_file.save(zip_path)
+
+    folder_uploads = _folder_uploads_from_request()
+    if not excel_raw and not zip_path and not folder_uploads:
+        if wants_json:
+            return jsonify(
+                {'ok': False, 'message': 'Choose an Excel file, a ZIP, or a folder of barcode images.'},
+                400,
+            )
+        flash('Choose an Excel file, a ZIP, or a folder of barcode images.', 'error')
+        return redirect(url_for('ecommerce.products', **_products_redirect_kwargs()))
 
     download_urls = str(request.form.get('download_urls') or '1').strip().lower() in ('1', 'true', 'yes', 'on')
-    result = product_images_svc.import_product_images_from_excel(
-        excel_raw,
-        zip_raw=zip_raw or None,
-        download_urls=download_urls,
-    )
+    existing_mode = str(request.form.get('existing_images') or 'keep').strip().lower()
+    replace_existing = existing_mode in ('replace', 'remove', 'overwrite', '1', 'true', 'yes')
+    result = {'ok': False, 'error': 'Import failed.'}
+    try:
+        if job_id:
+            product_images_svc.write_import_progress(
+                job_id,
+                {
+                    'phase': 'preparing',
+                    'total': 0,
+                    'processed': 0,
+                    'updated': 0,
+                    'failed': 0,
+                    'current': '',
+                    'done': False,
+                },
+            )
+        if excel_raw:
+            if zip_path:
+                with open(zip_path, 'rb') as zip_in:
+                    zip_raw = zip_in.read()
+            result = product_images_svc.import_product_images_from_excel(
+                excel_raw,
+                zip_raw=zip_raw or None,
+                download_urls=download_urls,
+                replace_existing=replace_existing,
+            )
+        elif folder_uploads:
+            result = product_images_svc.import_product_images_from_folder_uploads(
+                folder_uploads,
+                progress_cb=on_progress if job_id else None,
+                replace_existing=replace_existing,
+            )
+        else:
+            result = product_images_svc.import_product_images_from_barcode_zip_path(
+                zip_path,
+                progress_cb=on_progress if job_id else None,
+                replace_existing=replace_existing,
+            )
+    finally:
+        if zip_path:
+            try:
+                os.unlink(zip_path)
+            except OSError:
+                pass
     if not result.get('ok'):
-        flash(result.get('error') or result.get('message') or 'Import failed.', 'error')
-        return redirect(url_for('ecommerce.products', q=request.form.get('q') or None))
+        message = str(result.get('error') or result.get('message') or 'Import failed.')
+        if job_id:
+            product_images_svc.write_import_progress(
+                job_id,
+                {
+                    'phase': 'done',
+                    'done': True,
+                    'ok': False,
+                    'message': message,
+                    'processed': int(result.get('processed') or 0),
+                    'updated': int(result.get('updated') or 0),
+                    'failed': int(result.get('failed') or 0),
+                    'total': int(result.get('processed') or 0),
+                },
+            )
+        if wants_json:
+            return jsonify(_image_import_payload(result, message), 400)
+        flash(message, 'error')
+        return redirect(url_for('ecommerce.products', **_products_redirect_kwargs()))
 
     message = str(result.get('message') or 'Import completed.')
     errs = result.get('errors') or []
@@ -331,8 +728,161 @@ def products_image_import():
         if len(errs) > 3:
             preview += f' … and {len(errs) - 3} more'
         message = f'{message}. {preview}'
+    if wants_json:
+        return jsonify(_image_import_payload(result, message))
     flash(message, 'message' if result.get('partial') or result.get('updated') else 'warning')
-    return redirect(url_for('ecommerce.products', q=request.form.get('q') or None))
+    return redirect(url_for('ecommerce.products', **_products_redirect_kwargs()))
+
+
+def _run_drive_image_import(
+    *,
+    item_code: Optional[int] = None,
+    fallback_barcode: str = '',
+):
+    wants_json = _wants_json_response()
+    drive_url = str(request.form.get('drive_url') or request.form.get('google_drive_url') or '').strip()
+    job_id = product_images_svc.safe_import_job_id(request.form.get('import_job_id'))
+    existing_mode = str(request.form.get('existing_images') or 'keep').strip().lower()
+    replace_existing = existing_mode in ('replace', 'remove', 'overwrite', '1', 'true', 'yes')
+    if item_code:
+        replace_existing = False
+
+    def redirect_back():
+        if item_code:
+            return redirect(url_for('ecommerce.product_edit', item_code=item_code, **_product_edit_query()))
+        return redirect(url_for('ecommerce.products', **_products_redirect_kwargs()))
+
+    if not drive_url:
+        message = 'Paste a Google Drive folder or file link.'
+        if wants_json:
+            return jsonify({'ok': False, 'message': message}, 400)
+        flash(message, 'error')
+        return redirect_back()
+
+    def on_progress(payload):
+        product_images_svc.write_import_progress(job_id, payload)
+
+    if job_id:
+        product_images_svc.write_import_progress(
+            job_id,
+            {
+                'phase': 'preparing',
+                'total': 0,
+                'processed': 0,
+                'updated': 0,
+                'failed': 0,
+                'current': 'Reading Google Drive…',
+                'done': False,
+            },
+        )
+    result = product_images_svc.import_product_images_from_drive_url(
+        drive_url,
+        replace_existing=replace_existing,
+        only_item_code=int(item_code) if item_code else None,
+        fallback_barcode=fallback_barcode,
+        progress_cb=on_progress if job_id else None,
+    )
+    if not result.get('ok'):
+        message = str(result.get('error') or result.get('message') or 'Could not fetch Drive images.')
+        if job_id:
+            product_images_svc.write_import_progress(
+                job_id,
+                {
+                    'phase': 'done',
+                    'done': True,
+                    'ok': False,
+                    'message': message,
+                    'processed': int(result.get('processed') or 0),
+                    'updated': int(result.get('updated') or 0),
+                    'failed': int(result.get('failed') or 0),
+                    'total': int(result.get('processed') or 0),
+                },
+            )
+        if wants_json:
+            return jsonify(_image_import_payload(result, message), 400)
+        flash(message, 'error')
+        return redirect_back()
+    message = str(result.get('message') or 'Images fetched from Google Drive.')
+    kept = int(result.get('kept') or 0)
+    if item_code and kept and not int(result.get('gallery_total') or 0):
+        message = 'This product already has an image. Existing photo was kept.'
+    if wants_json:
+        return jsonify(_image_import_payload(result, message))
+    flash(message, 'warning' if item_code and kept else 'message')
+    return redirect_back()
+
+
+@bp.route('/products/images/from-drive', methods=['POST'])
+def products_images_from_drive():
+    """Fetch barcode-named images from a public Google Drive folder or file."""
+    return _run_drive_image_import()
+
+
+@bp.route('/products/<int:item_code>/images/from-drive', methods=['POST'])
+def product_images_from_drive(item_code: int):
+    """Fetch Drive images for one product if it has no photo yet."""
+    product = catalog_svc.get_product_for_edit(item_code)
+    if not product:
+        flash('Product not found.', 'error')
+        return redirect(url_for('ecommerce.products', **_products_redirect_kwargs()))
+    return _run_drive_image_import(
+        item_code=int(item_code),
+        fallback_barcode=str(product.get('barcode') or ''),
+    )
+
+
+@bp.route('/products/<int:item_code>/images/from-folder', methods=['POST'])
+def product_images_from_folder(item_code: int):
+    """Upload images only. Folder name is the barcode. Fills the photo if this SKU has none."""
+    product = catalog_svc.get_product_for_edit(item_code)
+    if not product:
+        flash('Product not found.', 'error')
+        return redirect(url_for('ecommerce.products', **_products_redirect_kwargs()))
+    uploads = _folder_uploads_from_request()
+    if not uploads:
+        flash('Choose a folder of images. Name the folder with the barcode.', 'error')
+        return redirect(url_for('ecommerce.product_edit', item_code=item_code, **_product_edit_query()))
+    result = product_images_svc.import_product_images_from_folder_uploads(
+        uploads,
+        replace_existing=False,
+        only_item_code=int(item_code),
+        fallback_barcode=str(product.get('barcode') or ''),
+    )
+    if not result.get('ok'):
+        flash(str(result.get('error') or result.get('message') or 'Could not save images.'), 'error')
+        return redirect(url_for('ecommerce.product_edit', item_code=item_code, **_product_edit_query()))
+    kept = int(result.get('kept') or 0)
+    if kept and not int(result.get('gallery_total') or 0):
+        flash('This product already has an image. Existing photo was kept.', 'warning')
+    else:
+        flash(str(result.get('message') or 'Images saved.'), 'message')
+    return redirect(url_for('ecommerce.product_edit', item_code=item_code, **_product_edit_query()))
+
+
+@bp.route('/products/images/remove-all', methods=['POST'])
+def products_images_remove_all():
+    """Clear Item Master images (and optional gallery images) for this location."""
+    confirm_remove = str(request.form.get('confirm_remove') or '').strip().lower() in (
+        '1',
+        'true',
+        'yes',
+        'on',
+    )
+    if not confirm_remove:
+        flash('Tick the confirmation box to remove all product images.', 'error')
+        return redirect(url_for('ecommerce.products', **_products_redirect_kwargs()))
+    remove_gallery = str(request.form.get('remove_gallery') or '').strip().lower() in (
+        '1',
+        'true',
+        'yes',
+        'on',
+    )
+    result = product_images_svc.remove_all_product_images(remove_gallery=remove_gallery)
+    if not result.get('ok'):
+        flash(result.get('error') or result.get('message') or 'Could not remove images.', 'error')
+        return redirect(url_for('ecommerce.products', **_products_redirect_kwargs()))
+    flash(result.get('message') or 'Product images removed.', 'message')
+    return redirect(url_for('ecommerce.products', **_products_redirect_kwargs()))
 
 
 @bp.route('/products/images/fetch-web', methods=['POST'])
@@ -349,7 +899,7 @@ def products_image_fetch_web():
     )
     if not result.get('ok') and not result.get('updated'):
         flash(result.get('error') or result.get('message') or 'Web fetch failed.', 'error')
-        return redirect(url_for('ecommerce.products', q=request.form.get('q') or None))
+        return redirect(url_for('ecommerce.products', **_products_redirect_kwargs()))
 
     message = str(result.get('message') or 'Web fetch completed.')
     errs = result.get('errors') or []
@@ -359,7 +909,7 @@ def products_image_fetch_web():
             preview += f' … and {len(errs) - 3} more'
         message = f'{message}. {preview}'
     flash(message, 'message' if result.get('updated') else 'warning')
-    return redirect(url_for('ecommerce.products', q=request.form.get('q') or None))
+    return redirect(url_for('ecommerce.products', **_products_redirect_kwargs()))
 
 
 @bp.route('/products/<int:item_code>/fetch-image-web', methods=['POST'])
@@ -387,7 +937,201 @@ def products_item_fetch_image_web(item_code: int):
         flash(result.get('error') or result.get('message') or 'Web fetch failed.', 'error')
     else:
         flash(result.get('message') or 'Image fetched.', 'message')
-    return redirect(url_for('ecommerce.products', q=request.form.get('q') or request.args.get('q') or None))
+    return redirect(url_for('ecommerce.products', **_products_redirect_kwargs()))
+
+
+@bp.route('/products/<int:item_code>/import-from-url', methods=['POST'])
+def products_import_from_url(item_code: int):
+    """Fill description, features, and images from a public product page URL."""
+    page_url = (request.form.get('page_url') or request.args.get('page_url') or '').strip()
+    payload = request.get_json(silent=True) or {}
+    if not page_url:
+        page_url = str(payload.get('page_url') or '').strip()
+    save_images_raw = (
+        request.form.get('save_images')
+        if request.form.get('save_images') is not None
+        else payload.get('save_images')
+    )
+    if save_images_raw is None:
+        save_images = True
+    else:
+        save_images = str(save_images_raw).strip().lower() not in ('0', 'false', 'no', 'off')
+    result = product_page_import_svc.import_from_page_url(
+        item_code=item_code,
+        page_url=page_url,
+        save_images=save_images,
+    )
+    wants_json = (
+        'application/json' in (request.headers.get('Accept') or '').lower()
+        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    )
+    if wants_json:
+        status = 200 if result.get('ok') else 422
+        return Response(
+            json.dumps(result, default=str),
+            status=status,
+            mimetype='application/json',
+        )
+    flash(result.get('message') or result.get('error') or 'Import failed.', 'message' if result.get('ok') else 'error')
+    return redirect(url_for('ecommerce.product_edit', item_code=item_code))
+
+
+@bp.route('/products/<int:item_code>/compare', methods=['GET', 'POST'])
+def product_compare(item_code: int):
+    """Save compare URLs and show image, description, and price from each page."""
+    extra_entries = None
+    if request.method == 'POST':
+        extra_entries = web_meta_svc.compare_entries_from_form(
+            request.form.getlist('compare_url'),
+            request.form.getlist('compare_store_id'),
+            request.form.getlist('compare_store'),
+        )
+        save_only = (request.form.get('compare_action') or '').strip().lower() == 'save'
+        if save_only and not extra_entries:
+            flash('Enter a product URL first.', 'error')
+            return redirect(url_for('ecommerce.product_compare', item_code=item_code, **_product_edit_query()))
+        ok, message = product_compare_svc.save_compare_urls(item_code, extra_entries)
+        if not ok:
+            flash(message or 'Could not save compare URLs.', 'error')
+            return redirect(url_for('ecommerce.product_edit', item_code=item_code, **_product_edit_query()))
+        if save_only:
+            flash(f'Saved {len(extra_entries)} comparison URL{"s" if len(extra_entries) != 1 else ""}.', 'message')
+            return redirect(url_for('ecommerce.product_compare', item_code=item_code, **_product_edit_query()))
+    result = product_compare_svc.compare_product(item_code, extra_entries)
+    if not result.get('ok'):
+        flash(result.get('error') or 'Product not found.', 'error')
+        return redirect(url_for('ecommerce.products'))
+    return render_template(
+        'ecommerce/product_compare.html',
+        title=f'Compare product {item_code}',
+        product=result.get('product'),
+        rows=result.get('rows') or [],
+        entries=result.get('entries') or [],
+        compare_stores=compare_stores_db.list_compare_stores(active_only=True),
+        lowest_price=result.get('lowest_price'),
+        highest_price=result.get('highest_price'),
+        nav_kwargs=_product_edit_query(),
+        find_urls_url=url_for('ecommerce.product_compare_find_urls', item_code=item_code),
+        search_query=product_compare_find_svc.default_search_name(result.get('product')),
+    )
+
+
+@bp.route('/products/<int:item_code>/compare/find-urls', methods=['POST'])
+def product_compare_find_urls(item_code: int):
+    """Find competitor product URLs from the editable product name."""
+    payload = request.get_json(silent=True) or {}
+    search_query = (
+        request.form.get('search_query')
+        or payload.get('search_query')
+        or request.args.get('search_query')
+        or ''
+    )
+    result = product_compare_find_svc.find_compare_urls(item_code, search_query=str(search_query or ''))
+    return Response(
+        json.dumps(result, default=str),
+        status=200 if result.get('ok') else 422,
+        mimetype='application/json',
+    )
+
+
+def _safe_compare_next(raw: str) -> str:
+    value = str(raw or '').strip()
+    if value.startswith('/ecommerce/') and '//' not in value and '\n' not in value:
+        return value.split('#', 1)[0]
+    return ''
+
+
+@bp.route('/compare-stores', methods=['GET'])
+def compare_stores():
+    stores = compare_stores_db.list_compare_stores(active_only=False)
+    return render_template(
+        'ecommerce/compare_stores.html',
+        title='Compare store master',
+        stores=stores,
+        next_url=_safe_compare_next(request.args.get('next') or ''),
+    )
+
+
+@bp.route('/compare-stores/new', methods=['POST'])
+def compare_store_new():
+    ok, message, _row = compare_stores_db.create_compare_store(
+        store_name=request.form.get('store_name') or '',
+        website_url=request.form.get('website_url') or '',
+    )
+    flash(message, 'message' if ok else 'error')
+    next_url = _safe_compare_next(request.form.get('next') or request.args.get('next') or '')
+    if ok and next_url:
+        return redirect(next_url)
+    return redirect(url_for('ecommerce.compare_stores', next=next_url or None))
+
+
+@bp.route('/compare-stores/<int:store_id>', methods=['POST'])
+def compare_store_update(store_id: int):
+    ok, message = compare_stores_db.update_compare_store(
+        store_id,
+        store_name=request.form.get('store_name') or '',
+        website_url=request.form.get('website_url') or '',
+    )
+    flash(message, 'message' if ok else 'error')
+    return redirect(url_for('ecommerce.compare_stores'))
+
+
+@bp.route('/compare-stores/<int:store_id>/toggle', methods=['POST'])
+def compare_store_toggle(store_id: int):
+    ok, message = compare_stores_db.toggle_compare_store(store_id)
+    flash(message, 'message' if ok else 'error')
+    return redirect(url_for('ecommerce.compare_stores'))
+
+
+@bp.route('/snoonu', methods=['GET', 'POST'])
+def snoonu():
+    search = (request.values.get('q') or '').strip()
+    page = _int_query('page', 1)
+    selected_code = 0
+    try:
+        selected_code = int(request.values.get('item_code') or 0)
+    except (TypeError, ValueError):
+        selected_code = 0
+    page_url = (request.values.get('page_url') or '').strip()
+    listing = snoonu_svc.list_missing_image_items(page=page, search=search)
+    selected = snoonu_svc.get_catalog_item(selected_code) if selected_code else None
+    item_name = (request.values.get('item_name') or '').strip()
+    if selected and not item_name:
+        item_name = selected.get('item_name') or ''
+    if selected and not page_url:
+        page_url = selected.get('snoonu_url') or ''
+    result: dict | None = None
+    error = ''
+    should_fetch = bool(
+        request.method == 'POST'
+        or request.values.get('fetch')
+        or snoonu_svc.is_full_snoonu_url(page_url)
+    )
+    if should_fetch and (page_url or item_name):
+        try:
+            result = snoonu_svc.fetch_snoonu_listing(page_url=page_url, item_name=item_name)
+            page_url = str(result.get('page_url') or page_url)
+        except ValueError as exc:
+            error = str(exc)
+        except Exception as exc:  # noqa: BLE001
+            error = f'Could not read that Snoonu page. {exc}'
+        if error:
+            flash(error, 'error')
+    pages = max(1, (int(listing.get('total') or 0) + int(listing.get('per_page') or 40) - 1) // int(listing.get('per_page') or 40))
+    return render_template(
+        'ecommerce/snoonu.html',
+        title='Ecommerce — Snoonu',
+        page_url=page_url,
+        item_name=item_name,
+        result=result,
+        error=error,
+        selected=selected,
+        items=listing.get('items') or [],
+        items_total=listing.get('total') or 0,
+        items_page=listing.get('page') or 1,
+        items_pages=pages,
+        items_search=listing.get('search') or '',
+    )
 
 
 @bp.route('/categories')
@@ -400,6 +1144,43 @@ def categories():
         location_code=loc,
         itemmaster_categories_url=url_for('itemmaster.category_master_list'),
     )
+
+
+@bp.route('/assist')
+def assist():
+    data = assist_svc.get_assist_board()
+    return render_template(
+        'ecommerce/assist.html',
+        title='Ecommerce — Assist',
+        **data,
+    )
+
+
+@bp.route('/assist/notify', methods=['POST'])
+def assist_notify():
+    try:
+        user_id = int(request.form.get('user_id') or 0)
+    except (TypeError, ValueError):
+        user_id = 0
+    message = (request.form.get('message') or '').strip()
+    ok, msg = assist_svc.send_assist_notification(user_id, message)
+    flash(msg, 'message' if ok else 'error')
+    return redirect(request.referrer or url_for('ecommerce.assist'))
+
+
+@bp.route('/assist/chat', methods=['POST'])
+def assist_chat():
+    try:
+        user_id = int(request.form.get('user_id') or 0)
+    except (TypeError, ValueError):
+        user_id = 0
+    message = (request.form.get('message') or '').strip()
+    staff = (session.get('user') or '').strip()
+    ok, msg, conversation_id = assist_svc.open_assist_chat(staff, user_id, message)
+    if ok and conversation_id:
+        return redirect(f'/chat?c={int(conversation_id)}')
+    flash(msg, 'error')
+    return redirect(request.referrer or url_for('ecommerce.assist'))
 
 
 @bp.route('/customers')

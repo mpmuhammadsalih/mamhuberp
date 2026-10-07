@@ -116,12 +116,43 @@ def register_customer(
     ok_mobile, mobile_msg, mobile_norm = normalize_mobile(mobile)
     if not ok_mobile or not mobile_norm:
         return False, mobile_msg, None
+    from storefront_backend.services.erp_customer import (
+        DuplicateCustomerError,
+        find_email_duplicate,
+        find_mobile_duplicate,
+        validate_email,
+    )
+    ok_email, email_msg = validate_email(email_norm, required=True)
+    if not ok_email:
+        return False, email_msg, None
     existing = _safe_rows(
         'SELECT USER_ID FROM APP_USER WHERE LOWER(EMAIL) = :email',
         {'email': email_norm},
     )
     if existing:
         return False, 'Email is already registered', None
+    mobile_digits = re.sub(r'\D+', '', mobile_norm)
+    mobile_last8 = mobile_digits[-8:] if len(mobile_digits) >= 8 else mobile_digits
+    if mobile_last8:
+        taken_mobile = _safe_rows(
+            """
+            SELECT USER_ID FROM APP_USER
+            WHERE REGEXP_REPLACE(NVL(MOBILE, ''), '[^0-9]', '') LIKE :q
+            FETCH FIRST 1 ROWS ONLY
+            """,
+            {'q': f'%{mobile_last8}%'},
+        )
+        if taken_mobile:
+            return False, 'Mobile number is already registered', None
+    try:
+        from storefront_backend.deps import resolve_location_code
+        loc = resolve_location_code()
+    except Exception:
+        loc = 1
+    email_dup = find_email_duplicate(email_norm, location_code=loc)
+    mobile_dup = find_mobile_duplicate(mobile_norm, location_code=loc)
+    if email_dup and email_dup != mobile_dup:
+        return False, f'Email already used by customer {email_dup}.', None
     username_base = re.sub(r'[^a-z0-9]+', '.', email_norm.split('@')[0]).strip('.') or 'customer'
     username = username_base
     suffix = 1
@@ -157,6 +188,20 @@ def register_customer(
                     },
                 )
             conn.commit()
+        try:
+            from storefront_backend.services.erp_customer import upsert_erp_customer
+            from storefront_backend.deps import resolve_location_code
+            upsert_erp_customer(
+                channel='WEB',
+                name=f'{first_name.strip()} {last_name.strip()}'.strip(),
+                mobile=mobile_norm,
+                email=email_norm,
+                location_code=resolve_location_code(),
+            )
+        except DuplicateCustomerError as exc:
+            return False, str(exc), None
+        except Exception:
+            pass
         profile = get_profile(user_id)
         return True, 'Registration successful', profile
     except Exception as exc:  # noqa: BLE001

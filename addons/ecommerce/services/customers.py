@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Tuple
 
 from addons.ecommerce import customers_db
+from addons.ecommerce.services.assist import _attach_chat
 
 
 def list_customers_page(
@@ -34,10 +35,15 @@ def get_customer_detail(user_id: int) -> Optional[Dict[str, Any]]:
         return None
     summary = customers_db.customer_order_summary(user_id)
     orders = customers_db.list_customer_orders(user_id)
+    name = f"{customer.get('first_name') or ''} {customer.get('last_name') or ''}".strip() or 'there'
     return {
         **customer,
         **summary,
         'orders': orders,
+        **_attach_chat(
+            customer,
+            f'Hi {name}, this is MamaHub. How can I help you today?',
+        ),
     }
 
 

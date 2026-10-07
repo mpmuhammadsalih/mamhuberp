@@ -8,6 +8,13 @@ from db import _get_connection, _safe_rows, _table_exists
 
 
 def _ready() -> bool:
+    if _table_exists('MH_NOTIFICATION'):
+        return True
+    try:
+        from storefront_backend.services.schema_bootstrap import ensure_notification_schema
+        ensure_notification_schema()
+    except Exception:
+        return False
     return _table_exists('MH_NOTIFICATION')
 
 
@@ -68,6 +75,24 @@ def notify_order_confirmed(*, user_id: int, order_number: str, order_id: int) ->
         notification_type='ORDER_CONFIRMED',
         title='Order confirmed',
         body=f'Your order {order_number} has been placed successfully.',
+        ref_entity='ORDER',
+        ref_entity_id=order_id,
+    )
+
+
+def notify_order_status(
+    *,
+    user_id: int,
+    order_number: str,
+    order_id: int,
+    title: str,
+    body: str,
+) -> None:
+    create_notification(
+        user_id=user_id,
+        notification_type='ORDER_STATUS',
+        title=title,
+        body=body,
         ref_entity='ORDER',
         ref_entity_id=order_id,
     )

@@ -147,12 +147,45 @@ def _clip_media_text(value: Any, max_chars: int) -> Optional[str]:
     return text[:max_chars]
 
 
+def _fit_meta_json(meta: Any, max_chars: int = 4000) -> str:
+    """Keep META_JSON valid JSON inside the 4000-char column."""
+    data = dict(meta) if isinstance(meta, dict) else {}
+    raw = json.dumps(data, ensure_ascii=False)
+    if len(raw) <= max_chars:
+        return raw
+    shrink_keys = sorted(
+        (
+            key
+            for key, value in data.items()
+            if key != 'compare_urls' and isinstance(value, str) and len(value) > 20
+        ),
+        key=lambda key: len(str(data.get(key) or '')),
+        reverse=True,
+    )
+    while len(raw) > max_chars and shrink_keys:
+        key = shrink_keys[0]
+        value = str(data.get(key) or '')
+        overflow = len(raw) - max_chars
+        cut = max(20, len(value) - overflow - 20)
+        if cut >= len(value):
+            shrink_keys.pop(0)
+            continue
+        data[key] = value[:cut].rstrip()
+        raw = json.dumps(data, ensure_ascii=False)
+        if len(str(data.get(key) or '')) <= 20:
+            shrink_keys.pop(0)
+    return raw if len(raw) <= max_chars else json.dumps(
+        {key: data[key] for key in data if key == 'compare_urls'},
+        ensure_ascii=False,
+    )[:max_chars]
+
+
 def upsert_media(payload: Dict[str, Any]) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     if not media_table_ready():
         return False, _table_missing_message(), None
 
     media_id = payload.get('media_id')
-    meta_json = json.dumps(payload.get('meta') or {}, ensure_ascii=False)[:4000]
+    meta_json = _fit_meta_json(payload.get('meta') or {})
     try:
         with _get_connection() as conn:
             with conn.cursor() as cur:

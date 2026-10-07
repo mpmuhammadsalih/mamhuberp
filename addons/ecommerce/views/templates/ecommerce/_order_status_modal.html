@@ -1,0 +1,165 @@
+<div class="modal hidden" id="ecOrderStatusModal" role="dialog" aria-modal="true" aria-labelledby="ecOrderStatusHeading">
+  <div class="modal__overlay" data-close="ecOrderStatusModal"></div>
+  <div class="modal__content ecommerce-order-status-modal">
+    <div class="modal__header">
+      <h4 id="ecOrderStatusHeading">Update status <span id="ecOrderStatusTitle"></span></h4>
+      <button type="button" class="modal__close" data-close="ecOrderStatusModal" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <form id="ecOrderStatusForm" method="post" class="ecommerce-order-form">
+        <div class="form-group">
+          <label for="ecOrderStatusDisplay">Order status</label>
+          <div
+            data-ec-list-picker
+            data-modal="ecOrderStatusPickerModal"
+            data-display="ecOrderStatusDisplay"
+            data-hidden="ecOrderStatusValue"
+            data-picker="ecOrderStatusPickerBtn"
+          >
+            <span class="search-field search-field--popup">
+              <input
+                type="text"
+                id="ecOrderStatusDisplay"
+                placeholder="Click to select status..."
+                readonly
+                autocomplete="off"
+              />
+              <button type="button" class="search-picker" id="ecOrderStatusPickerBtn" aria-label="Open status list">▾</button>
+            </span>
+            <input type="hidden" id="ecOrderStatusValue" name="status" required />
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="ecOrderStatusNotes">Notes (optional)</label>
+          <textarea id="ecOrderStatusNotes" name="notes" class="input ecommerce-order-form__textarea" rows="3" placeholder="Add a note for the status change…"></textarea>
+        </div>
+        <div class="ecommerce-order-status-modal__actions">
+          <button type="button" class="page-po__btn-secondary" data-close="ecOrderStatusModal">Cancel</button>
+          <button type="submit" class="page-po__btn-primary">Save status</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden ecommerce-picker-modal" id="ecOrderStatusPickerModal" role="dialog" aria-modal="true">
+  <div class="modal__overlay" data-ec-picker-close="1"></div>
+  <div class="modal__content">
+    <div class="modal__header">
+      <h3>Select status</h3>
+      <button type="button" class="modal__close" data-ec-picker-close="1" aria-label="Close">×</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__search">
+        <div class="search-field">
+          <input type="text" data-ec-picker-search placeholder="Search status..." autocomplete="off" />
+          <button type="button" class="search-clear" data-ec-picker-search-clear aria-label="Clear search">×</button>
+        </div>
+      </div>
+      <div class="scroll-table modal__table">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in status_options %}
+            <tr class="ec-picker-row" data-value="{{ s }}" data-label="{{ s.replace('_', ' ') }}" style="cursor:pointer;">
+              <td>{{ s.replace('_', ' ') }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="{{ url_for('ecommerce.static', filename='js/ecommerce-list-picker.js') }}?v=2"></script>
+<script>
+(function () {
+  var modal = document.getElementById('ecOrderStatusModal');
+  var picker = document.getElementById('ecOrderStatusPickerModal');
+  var form = document.getElementById('ecOrderStatusForm');
+  var title = document.getElementById('ecOrderStatusTitle');
+  var hidden = document.getElementById('ecOrderStatusValue');
+  var display = document.getElementById('ecOrderStatusDisplay');
+  var notes = document.getElementById('ecOrderStatusNotes');
+  if (!modal || !form || !hidden || !display) return;
+
+  var actionTemplate = {{ url_for('ecommerce.order_status', order_id=999999)|tojson }};
+
+  function statusLabel(value) {
+    return String(value || '').replace(/_/g, ' ');
+  }
+
+  function closeModal() {
+    if (picker && !picker.classList.contains('hidden')) return;
+    modal.classList.add('hidden');
+  }
+
+  function openModal(orderId, orderNumber, currentStatus) {
+    form.action = actionTemplate.replace('999999', String(orderId));
+    if (title) title.textContent = orderNumber ? '· ' + orderNumber : '';
+    hidden.value = currentStatus || '';
+    display.value = statusLabel(currentStatus);
+    if (notes) notes.value = '';
+    modal.classList.remove('hidden');
+    display.focus();
+  }
+
+  document.addEventListener('click', function (e) {
+    var opener = e.target.closest('[data-open-status-modal]');
+    if (opener) {
+      e.preventDefault();
+      openModal(
+        opener.getAttribute('data-order-id'),
+        opener.getAttribute('data-order-number') || '',
+        opener.getAttribute('data-order-status') || ''
+      );
+      return;
+    }
+    if (e.target.closest('[data-close="ecOrderStatusModal"]')) {
+      closeModal();
+    }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (picker && !picker.classList.contains('hidden')) return;
+    if (!modal.classList.contains('hidden')) closeModal();
+  });
+})();
+</script>
+<style>
+  #ecOrderStatusModal .ecommerce-order-status-modal {
+    width: min(420px, 92vw);
+    max-height: none;
+    padding: 0;
+  }
+  #ecOrderStatusModal .modal__header,
+  #ecOrderStatusModal .modal__body {
+    padding: 14px 16px;
+  }
+  #ecOrderStatusModal .ecommerce-order-form .form-group {
+    margin-bottom: 12px;
+  }
+  #ecOrderStatusModal .search-field--popup,
+  #ecOrderStatusModal .ecommerce-order-form textarea.input {
+    width: 100%;
+    max-width: none;
+    box-sizing: border-box;
+  }
+  #ecOrderStatusPickerModal {
+    z-index: 1100;
+  }
+  #ecOrderStatusPickerModal .modal__content {
+    width: min(420px, 92vw);
+  }
+  .ecommerce-order-status-modal__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 8px;
+  }
+</style>

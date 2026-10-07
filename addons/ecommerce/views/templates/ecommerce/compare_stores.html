@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('ecommerce.static', filename='css/ecommerce.css') }}?v=28" />
+{% endblock %}
+{% block content %}
+<div class="page-po nexa-list-page ecommerce-page" style="max-width:920px;">
+  <div class="page-po__topbar">
+    <div>
+      <h1 class="page-po__title">Compare store master</h1>
+      <p class="page-po__muted">Shared store names for product comparison · {{ stores|length }} store{{ '' if stores|length == 1 else 's' }}</p>
+    </div>
+    <div class="page-po__topbar-actions">
+      <a href="{{ url_for('ecommerce.products') }}" class="page-po__btn-secondary">← Products</a>
+    </div>
+  </div>
+
+  <form method="post" action="{{ url_for('ecommerce.compare_store_new') }}" class="ecommerce-form-panel ecommerce-compare-store-add">
+    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}" />{% endif %}
+    <fieldset class="ecommerce-compare-form__fieldset">
+      <legend>Add store</legend>
+      <p class="page-po__muted">Add Snoonu, Virgin, and other shops once. Comparison pages pick from this list.</p>
+      <div class="ecommerce-compare-store-add__row">
+        <div class="form-group">
+          <label for="store_name">Store name</label>
+          <input id="store_name" name="store_name" class="input" maxlength="80" autocomplete="organization" required placeholder="Snoonu" />
+        </div>
+        <div class="form-group">
+          <label for="website_url">Website (optional)</label>
+          <input id="website_url" name="website_url" type="text" class="input" inputmode="url" autocomplete="url" maxlength="500" placeholder="https://…" />
+        </div>
+        <button type="submit" class="page-po__btn-primary">Add store</button>
+      </div>
+    </fieldset>
+  </form>
+
+  <div class="co-table-wrap">
+    <table class="co-table co-table--th-hint">
+      <thead>
+        <tr>
+          <th style="text-align:center; width:56px; cursor:default;">Sl.No</th>
+          <th>Store name</th>
+          <th>Website</th>
+          <th>Status</th>
+          <th style="text-align:center; cursor:default;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in stores %}
+        <tr>
+          <td class="sl-no">{{ loop.index }}</td>
+          <td>
+            <form method="post" action="{{ url_for('ecommerce.compare_store_update', store_id=row.store_id) }}" class="ecommerce-compare-store-edit">
+              <input name="store_name" class="input" maxlength="80" value="{{ row.store_name }}" required />
+              <input name="website_url" class="input" type="text" maxlength="500" value="{{ row.website_url or '' }}" placeholder="https://…" />
+              <button type="submit" class="btn-view">Save</button>
+            </form>
+          </td>
+          <td>
+            {% if row.website_url %}
+            <a href="{{ row.website_url }}" target="_blank" rel="noopener noreferrer">{{ row.website_url }}</a>
+            {% else %}
+            —
+            {% endif %}
+          </td>
+          <td>
+            <span class="ecommerce-flag {% if row.is_active %}ecommerce-flag-Y{% else %}ecommerce-flag-N{% endif %}">
+              {% if row.is_active %}Active{% else %}Inactive{% endif %}
+            </span>
+          </td>
+          <td style="text-align:center; white-space:nowrap;">
+            <form method="post" action="{{ url_for('ecommerce.compare_store_toggle', store_id=row.store_id) }}" style="display:inline;">
+              <button type="submit" class="btn-view" style="border:none; cursor:pointer;">
+                {% if row.is_active %}Deactivate{% else %}Activate{% endif %}
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" style="text-align:center;padding:20px;color:#64748b;">
+            No comparison stores yet. Add Snoonu or another shop above.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

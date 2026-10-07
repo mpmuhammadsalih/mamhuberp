@@ -127,6 +127,7 @@ def _ensure_customer_account_columns() -> None:
         ('CLOSEDREASON', 'VARCHAR2(500)'),
         ('COUNTERSALE', 'VARCHAR2(1)'),
         ('CUSTOMER_BILLING_TYPE', 'VARCHAR2(10)'),
+        ('SOURCE_CHANNEL', 'VARCHAR2(40)'),
     ]
     want = {name for name, _ in new_cols}
     cols_cached = _get_table_columns(tbl)
@@ -311,6 +312,7 @@ def _get_customer_list(location_code: Optional[int]=None, search: Optional[str]=
         f'c.{loc_col} AS locationcode',
         f'c.{code_col} AS customercode',
         f'c.{name_col} AS customername',
+        f'c.SOURCE_CHANNEL AS source_channel' if _column_exists(tbl, 'SOURCE_CHANNEL') else 'NULL AS source_channel',
         f'{billing_sql} AS customer_billing_type',
         f'c.{category_col} AS customercategory' if category_col else 'NULL AS customercategory',
         f'c.{flag_col} AS customerflag' if flag_col else 'NULL AS customerflag',
@@ -759,6 +761,7 @@ def customer_list():
     _t0 = time.perf_counter()
     if not session.get('user'):
         return redirect(url_for('auth.login'))
+    _ensure_customer_account_columns()
     _step = time.perf_counter()
     location_code = None
     try:
@@ -1115,6 +1118,48 @@ def _customer_save(location_code: int, customer_code: Optional[int], is_new: boo
         )
     if not mobile and (not telephone):
         return _customer_save_validation_error('Mobile No or Telephone is required.', form, location_code, customer_code, is_new)
+    from storefront_backend.services.erp_customer import (
+        find_email_duplicate,
+        find_mobile_duplicate,
+        validate_email,
+        validate_mobile,
+    )
+    if email:
+        ok_email, email_msg = validate_email(email, required=False)
+        if not ok_email:
+            return _customer_save_validation_error(email_msg, form, location_code, customer_code, is_new)
+        email_dup = find_email_duplicate(email, location_code=location_code, exclude_code=None if is_new else customer_code)
+        if email_dup:
+            return _customer_save_validation_error(
+                f'Email already used by customer {email_dup}.',
+                form,
+                location_code,
+                customer_code,
+                is_new,
+            )
+    if mobile:
+        ok_mobile, mobile_msg, _mobile_norm = validate_mobile(mobile, required=False)
+        if not ok_mobile:
+            return _customer_save_validation_error(mobile_msg, form, location_code, customer_code, is_new)
+        mobile_dup = find_mobile_duplicate(mobile, location_code=location_code, exclude_code=None if is_new else customer_code)
+        if mobile_dup:
+            return _customer_save_validation_error(
+                f'Mobile number already used by customer {mobile_dup}.',
+                form,
+                location_code,
+                customer_code,
+                is_new,
+            )
+    if whatsapp:
+        wa_dup = find_mobile_duplicate(whatsapp, location_code=location_code, exclude_code=None if is_new else customer_code)
+        if wa_dup:
+            return _customer_save_validation_error(
+                f'WhatsApp number already used by customer {wa_dup}.',
+                form,
+                location_code,
+                customer_code,
+                is_new,
+            )
     if billing_type == 'CREDIT':
         if not creditlimit or creditlimit <= 0:
             return _customer_save_validation_error('Credit Limit is required for Credit customers.', form, location_code, customer_code, is_new)

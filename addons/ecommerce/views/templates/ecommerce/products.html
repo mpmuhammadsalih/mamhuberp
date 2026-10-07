@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ title }}{% endblock %}
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=13" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ecommerce.css') }}?v=20" />
 {% endblock %}
 {% block content %}
 <div class="page-po nexa-list-page ecommerce-page ecommerce-products-page">
@@ -13,7 +13,11 @@
     <div class="page-po__topbar-actions">
       <button type="button" class="page-po__btn-secondary" id="productConfigOpen" aria-haspopup="dialog" aria-controls="productConfigModal">
         Product config
+        {% if pending_image_skus|default(0) %}
+        <span class="ecommerce-pending-image-badge" title="SKUs with no Item Master image">{{ pending_image_skus }} pending</span>
+        {% endif %}
       </button>
+      <a href="{{ url_for('ecommerce.compare_stores') }}" class="page-po__btn-secondary">Compare stores</a>
       <a href="{{ url_for('itemmaster.productlist') }}" class="page-po__btn-primary">Open Item Master</a>
       <a href="{{ url_for('ecommerce.dashboard') }}" class="page-po__btn-secondary">Dashboard</a>
     </div>
@@ -22,6 +26,23 @@
   <form method="get" class="nexa-list-toolbar">
     <input type="text" name="q" value="{{ search }}" placeholder="Search code, barcode, name…"
            class="input" style="min-width:220px; max-width:320px;" autocomplete="off" />
+    <label class="ecommerce-web-filter" for="web-filter">
+      <span>Website</span>
+      <select id="web-filter" name="web" class="input">
+        <option value="all"{% if web_filter == 'all' %} selected{% endif %}>All products</option>
+        <option value="on"{% if web_filter == 'on' %} selected{% endif %}>On website</option>
+        <option value="hidden"{% if web_filter == 'hidden' %} selected{% endif %}>Hidden</option>
+        <option value="featured"{% if web_filter == 'featured' %} selected{% endif %}>Featured</option>
+      </select>
+    </label>
+    <label class="ecommerce-web-filter" for="image-filter">
+      <span>Image</span>
+      <select id="image-filter" name="image" class="input">
+        <option value="all"{% if image_filter == 'all' %} selected{% endif %}>All images</option>
+        <option value="missing"{% if image_filter == 'missing' %} selected{% endif %}>No image</option>
+        <option value="has"{% if image_filter == 'has' %} selected{% endif %}>Has image</option>
+      </select>
+    </label>
     {% if sort_column %}<input type="hidden" name="sort" value="{{ sort_column }}" />{% endif %}
     {% if sort_order %}<input type="hidden" name="order" value="{{ sort_order }}" />{% endif %}
     <button type="submit" class="page-po__btn-primary" style="padding:4px 12px; font-size:11px;">Search</button>
@@ -30,7 +51,7 @@
   </form>
 
   <p class="page-po__muted ecommerce-products-page__hint">
-    Click <strong>Edit</strong> to update description, specifications, and images. Set <strong>Offer</strong> lower than <strong>Retail</strong> to show a sale price on the app.
+    Tick <strong>Web</strong> to show an item on the store, or leave it off to hide that SKU. Tick <strong>Feature</strong> to put it in the Featured collection. Click <strong>Edit</strong> for full details.
   </p>
 
   <div class="co-table-wrap ecommerce-products-table-wrap">
@@ -44,6 +65,7 @@
         <col class="ecommerce-products-table__col-stock" />
         <col class="ecommerce-products-table__col-price" />
         <col class="ecommerce-products-table__col-offer" />
+        <col class="ecommerce-products-table__col-webflags" />
         <col class="ecommerce-products-table__col-actions" />
       </colgroup>
       <thead>
@@ -56,6 +78,7 @@
           <th class="sortable ecommerce-products-table__th ecommerce-products-table__th--center{% if sort_column == 'currentstock' and sort_order %} sort-{{ sort_order }}{% endif %}" data-sort="currentstock">Stock<span class="sort-arrow"></span></th>
           <th class="sortable ecommerce-products-table__th ecommerce-products-table__th--right{% if sort_column == 'retailprice' and sort_order %} sort-{{ sort_order }}{% endif %}" data-sort="retailprice">Retail<span class="sort-arrow"></span></th>
           <th class="ecommerce-products-table__th ecommerce-products-table__th--right">Offer</th>
+          <th class="ecommerce-products-table__th ecommerce-products-table__th--center" style="cursor:default;">Website</th>
           <th class="ecommerce-products-table__th ecommerce-products-table__th--center" style="cursor:default;">Actions</th>
         </tr>
       </thead>
@@ -67,11 +90,16 @@
         {% if page and page > 1 %}{% set edit_qs = edit_qs ~ ('&' if edit_qs else '?') ~ 'page=' ~ page %}{% endif %}
         {% if sort_column %}{% set edit_qs = edit_qs ~ ('&' if edit_qs else '?') ~ 'sort=' ~ (sort_column|urlencode) %}{% endif %}
         {% if sort_order in ('asc', 'desc') %}{% set edit_qs = edit_qs ~ ('&' if edit_qs else '?') ~ 'order=' ~ sort_order %}{% endif %}
+        {% if web_filter and web_filter != 'all' %}{% set edit_qs = edit_qs ~ ('&' if edit_qs else '?') ~ 'web=' ~ (web_filter|urlencode) %}{% endif %}
+        {% if image_filter and image_filter != 'all' %}{% set edit_qs = edit_qs ~ ('&' if edit_qs else '?') ~ 'image=' ~ (image_filter|urlencode) %}{% endif %}
         {% set edit_url = '/ecommerce/products/' ~ item_code ~ edit_qs %}
         {% set form_id = 'product-row-' ~ item_code %}
         {% set image_url = row.image_url %}
         {% set has_details = (row.description_text or row.specifications_text) %}
-        <tr>
+        {% set show_on_web = row.show_on_web if row.show_on_web is defined else true %}
+        {% set is_featured = row.is_featured if row.is_featured is defined else false %}
+        {% set is_addon = row.is_addon if row.is_addon is defined else false %}
+        <tr class="{% if not show_on_web %}ecommerce-products-table__row--hidden{% endif %}">
           <td class="sl-no ecommerce-products-table__cell ecommerce-products-table__cell--center">{{ loop.index + (page - 1) * 50 if page else loop.index }}</td>
           <td class="ecommerce-products-table__image-cell ecommerce-products-table__cell ecommerce-products-table__cell--center">
             <form id="{{ form_id }}" method="post" action="/ecommerce/products/{{ item_code }}/update" enctype="multipart/form-data"></form>
@@ -79,6 +107,9 @@
             <input type="hidden" form="{{ form_id }}" name="page" value="{{ page }}" />
             <input type="hidden" form="{{ form_id }}" name="sort" value="{{ sort_column }}" />
             <input type="hidden" form="{{ form_id }}" name="order" value="{{ sort_order }}" />
+            <input type="hidden" form="{{ form_id }}" name="web" value="{{ web_filter }}" />
+            <input type="hidden" form="{{ form_id }}" name="image" value="{{ image_filter }}" />
+            <input type="hidden" form="{{ form_id }}" name="touch_web_flags" value="1" />
             <a
               href="{{ edit_url }}"
               class="ecommerce-products-table__thumb-link"
@@ -104,9 +135,17 @@
               maxlength="200"
               required
             />
-            {% if has_details %}
-            <span class="ecommerce-products-table__details-badge" title="Has description or specifications">Details</span>
-            {% endif %}
+            <span class="ecommerce-products-table__badges">
+              {% if has_details %}
+              <span class="ecommerce-products-table__details-badge" title="Has description or specifications">Details</span>
+              {% endif %}
+              {% if not show_on_web %}
+              <span class="ecommerce-products-table__web-badge ecommerce-products-table__web-badge--hidden">Hidden</span>
+              {% endif %}
+              {% if is_featured %}
+              <span class="ecommerce-products-table__web-badge ecommerce-products-table__web-badge--featured">Featured</span>
+              {% endif %}
+            </span>
           </td>
           <td class="ecommerce-products-table__meta ecommerce-products-table__cell" title="{{ row.categoryname or row.CATEGORYNAME or row.category_name or '' }}">{{ row.categoryname or row.CATEGORYNAME or row.category_name or '—' }}</td>
           <td class="ecommerce-products-table__cell ecommerce-products-table__cell--center">{{ row.currentstock or row.CURRENTSTOCK or 0 }}</td>
@@ -131,6 +170,46 @@
               placeholder="—"
             />
           </td>
+          <td class="ecommerce-products-table__cell ecommerce-products-table__cell--center ecommerce-products-table__webflags">
+            <fieldset class="ecommerce-products-table__web-checks">
+              <legend class="visually-hidden">Website for {{ item_code }}</legend>
+              <label class="ecommerce-products-table__web-check" for="show-on-web-{{ item_code }}">
+                <input
+                  type="checkbox"
+                  id="show-on-web-{{ item_code }}"
+                  form="{{ form_id }}"
+                  name="show_on_web"
+                  value="1"
+                  data-web-show
+                  {% if show_on_web %}checked{% endif %}
+                />
+                <span>Web</span>
+              </label>
+              <label class="ecommerce-products-table__web-check" for="is-featured-{{ item_code }}">
+                <input
+                  type="checkbox"
+                  id="is-featured-{{ item_code }}"
+                  form="{{ form_id }}"
+                  name="is_featured"
+                  value="1"
+                  data-web-featured
+                  {% if is_featured %}checked{% endif %}
+                />
+                <span>Feature</span>
+              </label>
+              <label class="ecommerce-products-table__web-check" for="is-addon-{{ item_code }}">
+                <input
+                  type="checkbox"
+                  id="is-addon-{{ item_code }}"
+                  form="{{ form_id }}"
+                  name="is_addon"
+                  value="1"
+                  {% if is_addon %}checked{% endif %}
+                />
+                <span>Addon</span>
+              </label>
+            </fieldset>
+          </td>
           <td class="ecommerce-products-table__actions ecommerce-products-table__cell ecommerce-products-table__cell--center">
             <div class="ecommerce-products-table__action-stack">
               <a
@@ -142,7 +221,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="9" style="text-align:center;padding:20px;color:#64748b;">No products found.</td></tr>
+        <tr><td colspan="10" style="text-align:center;padding:20px;color:#64748b;">No products found.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -185,6 +264,13 @@
       <section class="ecommerce-web-fetch-panel ecommerce-product-config-section">
         <div class="ecommerce-web-fetch-panel__copy">
           <p class="ecommerce-web-fetch-panel__title">Fetch missing images from web</p>
+          <p class="ecommerce-web-fetch-panel__pending">
+            {% if pending_image_skus|default(0) %}
+            <strong>{{ pending_image_skus }}</strong> SKU{{ '' if pending_image_skus == 1 else 's' }} pending image
+            {% else %}
+            All SKUs have an image.
+            {% endif %}
+          </p>
           <p class="ecommerce-web-fetch-panel__hint">
             For products with <strong>no image</strong> in Item Master, search the web by product name
             (Bing Images — good for toys, balloons, party items) and barcode (Open Food Facts / UPCItemDB),
@@ -205,6 +291,43 @@
         </form>
       </section>
 
+      <section class="ecommerce-remove-images-panel ecommerce-product-config-section">
+        <div class="ecommerce-remove-images-panel__copy">
+          <p class="ecommerce-remove-images-panel__title">Remove all product images</p>
+          <p class="ecommerce-remove-images-panel__count">
+            {% if product_image_skus|default(0) %}
+            <strong>{{ product_image_skus }}</strong> SKU{{ '' if product_image_skus == 1 else 's' }} currently have a main image
+            {% else %}
+            No SKUs have a main image.
+            {% endif %}
+            {% if product_gallery_skus|default(0) %}
+            · <strong>{{ product_gallery_skus }}</strong> extra gallery image{{ '' if product_gallery_skus == 1 else 's' }}
+            {% endif %}
+          </p>
+          <p class="ecommerce-remove-images-panel__hint">
+            Clears the Item Master image for every product at this location and deletes the saved files.
+            This cannot be undone. Use <strong>Fetch images from web</strong> or Excel import to add images again.
+          </p>
+        </div>
+        <form
+          method="post"
+          action="{{ url_for('ecommerce.products_images_remove_all') }}"
+          class="ecommerce-remove-images-panel__form"
+          id="productRemoveAllImagesForm"
+        >
+          <input type="hidden" name="q" value="{{ search }}" />
+          <label class="ecommerce-remove-images-panel__checkbox" for="removeGalleryImages">
+            <input type="checkbox" id="removeGalleryImages" name="remove_gallery" value="1" />
+            Also remove extra gallery images
+          </label>
+          <label class="ecommerce-remove-images-panel__checkbox" for="confirmRemoveAllImages">
+            <input type="checkbox" id="confirmRemoveAllImages" name="confirm_remove" value="1" required />
+            I understand this cannot be undone
+          </label>
+          <button type="submit" class="page-po__btn-danger">Remove all product images</button>
+        </form>
+      </section>
+
       <section class="ecommerce-product-gallery-panel ecommerce-product-config-section">
         <div class="ecommerce-product-gallery-panel__copy">
           <p class="ecommerce-product-gallery-panel__title">Extra product images (gallery)</p>
@@ -219,32 +342,120 @@
 
       <section class="ecommerce-bulk-images-panel ecommerce-product-config-section">
         <div class="ecommerce-bulk-images-panel__copy">
-          <p class="ecommerce-bulk-images-panel__title">Bulk product images (Excel)</p>
+          <p class="ecommerce-bulk-images-panel__title">Bulk product images</p>
           <p class="ecommerce-bulk-images-panel__hint">
-            Download the template, add <strong>ItemCode</strong> or <strong>Barcode</strong>, then use any one of:
-            paste a picture into the <strong>Image</strong> column (Insert → Picture in Excel),
-            an <strong>ImageURL</strong>, or an <strong>ImageFileName</strong> with an optional ZIP upload.
-            Images are saved to Item Master and shown on the storefront.
+            Choose an <strong>image folder</strong> (no ZIP needed) or a ZIP. One folder per product.
+            Folder name is the <strong>barcode</strong>
+            (example <code>1200000001035/1.jpg</code>) or a file named
+            <code>1200000001035-1.jpg</code>, <code>1200000001035-2.jpg</code>.
+            A parent folder inside the ZIP is OK
+            (example <code>photos/1200000001035/1.jpg</code> or <code>photos/rattle-set/images/1.jpg</code>).
+            If the folder is not the barcode, use Excel column <strong>FolderName</strong>
+            (example folder <code>rattle-set</code>, row FolderName = <code>rattle-set</code>).
+            First photo is the main image, the rest go to the gallery.
+            Optional in the same folder: <code>description.txt</code>, <code>description_ar.txt</code>, and <code>specifications.txt</code>
+            (or <code>product.json</code> with those fields).
+            Choose whether to <strong>keep</strong> an existing product photo or <strong>replace</strong> it.
+            ZIP limit is <strong>2 GB</strong> — a large file can take several minutes.
+            Or use the Excel template with ItemCode/Barcode, FolderName, Description, DescriptionArabic, Specifications,
+            ProductPageURL, and a pasted picture, ImageURL, or ImageFileName.
+            Images are cropped to a square and resized to <strong>800 × 800 px</strong>.
           </p>
           <a href="{{ url_for('ecommerce.products_image_import_template') }}" class="page-po__btn-secondary ecommerce-bulk-images-panel__template">
             Download Excel template
           </a>
         </div>
-        <form method="post" action="{{ url_for('ecommerce.products_image_import') }}" enctype="multipart/form-data" class="ecommerce-bulk-images-panel__form">
+        <form
+          id="productBulkImagesForm"
+          method="post"
+          action="{{ url_for('ecommerce.products_image_import') }}"
+          enctype="multipart/form-data"
+          class="ecommerce-bulk-images-panel__form"
+          data-progress-url="{{ url_for('ecommerce.products_image_import_progress') }}"
+        >
           <input type="hidden" name="q" value="{{ search }}" />
           <label class="ecommerce-bulk-images-panel__field">
             <span>Excel file (.xlsx)</span>
-            <input type="file" name="excel_file" accept=".xlsx,.xlsm" required />
+            <input type="file" name="excel_file" accept=".xlsx,.xlsm" />
           </label>
           <label class="ecommerce-bulk-images-panel__field">
-            <span>Images ZIP (optional)</span>
+            <span>Image folder (folder name = barcode)</span>
+            <input
+              type="file"
+              name="image_files"
+              accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+              multiple
+              webkitdirectory
+              directory
+            />
+          </label>
+          <label class="ecommerce-bulk-images-panel__field">
+            <span>Images ZIP (barcode folders or file names)</span>
             <input type="file" name="images_zip" accept=".zip" />
           </label>
+          <fieldset class="ecommerce-bulk-images-panel__options">
+            <legend>If the product already has an image</legend>
+            <label class="ecommerce-bulk-images-panel__checkbox">
+              <input type="radio" name="existing_images" value="keep" checked />
+              Keep existing image
+            </label>
+            <label class="ecommerce-bulk-images-panel__checkbox">
+              <input type="radio" name="existing_images" value="replace" />
+              Remove and replace existing image
+            </label>
+          </fieldset>
           <label class="ecommerce-bulk-images-panel__checkbox">
             <input type="checkbox" name="download_urls" value="1" checked />
             Download images from URLs
           </label>
+          <div class="ecommerce-bulk-images-panel__progress" id="productBulkImagesProgress" hidden>
+            <p class="ecommerce-bulk-images-panel__progress-status" id="productBulkImagesStatus">Ready</p>
+            <p class="ecommerce-bulk-images-panel__progress-count" id="productBulkImagesCount" aria-live="polite"></p>
+            <progress id="productBulkImagesBar" max="100" value="0"></progress>
+          </div>
           <button type="submit" class="page-po__btn-primary">Import images</button>
+        </form>
+      </section>
+
+      <section class="ecommerce-bulk-images-panel ecommerce-product-config-section">
+        <div class="ecommerce-bulk-images-panel__copy">
+          <p class="ecommerce-bulk-images-panel__title">Google Drive images</p>
+          <p class="ecommerce-bulk-images-panel__hint">
+            Paste a <strong>public</strong> Drive folder or file link
+            (Anyone with the link can view). File names should be the barcode,
+            for example <code>1200000001035-1.jpg</code>.
+            Images are added <strong>only if the product has no photo</strong>.
+          </p>
+        </div>
+        <form
+          id="productDriveImagesForm"
+          method="post"
+          action="{{ url_for('ecommerce.products_images_from_drive') }}"
+          class="ecommerce-bulk-images-panel__form"
+          data-progress-url="{{ url_for('ecommerce.products_image_import_progress') }}"
+        >
+          <input type="hidden" name="q" value="{{ search }}" />
+          <input type="hidden" name="existing_images" value="keep" />
+          <label class="ecommerce-bulk-images-panel__field">
+            <span>Google Drive link</span>
+            <input
+              id="productDriveUrl"
+              type="url"
+              name="drive_url"
+              class="input"
+              inputmode="url"
+              autocomplete="url"
+              placeholder="https://drive.google.com/drive/folders/…"
+              spellcheck="false"
+              required
+            />
+          </label>
+          <div class="ecommerce-bulk-images-panel__progress" id="productDriveImagesProgress" hidden>
+            <p class="ecommerce-bulk-images-panel__progress-status" id="productDriveImagesStatus">Ready</p>
+            <p class="ecommerce-bulk-images-panel__progress-count" id="productDriveImagesCount" aria-live="polite"></p>
+            <progress id="productDriveImagesBar" max="100" value="0"></progress>
+          </div>
+          <button type="submit" class="page-po__btn-primary" id="productDriveImagesSubmit">Fetch from Drive</button>
         </form>
       </section>
     </div>
@@ -279,12 +490,398 @@
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
   });
+
+  var removeForm = document.getElementById('productRemoveAllImagesForm');
+  if (removeForm) {
+    removeForm.addEventListener('submit', function (event) {
+      var confirmBox = document.getElementById('confirmRemoveAllImages');
+      if (!confirmBox || !confirmBox.checked) {
+        event.preventDefault();
+        confirmBox && confirmBox.focus();
+        return;
+      }
+      var galleryBox = document.getElementById('removeGalleryImages');
+      var message = 'Remove every main product image for this location?';
+      if (galleryBox && galleryBox.checked) {
+        message = 'Remove every main product image and extra gallery images for this location?';
+      }
+      if (!window.confirm(message)) {
+        event.preventDefault();
+        return;
+      }
+      var submitBtn = removeForm.querySelector('button[type="submit"]');
+      if (submitBtn) submitBtn.disabled = true;
+    });
+  }
+
+  var bulkForm = document.getElementById('productBulkImagesForm');
+  if (bulkForm) {
+    var zipInput = bulkForm.querySelector('input[name="images_zip"]');
+    var excelInput = bulkForm.querySelector('input[name="excel_file"]');
+    var folderInput = bulkForm.querySelector('input[name="image_files"]');
+    var progressBox = document.getElementById('productBulkImagesProgress');
+    var statusEl = document.getElementById('productBulkImagesStatus');
+    var countEl = document.getElementById('productBulkImagesCount');
+    var barEl = document.getElementById('productBulkImagesBar');
+    var submitBtn = bulkForm.querySelector('button[type="submit"]');
+    var progressUrl = bulkForm.getAttribute('data-progress-url') || '/ecommerce/products/images/import/progress';
+    var pollTimer = 0;
+
+    function formatMb(bytes) {
+      return (Number(bytes || 0) / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    function showProgress() {
+      if (progressBox) progressBox.hidden = false;
+    }
+
+    function setStatus(text) {
+      if (statusEl) statusEl.textContent = text;
+    }
+
+    function setCount(text) {
+      if (countEl) countEl.textContent = text;
+    }
+
+    function setBar(value, max, determinate) {
+      if (!barEl) return;
+      if (!determinate) {
+        barEl.removeAttribute('value');
+        return;
+      }
+      barEl.max = Math.max(1, Number(max) || 1);
+      barEl.value = Math.max(0, Number(value) || 0);
+    }
+
+    function resetImportForm() {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Import images';
+      }
+      if (typeof window.reEnableFormSubmit === 'function') {
+        window.reEnableFormSubmit(bulkForm);
+      }
+    }
+
+    function stopPoll() {
+      if (pollTimer) {
+        window.clearInterval(pollTimer);
+        pollTimer = 0;
+      }
+    }
+
+    function applyImportCount(data) {
+      if (!data || data.phase === 'waiting') return;
+      var total = Number(data.total || 0);
+      var processed = Number(data.processed || 0);
+      var updated = Number(data.updated || 0);
+      var failed = Number(data.failed || 0);
+      var current = String(data.current || '');
+      if (total > 0) {
+        setBar(processed, total, true);
+        setCount(processed + ' / ' + total + ' products');
+      }
+      if (data.phase === 'preparing') {
+        setStatus('Upload complete. Preparing import…');
+        return;
+      }
+      if (data.phase === 'importing') {
+        setStatus(current ? ('Importing ' + current) : 'Importing products…');
+        if (updated || failed) {
+          setCount(processed + ' / ' + total + ' products · ' + updated + ' saved · ' + failed + ' failed');
+        }
+        return;
+      }
+      if (data.phase === 'done') {
+        setStatus(data.message || 'Import finished.');
+        if (total > 0) {
+          setCount(processed + ' / ' + total + ' products · ' + updated + ' saved · ' + failed + ' failed');
+        }
+      }
+    }
+
+    function startPoll(jobId) {
+      stopPoll();
+      var fetchProgress = function () {
+        fetch(progressUrl + '?job_id=' + encodeURIComponent(jobId), {
+          headers: { 'Accept': 'application/json' },
+          credentials: 'same-origin',
+          cache: 'no-store'
+        }).then(function (res) { return res.json(); }).then(applyImportCount).catch(function () {});
+      };
+      fetchProgress();
+      pollTimer = window.setInterval(fetchProgress, 800);
+    }
+
+    if (zipInput) {
+      zipInput.addEventListener('change', function () {
+        var file = zipInput.files && zipInput.files[0];
+        showProgress();
+        if (!file) {
+          setStatus('Ready');
+          setCount('');
+          setBar(0, 100, true);
+          return;
+        }
+        setStatus('ZIP selected');
+        setCount(formatMb(file.size));
+        setBar(0, 100, true);
+      });
+    }
+
+    if (folderInput) {
+      folderInput.addEventListener('change', function () {
+        var n = folderInput.files ? folderInput.files.length : 0;
+        showProgress();
+        if (!n) {
+          setStatus('Ready');
+          setCount('');
+          setBar(0, 100, true);
+          return;
+        }
+        var bytes = 0;
+        Array.prototype.forEach.call(folderInput.files, function (file) { bytes += file.size || 0; });
+        setStatus(n + ' image file(s) selected');
+        setCount(formatMb(bytes));
+        setBar(0, 100, true);
+      });
+    }
+
+    bulkForm.addEventListener('submit', function (event) {
+      var zipFile = zipInput && zipInput.files && zipInput.files[0];
+      var excelFile = excelInput && excelInput.files && excelInput.files[0];
+      var folderCount = folderInput && folderInput.files ? folderInput.files.length : 0;
+      var maxZip = 2 * 1024 * 1024 * 1024;
+      if (zipFile && zipFile.size > maxZip) {
+        event.preventDefault();
+        window.alert('This ZIP is larger than 2 GB. Split it into smaller ZIPs and import them one at a time.');
+        return;
+      }
+      if (!zipFile && !excelFile && !folderCount) {
+        event.preventDefault();
+        window.alert('Choose an image folder, a ZIP of barcode folders, or an Excel file.');
+        return;
+      }
+
+      event.preventDefault();
+      var jobId = (window.crypto && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (ch) {
+            var n = Math.random() * 16 | 0;
+            return (ch === 'x' ? n : (n & 0x3 | 0x8)).toString(16);
+          });
+      var formData = new FormData(bulkForm);
+      formData.delete('image_files');
+      if (folderInput && folderInput.files) {
+        Array.prototype.forEach.call(folderInput.files, function (file) {
+          formData.append('image_files', file, file.webkitRelativePath || file.name);
+        });
+      }
+      formData.append('ajax', '1');
+      formData.append('import_job_id', jobId);
+
+      showProgress();
+      setStatus(folderCount && !zipFile ? 'Uploading folder…' : 'Uploading ZIP…');
+      setCount(zipFile ? ('0 / ' + formatMb(zipFile.size)) : 'Starting…');
+      setBar(0, zipFile ? zipFile.size : 100, !!zipFile);
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Uploading…';
+      }
+
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', bulkForm.getAttribute('action') || '/ecommerce/products/images/import');
+      xhr.setRequestHeader('Accept', 'application/json');
+      xhr.withCredentials = true;
+
+      xhr.upload.addEventListener('progress', function (e) {
+        if (!e.lengthComputable) return;
+        setBar(e.loaded, e.total, true);
+        setStatus(folderCount && !zipFile ? 'Uploading folder…' : 'Uploading ZIP…');
+        setCount(formatMb(e.loaded) + ' / ' + formatMb(e.total));
+      });
+
+      xhr.upload.addEventListener('load', function () {
+        setStatus('Upload complete. Preparing import…');
+        setBar(null, 1, false);
+        if (submitBtn) submitBtn.textContent = 'Importing…';
+        startPoll(jobId);
+      });
+
+      xhr.addEventListener('load', function () {
+        stopPoll();
+        var data = {};
+        try {
+          data = JSON.parse(xhr.responseText || '{}');
+        } catch (err) {
+          data = { ok: false, message: 'Import failed. Please try again.' };
+        }
+        applyImportCount({
+          phase: 'done',
+          done: true,
+          ok: data.ok,
+          message: data.message,
+          processed: data.processed,
+          updated: data.updated,
+          failed: data.failed,
+          total: data.processed
+        });
+        if (xhr.status >= 200 && xhr.status < 300 && data.ok) {
+          setStatus(data.message || 'Import finished.');
+          if (submitBtn) submitBtn.textContent = 'Done';
+          window.setTimeout(function () {
+            window.location.reload();
+          }, 1200);
+          return;
+        }
+        setStatus(data.message || 'Import failed.');
+        resetImportForm();
+      });
+
+      xhr.addEventListener('error', function () {
+        stopPoll();
+        setStatus('Upload failed. Check your connection and try again.');
+        resetImportForm();
+      });
+
+      xhr.addEventListener('abort', function () {
+        stopPoll();
+        setStatus('Upload cancelled.');
+        resetImportForm();
+      });
+
+      xhr.send(formData);
+    });
+  }
+
+  var driveForm = document.getElementById('productDriveImagesForm');
+  if (driveForm) {
+    var driveUrl = document.getElementById('productDriveUrl');
+    var driveProgress = document.getElementById('productDriveImagesProgress');
+    var driveStatus = document.getElementById('productDriveImagesStatus');
+    var driveCount = document.getElementById('productDriveImagesCount');
+    var driveBar = document.getElementById('productDriveImagesBar');
+    var driveBtn = document.getElementById('productDriveImagesSubmit');
+    var driveProgressUrl = driveForm.getAttribute('data-progress-url') || '/ecommerce/products/images/import/progress';
+    var driveTimer = 0;
+
+    function setDriveStatus(text) {
+      if (driveStatus) driveStatus.textContent = text;
+    }
+    function setDriveCount(text) {
+      if (driveCount) driveCount.textContent = text;
+    }
+    function stopDrivePoll() {
+      if (driveTimer) {
+        window.clearInterval(driveTimer);
+        driveTimer = 0;
+      }
+    }
+
+    driveForm.addEventListener('submit', function (event) {
+      var link = driveUrl && String(driveUrl.value || '').trim();
+      if (!link) {
+        event.preventDefault();
+        window.alert('Paste a Google Drive folder or file link.');
+        return;
+      }
+      event.preventDefault();
+      var jobId = (window.crypto && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (ch) {
+            var n = Math.random() * 16 | 0;
+            return (ch === 'x' ? n : (n & 0x3 | 0x8)).toString(16);
+          });
+      var formData = new FormData(driveForm);
+      formData.append('ajax', '1');
+      formData.append('import_job_id', jobId);
+      if (driveProgress) driveProgress.hidden = false;
+      setDriveStatus('Reading Google Drive…');
+      setDriveCount('');
+      if (driveBtn) {
+        driveBtn.disabled = true;
+        driveBtn.textContent = 'Fetching…';
+      }
+      function applyDrive(data) {
+        if (!data) return;
+        var total = Number(data.total || 0);
+        var processed = Number(data.processed || 0);
+        if (driveBar && total > 0) {
+          driveBar.max = total;
+          driveBar.value = processed;
+        }
+        if (data.current) setDriveStatus(data.phase === 'done' ? (data.message || 'Done') : data.current);
+        if (total) setDriveCount(processed + ' / ' + total);
+      }
+      function pollDrive() {
+        fetch(driveProgressUrl + '?job_id=' + encodeURIComponent(jobId), {
+          headers: { 'Accept': 'application/json' },
+          credentials: 'same-origin',
+          cache: 'no-store'
+        }).then(function (res) { return res.json(); }).then(applyDrive).catch(function () {});
+      }
+      pollDrive();
+      driveTimer = window.setInterval(pollDrive, 800);
+      fetch(driveForm.getAttribute('action'), {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+      }).then(function (res) { return res.json().then(function (data) { return { res: res, data: data }; }); })
+        .then(function (result) {
+          stopDrivePoll();
+          applyDrive(result.data);
+          setDriveStatus(result.data.message || (result.data.ok ? 'Images fetched.' : 'Fetch failed.'));
+          if (driveBtn) {
+            driveBtn.disabled = false;
+            driveBtn.textContent = 'Fetch from Drive';
+          }
+          if (result.data.ok && result.data.redirect) {
+            window.location = result.data.redirect;
+          }
+        }).catch(function () {
+          stopDrivePoll();
+          setDriveStatus('Fetch failed. Check the Drive sharing setting.');
+          if (driveBtn) {
+            driveBtn.disabled = false;
+            driveBtn.textContent = 'Fetch from Drive';
+          }
+        });
+    });
+  }
 })();
 
 (function () {
   var params = new URLSearchParams(window.location.search);
-  var currentSort = (params.get('sort') || '').trim();
-  var currentOrder = (params.get('order') || '').trim();
+  var currentSort = (params.get('sort') || 'itemcode').trim();
+  var currentOrder = (params.get('order') || 'asc').trim();
+
+  document.querySelectorAll('[data-web-show]').forEach(function (showBox) {
+    var form = showBox.form;
+    if (!form) return;
+    var featuredBox = form.querySelector('[data-web-featured]');
+    if (!featuredBox) return;
+    featuredBox.addEventListener('change', function () {
+      if (featuredBox.checked) showBox.checked = true;
+    });
+    showBox.addEventListener('change', function () {
+      if (!showBox.checked) featuredBox.checked = false;
+    });
+  });
+
+  var webFilter = document.getElementById('web-filter');
+  if (webFilter) {
+    webFilter.addEventListener('change', function () {
+      webFilter.form && webFilter.form.requestSubmit();
+    });
+  }
+
+  var imageFilter = document.getElementById('image-filter');
+  if (imageFilter) {
+    imageFilter.addEventListener('change', function () {
+      imageFilter.form && imageFilter.form.requestSubmit();
+    });
+  }
 
   document.querySelectorAll('.ecommerce-products-table th.sortable').forEach(function (header) {
     header.addEventListener('click', function () {

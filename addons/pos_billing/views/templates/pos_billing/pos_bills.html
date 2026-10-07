@@ -256,7 +256,7 @@
 </div>
 
 <script>
-  window.__SALES_QZ_SCRIPT_URL__ = 'https://cdn.jsdelivr.net/npm/qz-tray/qz-tray.js';
+  window.__SALES_QZ_SCRIPT_URL__ = {{ url_for('static', filename='js/vendor/qz-tray.js')|tojson }};
   window.__POS_QZ_URLS__ = {
     certificate: {{ url_for('reports.qz_certificate')|tojson }},
     sign: {{ url_for('reports.qz_sign')|tojson }}

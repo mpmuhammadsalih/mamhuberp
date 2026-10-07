@@ -238,21 +238,6 @@
       text-align: center;
       word-break: break-word;
     }
-    .bc-print-cap-ar {
-      font-size: 6pt;
-      font-weight: 600;
-      color: #000;
-      margin: 0.2mm 0 0;
-      line-height: 1.1;
-      max-height: 4mm;
-      overflow: hidden;
-      width: 100%;
-      text-align: center;
-      direction: rtl;
-      unicode-bidi: embed;
-      word-break: break-word;
-      font-family: Tahoma, "Segoe UI", Arial, sans-serif;
-    }
     .bc-print-meta {
       font-size: 6pt;
       color: #000;
@@ -313,6 +298,15 @@
       font-weight: 600;
       color: #000;
     }
+    .bc-print-cost-code {
+      font-size: 9pt;
+      font-weight: 800;
+      color: #000;
+      letter-spacing: 0.08em;
+      text-transform: lowercase;
+      margin: 0;
+      line-height: 1.05;
+    }
     .bc-print-prices {
       display: flex;
       flex-direction: row;
@@ -350,15 +344,6 @@
       font-weight: 800;
       color: #000;
       letter-spacing: 0.02em;
-    }
-    .bc-print-price-ar {
-      font-size: 9pt;
-      font-weight: 700;
-      color: #000;
-      direction: rtl;
-      unicode-bidi: embed;
-      font-family: Tahoma, "Segoe UI", Arial, sans-serif;
-      margin-top: 0.2mm;
     }
   }
 </style>
@@ -433,13 +418,14 @@
               <th>Name</th>
               <th style="min-width:100px;">Unit (UOM)</th>
               <th style="width:72px;text-align:right;">Price</th>
+              <th style="width:72px;text-align:right;" title="Current stock at this location">Stock</th>
               <th style="width:64px;text-align:center;" title="Labels to print for this row">Count</th>
               <th class="bc-thumb-wrap">Preview</th>
               <th style="width:120px;">Actions</th>
             </tr>
           </thead>
           <tbody id="bcProdBody">
-            <tr><td colspan="11" class="muted">Add items above — each Add creates a row you can print together.</td></tr>
+            <tr><td colspan="12" class="muted">Add items above — each Add creates a row you can print together.</td></tr>
           </tbody>
         </table>
       </div>
@@ -516,8 +502,50 @@
             var p = isNaN(pnum) ? '0.00' : pnum.toFixed(2);
             return bcToArabicDigits(p).replace('.', '\u066B') + ' \u0631.\u0642';
           }
+          /** Staff-only average cost on the sticker: mangojuice (m=1 a=2 … e=0). */
+          function bcResolveLabelCost(r) {
+            var vals = [
+              r && r.averagecost,
+              r && r.costprice,
+              r && r.landingcost,
+              r && r.uom_options && r.uom_options[0] && r.uom_options[0].costprice
+            ];
+            for (var i = 0; i < vals.length; i++) {
+              var n = parseFloat(vals[i]);
+              if (isFinite(n) && n > 0) return n;
+            }
+            return 0;
+          }
+          function bcEncodeAverageCost(raw) {
+            var sraw = String(raw == null ? '' : raw).trim();
+            if (/[a-z]/i.test(sraw) && !/\d/.test(sraw.replace(/\./g, ''))) {
+              return sraw.toLowerCase();
+            }
+            var n = parseFloat(sraw);
+            if (!isFinite(n) || n < 0) n = 0;
+            var map = { '1': 'm', '2': 'a', '3': 'n', '4': 'g', '5': 'o', '6': 'j', '7': 'u', '8': 'i', '9': 'c', '0': 'e' };
+            var s = n.toFixed(2);
+            var out = '';
+            for (var i = 0; i < s.length; i++) {
+              var ch = s.charAt(i);
+              if (ch === '.') {
+                out += '.';
+                continue;
+              }
+              out += map[ch] || ch;
+            }
+            return out;
+          }
           window.bcFormatPrice = bcFormatPrice;
           window.bcFormatPriceArabic = bcFormatPriceArabic;
+          window.bcEncodeAverageCost = bcEncodeAverageCost;
+          window.bcResolveLabelCost = bcResolveLabelCost;
+          function bcFormatStock(raw) {
+            var n = parseFloat(raw);
+            if (!isFinite(n)) n = 0;
+            if (Math.abs(n - Math.round(n)) < 0.0000001) return String(Math.round(n));
+            return n.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+          }
           function bcSourceBadge(src) {
             return String(src || '').toUpperCase() === 'ALT'
               ? '<span class="bc-badge bc-badge-alt">Alt UOM</span>'
@@ -535,9 +563,9 @@
             var src = String(r.source || 'BASE').toUpperCase();
             var opts = r.uom_options || [];
             if (!opts.length) {
-              opts = [{ uom: uom, barcode: bv, retailprice: r.retailprice, source: src }];
+              opts = [{ uom: uom, barcode: bv, retailprice: r.retailprice, costprice: r.costprice, source: src }];
             }
-            return {
+            var row = {
               itemcode: r.itemcode,
               itemname: String(r.itemname != null ? r.itemname : ''),
               itemnameara: String(r.itemnameara != null ? r.itemnameara : ''),
@@ -546,11 +574,20 @@
               uom: uom,
               retailprice: r.retailprice,
               averagecost: (r.averagecost != null ? r.averagecost : 0),
+              costprice: (r.costprice != null ? r.costprice : 0),
+              landingcost: (r.landingcost != null ? r.landingcost : 0),
+              currentstock: (r.currentstock != null ? r.currentstock : (r.current_stock != null ? r.current_stock : 0)),
               category: String(r.category != null ? r.category : ''),
               source: src,
               uom_options: opts,
               print_count: bcParsePrintCount(r.print_count != null ? r.print_count : 1)
             };
+            var resolved = bcResolveLabelCost(row);
+            if (resolved > 0) {
+              row.costprice = resolved;
+              row.averagecost = resolved;
+            }
+            return row;
           }
           function bcSyncPrintCountToQueue(tr) {
             var qid = tr.getAttribute('data-bc-queue-id');
@@ -633,10 +670,18 @@
             var uom = String(variant.uom != null ? variant.uom : '').trim();
             var priceShown = bcFormatPrice(variant.retailprice);
             var src = String(variant.source || 'BASE').toUpperCase();
+            var costNum = parseFloat(variant.costprice);
+            var costCode = '';
+            if (isFinite(costNum) && costNum > 0) {
+              costCode = bcEncodeAverageCost(costNum);
+            } else {
+              costCode = tr.getAttribute('data-bc-cost-code') || '';
+            }
             tr.setAttribute('data-bc-value', bv);
             tr.setAttribute('data-bc-uom', uom);
             tr.setAttribute('data-bc-price', priceShown);
             tr.setAttribute('data-bc-price-ar', bcFormatPriceArabic(variant.retailprice));
+            tr.setAttribute('data-bc-cost-code', costCode);
             tr.setAttribute('data-bc-source', src);
             if (qid) {
               for (var i = 0; i < bcPrintQueue.length; i++) {
@@ -644,6 +689,7 @@
                   bcPrintQueue[i].barcode = bv;
                   bcPrintQueue[i].uom = uom;
                   bcPrintQueue[i].retailprice = variant.retailprice;
+                  if (isFinite(costNum) && costNum > 0) bcPrintQueue[i].costprice = costNum;
                   bcPrintQueue[i].source = src;
                   break;
                 }
@@ -670,7 +716,7 @@
               var op = bcFormatPrice(o.retailprice);
               var os = String(o.source || 'ALT').toUpperCase();
               var selAttr = (ou === uom) ? ' selected' : '';
-              html += '<option value="' + escAttr(ou) + '" data-barcode="' + escAttr(ob) + '" data-price="' + escAttr(op) + '" data-source="' + escAttr(os) + '"' + selAttr + '>' + esc(ou) + '</option>';
+                  html += '<option value="' + escAttr(ou) + '" data-barcode="' + escAttr(ob) + '" data-price="' + escAttr(op) + '" data-cost="' + escAttr(String(o.costprice != null ? o.costprice : '')) + '" data-source="' + escAttr(os) + '"' + selAttr + '>' + esc(ou) + '</option>';
             });
             return html + '</select>';
           }
@@ -693,7 +739,8 @@
             var priceEsc = escAttr(priceShown);
             var pcnt = bcParsePrintCount(r.print_count);
             var locName = String(r.location_name != null ? r.location_name : '').trim();
-            return '<tr data-bc-queue-id="' + escAttr(r.id) + '" data-bc-itemcode="' + escAttr(icode) + '" data-bc-value="' + escAttr(bv) + '" data-bc-title="' + escAttr(title) + '" data-bc-title-ara="' + escAttr(titleAra) + '" data-bc-location-name="' + escAttr(locName) + '" data-bc-code="' + escAttr(icode) + '" data-bc-uom="' + escAttr(uom) + '" data-bc-price="' + priceEsc + '" data-bc-price-ar="' + escAttr(priceAr) + '" data-bc-source="' + escAttr(src) + '" data-bc-print-count="' + pcnt + '">'
+            var costCode = bcEncodeAverageCost(bcResolveLabelCost(r));
+            return '<tr data-bc-queue-id="' + escAttr(r.id) + '" data-bc-itemcode="' + escAttr(icode) + '" data-bc-value="' + escAttr(bv) + '" data-bc-title="' + escAttr(title) + '" data-bc-title-ara="' + escAttr(titleAra) + '" data-bc-location-name="' + escAttr(locName) + '" data-bc-code="' + escAttr(icode) + '" data-bc-uom="' + escAttr(uom) + '" data-bc-price="' + priceEsc + '" data-bc-price-ar="' + escAttr(priceAr) + '" data-bc-cost-code="' + escAttr(costCode) + '" data-bc-source="' + escAttr(src) + '" data-bc-print-count="' + pcnt + '">'
               + '<td class="muted" style="text-align:center;">' + lineNo + '</td>'
               + '<td>' + bcToggleHtml('bc-row-chk', true) + '</td>'
               + '<td class="bc-cell-type">' + bcSourceBadge(src) + '</td>'
@@ -706,6 +753,7 @@
               + '<td class="bc-cell-price" style="text-align:right;">'
               + '<div style="font-weight:700;line-height:1.2;">' + esc(priceShown) + '</div>'
               + '<div style="font-size:11px;direction:rtl;line-height:1.2;">' + esc(priceAr) + '</div></td>'
+              + '<td class="bc-cell-stock" style="text-align:right;font-variant-numeric:tabular-nums;">' + esc(bcFormatStock(r.currentstock)) + '</td>'
               + '<td style="text-align:center;"><input type="number" class="bc-print-cnt input" min="1" max="999" step="1" value="' + pcnt + '" title="Number of labels to print" aria-label="Print count" /></td>'
               + '<td><svg class="bc-thumb-svg" role="img" aria-label="Barcode preview"></svg></td>'
               + '<td style="white-space:nowrap;">'
@@ -725,6 +773,7 @@
                     barcode: opt.getAttribute('data-barcode') || '',
                     uom: opt.value || '',
                     retailprice: opt.getAttribute('data-price') || '0',
+                    costprice: opt.getAttribute('data-cost') || '',
                     source: opt.getAttribute('data-source') || 'BASE'
                   }, idx);
                 });
@@ -762,7 +811,7 @@
           function bcRenderPrintList() {
             bcUpdateListCount();
             if (!bcPrintQueue.length) {
-              body.innerHTML = '<tr><td colspan="11" class="muted">Add items above — each Add creates a row you can print together.</td></tr>';
+              body.innerHTML = '<tr><td colspan="12" class="muted">Add items above — each Add creates a row you can print together.</td></tr>';
               if (selAll) selAll.checked = false;
               return;
             }
@@ -1194,7 +1243,7 @@
             }
             // Keep counts/UOM in sync with what is on screen before exporting.
             body.querySelectorAll('tr[data-bc-queue-id]').forEach(function(tr) { bcSyncPrintCountToQueue(tr); });
-            var headers = ['#', 'Type', 'Barcode', 'Item Code', 'Item Name', 'Arabic Name', 'Category', 'UOM', 'Price', 'Average Cost', 'Count', 'Location'];
+            var headers = ['#', 'Type', 'Barcode', 'Item Code', 'Item Name', 'Arabic Name', 'Category', 'UOM', 'Price', 'Stock', 'Average Cost', 'Count', 'Location'];
             var lines = [headers.map(bcCsvCell).join(',')];
             bcPrintQueue.forEach(function(r, i) {
               var pnum = parseFloat(r.retailprice);
@@ -1212,6 +1261,7 @@
                 bcCsvCell(r.category),
                 bcCsvCell(r.uom),
                 bcCsvCell(price),
+                bcCsvCell(bcFormatStock(r.currentstock)),
                 bcCsvCell(avgCost),
                 bcCsvCell(bcParsePrintCount(r.print_count)),
                 bcCsvCell(r.location_name)
@@ -1435,7 +1485,7 @@ window.__BC_QZ_URLS__ = {
 <script src="{{ url_for('static', filename='js/qz_printer_prefs.js') }}"></script>
 <script src="{{ url_for('static', filename='js/qz_invoice_print.js') }}"></script>
 <script src="{{ url_for('static', filename='js/qz_printer_picker.js') }}"></script>
-<script src="{{ url_for('static', filename='js/qz_barcode_print.js') }}?v=4"></script>
+<script src="{{ url_for('static', filename='js/qz_barcode_print.js') }}?v=6"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 <script>
 (function() {
@@ -1490,16 +1540,24 @@ window.__BC_QZ_URLS__ = {
     var p = isNaN(pnum) ? '0.00' : pnum.toFixed(2);
     return p + ' QR';
   }
-  function bcToArabicDigits(s) {
-    var ar = ['\u0660', '\u0661', '\u0662', '\u0663', '\u0664', '\u0665', '\u0666', '\u0667', '\u0668', '\u0669'];
-    return String(s || '').replace(/\d/g, function(d) {
-      return ar[parseInt(d, 10)] || d;
-    });
-  }
-  function bcFormatPriceArabic(rp) {
-    var pnum = parseFloat(rp);
-    var p = isNaN(pnum) ? '0.00' : pnum.toFixed(2);
-    return bcToArabicDigits(p).replace('.', '\u066B') + ' \u0631.\u0642';
+  function bcEncodeAverageCost(raw) {
+    if (typeof window.bcEncodeAverageCost === 'function' && window.bcEncodeAverageCost !== bcEncodeAverageCost) {
+      return window.bcEncodeAverageCost(raw);
+    }
+    var n = parseFloat(raw);
+    if (!isFinite(n) || n < 0) n = 0;
+    var map = { '1': 'm', '2': 'a', '3': 'n', '4': 'g', '5': 'o', '6': 'j', '7': 'u', '8': 'i', '9': 'c', '0': 'e' };
+    var s = n.toFixed(2);
+    var out = '';
+    for (var i = 0; i < s.length; i++) {
+      var ch = s.charAt(i);
+      if (ch === '.') {
+        out += '.';
+        continue;
+      }
+      out += map[ch] || ch;
+    }
+    return out;
   }
   function bcConcatNameCode(titleEn, code, barcode) {
     var parts = [];
@@ -1511,7 +1569,7 @@ window.__BC_QZ_URLS__ = {
     if (b) parts.push(b);
     return parts.join(' · ');
   }
-  function bcAppendPrintNames(wrap, locationName, titleEn, titleAra, code, barcode) {
+  function bcAppendPrintNames(wrap, locationName, titleEn, code, barcode) {
     var box = document.createElement('div');
     box.className = 'bc-print-names';
     var loc = String(locationName != null ? locationName : '').trim();
@@ -1525,30 +1583,34 @@ window.__BC_QZ_URLS__ = {
     en.className = 'bc-print-cap';
     en.textContent = bcConcatNameCode(titleEn, code, barcode);
     box.appendChild(en);
-    var ara = String(titleAra != null ? titleAra : '').trim();
-    if (ara) {
-      var ar = document.createElement('div');
-      ar.className = 'bc-print-cap-ar';
-      ar.textContent = ara;
-      box.appendChild(ar);
-    }
     wrap.appendChild(box);
   }
-  function bcAppendPrintProductDetails(wrap, uom, priceVal) {
+  function bcAppendPrintProductDetails(wrap, uom, priceVal, costCode) {
     var row = document.createElement('div');
     row.className = 'bc-print-info-row';
     var hasRow = false;
-    if (priceVal != null && String(priceVal).trim() !== '') {
-      var prices = document.createElement('div');
-      prices.className = 'bc-print-prices';
+    var sellNum = parseFloat(priceVal);
+    var hasSell = isFinite(sellNum) && sellNum > 0;
+    var code = String(costCode != null ? costCode : '').trim();
+    if (/^0\.0+$/.test(code) || code === 'e.ee') {
+      /* encoded zero — hide unless we have no other price */
+      if (hasSell) code = '';
+    }
+    var prices = document.createElement('div');
+    prices.className = 'bc-print-prices';
+    if (hasSell) {
       var prEn = document.createElement('div');
       prEn.className = 'bc-print-price';
-      prEn.textContent = bcFormatPrice(priceVal);
-      var prAr = document.createElement('div');
-      prAr.className = 'bc-print-price-ar';
-      prAr.textContent = bcFormatPriceArabic(priceVal);
+      prEn.textContent = bcFormatPrice(sellNum);
       prices.appendChild(prEn);
-      prices.appendChild(prAr);
+    }
+    if (code) {
+      var costEl = document.createElement('div');
+      costEl.className = hasSell ? 'bc-print-cost-code' : 'bc-print-price';
+      costEl.textContent = code;
+      prices.appendChild(costEl);
+    }
+    if (prices.childNodes.length) {
       row.appendChild(prices);
       hasRow = true;
     }
@@ -1670,7 +1732,7 @@ window.__BC_QZ_URLS__ = {
       if (hasProductAttrs) {
         prodCode = String(it.code != null ? it.code : '').trim();
         prodUom = String(it.uom != null ? it.uom : '').trim();
-        bcAppendPrintNames(wrap, it.location_name, it.title, it.title_ara, prodCode, vRaw);
+        bcAppendPrintNames(wrap, it.location_name, it.title, prodCode, vRaw);
       } else {
         shelfSub = String(it.sub || '').trim();
         var cap = document.createElement('div');
@@ -1697,7 +1759,7 @@ window.__BC_QZ_URLS__ = {
           sub.textContent = (shelfSub ? shelfSub + ' · ' : '') + String(rendered.barcodeText || vRaw);
           wrap.appendChild(sub);
         } else {
-          bcAppendPrintProductDetails(wrap, prodUom, it.price);
+          bcAppendPrintProductDetails(wrap, prodUom, it.price, it.cost_code);
         }
         area.appendChild(wrap);
         anySvg = true;
@@ -1827,9 +1889,11 @@ window.__BC_QZ_URLS__ = {
       item.code = codeAttr;
       item.uom = tr.getAttribute('data-bc-uom') || '';
       item.price = tr.getAttribute('data-bc-price') || '';
-      item.price_ar = tr.getAttribute('data-bc-price-ar') || '';
-      item.title_ara = tr.getAttribute('data-bc-title-ara') || '';
       item.location_name = tr.getAttribute('data-bc-location-name') || '';
+      item.cost_code = tr.getAttribute('data-bc-cost-code') || '';
+      if (!item.cost_code && typeof bcEncodeAverageCost === 'function') {
+        item.cost_code = bcEncodeAverageCost(tr.getAttribute('data-bc-averagecost') || '');
+      }
     } else {
       item.sub = tr.getAttribute('data-bc-sub') || '';
     }

@@ -9,6 +9,7 @@ from nexa_http import current_app, url_for
 from addons.ecommerce.services.common import resolve_location_code
 from addons.ecommerce.services import media as media_svc
 from addons.ecommerce.services import product_images as product_images_svc
+from addons.ecommerce.services import item_age_groups as item_age_groups_svc
 from addons.ecommerce.services import product_web_meta as web_meta_svc
 from db import (
     _detect_column,
@@ -16,12 +17,113 @@ from db import (
     _fetch_rows,
     _get_connection,
     _get_table_columns,
+    ensure_itemmaster_description_width,
     ensure_itemmaster_image_path_column,
     set_item_image_path,
 )
 from addons.ecommerce import media_db
 
 _ALLOWED_IMAGE_EXT = {'.png', '.jpg', '.jpeg', '.webp', '.gif'}
+_ITEMMASTER_DESCRIPTION_MAX = 2000
+
+
+def _clip_itemmaster_description(value: Any) -> str:
+    """Keep ITEMMASTER.DESCRIPTION within the widened VARCHAR2(2000 CHAR) column."""
+    return ' '.join(str(value or '').split()).strip()[:_ITEMMASTER_DESCRIPTION_MAX]
+
+
+def set_item_description_text(
+    item_code: int,
+    description: str,
+    *,
+    location_code: Optional[int] = None,
+) -> Tuple[bool, str]:
+    """Save ITEMMASTER.DESCRIPTION without requiring the rest of the product form."""
+    loc = int(location_code or resolve_location_code())
+    ic = int(item_code)
+    if ic <= 0:
+        return (False, 'Invalid item code.')
+    ensure_itemmaster_description_width()
+    im = _detect_table(['ITEMMASTER', 'itemmaster', 'ITEM_MASTER'])
+    if not im:
+        return (False, 'ITEMMASTER not found.')
+    cols = {c.upper() for c in _get_table_columns(im) or []}
+    if 'DESCRIPTION' not in cols:
+        return (False, 'DESCRIPTION column is missing.')
+    code_col = _detect_column(im, ['ITEMCODE', 'ITEM_CODE', 'itemcode'])
+    loc_col = _detect_column(im, ['LOCATIONCODE', 'LOCATION_CODE', 'locationcode'])
+    if not code_col:
+        return (False, 'Invalid item table.')
+    where = [f'{code_col} = :ic']
+    params: Dict[str, Any] = {
+        'ic': ic,
+        'description': _clip_itemmaster_description(description),
+    }
+    if loc_col:
+        where.append(f'{loc_col} = :loc')
+        params['loc'] = loc
+    try:
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"UPDATE {im} SET DESCRIPTION = :description WHERE {' AND '.join(where)}",
+                    params,
+                )
+                if cur.rowcount == 0:
+                    conn.rollback()
+                    return (False, 'Item not found for this location.')
+            conn.commit()
+        return (True, '')
+    except Exception as exc:  # noqa: BLE001
+        return (False, str(exc))
+
+
+def set_item_name_text(
+    item_code: int,
+    item_name: str,
+    *,
+    location_code: Optional[int] = None,
+) -> Tuple[bool, str]:
+    """Save ITEMMASTER.ITEMNAME without requiring the rest of the product form."""
+    loc = int(location_code or resolve_location_code())
+    ic = int(item_code)
+    name_val = str(item_name or '').strip()
+    if ic <= 0:
+        return (False, 'Invalid item code.')
+    if not name_val:
+        return (False, 'Item name is required.')
+    im = _detect_table(['ITEMMASTER', 'itemmaster', 'ITEM_MASTER'])
+    if not im:
+        return (False, 'ITEMMASTER not found.')
+    cols = {c.upper() for c in _get_table_columns(im) or []}
+    if 'ITEMNAME' not in cols:
+        return (False, 'ITEMNAME column is missing.')
+    code_col = _detect_column(im, ['ITEMCODE', 'ITEM_CODE', 'itemcode'])
+    loc_col = _detect_column(im, ['LOCATIONCODE', 'LOCATION_CODE', 'locationcode'])
+    if not code_col:
+        return (False, 'Invalid item table.')
+    where = [f'{code_col} = :ic']
+    params: Dict[str, Any] = {
+        'ic': ic,
+        'item_name': name_val[:200],
+    }
+    if loc_col:
+        where.append(f'{loc_col} = :loc')
+        params['loc'] = loc
+    try:
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"UPDATE {im} SET ITEMNAME = :item_name WHERE {' AND '.join(where)}",
+                    params,
+                )
+                if cur.rowcount == 0:
+                    conn.rollback()
+                    return (False, 'Item not found for this location.')
+            conn.commit()
+        return (True, '')
+    except Exception as exc:  # noqa: BLE001
+        return (False, str(exc))
 
 
 def product_image_public_url(image_path: Optional[str]) -> Optional[str]:
@@ -35,7 +137,10 @@ def product_image_public_url(image_path: Optional[str]) -> Optional[str]:
         return raw
     if raw.startswith('/'):
         return raw
-    return url_for('static', filename=raw)
+    try:
+        return url_for('static', filename=raw)
+    except Exception:
+        return f'/static/{raw.lstrip("/")}'
 
 
 def update_product_row(
@@ -53,6 +158,19 @@ def update_product_row(
     remove_image: bool = False,
     gallery_uploads: Optional[List[Any]] = None,
     remove_gallery_ids: Optional[List[Any]] = None,
+    remove_all_gallery: bool = False,
+    age_group_ids: Optional[List[Any]] = None,
+    seo_title: Optional[str] = None,
+    seo_description: Optional[str] = None,
+    touch_seo: bool = False,
+    show_on_web: Optional[bool] = None,
+    is_featured: Optional[bool] = None,
+    is_addon: Optional[bool] = None,
+    touch_web_flags: bool = False,
+    import_page_url: Optional[str] = None,
+    touch_import_page_url: bool = False,
+    compare_urls: Optional[Any] = None,
+    touch_compare_urls: bool = False,
 ) -> Tuple[bool, str]:
     """Update name, description, retail price, and optional image for one product."""
     loc = int(location_code or resolve_location_code())
@@ -61,6 +179,7 @@ def update_product_row(
         return (False, 'Invalid item code.')
 
     ensure_itemmaster_image_path_column()
+    ensure_itemmaster_description_width()
     im = _detect_table(['ITEMMASTER', 'itemmaster', 'ITEM_MASTER'])
     if not im:
         return (False, 'ITEMMASTER not found.')
@@ -82,7 +201,7 @@ def update_product_row(
 
     if description is not None and 'DESCRIPTION' in cols:
         set_parts.append('DESCRIPTION = :description')
-        params['description'] = str(description or '').strip()[:500]
+        params['description'] = _clip_itemmaster_description(description)
 
     if retail_price is not None and 'RETAILPRICE' in cols:
         try:
@@ -117,8 +236,20 @@ def update_product_row(
         raw_id for raw_id in (remove_gallery_ids or []) if str(raw_id or '').strip()
     ]
 
-    if not set_parts and specifications is None and description_ar is None and specifications_ar is None and not remove_image and not gallery_files and not gallery_remove_ids and not (
-        image_upload and str(getattr(image_upload, 'filename', '') or '').strip()
+    if (
+        not set_parts
+        and specifications is None
+        and description_ar is None
+        and specifications_ar is None
+        and not remove_image
+        and not gallery_files
+        and not gallery_remove_ids
+        and not (
+            image_upload and str(getattr(image_upload, 'filename', '') or '').strip()
+        )
+        and not touch_seo
+        and not touch_web_flags
+        and age_group_ids is None
     ):
         return (False, 'Nothing to save.')
 
@@ -231,9 +362,59 @@ def update_product_row(
         ic,
         gallery_uploads=gallery_files,
         remove_media_ids=gallery_remove_ids,
+        remove_all=remove_all_gallery,
     )
     if not gallery_ok:
         return (False, gallery_msg)
+
+    if age_group_ids is not None:
+        age_ok, age_msg = item_age_groups_svc.save_item_age_groups(ic, age_group_ids)
+        if not age_ok:
+            return (False, age_msg)
+
+    if touch_seo:
+        seo_ok, seo_msg = web_meta_svc.save_product_web_meta(
+            ic,
+            seo_title=seo_title,
+            seo_description=seo_description,
+            touch_seo=True,
+            fallback_image=existing_path,
+        )
+        if not seo_ok:
+            return (False, seo_msg)
+
+    if touch_web_flags:
+        flags_ok, flags_msg = web_meta_svc.save_product_web_meta(
+            ic,
+            show_on_web=False if show_on_web is False else True,
+            is_featured=bool(is_featured),
+            is_addon=bool(is_addon),
+            addon_type='gift_wrap' if is_addon else None,
+            touch_web_flags=True,
+            fallback_image=existing_path,
+        )
+        if not flags_ok:
+            return (False, flags_msg)
+
+    if touch_import_page_url:
+        url_ok, url_msg = web_meta_svc.save_product_web_meta(
+            ic,
+            import_page_url=import_page_url,
+            touch_import_page_url=True,
+            fallback_image=existing_path,
+        )
+        if not url_ok:
+            return (False, url_msg)
+
+    if touch_compare_urls:
+        cmp_ok, cmp_msg = web_meta_svc.save_product_web_meta(
+            ic,
+            compare_urls=compare_urls,
+            touch_compare_urls=True,
+            fallback_image=existing_path,
+        )
+        if not cmp_ok:
+            return (False, cmp_msg)
 
     message = 'Product saved.'
     if offer_saved is not None and offer_saved > 0:
@@ -271,14 +452,15 @@ def sync_product_gallery(
     *,
     gallery_uploads: Optional[List[Any]] = None,
     remove_media_ids: Optional[List[Any]] = None,
+    remove_all: bool = False,
 ) -> Tuple[bool, str]:
     """Add or remove MH_MEDIA rows for product gallery images."""
     uploads = list(gallery_uploads or [])
     remove_ids = list(remove_media_ids or [])
-    if not uploads and not remove_ids:
-        return (True, '')
 
     if not media_db.media_table_ready():
+        if not uploads and not remove_ids and not remove_all:
+            return (True, '')
         return (
             False,
             'Gallery images require the MH_MEDIA table. Run the MamaHub media schema script first.',
@@ -287,6 +469,14 @@ def sync_product_gallery(
     ic = int(item_code)
     rows, _ = media_db.list_media(placement='product', active_only=False)
     product_rows = [row for row in rows if str(row.get('ref_key') or '').strip() == str(ic)]
+    if remove_all:
+        remove_ids = [
+            row.get('media_id')
+            for row in product_rows
+            if row.get('is_active') and row.get('media_id')
+        ]
+    if not uploads and not remove_ids:
+        return (True, '')
 
     for raw_id in remove_ids:
         try:

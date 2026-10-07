@@ -146,7 +146,7 @@ def list_products(
 
 
 def get_product(item_code: int) -> Optional[Dict[str, Any]]:
-    return catalog_svc.get_product(item_code)
+    return catalog_svc.get_product(item_code, include_hidden=True)
 
 
 def list_promotions() -> List[Dict[str, Any]]:

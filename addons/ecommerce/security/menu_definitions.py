@@ -4,9 +4,13 @@ from typing import Dict, List
 MENU_PAGE_LABELS: Dict[str, str] = {
     'ecommerce.dashboard': 'Dashboard',
     'ecommerce.orders': 'Orders',
+    'ecommerce.live_orders': 'Live orders',
     'ecommerce.products': 'Products',
+    'ecommerce.compare_stores': 'Compare stores',
+    'ecommerce.snoonu': 'Snoonu',
     'ecommerce.categories': 'Categories',
     'ecommerce.customers': 'Customers',
+    'ecommerce.assist': 'Assist',
     'ecommerce.promotions': 'Promotions',
     'ecommerce.reviews': 'Reviews',
     'ecommerce.media': 'Media',

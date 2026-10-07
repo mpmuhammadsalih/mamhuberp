@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ title or "Nexus Erp" }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/font/bootstrap-icons.min.css') }}?v=1.11.3" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=30" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=32" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/nexa_list_page.css') }}?v=6" />
     {% block extra_css %}{% endblock %}
   </head>
@@ -294,23 +294,29 @@
                 {% endif %}
               </div>
             {% endif %}
-            {% if has_any_menu_permission(['ecommerce.dashboard', 'ecommerce.orders', 'ecommerce.products', 'ecommerce.categories', 'ecommerce.customers', 'ecommerce.promotions', 'ecommerce.reviews', 'ecommerce.media', 'ecommerce.cms', 'ecommerce.inventory', 'ecommerce.reports', 'ecommerce.settings']) %}
+            {% if has_any_menu_permission(['ecommerce.dashboard', 'ecommerce.orders', 'ecommerce.products', 'ecommerce.categories', 'ecommerce.customers', 'ecommerce.assist', 'ecommerce.promotions', 'ecommerce.reviews', 'ecommerce.media', 'ecommerce.cms', 'ecommerce.inventory', 'ecommerce.reports', 'ecommerce.settings', 'ecommerce.snoonu']) %}
               <button class="sidebar__section" type="button" data-menu="ecommerce-root" data-icon="EC">Ecommerce</button>
               <div class="sidebar__submenu" id="ecommerce-root">
                 {% if has_menu_permission('ecommerce.dashboard') %}
                   <a href="{{ url_for('ecommerce.dashboard') }}" data-icon="ED">Dashboard</a>
                 {% endif %}
                 {% if has_menu_permission('ecommerce.orders') %}
+                  <a href="{{ url_for('ecommerce.live_orders') }}" data-icon="ELO">Live orders</a>
                   <a href="{{ url_for('ecommerce.orders') }}" data-icon="EO">Orders</a>
                 {% endif %}
                 {% if has_menu_permission('ecommerce.products') %}
                   <a href="{{ url_for('ecommerce.products') }}" data-icon="EP">Products</a>
+                  <a href="{{ url_for('ecommerce.compare_stores') }}" data-icon="ECS">Compare stores</a>
+                  <a href="{{ url_for('ecommerce.snoonu') }}" data-icon="ESN">Snoonu</a>
                 {% endif %}
                 {% if has_menu_permission('ecommerce.categories') %}
                   <a href="{{ url_for('ecommerce.categories') }}" data-icon="ECAT">Categories</a>
                 {% endif %}
                 {% if has_menu_permission('ecommerce.customers') %}
                   <a href="{{ url_for('ecommerce.customers') }}" data-icon="ECU">Customers</a>
+                {% endif %}
+                {% if has_menu_permission('ecommerce.assist') or has_menu_permission('ecommerce.customers') %}
+                  <a href="{{ url_for('ecommerce.assist') }}" data-icon="EAS">Assist</a>
                 {% endif %}
                 {% if has_menu_permission('ecommerce.promotions') %}
                   <a href="{{ url_for('ecommerce.promotions') }}" data-icon="EPR">Promotions</a>
@@ -1650,6 +1656,188 @@
       // Poll soon so badge, snooze, and org-wide AI flag match the server; then every 30s
       setTimeout(poll, 400);
       _crPollInterval = setInterval(poll, POLL_INTERVAL);
+    })();
+    </script>
+    {% endif %}
+
+    {% if show_app_shell and (allow_all_permissions or has_menu_permission('ecommerce.orders')) %}
+    <div id="ecOrderAlertToast" hidden class="ecommerce-order-alert" role="status">NEW ORDER</div>
+    <style>
+      .ecommerce-order-alert {
+        position: fixed;
+        right: 20px;
+        bottom: 20px;
+        z-index: 80;
+        padding: 14px 18px;
+        border-radius: 12px;
+        background: #be185d;
+        color: #fff;
+        font-size: 16px;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+        box-shadow: 0 10px 28px rgba(190, 24, 93, 0.4);
+        cursor: pointer;
+      }
+    </style>
+    <script>
+    (function () {
+      var POLL_URL = {{ url_for('ecommerce.orders_latest_alert')|tojson }};
+      var LIVE_URL = {{ url_for('ecommerce.live_orders')|tojson }};
+      var IDLE_POLL_MS = 10000;
+      var RING_POLL_MS = 2000;
+      var LS_KEY = 'mh_ec_latest_order_id';
+      var lastId = parseInt(localStorage.getItem(LS_KEY) || '0', 10) || 0;
+      var audioCtx = null;
+      var ringing = false;
+      var soundTimer = null;
+      var pollTimer = null;
+      var toast = document.getElementById('ecOrderAlertToast');
+      var alertChannel = null;
+      try { alertChannel = new BroadcastChannel('mh-ec-order-alert'); } catch (e) {}
+
+      function getCtx() {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        return audioCtx;
+      }
+
+      function unlock() {
+        try { getCtx(); } catch (e) {}
+        document.removeEventListener('click', unlock);
+        document.removeEventListener('keydown', unlock);
+        document.removeEventListener('touchstart', unlock);
+      }
+      document.addEventListener('click', unlock);
+      document.addEventListener('keydown', unlock);
+      document.addEventListener('touchstart', unlock);
+
+      function playHeavyAlert() {
+        try {
+          var ctx = getCtx();
+          function tone(type, freq, start, dur, vol) {
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, start);
+            gain.gain.setValueAtTime(0.0001, start);
+            gain.gain.exponentialRampToValueAtTime(vol, start + 0.02);
+            gain.gain.setValueAtTime(vol, start + dur - 0.04);
+            gain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+            osc.start(start);
+            osc.stop(start + dur + 0.02);
+          }
+          var t = ctx.currentTime;
+          for (var i = 0; i < 10; i++) {
+            var at = t + i * 0.72;
+            tone('square', 880, at, 0.28, 0.85);
+            tone('sawtooth', 880, at, 0.28, 0.35);
+            tone('square', 1320, at + 0.32, 0.32, 0.9);
+            tone('sawtooth', 1320, at + 0.32, 0.32, 0.4);
+          }
+        } catch (e) {}
+      }
+
+      function showToast(number) {
+        if (!toast) return;
+        toast.hidden = false;
+        toast.textContent = 'NEW ORDER ' + (number || '') + ' — open Live orders';
+      }
+
+      function rememberId(id) {
+        if (!id) return;
+        lastId = Math.max(lastId, id);
+        try { localStorage.setItem(LS_KEY, String(lastId)); } catch (e) {}
+      }
+
+      function broadcast(msg) {
+        try { if (alertChannel) alertChannel.postMessage(msg); } catch (e) {}
+      }
+
+      function schedulePoll(ms) {
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = window.setInterval(poll, ms);
+      }
+
+      function stopRing(fromRemote) {
+        ringing = false;
+        if (soundTimer) {
+          clearInterval(soundTimer);
+          soundTimer = null;
+        }
+        if (toast) toast.hidden = true;
+        schedulePoll(IDLE_POLL_MS);
+        if (!fromRemote) broadcast({ type: 'stop' });
+      }
+
+      function openLiveOrders() {
+        stopRing(false);
+        if ((window.location.pathname || '').indexOf('/ecommerce/live-orders') === 0) return;
+        window.location.href = LIVE_URL;
+      }
+
+      function startRing(number, id, fromRemote) {
+        ringing = true;
+        playHeavyAlert();
+        showToast(number);
+        if (soundTimer) clearInterval(soundTimer);
+        soundTimer = window.setInterval(playHeavyAlert, 8000);
+        schedulePoll(RING_POLL_MS);
+        try {
+          window.dispatchEvent(new CustomEvent('mamahub:new-order', {
+            detail: { latest_id: id, latest_number: number || '' }
+          }));
+        } catch (e) {}
+        if (!fromRemote) broadcast({ type: 'ring', latest_id: id, latest_number: number || '' });
+      }
+
+      if (toast) toast.addEventListener('click', openLiveOrders);
+
+      function poll() {
+        fetch(POLL_URL, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (!data || !data.ok) return;
+            var pending = parseInt(data.pending_count != null ? data.pending_count : data.total || 0, 10) || 0;
+            var active = data.alert_active === true || pending > 0;
+            var id = parseInt(data.latest_id || 0, 10) || 0;
+            if (!active) {
+              if (id) rememberId(id);
+              if (ringing) stopRing(false);
+              return;
+            }
+            if (!id) return;
+            if (!lastId) {
+              rememberId(id);
+              return;
+            }
+            if (id > lastId) {
+              rememberId(id);
+              startRing(data.latest_number || '', id, false);
+            }
+          })
+          .catch(function () {});
+      }
+
+      if (alertChannel) {
+        alertChannel.onmessage = function (ev) {
+          var msg = ev && ev.data ? ev.data : {};
+          if (msg.type === 'stop') {
+            stopRing(true);
+            return;
+          }
+          if (msg.type === 'ring') {
+            rememberId(parseInt(msg.latest_id || 0, 10) || 0);
+            startRing(msg.latest_number || '', parseInt(msg.latest_id || 0, 10) || 0, true);
+          }
+        };
+      }
+      window.addEventListener('mamahub:order-alert-check', function () { poll(); });
+      window.addEventListener('mamahub:order-alert-stop', function () { stopRing(false); });
+
+      poll();
+      schedulePoll(IDLE_POLL_MS);
     })();
     </script>
     {% endif %}

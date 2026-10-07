@@ -264,3 +264,73 @@ def _ensure_contact_inquiry_schema() -> None:
                     """,
                 )
         conn.commit()
+
+
+_ORDER_ERP_COLS_READY = False
+
+
+def ensure_order_erp_columns() -> bool:
+    """Add ERP invoice link columns on MH_ORDER when missing."""
+    global _ORDER_ERP_COLS_READY
+    if _ORDER_ERP_COLS_READY:
+        return True
+    if not _table_exists('MH_ORDER'):
+        return False
+    with _get_connection() as conn:
+        with conn.cursor() as cur:
+            if not _column_exists(cur, 'MH_ORDER', 'ERP_BILLNO'):
+                _exec_ddl(cur, 'ALTER TABLE MH_ORDER ADD (ERP_BILLNO VARCHAR2(40))')
+            if not _column_exists(cur, 'MH_ORDER', 'ERP_INVOICED_AT'):
+                _exec_ddl(cur, 'ALTER TABLE MH_ORDER ADD (ERP_INVOICED_AT TIMESTAMP)')
+            if not _column_exists(cur, 'MH_ORDER', 'ERP_INVOICED_BY'):
+                _exec_ddl(cur, 'ALTER TABLE MH_ORDER ADD (ERP_INVOICED_BY VARCHAR2(100))')
+            if not _column_exists(cur, 'MH_ORDER', 'CREATED_BY_NAME'):
+                _exec_ddl(cur, "ALTER TABLE MH_ORDER ADD (CREATED_BY_NAME VARCHAR2(40))")
+        conn.commit()
+    _ORDER_ERP_COLS_READY = True
+    return True
+
+
+_COMPARE_STORE_TABLE = 'MH_COMPARE_STORE'
+_COMPARE_STORE_READY = False
+
+
+def ensure_compare_store_schema() -> bool:
+    """Create MH_COMPARE_STORE when the tenant DB does not have it yet."""
+    global _COMPARE_STORE_READY
+    if _COMPARE_STORE_READY:
+        return True
+    if _table_exists(_COMPARE_STORE_TABLE):
+        _TABLE_EXISTS_CACHE[_COMPARE_STORE_TABLE] = True
+        _COMPARE_STORE_READY = True
+        return True
+    with _get_connection() as conn:
+        with conn.cursor() as cur:
+            if not _sequence_exists(cur, 'SEQ_MH_COMPARE_STORE_ID'):
+                _exec_ddl(
+                    cur,
+                    'CREATE SEQUENCE SEQ_MH_COMPARE_STORE_ID START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE',
+                )
+            if not _table_exists(_COMPARE_STORE_TABLE):
+                _exec_ddl(
+                    cur,
+                    """
+                    CREATE TABLE MH_COMPARE_STORE (
+                        STORE_ID                NUMBER          NOT NULL,
+                        STORE_NAME              VARCHAR2(80 CHAR) NOT NULL,
+                        WEBSITE_URL             VARCHAR2(500 CHAR),
+                        IS_ACTIVE               NUMBER(1)       DEFAULT 1 NOT NULL,
+                        SORT_ORDER              NUMBER          DEFAULT 0 NOT NULL,
+                        CREATED_AT              TIMESTAMP       DEFAULT SYSTIMESTAMP NOT NULL,
+                        CONSTRAINT PK_MH_COMPARE_STORE PRIMARY KEY (STORE_ID),
+                        CONSTRAINT CK_MH_COMPARE_STORE_ACTIVE CHECK (IS_ACTIVE IN (0, 1))
+                    )
+                    """,
+                )
+        conn.commit()
+    for key in list(_TABLE_EXISTS_CACHE):
+        if str(key).endswith('MH_COMPARE_STORE'):
+            _TABLE_EXISTS_CACHE.pop(key, None)
+    exists = _table_exists(_COMPARE_STORE_TABLE)
+    _COMPARE_STORE_READY = bool(exists)
+    return bool(exists)

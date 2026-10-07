@@ -1,5 +1,6 @@
 """Sales blueprint"""
 from pathlib import Path
+import base64
 import csv
 import io
 import json
@@ -1067,6 +1068,14 @@ def sales_invoice():
     if order_billnos:
         convert_from_orders = order_billnos
         initial_order, convert_error = _sales_orders_convert_payload(location_code_int, order_billnos)
+    initial_bill_no = None
+    if not initial_order:
+        try:
+            initial_bill_no = peek_next_bill_no(
+                location_code_int, _session_countercode_optional(), doc_type=DOC_TYPE_SALES_INVOICE,
+            )
+        except Exception as e:
+            print(f'[WARN sales_invoice] Could not peek initial bill no: {e}')
     return render_template(
         'sales/sales.html',
         **_sales_template_context(
@@ -1081,6 +1090,7 @@ def sales_invoice():
             minus_billing_enabled=get_sales_minus_billing_invoice_enabled(),
             order_no_mandatory=get_sales_orderno_mandatory_invoice_enabled(),
             list_url=url_for('sales.sales_invoice_list', tab='invoice'),
+            initial_bill_no=initial_bill_no,
             initial_order=initial_order,
             initial_order_json=_json_for_script(initial_order) if initial_order else 'null',
             convert_from_orders=convert_from_orders,
@@ -1580,7 +1590,9 @@ def _json_next_billno(location_code_int: int, *, doc_type: str = DOC_TYPE_SALES_
     countercode = _session_countercode_optional()
     peek_only = (request.args.get('peek') or '').strip().lower() in ('1', 'true', 'yes')
     if peek_only:
-        next_billno = peek_next_bill_no(location_code_int, countercode, doc_type=doc_type)
+        next_billno = _peek_next_billno_after_save(location_code_int, doc_type=doc_type)
+        if not billno_is_valid(next_billno):
+            next_billno = peek_next_bill_no(location_code_int, countercode, doc_type=doc_type)
         return jsonify({'success': True, 'billno': next_billno, 'reserved': False})
     try:
         next_billno = get_next_bill_no(location_code_int, countercode, lock_wait_seconds=3, doc_type=doc_type)
@@ -1589,10 +1601,23 @@ def _json_next_billno(location_code_int: int, *, doc_type: str = DOC_TYPE_SALES_
     return jsonify({'success': True, 'billno': next_billno, 'reserved': True})
 
 
-def _peek_next_billno_after_save(location_code_int: int, *, doc_type: str) -> Any:
-    """Next bill number for a fresh form after a successful save."""
+def _peek_next_billno_after_save(location_code_int: int, *, doc_type: str, after_billno: Any = None) -> Any:
+    """Next unused bill number for a fresh form after a successful save."""
     try:
-        return peek_next_bill_no(location_code_int, _session_countercode_optional(), doc_type=doc_type)
+        peek = peek_next_bill_no(location_code_int, _session_countercode_optional(), doc_type=doc_type)
+        if (
+            billno_is_valid(peek)
+            and (not billno_is_valid(after_billno) or not billno_equal(peek, after_billno))
+            and not billhdr_exists(location_code_int, peek)
+        ):
+            return peek
+        nxt, _ = _next_free_billno_for_save(
+            location_code_int,
+            _session_countercode_optional(),
+            after_billno if billno_is_valid(after_billno) else peek,
+            doc_type=doc_type,
+        )
+        return nxt
     except Exception as e:
         print(f'[WARN _peek_next_billno_after_save] {e}')
         return None
@@ -1616,6 +1641,67 @@ def sales_ai_screenshot_lines():
     """Same AI line extraction as POS (image / PDF / pasted text → ITEMMASTER match)."""
     from addons.pos_billing.controllers.routes import pos_ai_screenshot_lines
     return pos_ai_screenshot_lines()
+
+
+@bp.route('/sales/ai-snoonu-customer', methods=['GET'])
+def sales_ai_snoonu_customer():
+    """Fetch (or create) the SNOONU bill-to customer for Sales Invoice."""
+    if not session.get('user'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}, 401)
+    user_dbkey = session.get('tenant_id')
+    if user_dbkey:
+        from addons.pos_billing.controllers.routes import _apply_active_connection
+        _apply_active_connection(user_dbkey)
+    try:
+        from addons.sales.services.snoonu_invoice import ensure_snoonu_bill_customer
+        return jsonify(ensure_snoonu_bill_customer())
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}, 400)
+    except Exception as exc:
+        return jsonify({'success': False, 'error': str(exc)}, 500)
+
+
+@bp.route('/sales/ai-snoonu-invoice', methods=['POST'])
+def sales_ai_snoonu_invoice():
+    """Import a Snoonu invoice: bill to SNOONU, create loyalty by mobile, fill item/qty/amount."""
+    if not session.get('user'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}, 401)
+    if not (os.environ.get('OPENAI_API_KEY') or '').strip():
+        return jsonify({'success': False, 'error': 'OPENAI_API_KEY is not configured on the server.'}, 503)
+    user_dbkey = session.get('tenant_id')
+    if user_dbkey:
+        from addons.pos_billing.controllers.routes import _apply_active_connection
+        _apply_active_connection(user_dbkey)
+    text = ''
+    raw = None
+    mime = 'image/png'
+    filename = ''
+    upload = request.files.get('image') or request.files.get('file')
+    if upload and (upload.filename or '').strip():
+        raw = upload.read()
+        mime = str(getattr(upload, 'content_type', None) or getattr(upload, 'mimetype', None) or 'image/png')
+        filename = str(upload.filename or '')
+        text = str(request.form.get('text') or '').strip()
+    else:
+        payload = request.get_json(silent=True) or {}
+        text = str(payload.get('text') or request.form.get('text') or '').strip()
+        b64 = payload.get('image_base64')
+        if isinstance(b64, str) and b64.strip():
+            try:
+                raw = base64.b64decode(b64.split(',', 1)[-1].strip())
+            except Exception:
+                return jsonify({'success': False, 'error': 'Invalid image_base64.'}, 400)
+            mime = str(payload.get('mime') or 'image/png')
+    try:
+        from addons.sales.services.snoonu_invoice import import_snoonu_invoice
+        data = import_snoonu_invoice(text=text, image_bytes=raw, mime=mime, filename=filename)
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}, 400)
+    except Exception as exc:
+        return jsonify({'success': False, 'error': str(exc)}, 500)
+    if not data.get('success') and data.get('already_saved'):
+        return jsonify(data, 409)
+    return jsonify(data)
 
 @bp.route('/sales-return/ai-screenshot-lines', methods=['POST'])
 def sales_return_ai_screenshot_lines():
@@ -2017,7 +2103,9 @@ def sales_save():
             'billno': billno,
             'requested_billno': req_no,
             'billno_reassigned': really_reassigned,
-            'next_billno': _peek_next_billno_after_save(location_code_int, doc_type=DOC_TYPE_SALES_INVOICE),
+            'next_billno': _peek_next_billno_after_save(
+                location_code_int, doc_type=DOC_TYPE_SALES_INVOICE, after_billno=billno,
+            ),
             'pdf_url': url_for('reports.crystal_reports_open_report', report_name='cashbilldup', billno=billno),
             'stock_posted': bool((stock_debug or {}).get('stock_posted')),
             'stock_affected_items': int((stock_debug or {}).get('stock_affected_items') or 0),
@@ -2129,7 +2217,9 @@ def sales_return_save():
             'billno': billno,
             'requested_billno': req_no,
             'billno_reassigned': really_reassigned,
-            'next_billno': _peek_next_billno_after_save(location_code_int, doc_type=DOC_TYPE_SALES_RETURN),
+            'next_billno': _peek_next_billno_after_save(
+                location_code_int, doc_type=DOC_TYPE_SALES_RETURN, after_billno=billno,
+            ),
             'pdf_url': url_for('reports.crystal_reports_open_report', report_name='salesreturn', billno=billno),
             'stock_posted': bool((stock_debug or {}).get('stock_posted')),
             'stock_affected_items': int((stock_debug or {}).get('stock_affected_items') or 0),
@@ -2189,7 +2279,9 @@ def sales_order_save():
         return json_response_rotate_global({
             'success': True,
             'billno': billno,
-            'next_billno': _peek_next_billno_after_save(location_code_int, doc_type=DOC_TYPE_SALES_ORDER),
+            'next_billno': _peek_next_billno_after_save(
+                location_code_int, doc_type=DOC_TYPE_SALES_ORDER, after_billno=billno,
+            ),
             'pdf_url': _sales_order_pdf_url(billno),
         })
     finally:

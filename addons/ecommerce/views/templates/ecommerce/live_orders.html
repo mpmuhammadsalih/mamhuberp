@@ -1,0 +1,409 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('ecommerce.static', filename='css/ecommerce.css') }}?v=42" />
+{% endblock %}
+{% block content %}
+<div class="page-po ecommerce-live-page">
+  <div class="ecommerce-live-top">
+    <div>
+      <h1 class="ecommerce-live-title">Live orders</h1>
+      <p class="ecommerce-live-store" id="liveStoreName">{{ store_name }}</p>
+    </div>
+    <div class="ecommerce-live-top__actions">
+      <a href="{{ url_for('ecommerce.orders') }}" class="page-po__btn-secondary">All orders</a>
+      <span id="liveAccepting" class="ecommerce-live-accept{% if not accepting_orders %} is-paused{% endif %}">
+        {{ 'Accepting orders' if accepting_orders else 'Checkout paused' }}
+      </span>
+    </div>
+  </div>
+
+  {% if warning %}
+  <div class="ecommerce-alert">{{ warning }}</div>
+  {% endif %}
+
+  <div class="ecommerce-live-board">
+    <aside class="ecommerce-live-queue">
+      <div class="ecommerce-live-tabs" role="tablist">
+        <button type="button" class="ecommerce-live-tab is-active" data-bucket="needs_action" role="tab">
+          Needs action <span class="ecommerce-live-tab__count" data-count="needs_action">{{ counts.needs_action }}</span>
+        </button>
+        <button type="button" class="ecommerce-live-tab" data-bucket="preparing" role="tab">
+          Preparing <span class="ecommerce-live-tab__count" data-count="preparing">{{ counts.preparing }}</span>
+        </button>
+        <button type="button" class="ecommerce-live-tab" data-bucket="ready" role="tab">
+          Ready for pickup <span class="ecommerce-live-tab__count" data-count="ready">{{ counts.ready }}</span>
+        </button>
+      </div>
+      <div class="ecommerce-live-tools">
+        <label class="visually-hidden" for="liveSearch">Search</label>
+        <input id="liveSearch" type="search" class="ecommerce-live-search" placeholder="Search order, name, phone…" autocomplete="off" />
+      </div>
+      <ul id="liveQueue" class="ecommerce-live-list"></ul>
+      <div class="ecommerce-live-queue__foot">
+        <a href="{{ url_for('ecommerce.orders') }}">All orders</a>
+        <a href="{{ url_for('ecommerce.reports') }}">Order tracker</a>
+      </div>
+    </aside>
+
+    <section id="liveDetail" class="ecommerce-live-detail" aria-live="polite"></section>
+  </div>
+</div>
+
+<script id="liveOrdersData" type="application/json">{{ {
+  'orders': orders,
+  'counts': counts,
+  'store_name': store_name,
+  'accepting_orders': accepting_orders,
+  'latest_id': latest_id,
+  'latest_number': latest_number,
+  'tables_ready': tables_ready
+}|tojson }}</script>
+<script>
+(function () {
+  var FEED_URL = {{ url_for('ecommerce.live_orders_feed')|tojson }};
+  var STATUS_URL = {{ url_for('ecommerce.live_order_status', order_id=999999)|tojson }};
+  var RECEIPT_URL = {{ url_for('ecommerce.order_receipt', order_id=999999)|tojson }};
+  var POLL_MS = 8000;
+  var state = { orders: [], selectedId: 0, bucket: 'needs_action', query: '', latestId: 0, busy: false, followSelected: false };
+  var queueEl = document.getElementById('liveQueue');
+  var detailEl = document.getElementById('liveDetail');
+
+  function parseBoot() {
+    var node = document.getElementById('liveOrdersData');
+    if (!node || !node.textContent) return {};
+    try { return JSON.parse(node.textContent); } catch (e) { return {}; }
+  }
+
+  function money(code, value) {
+    var n = Number(value || 0);
+    return (code || 'QAR') + ' ' + n.toFixed(2);
+  }
+
+  function esc(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function oid(value) {
+    return parseInt(value, 10) || 0;
+  }
+
+  function filtered() {
+    var q = state.query.toLowerCase();
+    return state.orders.filter(function (order) {
+      if (order.bucket !== state.bucket) return false;
+      if (!q) return true;
+      var hay = [
+        order.order_number, order.customer_name, order.customer_phone,
+        order.customer_email, order.address, order.channel_label, order.created_by_name
+      ].join(' ').toLowerCase();
+      return hay.indexOf(q) !== -1;
+    });
+  }
+
+  function selectedOrder() {
+    var id = oid(state.selectedId);
+    return state.orders.find(function (order) { return oid(order.order_id) === id; }) || null;
+  }
+
+  function syncTabs() {
+    document.querySelectorAll('.ecommerce-live-tab').forEach(function (tab) {
+      tab.classList.toggle('is-active', tab.getAttribute('data-bucket') === state.bucket);
+    });
+  }
+
+  function focusOrder(orderId, bucket) {
+    state.selectedId = oid(orderId);
+    state.followSelected = true;
+    if (bucket) state.bucket = bucket;
+    var current = selectedOrder();
+    if (current && current.bucket) state.bucket = current.bucket;
+    syncTabs();
+    render();
+    var card = queueEl.querySelector('[data-select="' + state.selectedId + '"]');
+    if (card && card.closest) {
+      var row = card.closest('.ecommerce-live-row');
+      if (row && row.scrollIntoView) row.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function applyFeed(data, preferNew) {
+    var keepId = oid(state.selectedId);
+    state.orders = data.orders || [];
+    var counts = data.counts || {};
+    document.querySelectorAll('[data-count]').forEach(function (el) {
+      el.textContent = counts[el.getAttribute('data-count')] || 0;
+    });
+    var store = document.getElementById('liveStoreName');
+    if (store && data.store_name) store.textContent = data.store_name;
+    var badge = document.getElementById('liveAccepting');
+    if (badge) {
+      badge.textContent = data.accepting_orders ? 'Accepting orders' : 'Checkout paused';
+      badge.classList.toggle('is-paused', !data.accepting_orders);
+    }
+    var incoming = oid(data.latest_id);
+    var jumpedNew = incoming && state.latestId && incoming > state.latestId && !state.followSelected;
+    if (jumpedNew) {
+      state.bucket = 'needs_action';
+      state.selectedId = incoming;
+    }
+    if (incoming) state.latestId = incoming;
+    if (keepId && !jumpedNew) state.selectedId = keepId;
+    var current = selectedOrder();
+    if (!current && preferNew && state.orders.length) {
+      var firstNew = state.orders.find(function (order) { return order.bucket === 'needs_action'; });
+      state.selectedId = oid((firstNew || state.orders[0]).order_id);
+      current = selectedOrder();
+    }
+    if (current && current.bucket && (preferNew || state.followSelected)) {
+      state.bucket = current.bucket;
+    }
+    if (state.followSelected && current) state.followSelected = false;
+    syncTabs();
+    render();
+    if (keepId) {
+      var card = queueEl.querySelector('[data-select="' + keepId + '"]');
+      if (card && card.closest) {
+        var row = card.closest('.ecommerce-live-row');
+        if (row && row.scrollIntoView) row.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }
+
+  function renderQueue() {
+    var rows = filtered();
+    if (!rows.length) {
+      queueEl.innerHTML = '<li class="ecommerce-live-empty">No live orders in this tab.</li>';
+      return;
+    }
+    queueEl.innerHTML = rows.map(function (order) {
+      var active = oid(order.order_id) === oid(state.selectedId) ? ' is-active' : '';
+      var primary = (order.actions || []).find(function (action) { return action.kind === 'primary'; });
+      var shortLabel = {
+        'Accept order': 'Accept',
+        'Mark ready': 'Ready',
+        'Handed over': 'Handover',
+        'Out for delivery': 'Deliver'
+      };
+      var actionBtn = primary
+        ? '<button type="button" class="ecommerce-live-mini ecommerce-live-mini--accept" data-quick-id="' + order.order_id + '" data-quick-status="' + esc(primary.status) + '" data-quick-notes="' + esc(primary.notes || '') + '">' + esc(shortLabel[primary.label] || primary.label) + '</button>'
+        : '';
+      return (
+        '<li class="ecommerce-live-row' + active + '">' +
+          '<button type="button" class="ecommerce-live-card" data-select="' + order.order_id + '">' +
+            '<span class="ecommerce-live-card__no">#' + esc(order.order_number) + '</span>' +
+            '<span class="ecommerce-live-card__meta">' + esc(order.channel_label || 'Web') + ' · ' + esc(order.item_count) + ' item(s) · ' + esc(order.fulfillment_label) + '</span>' +
+          '</button>' +
+          (actionBtn ? '<div class="ecommerce-live-card__btns">' + actionBtn + '</div>' : '') +
+        '</li>'
+      );
+    }).join('');
+  }
+
+  function itemRow(item) {
+    var img = item.image_url
+      ? '<img src="' + esc(item.image_url) + '" alt="" width="48" height="48">'
+      : '<span class="ecommerce-live-item__ph" aria-hidden="true"></span>';
+    return (
+      '<div class="ecommerce-live-item">' +
+        img +
+        '<div class="ecommerce-live-item__body">' +
+          '<p class="ecommerce-live-item__name">' + esc(item.quantity) + 'x ' + esc(item.item_name) + '</p>' +
+          '<p class="ecommerce-live-item__sku">SKU ' + esc(item.barcode || item.item_code) + '</p>' +
+        '</div>' +
+        '<div class="ecommerce-live-item__prices">' +
+          '<span>' + money('QAR', item.unit_price) + '</span>' +
+          '<strong>' + money('QAR', item.line_total) + '</strong>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderDetail() {
+    var order = selectedOrder();
+    if (!order) {
+      detailEl.innerHTML = '<div class="ecommerce-live-detail__empty"><p>Select a live order to prepare it.</p></div>';
+      return;
+    }
+    var actions = (order.actions || []).map(function (action) {
+      return (
+        '<button type="button" class="ecommerce-live-action ecommerce-live-action--' + esc(action.kind || 'ghost') + '" ' +
+          'data-status="' + esc(action.status) + '" data-notes="' + esc(action.notes || '') + '">' +
+          esc(action.label) +
+        '</button>'
+      );
+    }).join('');
+    var items = (order.items || []).map(itemRow).join('') || '<p class="page-po__muted">No items on this order.</p>';
+    var phone = order.customer_phone ? esc(order.customer_phone) : '—';
+    var address = order.address ? esc(order.address) : '—';
+    detailEl.innerHTML =
+      '<div class="ecommerce-live-detail__head">' +
+        '<div>' +
+          '<h2>Order #' + esc(order.order_number) + '</h2>' +
+          '<p>' + esc(order.channel_label || 'Web') + ' order · ' + esc(order.item_count) + ' item(s) · ' + esc(order.fulfillment_label) + '</p>' +
+        '</div>' +
+        '<span class="ecommerce-live-badge">' + esc(order.badge) + '</span>' +
+      '</div>' +
+      (order.driver_label ? '<p class="ecommerce-live-driver">' + esc(order.driver_label) + '</p>' : '') +
+      '<div class="ecommerce-live-block">' +
+        '<div class="ecommerce-live-block__head"><h3>Customer details</h3></div>' +
+        '<dl class="ecommerce-live-dl">' +
+          '<div><dt>Name</dt><dd>' + esc(order.customer_name) + '</dd></div>' +
+          '<div><dt>Phone</dt><dd>' + phone + '</dd></div>' +
+          '<div><dt>Address</dt><dd>' + address + '</dd></div>' +
+        '</dl>' +
+      '</div>' +
+      '<div class="ecommerce-live-block">' +
+        '<div class="ecommerce-live-block__head">' +
+          '<h3>Order details</h3>' +
+          '<button type="button" class="page-po__btn-secondary" id="livePrint">Print receipt</button>' +
+        '</div>' +
+        items +
+      '</div>' +
+      '<div class="ecommerce-live-block">' +
+        '<h3>Payment details</h3>' +
+        '<dl class="ecommerce-live-pay">' +
+          '<div><dt>' + esc(order.item_count) + ' total item(s)</dt><dd>' + esc(order.payment_status || '—') + '</dd></div>' +
+          '<div><dt>Subtotal</dt><dd>' + money(order.currency_code, order.subtotal) + '</dd></div>' +
+          '<div><dt>Discount</dt><dd>-' + money(order.currency_code, order.discount_total) + '</dd></div>' +
+          '<div><dt>Delivery fee</dt><dd>' + money(order.currency_code, order.delivery_fee) + '</dd></div>' +
+          '<div class="is-total"><dt>Total</dt><dd>' + money(order.currency_code, order.grand_total) + '</dd></div>' +
+        '</dl>' +
+      '</div>' +
+      '<div class="ecommerce-live-actions">' + actions + '</div>';
+  }
+
+  function render() {
+    renderQueue();
+    renderDetail();
+  }
+
+  function selectOrder(id) {
+    state.followSelected = false;
+    focusOrder(id);
+  }
+
+  function refreshFeed() {
+    return fetch(FEED_URL, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || !data.ok) return;
+        applyFeed(data, false);
+      })
+      .catch(function () {});
+  }
+
+  function postStatus(orderId, status, notes) {
+    if (state.busy) return;
+    state.busy = true;
+    orderId = oid(orderId);
+    var nextBucket = {
+      PROCESSING: 'preparing',
+      PICKING: 'preparing',
+      PACKED: 'ready'
+    }[status] || '';
+    var nextAction = {
+      PROCESSING: { label: 'Mark ready', status: 'PACKED', kind: 'primary' },
+      PICKING: { label: 'Mark ready', status: 'PACKED', kind: 'primary' },
+      PACKED: { label: 'Out for delivery', status: 'OUT_FOR_DELIVERY', kind: 'primary' }
+    }[status];
+    state.orders = state.orders.filter(function (order) {
+      if (oid(order.order_id) !== orderId) return true;
+      if (!nextBucket) return false;
+      order.order_status = status;
+      order.bucket = nextBucket;
+      order.badge = status === 'PACKED' ? 'Prepared' : 'Preparing';
+      if (nextAction) order.actions = [nextAction];
+      return true;
+    });
+    focusOrder(orderId, nextBucket);
+    var url = STATUS_URL.replace('999999', String(orderId));
+    fetch(url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: status, notes: notes || '' })
+    })
+      .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+      .then(function () {
+        state.busy = false;
+        state.followSelected = true;
+        state.selectedId = orderId;
+        try { window.dispatchEvent(new CustomEvent('mamahub:order-alert-check')); } catch (e) {}
+        return refreshFeed();
+      })
+      .then(function () {
+        focusOrder(orderId);
+      })
+      .catch(function () {
+        state.busy = false;
+        state.followSelected = true;
+        state.selectedId = orderId;
+        refreshFeed().then(function () { focusOrder(orderId); });
+      });
+  }
+
+  document.querySelectorAll('.ecommerce-live-tab').forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      state.bucket = tab.getAttribute('data-bucket') || 'needs_action';
+      state.followSelected = false;
+      var current = selectedOrder();
+      if (!current || current.bucket !== state.bucket) {
+        var first = filtered()[0];
+        state.selectedId = first ? first.order_id : 0;
+      }
+      document.querySelectorAll('.ecommerce-live-tab').forEach(function (el) {
+        el.classList.toggle('is-active', el === tab);
+      });
+      render();
+    });
+  });
+
+  document.getElementById('liveSearch').addEventListener('input', function (ev) {
+    state.query = ev.target.value || '';
+    render();
+  });
+
+  queueEl.addEventListener('click', function (ev) {
+    var quick = ev.target.closest('[data-quick-status]');
+    if (quick) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      var oid = parseInt(quick.getAttribute('data-quick-id') || '0', 10);
+      var status = quick.getAttribute('data-quick-status') || '';
+      var notes = quick.getAttribute('data-quick-notes') || '';
+      if (!oid || !status) return;
+      state.selectedId = oid;
+      postStatus(oid, status, notes);
+      return;
+    }
+    var btn = ev.target.closest('[data-select]');
+    if (!btn) return;
+    selectOrder(btn.getAttribute('data-select'));
+  });
+
+  detailEl.addEventListener('click', function (ev) {
+    if (ev.target.id === 'livePrint') {
+      var current = selectedOrder();
+      if (current && current.order_id) {
+        window.open(RECEIPT_URL.replace('999999', String(current.order_id)) + '?print=1', '_blank', 'noopener');
+      }
+      return;
+    }
+    var btn = ev.target.closest('[data-status]');
+    if (!btn || !state.selectedId) return;
+    postStatus(state.selectedId, btn.getAttribute('data-status'), btn.getAttribute('data-notes'));
+  });
+
+  var boot = parseBoot();
+  state.latestId = parseInt(boot.latest_id || 0, 10);
+  applyFeed(boot, true);
+  window.addEventListener('mamahub:new-order', function () { refreshFeed(); });
+  window.setInterval(refreshFeed, POLL_MS);
+})();
+</script>
+{% endblock %}

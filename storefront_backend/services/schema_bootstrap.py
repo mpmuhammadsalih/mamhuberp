@@ -5,7 +5,7 @@ import re
 
 import oracledb
 
-from db import _TABLE_EXISTS_CACHE, _get_connection, _table_exists
+from db import _TABLE_EXISTS_CACHE, _get_connection, _schema_cache_key, _table_exists
 
 
 _CART_TABLES = ('MH_CART', 'MH_CART_ITEM', 'MH_CART_COUPON')
@@ -25,6 +25,7 @@ _APP_USER_SCHEMA_READY = False
 _ADDRESS_SCHEMA_READY = False
 _ORDER_SCHEMA_READY = False
 _PASSWORD_RESET_SCHEMA_READY = False
+_PROMOTION_SCHEMA_READY = False
 
 
 def _invalidate_cart_table_cache() -> None:
@@ -61,9 +62,20 @@ def _exec_ddl(cur, sql: str) -> None:
         match = re.search(r'ORA-(\d+)', str(exc))
         if match:
             code = int(match.group(1))
-        if code in {955, 2260, 2261, 2264, 1408}:
+        if code in {955, 2260, 2261, 2264, 1408, 1430}:
             return
         raise
+
+
+def _column_exists(cur, table: str, column: str) -> bool:
+    cur.execute(
+        """
+        SELECT COUNT(*) FROM user_tab_columns
+        WHERE table_name = :table_name AND column_name = :column_name
+        """,
+        {'table_name': table.upper(), 'column_name': column.upper()},
+    )
+    return int((cur.fetchone() or [0])[0]) > 0
 
 
 def ensure_cart_schema() -> None:
@@ -176,6 +188,24 @@ def ensure_cart_schema() -> None:
     _CART_SCHEMA_READY = True
 
 
+_CART_PARENT_COL_READY = False
+
+
+def ensure_cart_item_parent_column() -> None:
+    """Link add-on cart lines to the product they were chosen for."""
+    global _CART_PARENT_COL_READY
+    if _CART_PARENT_COL_READY:
+        return
+    if not _table_exists('MH_CART_ITEM'):
+        return
+    with _get_connection() as conn:
+        with conn.cursor() as cur:
+            if not _column_exists(cur, 'MH_CART_ITEM', 'PARENT_ITEM_CODE'):
+                _exec_ddl(cur, 'ALTER TABLE MH_CART_ITEM ADD (PARENT_ITEM_CODE NUMBER)')
+        conn.commit()
+    _CART_PARENT_COL_READY = True
+
+
 def _invalidate_age_group_cache() -> None:
     _TABLE_EXISTS_CACHE.pop('MH_AGE_GROUP', None)
 
@@ -261,6 +291,46 @@ def ensure_age_group_schema() -> None:
 
     _mark_age_group_ready()
     _AGE_GROUP_SCHEMA_READY = True
+
+
+_ITEM_AGE_GROUP_SCHEMA_READY = False
+
+
+def ensure_item_age_group_schema() -> None:
+    """Create MH_ITEM_AGE_GROUP so ERP can assign products to Shop by age."""
+    global _ITEM_AGE_GROUP_SCHEMA_READY
+    if _ITEM_AGE_GROUP_SCHEMA_READY:
+        return
+    ensure_age_group_schema()
+    if _table_exists('MH_ITEM_AGE_GROUP'):
+        _TABLE_EXISTS_CACHE['MH_ITEM_AGE_GROUP'] = True
+        key = _schema_cache_key('MH_ITEM_AGE_GROUP')
+        if key:
+            _TABLE_EXISTS_CACHE[key] = True
+        _ITEM_AGE_GROUP_SCHEMA_READY = True
+        return
+
+    with _get_connection() as conn:
+        with conn.cursor() as cur:
+            _exec_ddl(
+                cur,
+                """
+                CREATE TABLE MH_ITEM_AGE_GROUP (
+                    ITEM_CODE               NUMBER          NOT NULL,
+                    AGE_GROUP_ID            NUMBER          NOT NULL,
+                    CREATED_AT              TIMESTAMP       DEFAULT SYSTIMESTAMP NOT NULL,
+                    CONSTRAINT PK_MH_ITEM_AGE_GROUP PRIMARY KEY (ITEM_CODE, AGE_GROUP_ID)
+                )
+                """,
+            )
+            _exec_ddl(cur, 'CREATE INDEX IX_MH_ITEM_AGE_GROUP_AGE ON MH_ITEM_AGE_GROUP (AGE_GROUP_ID)')
+        conn.commit()
+
+    _TABLE_EXISTS_CACHE['MH_ITEM_AGE_GROUP'] = True
+    key = _schema_cache_key('MH_ITEM_AGE_GROUP')
+    if key:
+        _TABLE_EXISTS_CACHE[key] = True
+    _ITEM_AGE_GROUP_SCHEMA_READY = True
 
 
 _APP_USER_TABLES = ('APP_USER', 'ROLE', 'PERMISSION', 'USER_ROLE', 'ROLE_PERMISSION')
@@ -775,3 +845,455 @@ def ensure_password_reset_schema() -> None:
 
     _mark_password_reset_ready()
     _PASSWORD_RESET_SCHEMA_READY = True
+
+
+_DELIVERY_SCHEMA_READY = False
+
+_DEFAULT_DELIVERY_ZONES = (
+    ('QATAR', 'Qatar', 'Doha', 0, 0, None, 1),
+)
+
+_DEFAULT_DELIVERY_SLOTS = (
+    ('MORNING', 'Morning (9 AM – 1 PM)', 9, 13, 80),
+    ('AFTERNOON', 'Afternoon (1 PM – 5 PM)', 13, 17, 80),
+    ('EVENING', 'Evening (5 PM – 9 PM)', 17, 21, 80),
+)
+
+
+def _seed_delivery_defaults(cur) -> None:
+    cur.execute('SELECT COUNT(*) FROM MH_DELIVERY_ZONE')
+    if int((cur.fetchone() or [0])[0]) == 0:
+        for zone_id, (code, name, city, fee, min_order, free_over, days) in enumerate(
+            _DEFAULT_DELIVERY_ZONES, start=1
+        ):
+            cur.execute(
+                """
+                INSERT INTO MH_DELIVERY_ZONE (
+                    DELIVERY_ZONE_ID, ZONE_CODE, ZONE_NAME, CITY,
+                    DELIVERY_FEE, MIN_ORDER_AMOUNT, FREE_DELIVERY_THRESHOLD,
+                    ESTIMATED_DAYS, IS_ACTIVE
+                ) VALUES (
+                    :zone_id, :zone_code, :zone_name, :city,
+                    :delivery_fee, :min_order_amount, :free_delivery_threshold,
+                    :estimated_days, 1
+                )
+                """,
+                {
+                    'zone_id': zone_id,
+                    'zone_code': code,
+                    'zone_name': name,
+                    'city': city,
+                    'delivery_fee': fee,
+                    'min_order_amount': min_order,
+                    'free_delivery_threshold': free_over,
+                    'estimated_days': days,
+                },
+            )
+    cur.execute('SELECT COUNT(*) FROM MH_DELIVERY_SLOT')
+    if int((cur.fetchone() or [0])[0]) == 0:
+        for slot_id, (code, label, start_hour, end_hour, max_orders) in enumerate(
+            _DEFAULT_DELIVERY_SLOTS, start=1
+        ):
+            cur.execute(
+                """
+                INSERT INTO MH_DELIVERY_SLOT (
+                    DELIVERY_SLOT_ID, SLOT_CODE, SLOT_LABEL,
+                    START_HOUR, END_HOUR, MAX_ORDERS, IS_ACTIVE
+                ) VALUES (
+                    :slot_id, :slot_code, :slot_label,
+                    :start_hour, :end_hour, :max_orders, 1
+                )
+                """,
+                {
+                    'slot_id': slot_id,
+                    'slot_code': code,
+                    'slot_label': label,
+                    'start_hour': start_hour,
+                    'end_hour': end_hour,
+                    'max_orders': max_orders,
+                },
+            )
+
+
+def ensure_delivery_schema() -> None:
+    """Create delivery zone/slot tables and seed Qatar defaults when empty."""
+    global _DELIVERY_SCHEMA_READY
+    if _DELIVERY_SCHEMA_READY:
+        return
+    zone_ready = _table_exists('MH_DELIVERY_ZONE')
+    slot_ready = _table_exists('MH_DELIVERY_SLOT')
+    if zone_ready and slot_ready:
+        with _get_connection() as conn:
+            with conn.cursor() as cur:
+                _seed_delivery_defaults(cur)
+            conn.commit()
+        _TABLE_EXISTS_CACHE['MH_DELIVERY_ZONE'] = True
+        _TABLE_EXISTS_CACHE['MH_DELIVERY_SLOT'] = True
+        _DELIVERY_SCHEMA_READY = True
+        return
+
+    with _get_connection() as conn:
+        with conn.cursor() as cur:
+            if not _sequence_exists(cur, 'SEQ_MH_DELIVERY_ZONE_ID'):
+                _exec_ddl(
+                    cur,
+                    'CREATE SEQUENCE SEQ_MH_DELIVERY_ZONE_ID START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE',
+                )
+            if not _sequence_exists(cur, 'SEQ_MH_DELIVERY_SLOT_ID'):
+                _exec_ddl(
+                    cur,
+                    'CREATE SEQUENCE SEQ_MH_DELIVERY_SLOT_ID START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE',
+                )
+            _exec_ddl(
+                cur,
+                """
+                CREATE TABLE MH_DELIVERY_ZONE (
+                    DELIVERY_ZONE_ID        NUMBER          NOT NULL,
+                    ZONE_CODE               VARCHAR2(40)    NOT NULL,
+                    ZONE_NAME               VARCHAR2(120)   NOT NULL,
+                    CITY                    VARCHAR2(80)    NOT NULL,
+                    DELIVERY_FEE            NUMBER(12,3)    DEFAULT 0 NOT NULL,
+                    MIN_ORDER_AMOUNT        NUMBER(12,3)    DEFAULT 0 NOT NULL,
+                    FREE_DELIVERY_THRESHOLD NUMBER(12,3),
+                    ESTIMATED_DAYS          NUMBER          DEFAULT 1 NOT NULL,
+                    IS_ACTIVE               NUMBER(1)       DEFAULT 1 NOT NULL,
+                    CREATED_AT              TIMESTAMP       DEFAULT SYSTIMESTAMP NOT NULL,
+                    CONSTRAINT PK_MH_DELIVERY_ZONE PRIMARY KEY (DELIVERY_ZONE_ID),
+                    CONSTRAINT UQ_MH_DELIVERY_ZONE_CODE UNIQUE (ZONE_CODE),
+                    CONSTRAINT CK_MH_DELIVERY_ZONE_ACTIVE CHECK (IS_ACTIVE IN (0, 1))
+                )
+                """,
+            )
+            _exec_ddl(
+                cur,
+                """
+                CREATE TABLE MH_DELIVERY_SLOT (
+                    DELIVERY_SLOT_ID        NUMBER          NOT NULL,
+                    SLOT_CODE               VARCHAR2(40)    NOT NULL,
+                    SLOT_LABEL              VARCHAR2(120)   NOT NULL,
+                    START_HOUR              NUMBER          NOT NULL,
+                    END_HOUR                NUMBER          NOT NULL,
+                    MAX_ORDERS              NUMBER          DEFAULT 50 NOT NULL,
+                    IS_ACTIVE               NUMBER(1)       DEFAULT 1 NOT NULL,
+                    CREATED_AT              TIMESTAMP       DEFAULT SYSTIMESTAMP NOT NULL,
+                    CONSTRAINT PK_MH_DELIVERY_SLOT PRIMARY KEY (DELIVERY_SLOT_ID),
+                    CONSTRAINT UQ_MH_DELIVERY_SLOT_CODE UNIQUE (SLOT_CODE),
+                    CONSTRAINT CK_MH_DELIVERY_SLOT_ACTIVE CHECK (IS_ACTIVE IN (0, 1))
+                )
+                """,
+            )
+            _seed_delivery_defaults(cur)
+        conn.commit()
+
+    _TABLE_EXISTS_CACHE['MH_DELIVERY_ZONE'] = True
+    _TABLE_EXISTS_CACHE['MH_DELIVERY_SLOT'] = True
+    _DELIVERY_SCHEMA_READY = True
+
+
+def _mark_promotion_ready() -> None:
+    for key in ('MH_PROMOTION', 'MH_COUPON', 'MH_COUPON_USAGE'):
+        _TABLE_EXISTS_CACHE.pop(key, None)
+        _TABLE_EXISTS_CACHE.pop(_schema_cache_key(key), None)
+        _TABLE_EXISTS_CACHE[key] = True
+        _TABLE_EXISTS_CACHE[_schema_cache_key(key)] = True
+
+
+def ensure_promotion_schema() -> None:
+    """Create MH_PROMOTION, MH_COUPON, and MH_COUPON_USAGE when absent."""
+    global _PROMOTION_SCHEMA_READY
+    if _PROMOTION_SCHEMA_READY:
+        return
+    if (
+        _table_exists('MH_PROMOTION')
+        and _table_exists('MH_COUPON')
+        and _table_exists('MH_COUPON_USAGE')
+    ):
+        _mark_promotion_ready()
+        _PROMOTION_SCHEMA_READY = True
+        return
+
+    with _get_connection() as conn:
+        with conn.cursor() as cur:
+            for seq in (
+                'SEQ_MH_PROMOTION_ID',
+                'SEQ_MH_COUPON_ID',
+                'SEQ_MH_COUPON_USAGE_ID',
+            ):
+                if not _sequence_exists(cur, seq):
+                    _exec_ddl(
+                        cur,
+                        f'CREATE SEQUENCE {seq} START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE',
+                    )
+
+            if not _table_exists('MH_PROMOTION'):
+                _exec_ddl(
+                    cur,
+                    """
+                    CREATE TABLE MH_PROMOTION (
+                        PROMOTION_ID            NUMBER          NOT NULL,
+                        PROMOTION_CODE          VARCHAR2(40)    NOT NULL,
+                        PROMOTION_NAME          VARCHAR2(200)   NOT NULL,
+                        PROMOTION_TYPE          VARCHAR2(20)    NOT NULL,
+                        DISCOUNT_VALUE          NUMBER(12,3)    DEFAULT 0 NOT NULL,
+                        MIN_ORDER_AMOUNT        NUMBER(12,3)    DEFAULT 0 NOT NULL,
+                        MAX_DISCOUNT_AMOUNT     NUMBER(12,3),
+                        START_DATE              TIMESTAMP       NOT NULL,
+                        END_DATE                TIMESTAMP       NOT NULL,
+                        USAGE_LIMIT             NUMBER,
+                        USAGE_PER_CUSTOMER      NUMBER          DEFAULT 1 NOT NULL,
+                        IS_ACTIVE               NUMBER(1)       DEFAULT 1 NOT NULL,
+                        CREATED_AT              TIMESTAMP       DEFAULT SYSTIMESTAMP NOT NULL,
+                        CONSTRAINT PK_MH_PROMOTION PRIMARY KEY (PROMOTION_ID),
+                        CONSTRAINT UQ_MH_PROMOTION_CODE UNIQUE (PROMOTION_CODE),
+                        CONSTRAINT CK_MH_PROMOTION_TYPE CHECK (
+                            PROMOTION_TYPE IN ('PERCENTAGE', 'FIXED', 'FREE_DELIVERY')
+                        ),
+                        CONSTRAINT CK_MH_PROMOTION_ACTIVE CHECK (IS_ACTIVE IN (0, 1))
+                    )
+                    """,
+                )
+
+            if not _table_exists('MH_COUPON'):
+                _exec_ddl(
+                    cur,
+                    """
+                    CREATE TABLE MH_COUPON (
+                        COUPON_ID               NUMBER          NOT NULL,
+                        PROMOTION_ID            NUMBER          NOT NULL,
+                        COUPON_CODE             VARCHAR2(50)    NOT NULL,
+                        IS_ACTIVE               NUMBER(1)       DEFAULT 1 NOT NULL,
+                        CREATED_AT              TIMESTAMP       DEFAULT SYSTIMESTAMP NOT NULL,
+                        CONSTRAINT PK_MH_COUPON PRIMARY KEY (COUPON_ID),
+                        CONSTRAINT UQ_MH_COUPON_CODE UNIQUE (COUPON_CODE),
+                        CONSTRAINT FK_MH_COUPON_PROMOTION FOREIGN KEY (PROMOTION_ID)
+                            REFERENCES MH_PROMOTION (PROMOTION_ID),
+                        CONSTRAINT CK_MH_COUPON_ACTIVE CHECK (IS_ACTIVE IN (0, 1))
+                    )
+                    """,
+                )
+
+            if not _table_exists('MH_COUPON_USAGE'):
+                _exec_ddl(
+                    cur,
+                    """
+                    CREATE TABLE MH_COUPON_USAGE (
+                        USAGE_ID                NUMBER          NOT NULL,
+                        COUPON_ID               NUMBER          NOT NULL,
+                        USER_ID                 NUMBER,
+                        ORDER_ID                NUMBER,
+                        CREATED_AT              TIMESTAMP       DEFAULT SYSTIMESTAMP NOT NULL,
+                        CONSTRAINT PK_MH_COUPON_USAGE PRIMARY KEY (USAGE_ID),
+                        CONSTRAINT FK_MH_COUPON_USAGE_COUPON FOREIGN KEY (COUPON_ID)
+                            REFERENCES MH_COUPON (COUPON_ID)
+                    )
+                    """,
+                )
+
+            for index_name, ddl in (
+                (
+                    'IX_MH_PROMOTION_ACTIVE',
+                    'CREATE INDEX IX_MH_PROMOTION_ACTIVE ON MH_PROMOTION (IS_ACTIVE, START_DATE, END_DATE)',
+                ),
+                (
+                    'IX_MH_COUPON_PROMOTION',
+                    'CREATE INDEX IX_MH_COUPON_PROMOTION ON MH_COUPON (PROMOTION_ID)',
+                ),
+                (
+                    'IX_MH_COUPON_USAGE_COUPON',
+                    'CREATE INDEX IX_MH_COUPON_USAGE_COUPON ON MH_COUPON_USAGE (COUPON_ID, USER_ID)',
+                ),
+            ):
+                if not _index_exists(cur, index_name):
+                    _exec_ddl(cur, ddl)
+
+        conn.commit()
+
+    _mark_promotion_ready()
+    _PROMOTION_SCHEMA_READY = True
+
+
+_SEARCH_EVENT_SCHEMA_READY = False
+
+
+def ensure_search_event_schema() -> None:
+    """Create MH_SEARCH_EVENT for zero-result / assist tracking."""
+    global _SEARCH_EVENT_SCHEMA_READY
+    if _SEARCH_EVENT_SCHEMA_READY:
+        return
+    if _table_exists('MH_SEARCH_EVENT'):
+        _TABLE_EXISTS_CACHE['MH_SEARCH_EVENT'] = True
+        _SEARCH_EVENT_SCHEMA_READY = True
+        return
+
+    with _get_connection() as conn:
+        with conn.cursor() as cur:
+            if not _sequence_exists(cur, 'SEQ_MH_SEARCH_EVENT_ID'):
+                _exec_ddl(
+                    cur,
+                    'CREATE SEQUENCE SEQ_MH_SEARCH_EVENT_ID START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE',
+                )
+            if not _table_exists('MH_SEARCH_EVENT'):
+                _exec_ddl(
+                    cur,
+                    """
+                    CREATE TABLE MH_SEARCH_EVENT (
+                        EVENT_ID                NUMBER          NOT NULL,
+                        USER_ID                 NUMBER,
+                        QUERY_TEXT              VARCHAR2(200 CHAR) NOT NULL,
+                        QUERY_NORM              VARCHAR2(200 CHAR) NOT NULL,
+                        RESULT_COUNT            NUMBER          DEFAULT 0 NOT NULL,
+                        CREATED_AT              TIMESTAMP       DEFAULT SYSTIMESTAMP NOT NULL,
+                        CONSTRAINT PK_MH_SEARCH_EVENT PRIMARY KEY (EVENT_ID)
+                    )
+                    """,
+                )
+            if not _index_exists(cur, 'IX_MH_SEARCH_EVENT_USER'):
+                _exec_ddl(
+                    cur,
+                    'CREATE INDEX IX_MH_SEARCH_EVENT_USER ON MH_SEARCH_EVENT (USER_ID, CREATED_AT)',
+                )
+            if not _index_exists(cur, 'IX_MH_SEARCH_EVENT_Q'):
+                _exec_ddl(
+                    cur,
+                    'CREATE INDEX IX_MH_SEARCH_EVENT_Q ON MH_SEARCH_EVENT (QUERY_NORM, CREATED_AT)',
+                )
+        conn.commit()
+
+    _TABLE_EXISTS_CACHE['MH_SEARCH_EVENT'] = True
+    _SEARCH_EVENT_SCHEMA_READY = True
+
+
+_NOTIFICATION_SCHEMA_READY = False
+
+
+def ensure_notification_schema() -> None:
+    """Create MH_NOTIFICATION for shop in-app alerts."""
+    global _NOTIFICATION_SCHEMA_READY
+    if _NOTIFICATION_SCHEMA_READY:
+        return
+    if _table_exists('MH_NOTIFICATION'):
+        _TABLE_EXISTS_CACHE['MH_NOTIFICATION'] = True
+        _NOTIFICATION_SCHEMA_READY = True
+        return
+
+    with _get_connection() as conn:
+        with conn.cursor() as cur:
+            if not _sequence_exists(cur, 'SEQ_MH_NOTIFICATION_ID'):
+                _exec_ddl(
+                    cur,
+                    'CREATE SEQUENCE SEQ_MH_NOTIFICATION_ID START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE',
+                )
+            if not _table_exists('MH_NOTIFICATION'):
+                _exec_ddl(
+                    cur,
+                    """
+                    CREATE TABLE MH_NOTIFICATION (
+                        NOTIFICATION_ID     NUMBER          NOT NULL,
+                        USER_ID             NUMBER          NOT NULL,
+                        CHANNEL             VARCHAR2(20)    DEFAULT 'IN_APP' NOT NULL,
+                        NOTIFICATION_TYPE   VARCHAR2(50)    NOT NULL,
+                        TITLE               VARCHAR2(200)   NOT NULL,
+                        BODY                VARCHAR2(2000),
+                        REF_ENTITY          VARCHAR2(50),
+                        REF_ENTITY_ID       NUMBER,
+                        IS_READ             NUMBER(1)       DEFAULT 0 NOT NULL,
+                        CREATED_AT          TIMESTAMP       DEFAULT SYSTIMESTAMP NOT NULL,
+                        READ_AT             TIMESTAMP,
+                        CONSTRAINT PK_MH_NOTIFICATION PRIMARY KEY (NOTIFICATION_ID),
+                        CONSTRAINT CK_MH_NOTIF_READ CHECK (IS_READ IN (0, 1))
+                    )
+                    """,
+                )
+            if not _index_exists(cur, 'IX_MH_NOTIFICATION_USER'):
+                _exec_ddl(
+                    cur,
+                    'CREATE INDEX IX_MH_NOTIFICATION_USER ON MH_NOTIFICATION (USER_ID, IS_READ, CREATED_AT)',
+                )
+        conn.commit()
+
+    _TABLE_EXISTS_CACHE.pop(_schema_cache_key('MH_NOTIFICATION'), None)
+    _TABLE_EXISTS_CACHE['MH_NOTIFICATION'] = True
+    _NOTIFICATION_SCHEMA_READY = True
+
+
+_WISHLIST_TABLES = ('MH_WISHLIST', 'MH_WISHLIST_ITEM')
+_WISHLIST_SCHEMA_READY = False
+
+
+def ensure_wishlist_schema() -> None:
+    """Create MH_WISHLIST / MH_WISHLIST_ITEM sequences and tables when absent."""
+    global _WISHLIST_SCHEMA_READY
+    if _WISHLIST_SCHEMA_READY:
+        return
+    if _table_exists('MH_WISHLIST') and _table_exists('MH_WISHLIST_ITEM'):
+        for key in _WISHLIST_TABLES:
+            _TABLE_EXISTS_CACHE[key] = True
+        _WISHLIST_SCHEMA_READY = True
+        return
+
+    with _get_connection() as conn:
+        with conn.cursor() as cur:
+            for seq in ('SEQ_MH_WISHLIST_ID', 'SEQ_MH_WISHLIST_ITEM_ID'):
+                if not _sequence_exists(cur, seq):
+                    _exec_ddl(
+                        cur,
+                        f'CREATE SEQUENCE {seq} START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE',
+                    )
+
+            if not _table_exists('MH_WISHLIST'):
+                _exec_ddl(
+                    cur,
+                    """
+                    CREATE TABLE MH_WISHLIST (
+                        WISHLIST_ID     NUMBER          NOT NULL,
+                        USER_ID         NUMBER          NOT NULL,
+                        WISHLIST_NAME   VARCHAR2(80)    DEFAULT 'My Wishlist' NOT NULL,
+                        IS_DEFAULT      NUMBER(1)       DEFAULT 1 NOT NULL,
+                        CREATED_AT      TIMESTAMP       DEFAULT SYSTIMESTAMP NOT NULL,
+                        CREATED_BY      NUMBER,
+                        MODIFIED_AT     TIMESTAMP,
+                        MODIFIED_BY     NUMBER,
+                        CONSTRAINT PK_MH_WISHLIST PRIMARY KEY (WISHLIST_ID),
+                        CONSTRAINT CK_MH_WISHLIST_DEFAULT CHECK (IS_DEFAULT IN (0, 1))
+                    )
+                    """,
+                )
+
+            if not _table_exists('MH_WISHLIST_ITEM'):
+                _exec_ddl(
+                    cur,
+                    """
+                    CREATE TABLE MH_WISHLIST_ITEM (
+                        WISHLIST_ITEM_ID    NUMBER          NOT NULL,
+                        WISHLIST_ID         NUMBER          NOT NULL,
+                        LOCATION_CODE       NUMBER          NOT NULL,
+                        ITEM_CODE           NUMBER          NOT NULL,
+                        CREATED_AT          TIMESTAMP       DEFAULT SYSTIMESTAMP NOT NULL,
+                        CREATED_BY          NUMBER,
+                        CONSTRAINT PK_MH_WISHLIST_ITEM PRIMARY KEY (WISHLIST_ITEM_ID),
+                        CONSTRAINT FK_MH_WISHLIST_ITEM_HDR FOREIGN KEY (WISHLIST_ID)
+                            REFERENCES MH_WISHLIST (WISHLIST_ID),
+                        CONSTRAINT UQ_MH_WISHLIST_ITEM UNIQUE (WISHLIST_ID, LOCATION_CODE, ITEM_CODE)
+                    )
+                    """,
+                )
+
+            for index_name, ddl in (
+                (
+                    'IX_MH_WISHLIST_USER',
+                    'CREATE INDEX IX_MH_WISHLIST_USER ON MH_WISHLIST (USER_ID, IS_DEFAULT)',
+                ),
+                (
+                    'IX_MH_WISHLIST_ITEM_HDR',
+                    'CREATE INDEX IX_MH_WISHLIST_ITEM_HDR ON MH_WISHLIST_ITEM (WISHLIST_ID)',
+                ),
+            ):
+                if not _index_exists(cur, index_name):
+                    _exec_ddl(cur, ddl)
+
+        conn.commit()
+
+    for key in _WISHLIST_TABLES:
+        _TABLE_EXISTS_CACHE.pop(_schema_cache_key(key), None)
+        _TABLE_EXISTS_CACHE[key] = True
+    _WISHLIST_SCHEMA_READY = True

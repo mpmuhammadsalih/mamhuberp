@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="{{ url_for('ecommerce.static', filename='css/ecommerce-receipt.css') }}?v=1" />
+</head>
+<body class="mh-receipt-body">
+  {% set money = order.currency_code or 'QAR' %}
+  {% set fulfill = (order.fulfillment_type or '')|upper %}
+  <div class="mh-receipt-toolbar">
+    <a href="{{ url_for('ecommerce.order_detail', order_id=order.order_id) }}">← Order</a>
+    <div>
+      <button type="button" onclick="window.print()">Print</button>
+      <button type="button" onclick="window.close()">Close</button>
+    </div>
+  </div>
+
+  <article class="mh-receipt">
+    <header class="mh-receipt__brand">
+      {% if order.receipt_logo %}
+      <img src="{{ order.receipt_logo }}" alt="{{ order.receipt_store }}" class="mh-receipt__logo" />
+      {% else %}
+      <p class="mh-receipt__wordmark">MamaHub</p>
+      {% endif %}
+      <p class="mh-receipt__store">{{ order.receipt_store_line }}</p>
+      <p class="mh-receipt__type">{{ order.receipt_fulfillment }}</p>
+      <p class="mh-receipt__type-ar">{{ order.receipt_fulfillment_ar }}</p>
+      <p class="mh-receipt__when">{{ order.receipt_when }}</p>
+    </header>
+
+    <section class="mh-receipt__number">
+      <div>
+        <p class="mh-receipt__kicker">Order Number</p>
+        <p class="mh-receipt__kicker-ar">رقم الطلب</p>
+        <p class="mh-receipt__no">{{ order.order_number }}</p>
+      </div>
+      <div class="mh-receipt__qr">{{ order.receipt_qr|safe }}</div>
+    </section>
+
+    <section class="mh-receipt__who">
+      <div>
+        <p>Customer: {{ order.customer_name }}</p>
+        <p class="is-ar">العميل</p>
+      </div>
+      <div>
+        <p>Customer Phone: {{ order.customer_phone or '—' }}</p>
+        <p class="is-ar">هاتف العميل</p>
+      </div>
+    </section>
+
+    <section class="mh-receipt__items">
+      {% for item in order.line_items %}
+      <div class="mh-receipt__item">
+        <span class="mh-receipt__qty">{{ item.quantity }}</span>
+        <div class="mh-receipt__item-body">
+          <p>{{ item.item_name }}</p>
+          {% if item.item_name_ar %}<p class="is-ar">{{ item.item_name_ar }}</p>{% endif %}
+          <p class="mh-receipt__sku">{{ item.item_code }}</p>
+        </div>
+        <strong>{{ money }} {{ '%.2f'|format(item.line_total or 0) }}</strong>
+      </div>
+      {% endfor %}
+      {% if order.gift_wrap %}
+      <div class="mh-receipt__item">
+        <span class="mh-receipt__qty"></span>
+        <div class="mh-receipt__item-body">
+          <p>{{ order.gift_wrap.label or 'Gift wrap' }}</p>
+          <p class="is-ar">تغليف هدية</p>
+        </div>
+        <strong>{{ money }} {{ '%.2f'|format(order.gift_wrap_fee or 0) }}</strong>
+      </div>
+      {% endif %}
+    </section>
+
+    <section class="mh-receipt__totals">
+      {% if fulfill == 'DELIVERY' or (order.delivery_fee or 0) > 0 %}
+      <div>
+        <div>
+          <p>Delivery Fee</p>
+          <p class="is-ar">رسوم التوصيل</p>
+        </div>
+        <strong>{{ money }} {{ '%.2f'|format(order.delivery_fee or 0) }}</strong>
+      </div>
+      {% endif %}
+      {% if (order.discount_total or 0) > 0 %}
+      <div>
+        <div>
+          <p>Discount</p>
+          <p class="is-ar">الخصم</p>
+        </div>
+        <strong>-{{ money }} {{ '%.2f'|format(order.discount_total or 0) }}</strong>
+      </div>
+      {% endif %}
+      {% if (order.tax_total or 0) > 0 %}
+      <div>
+        <div>
+          <p>Tax</p>
+          <p class="is-ar">الضريبة</p>
+        </div>
+        <strong>{{ money }} {{ '%.2f'|format(order.tax_total or 0) }}</strong>
+      </div>
+      {% endif %}
+      <div class="is-total">
+        <div>
+          <p>Total ({{ order.receipt_item_count }} item{{ 's' if order.receipt_item_count != 1 else '' }})</p>
+          <p class="is-ar">المجموع ({{ order.receipt_item_count_ar }})</p>
+        </div>
+        <strong>{{ money }} {{ '%.2f'|format(order.grand_total or 0) }}</strong>
+      </div>
+    </section>
+
+    <footer class="mh-receipt__foot">
+      <p>Thank you!</p>
+      <p class="is-ar">شكراً!</p>
+      {% if order.receipt_payment %}
+      <p class="mh-receipt__pay">{{ order.receipt_payment }}</p>
+      {% if order.receipt_payment_ar and order.receipt_payment_ar != order.receipt_payment %}
+      <p class="is-ar">{{ order.receipt_payment_ar }}</p>
+      {% endif %}
+      {% endif %}
+    </footer>
+  </article>
+
+  {% if auto_print %}
+  <script>window.addEventListener('load', function () { window.print(); });</script>
+  {% endif %}
+</body>
+</html>

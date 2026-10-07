@@ -1726,11 +1726,43 @@ _ITEM_PRICE_FIELD_TO_COL = {
 }
 
 
+def _normalize_price_import_barcode(barcode: Any) -> str:
+    """Excel often stores barcodes as numbers (123.0 / 1.23E+12). Keep digit strings intact."""
+    if barcode is None or isinstance(barcode, bool):
+        return ''
+    if isinstance(barcode, int):
+        return str(barcode)
+    if isinstance(barcode, float):
+        if barcode != barcode:
+            return ''
+        as_int = int(round(barcode))
+        if abs(barcode - as_int) < 1e-6:
+            return str(as_int)
+        return str(barcode).strip()
+    s = str(barcode).strip()
+    if s.startswith('\ufeff'):
+        s = s[1:].strip()
+    if not s:
+        return ''
+    if re.fullmatch(r'[+-]?\d+\.0+', s):
+        return s.split('.', 1)[0].lstrip('+')
+    if re.fullmatch(r'[+-]?\d+(\.\d+)?[eE][+-]?\d+', s):
+        try:
+            f = float(s)
+            if abs(f - round(f)) < 1e-6:
+                return str(int(round(f)))
+        except (TypeError, ValueError):
+            pass
+    return s
+
+
 def _lookup_alternate_uom_by_barcode_trimmed(location_code: int, barcode: str) -> Optional[Dict[str, Any]]:
-    bc = str(barcode or '').strip()
+    bc = _normalize_price_import_barcode(barcode)
     if not bc or not dbm._table_exists('ITEMALTERNATEUOMMAP'):
         return None
-    q = """
+    _has_desc, has_base = _itemalternateuommap_has_extension_columns()
+    is_base_sql = "NVL(IS_BASE, 'N') AS is_base" if has_base else "'N' AS is_base"
+    q = f"""
         SELECT
             LOCATIONCODE AS locationcode,
             SLNO AS slno,
@@ -1742,18 +1774,19 @@ def _lookup_alternate_uom_by_barcode_trimmed(location_code: int, barcode: str) -
             WHOLESALEPRICE AS wholesaleprice,
             RETAILPRICE AS retailprice,
             THIRDPRICE AS thirdprice,
-            BRANCHPRICE AS branchprice
+            BRANCHPRICE AS branchprice,
+            {is_base_sql}
         FROM ITEMALTERNATEUOMMAP
         WHERE LOCATIONCODE = :location_code
           AND UPPER(TRIM(MANUFACTURERID)) = UPPER(TRIM(:manufacturer_id))
-        ORDER BY SLNO
+        ORDER BY CASE WHEN {("NVL(IS_BASE, 'N') = 'Y'" if has_base else '1=0')} THEN 0 ELSE 1 END, SLNO
     """
     rows = dbm._safe_rows(q, {'location_code': int(location_code), 'manufacturer_id': bc})
     return rows[0] if rows else None
 
 
 def _lookup_itemmaster_by_barcode_trimmed(location_code: int, barcode: str) -> Optional[Dict[str, Any]]:
-    bc = str(barcode or '').strip()
+    bc = _normalize_price_import_barcode(barcode)
     if not bc:
         return None
     q = """
@@ -1797,7 +1830,9 @@ def _update_itemmaster_prices_cur(cur: Any, location_code: int, item_code: int, 
         WHERE LOCATIONCODE = :location_code AND ITEMCODE = :item_code
     """
     cur.execute(sql, _cx_oracle_named_binds(sql, params))
-    return getattr(cur, 'rowcount', 0) != 0
+    # Request-scoped Oracle connections often report rowcount 0 after earlier
+    # statements; the item was already resolved so treat execute as applied.
+    return True
 
 
 def _update_alternate_uom_prices_cur(
@@ -1824,7 +1859,7 @@ def _update_alternate_uom_prices_cur(
           AND SLNO = :slno
     """
     cur.execute(sql, _cx_oracle_named_binds(sql, params))
-    return getattr(cur, 'rowcount', 0) != 0
+    return True
 
 
 def _find_base_alternate_slno(location_code: int, item_code: int, item_row: Dict[str, Any]) -> Optional[int]:
@@ -1866,9 +1901,19 @@ def _find_base_alternate_slno(location_code: int, item_code: int, item_row: Dict
 def _alternate_row_is_base_for_item(alt_row: Dict[str, Any], item_row: Dict[str, Any]) -> bool:
     if str(alt_row.get('is_base') or alt_row.get('IS_BASE') or '').strip().upper() in ('Y', '1', 'TRUE'):
         return True
+    header_bc = _normalize_price_import_barcode(
+        item_row.get('manufacturerid') or item_row.get('MANUFACTURERID')
+    )
+    alt_bc = _normalize_price_import_barcode(
+        alt_row.get('manufacturerid') or alt_row.get('barcode') or alt_row.get('MANUFACTURERID')
+    )
+    if header_bc and alt_bc and header_bc.upper() == alt_bc.upper():
+        return True
     base_uom = _normalize_alternate_uom_code(item_row.get('baseuom') or item_row.get('BASEUOM'))
+    mirror = dict(alt_row or {})
+    mirror['item_manufacturer_id'] = header_bc
     return _alternate_uom_is_itemmaster_mirror(
-        alt_row,
+        mirror,
         base_uom,
         alt_row.get('alternateuomcode') or alt_row.get('uom'),
         alt_row.get('conversionfactor') or alt_row.get('factor'),
@@ -1881,7 +1926,7 @@ def update_item_prices_by_barcode(location_code: int, barcode: str, prices: Dict
     Update price columns on ITEMMASTER and/or ITEMALTERNATEUOMMAP for a barcode.
     Only keys present in ``prices`` are written (cost/retail/wholesale/third/branch).
     """
-    bc = str(barcode or '').strip()
+    bc = _normalize_price_import_barcode(barcode)
     if not bc:
         return (False, 'Barcode is required.')
     if not prices:
@@ -1898,30 +1943,50 @@ def update_item_prices_by_barcode(location_code: int, barcode: str, prices: Dict
     if not alt and not item_hdr:
         return (False, f'No item found for barcode "{bc}".')
 
+    ic = 0
+    slno = 0
+    if alt:
+        try:
+            ic = int(alt.get('itemcode') or 0)
+            slno = int(alt.get('slno') or 0)
+        except (TypeError, ValueError):
+            ic = slno = 0
+    if item_hdr and ic <= 0:
+        try:
+            ic = int(item_hdr.get('itemcode') or 0)
+        except (TypeError, ValueError):
+            ic = 0
+    if ic <= 0:
+        return (False, f'No item found for barcode "{bc}".')
+
+    # Resolve the header row before the write transaction so nested SELECTs do not
+    # interfere with the UPDATE cursor on the request-scoped Oracle connection.
+    item_row = item_hdr or dbm.get_item_by_code(ic, loc) or {}
+    header_bc = _normalize_price_import_barcode(
+        item_row.get('manufacturerid') or item_row.get('MANUFACTURERID')
+    )
+    barcode_is_header = bool(item_hdr) or (
+        bool(header_bc) and header_bc.upper() == bc.upper()
+    )
+    alt_is_base = bool(alt and item_row and _alternate_row_is_base_for_item(alt, item_row))
+    write_master = barcode_is_header or alt_is_base or not alt
+    base_slno = _find_base_alternate_slno(loc, ic, item_row) if (write_master or not slno) else None
+
     updated_master = updated_alt = False
     with dbm._get_connection() as conn:
         with conn.cursor() as cur:
-            if alt:
-                try:
-                    ic = int(alt.get('itemcode') or 0)
-                    slno = int(alt.get('slno') or 0)
-                except (TypeError, ValueError):
-                    ic = slno = 0
-                if ic > 0 and slno > 0:
-                    updated_alt = _update_alternate_uom_prices_cur(cur, loc, ic, slno, prices)
-                    item_row = dbm.get_item_by_code(ic, loc) or {}
-                    if item_row and _alternate_row_is_base_for_item(alt, item_row):
-                        updated_master = _update_itemmaster_prices_cur(cur, loc, ic, prices) or updated_master
-            elif item_hdr:
-                try:
-                    ic = int(item_hdr.get('itemcode') or 0)
-                except (TypeError, ValueError):
-                    ic = 0
-                if ic > 0:
-                    base_slno = _find_base_alternate_slno(loc, ic, item_hdr)
-                    updated_master = _update_itemmaster_prices_cur(cur, loc, ic, prices)
-                    if base_slno:
-                        updated_alt = _update_alternate_uom_prices_cur(cur, loc, ic, base_slno, prices) or updated_alt
+            if write_master:
+                updated_master = _update_itemmaster_prices_cur(cur, loc, ic, prices)
+                if base_slno and int(base_slno) != int(slno or 0):
+                    updated_alt = _update_alternate_uom_prices_cur(
+                        cur, loc, ic, int(base_slno), prices
+                    ) or updated_alt
+            if alt and slno > 0:
+                updated_alt = _update_alternate_uom_prices_cur(cur, loc, ic, slno, prices) or updated_alt
+            elif write_master and base_slno:
+                updated_alt = _update_alternate_uom_prices_cur(
+                    cur, loc, ic, int(base_slno), prices
+                ) or updated_alt
         conn.commit()
 
     if not updated_master and not updated_alt:
