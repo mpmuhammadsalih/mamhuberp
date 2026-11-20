@@ -1,0 +1,49 @@
+---
+description: Save-once, DB transactions, session lock, and mutation overlay for Nexa Mobile (Flutter + mobile_backend)
+alwaysApply: true
+---
+
+# Nexa Mobile — saves & transactions
+
+Two repos: **Flutter** `flutter_app/` · **API** `../Nova/mobile_backend/`
+
+## Backend — every insert / update / delete
+
+1. Wrap Oracle writes in `oracle_transaction(conn)` (`database/transaction.py`). No bare `conn.commit()` in services.
+2. Wrap save/post/cancel in `mobile_operation_lock(...)` (`operation_lock.py`). Busy → `OperationBusyError` → HTTP **423** via `failure_from_mutation_exc`.
+3. **New mutation routes** (POST/PUT/PATCH/DELETE that change data):
+   - Add `require_save_nonce` to route `dependencies`
+   - Inject `Request`; return `success_after_mutation(request, data, message=...)`
+   - Catch with `failure_from_mutation_exc` (423 busy / 400 validation)
+   - Do **not** use plain `success()` for successful writes
+4. Exempt from save-nonce: GET, `POST /api/v1/auth/login|refresh|logout`
+5. Issue token on login/refresh/tenant switch (`save_nonce` in JSON). Handler: `SaveNonceReplayError` → 409 in `bootstrap.py`
+
+```python
+@router.post("/items", dependencies=[_perm, require_save_nonce])
+def save_item(request: Request, body: ItemBody):
+    try:
+        data = svc.save_item(body.model_dump())
+    except Exception as exc:
+        return failure_from_mutation_exc(exc, fallback="Failed to save.")
+    return success_after_mutation(request, data, message="Saved")
+```
+
+## Flutter — every save / submit
+
+1. Use shared **`ApiClient`** only (no ad-hoc `Dio()` for authenticated mutations).
+2. `ApiClient` auto-sends `X-Save-Nonce`, shows global **Saving…** overlay, rotates nonce from responses.
+3. Do **not** duplicate full-screen save overlays for mutations; optional `isSubmitting` for disabling buttons is fine.
+4. After login / refresh / tenant switch, persist `save_nonce` via `SaveNonceStorage`.
+5. Health probes and login may use separate Dio instances.
+
+## New feature checklist
+
+- [ ] Service uses `oracle_transaction` for mobile-owned DB writes
+- [ ] Service uses `mobile_operation_lock` for save/post/cancel
+- [ ] Route has `require_save_nonce` + `success_after_mutation`
+- [ ] Route maps busy/validation via `failure_from_mutation_exc`
+- [ ] Flutter calls go through `ApiClient` (overlay + nonce automatic)
+- [ ] Manual test: double-tap Save → second request 409; concurrent → 423; UI blocked during save
+
+See `../Nova/mobile_backend/MUTATIONS.md` for full reference.

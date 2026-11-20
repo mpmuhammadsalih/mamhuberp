@@ -1,0 +1,32 @@
+---
+description: ApiClient save-nonce and transaction overlay for Flutter mutations
+globs: flutter_app/**/*.dart
+alwaysApply: false
+---
+
+# Flutter mutations
+
+## Required
+
+- Route all authenticated **POST/PUT/PATCH/DELETE** through **`ApiClient.dio`** (injected services).
+- Never add a second `Dio()` for saves — it bypasses `X-Save-Nonce` and the global overlay.
+
+## Automatic (do not reimplement)
+
+- `SaveNonceStorage` — token from login/responses
+- `TransactionOverlayController` — "Saving…" overlay in `main.dart` `MaterialApp.builder`
+- 409 `replay_blocked` — nonce refreshed in `ApiClient` error interceptor
+
+## New save flow
+
+```dart
+// In *Service class — uses ApiClient, overlay + nonce are automatic
+Future<void> saveWidget(Map<String, dynamic> payload) async {
+  final response = await _apiClient.dio.post('/api/v1/widgets', data: payload);
+  // save_nonce applied by interceptor
+}
+```
+
+Optional: `isSubmitting` in provider to disable buttons. Do **not** add another full-screen save overlay.
+
+See `flutter_app/DEVELOPMENT.md` and backend `mobile_backend/MUTATIONS.md`.

@@ -1,0 +1,18 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Flutter (with erp_api preLaunch)",
+      "request": "launch",
+      "type": "dart",
+      "cwd": "${workspaceFolder}/flutter_app",
+      "preLaunchTask": "erp_api: Uvicorn"
+    },
+    {
+      "name": "Flutter only",
+      "request": "launch",
+      "type": "dart",
+      "cwd": "${workspaceFolder}/flutter_app"
+    }
+  ]
+}

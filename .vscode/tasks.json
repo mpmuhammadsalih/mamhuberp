@@ -1,0 +1,29 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "erp_api: Uvicorn",
+      "type": "shell",
+      "command": "python",
+      "args": ["-m", "erp_api.app"],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {}
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "erp_api",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*Will watch for changes in these directories.*|.*Started server process.*|.*Uvicorn running.*",
+          "endsPattern": ".*Uvicorn running on http://.*|.*Application startup complete.*"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    }
+  ]
+}
